@@ -8,7 +8,8 @@
     "sendMessageKey": "enter",
     "spellCheck": false,
     "keepAwakeWhileRunning": false,
-    "richToolDescriptions": true
+    "richToolDescriptions": true,
+    "extendedPromptCache": false
   },
   "workspaceDefaults": {
     "thinkingLevel": "think",

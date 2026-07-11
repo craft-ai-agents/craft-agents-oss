@@ -16,7 +16,7 @@
 import { useCallback, useMemo } from 'react'
 import { useSetAtom } from 'jotai'
 import { cn } from '@/lib/utils'
-import { X } from 'lucide-react'
+import { X, ChevronLeft } from 'lucide-react'
 import { parseRouteToNavigationState } from '../../../shared/route-parser'
 import { closePanelAtom, focusedPanelIdAtom, type PanelStackEntry } from '@/atoms/panel-stack'
 import { useAppShellContext, AppShellProvider } from '@/context/AppShellContext'
@@ -38,6 +38,8 @@ interface PanelSlotProps {
   proportion: number
   /** Optional sash element rendered before this panel */
   sash?: React.ReactNode
+  /** Compact (mobile) mode — shows back button in panel header */
+  isCompact?: boolean
 }
 
 export function PanelSlot({
@@ -49,6 +51,7 @@ export function PanelSlot({
   isAtRightEdge,
   proportion,
   sash,
+  isCompact,
 }: PanelSlotProps) {
   const closePanel = useSetAtom(closePanelAtom)
   const setFocusedPanel = useSetAtom(focusedPanelIdAtom)
@@ -70,13 +73,27 @@ export function PanelSlot({
     )
   }, [handleClose])
 
-  // Override AppShellContext so ChatPage/PanelHeader gets our per-panel close button
-  // and isFocusedPanel for input field appearance
+  // Build back button for compact mode — closes the panel to reveal the session list.
+  // Same PanelHeaderCenterButton style as X and share, just on the left side.
+  const backButton = useMemo(() => {
+    if (!isCompact) return undefined
+    return (
+      <PanelHeaderCenterButton
+        icon={<ChevronLeft className="h-4 w-4" />}
+        onClick={handleClose}
+        tooltip="Back to list"
+      />
+    )
+  }, [isCompact, handleClose])
+
+  // Override AppShellContext so ChatPage/PanelHeader gets our per-panel close button,
+  // back button (compact mode), and isFocusedPanel for input field appearance
   const contextOverride = useMemo(() => ({
     ...parentContext,
     rightSidebarButton: closeButton,
+    leadingAction: backButton,
     isFocusedPanel,
-  }), [parentContext, closeButton, isFocusedPanel])
+  }), [parentContext, closeButton, backButton, isFocusedPanel])
 
   const handlePointerDown = useCallback(() => {
     if (!isFocusedPanel) {
@@ -89,8 +106,10 @@ export function PanelSlot({
       {sash}
       <div
         onPointerDown={handlePointerDown}
+        data-panel-role="content"
+        data-compact={isCompact || undefined}
         className={cn(
-          'h-full overflow-hidden relative',
+          'h-full overflow-hidden relative @container/panel',
           !isOnly && isFocusedPanel ? 'shadow-panel-focused z-[1]' : 'shadow-middle z-0',
           'bg-foreground-2',
         )}

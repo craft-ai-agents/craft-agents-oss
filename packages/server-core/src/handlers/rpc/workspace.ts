@@ -37,23 +37,23 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   const { sessionManager } = deps
   const windowManager = deps.windowManager
 
-  // Get workspaces
+  // Get workspaces (LOCAL_ONLY — includes rootPath for local Electron renderer)
   server.handle(RPC_CHANNELS.workspaces.GET, async () => {
     return sessionManager.getWorkspaces()
   })
 
   // Create a new workspace at a folder path (Obsidian-style: folder IS the workspace)
-  server.handle(RPC_CHANNELS.workspaces.CREATE, async (_ctx, folderPath: string, name: string) => {
+  server.handle(RPC_CHANNELS.workspaces.CREATE, async (_ctx, folderPath: string, name: string, remoteServer?: { url: string; token: string; remoteWorkspaceId: string }) => {
     const rootPath = folderPath.trim()
     const validation = isValidWorkspaceRootPath(rootPath)
     if (!validation.valid) {
       throw new Error(validation.reason!)
     }
 
-    const workspace = addWorkspace({ name, rootPath })
+    const workspace = addWorkspace({ name, rootPath, ...(remoteServer && { remoteServer }) })
     // Make it active
     setActiveWorkspace(workspace.id)
-    deps.platform.logger.info(`Created workspace "${name}" at ${rootPath}`)
+    deps.platform.logger.info(`Created workspace "${name}" at ${rootPath}${remoteServer ? ` (remote: ${remoteServer.url})` : ''}`)
     return workspace
   })
 
@@ -125,6 +125,13 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
       sessionManager.setupConfigWatcher(workspace.rootPath, workspaceId)
     }
     end()
+
+    // Return connection details so the preload RoutedClient can decide
+    // whether to connect directly to a remote server for this workspace.
+    return {
+      workspaceId,
+      remoteServer: workspace?.remoteServer ?? null,
+    }
   })
 
   // ============================================================

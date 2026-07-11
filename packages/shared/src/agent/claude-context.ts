@@ -219,6 +219,7 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
 
       const result = await validateMcpConnectionImpl({
         mcpUrl: config.url,
+        mcpTransport: config.transport,
         mcpHeaders: config.headers,
         claudeApiKey: apiKey || undefined,
         claudeOAuthToken: oauthToken || undefined,

@@ -18,6 +18,7 @@ export interface SessionListContextValue {
   onLabelsChange?: (sessionId: string, labels: string[]) => void
   onSelectSessionById: (sessionId: string) => void
   onOpenInNewWindow: (item: SessionMeta) => void
+  onSendToWorkspace?: (sessionIds: string[]) => void
   onFocusZone: () => void
   onKeyDown: (e: React.KeyboardEvent, item: SessionMeta) => void
 

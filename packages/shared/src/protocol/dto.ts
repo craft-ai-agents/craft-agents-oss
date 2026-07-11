@@ -130,6 +130,19 @@ export interface CreateSessionOptions {
   branchFromSessionId?: string
 }
 
+export interface RemoteSessionTransferPayload {
+  sourceSessionId: string
+  name?: string
+  sessionStatus?: SessionStatus
+  labels?: string[]
+  permissionMode?: PermissionMode
+  summary: string
+}
+
+export interface ImportRemoteSessionTransferResult {
+  sessionId: string
+}
+
 export interface PermissionModeState {
   permissionMode: PermissionMode
   previousPermissionMode?: PermissionMode
@@ -487,7 +500,6 @@ export interface WorkspaceSettings {
   localMcpEnabled?: boolean
   defaultLlmConnection?: string
   enabledSourceSlugs?: string[]
-  enable1MContext?: boolean
 }
 
 // ---------------------------------------------------------------------------

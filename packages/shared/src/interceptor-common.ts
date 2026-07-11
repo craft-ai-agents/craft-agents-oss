@@ -6,7 +6,7 @@
  * - toolMetadataStore (file-based cross-process sharing)
  * - LastApiError (error capture for error handler)
  * - Logging utilities
- * - Config reading (richToolDescriptions setting)
+ * - Config reading (richToolDescriptions, extendedPromptCache settings)
  */
 
 import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync, appendFileSync, mkdirSync, statSync } from 'node:fs';
@@ -88,21 +88,64 @@ export function debugLog(...args: unknown[]) {
 // ============================================================================
 
 /**
+ * Read and cache config.json for the duration of a single request cycle.
+ * Multiple interceptor functions can call this without redundant file reads.
+ * Cache expires after 100ms to pick up changes between requests.
+ */
+let _cachedConfig: Record<string, unknown> | null = null;
+let _cacheTimestamp = 0;
+const CONFIG_CACHE_TTL_MS = 100;
+
+function getInterceptorConfig(): Record<string, unknown> | null {
+  const now = Date.now();
+  if (_cachedConfig && (now - _cacheTimestamp) < CONFIG_CACHE_TTL_MS) return _cachedConfig;
+  try {
+    const content = readFileSync(CONFIG_FILE, 'utf-8');
+    _cachedConfig = JSON.parse(content);
+    _cacheTimestamp = now;
+    return _cachedConfig;
+  } catch {
+    return null;
+  }
+}
+
+/** Reset the config cache. Used by tests to ensure fresh reads after writing config. */
+export function _resetConfigCacheForTesting(): void {
+  _cachedConfig = null;
+  _cacheTimestamp = 0;
+}
+
+/**
  * Check if rich tool descriptions are enabled (adds _intent/_displayName to all tools).
- * Reads from config.json on each call — the file is small and this runs once per API request.
+ * Reads from config.json via shared cache — the file is small and this runs once per API request.
  * Defaults to true if config is unreadable or field is not set.
  */
 export function isRichToolDescriptionsEnabled(): boolean {
-  try {
-    const content = readFileSync(CONFIG_FILE, 'utf-8');
-    const config = JSON.parse(content);
-    if (config?.richToolDescriptions !== undefined) {
-      return config.richToolDescriptions;
-    }
-  } catch {
-    // Config unreadable — default to enabled
+  const config = getInterceptorConfig();
+  if (config?.richToolDescriptions !== undefined) {
+    return config.richToolDescriptions as boolean;
   }
   return true;
+}
+
+/**
+ * Check if extended prompt cache (1h TTL) is enabled.
+ * When enabled, the interceptor upgrades all cache_control blocks from 5m to 1h TTL.
+ * Defaults to false if config is unreadable or field is not set.
+ */
+export function isExtendedPromptCacheEnabled(): boolean {
+  const config = getInterceptorConfig();
+  return config?.extendedPromptCache === true;
+}
+
+/**
+ * Check if 1M context window is enabled.
+ * When disabled, the interceptor strips the context-1m beta header.
+ * Defaults to true if config is unreadable or field is not set.
+ */
+export function is1MContextEnabled(): boolean {
+  const config = getInterceptorConfig();
+  return config?.enable1MContext !== false;
 }
 
 // ============================================================================

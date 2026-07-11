@@ -1,8 +1,6 @@
 import type { HandlerDeps } from './handler-deps'
 import type { RpcServer } from '@craft-agent/server-core/transport'
-
-// Core handlers are now in server-core
-import { registerCoreRpcHandlers } from '@craft-agent/server-core/handlers/rpc'
+import { registerCoreRpcHandlers, type ServerHandlerContext } from '@craft-agent/server-core/handlers/rpc'
 export { registerCoreRpcHandlers }
 
 // GUI-only handlers remain local (Electron-specific imports)
@@ -18,7 +16,7 @@ export function registerGuiRpcHandlers(server: RpcServer, deps: HandlerDeps): vo
   registerSettingsGuiHandlers(server, deps)
 }
 
-export function registerAllRpcHandlers(server: RpcServer, deps: HandlerDeps): void {
-  registerCoreRpcHandlers(server, deps)
+export function registerAllRpcHandlers(server: RpcServer, deps: HandlerDeps, serverCtx?: ServerHandlerContext): void {
+  registerCoreRpcHandlers(server, deps, serverCtx)
   registerGuiRpcHandlers(server, deps)
 }

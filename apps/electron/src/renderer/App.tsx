@@ -11,6 +11,7 @@ import type { AgentEvent, Effect } from './event-processor'
 import { AppShell } from '@/components/app-shell/AppShell'
 import type { AppShellContextType } from '@/context/AppShellContext'
 import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
+import { WorkspacePicker } from '@/components/workspace'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
 import { SplashScreen } from '@/components/SplashScreen'
 import { TooltipProvider } from '@craft-agent/ui'
@@ -64,7 +65,7 @@ import { getFileManagerName } from '@/lib/platform'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
 
-type AppState = 'loading' | 'onboarding' | 'reauth' | 'ready'
+type AppState = 'loading' | 'onboarding' | 'reauth' | 'workspace-picker' | 'ready'
 
 /** Type for the Jotai store returned by useStore() */
 type JotaiStore = ReturnType<typeof getDefaultStore>
@@ -195,12 +196,18 @@ export default function App() {
   // Window's workspace ID — shared atom so Root/ThemeProvider stays in sync on switch
   const [windowWorkspaceId, setWindowWorkspaceId] = useAtom(windowWorkspaceIdAtom)
 
-  // Derive workspace slug from path for SDK skill qualification
+  // Derive workspace slug for SDK skill qualification
   const windowWorkspaceSlug = useMemo(() => {
     if (!windowWorkspaceId) return null
     const workspace = workspaces.find(w => w.id === windowWorkspaceId)
-    if (!workspace?.rootPath) return windowWorkspaceId // Fallback to ID
-    return extractWorkspaceSlugFromPath(workspace.rootPath, windowWorkspaceId)
+    return workspace?.slug ?? windowWorkspaceId
+  }, [windowWorkspaceId, workspaces])
+
+  // Derive remote workspace ID for session matching in NavigationContext
+  const windowRemoteWorkspaceId = useMemo(() => {
+    if (!windowWorkspaceId) return null
+    const workspace = workspaces.find(w => w.id === windowWorkspaceId)
+    return workspace?.remoteServer?.remoteWorkspaceId ?? null
   }, [windowWorkspaceId, workspaces])
 
   // LLM connections with authentication status (for provider selection)
@@ -443,18 +450,21 @@ export default function App() {
 
   // Handle onboarding completion
   const handleOnboardingComplete = useCallback(async () => {
-    // Reload workspaces after onboarding
-    const ws = await window.electronAPI.getWorkspaces()
-    if (ws.length > 0) {
-      // Switch to workspace in-place (no window close/reopen)
-      await window.electronAPI.switchWorkspace(ws[0].id)
-      setWindowWorkspaceId(ws[0].id)
-      setWorkspaces(ws)
-      setAppState('ready')
-      return
+    try {
+      // Reload workspaces after onboarding
+      const ws = await window.electronAPI.getWorkspaces()
+      if (ws.length > 0) {
+        // Switch to workspace in-place (no window close/reopen)
+        await window.electronAPI.switchWorkspace(ws[0].id)
+        setWindowWorkspaceId(ws[0].id)
+        setWorkspaces(ws)
+      } else {
+        setWorkspaces(ws)
+      }
+    } catch (error) {
+      console.error('[App] Failed to load workspaces after onboarding:', error)
+      // Still transition to ready — the app can recover via reconnect
     }
-    // Fallback: no workspaces (shouldn't happen after onboarding)
-    setWorkspaces(ws)
     setAppState('ready')
   }, [])
 
@@ -504,7 +514,13 @@ export default function App() {
         setSetupNeeds(needs)
 
         if (needs.isFullyConfigured) {
-          setAppState('ready')
+          // If no workspace is selected (thin client without CRAFT_WORKSPACE_ID),
+          // show workspace picker before entering the main app
+          if (!wsId) {
+            setAppState('workspace-picker')
+          } else {
+            setAppState('ready')
+          }
         } else {
           // New user or needs setup - show onboarding
           setAppState('onboarding')
@@ -1396,8 +1412,8 @@ export default function App() {
     readFileBinary: (path) => window.electronAPI.readFileBinary(path),
   })
 
-  const transportConnectionState = useTransportConnectionState()
-  const showTransportConnectionBanner = shouldShowTransportConnectionBanner(transportConnectionState)
+  const connectionState = useTransportConnectionState()
+  const showTransportConnectionBanner = shouldShowTransportConnectionBanner(connectionState)
 
   const handleReconnectTransport = useCallback(() => {
     void window.electronAPI.reconnectTransport().catch((error) => {
@@ -1506,10 +1522,7 @@ export default function App() {
 
   // Handle workspace switch by slug (called by NavigationContext on popstate when ?ws= changes)
   const handleSwitchWorkspaceBySlug = useCallback((slug: string) => {
-    const target = workspaces.find(w => {
-      const wsSlug = extractWorkspaceSlugFromPath(w.rootPath, w.id)
-      return wsSlug === slug
-    })
+    const target = workspaces.find(w => w.slug === slug)
     if (target) {
       handleSelectWorkspace(target.id)
     }
@@ -1698,6 +1711,24 @@ export default function App() {
     )
   }
 
+  // Workspace picker — thin client with no workspace selected
+  if (appState === 'workspace-picker') {
+    return (
+      <DismissibleLayerProvider>
+        <ModalProvider>
+          <WindowCloseHandler />
+          <WorkspacePicker
+            onSelectWorkspace={async (id) => {
+              await window.electronAPI.switchWorkspace(id)
+              setWindowWorkspaceId(id)
+              setAppState('ready')
+            }}
+          />
+        </ModalProvider>
+      </DismissibleLayerProvider>
+    )
+  }
+
   // Show splash until exit animation completes
   const showSplash = !splashHidden
 
@@ -1720,6 +1751,7 @@ export default function App() {
           onAutoDeleteEmptySession={handleAutoDeleteEmptySession}
           isReady={appState === 'ready'}
           isSessionsReady={sessionsLoaded}
+          remoteWorkspaceId={windowRemoteWorkspaceId}
         >
           {/* Handle window close requests (X button, Cmd+W) - close modal first if open */}
           <WindowCloseHandler />
@@ -1734,9 +1766,9 @@ export default function App() {
 
           {/* Main UI - always rendered, splash fades away to reveal it */}
           <div className="h-full flex flex-col pt-[48px] text-foreground">
-            {showTransportConnectionBanner && transportConnectionState && (
+            {showTransportConnectionBanner && connectionState && (
               <TransportConnectionBanner
-                state={transportConnectionState}
+                state={connectionState}
                 onRetry={handleReconnectTransport}
               />
             )}

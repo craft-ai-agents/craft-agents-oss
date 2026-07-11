@@ -141,6 +141,23 @@ export const ShortcutsIcon = ({ className }: IconProps) => (
   </svg>
 )
 
+/** Server/network icon for server settings */
+export const ServerSettingsIcon = ({ className }: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M4 3C2.89543 3 2 3.89543 2 5V8C2 9.10457 2.89543 10 4 10H20C21.1046 10 22 9.10457 22 8V5C22 3.89543 21.1046 3 20 3H4ZM5 7.5C5.82843 7.5 6.5 6.82843 6.5 6C6.5 5.17157 5.82843 4.5 5 4.5C4.17157 4.5 3.5 5.17157 3.5 6C3.5 6.82843 4.17157 7.5 5 7.5ZM9 5.5C8.44772 5.5 8 5.94772 8 6.5C8 7.05228 8.44772 7.5 9 7.5H19C19.5523 7.5 20 7.05228 20 6.5C20 5.94772 19.5523 5.5 19 5.5H9ZM4 14C2.89543 14 2 14.8954 2 16V19C2 20.1046 2.89543 21 4 21H20C21.1046 21 22 20.1046 22 19V16C22 14.8954 21.1046 14 20 14H4ZM5 18.5C5.82843 18.5 6.5 17.8284 6.5 17C6.5 16.1716 5.82843 15.5 5 15.5C4.17157 15.5 3.5 16.1716 3.5 17C3.5 17.8284 4.17157 18.5 5 18.5ZM9 16.5C8.44772 16.5 8 16.9477 8 17.5C8 18.0523 8.44772 18.5 9 18.5H19C19.5523 18.5 20 18.0523 20 17.5C20 16.9477 19.5523 16.5 19 16.5H9Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
 /** User icon for preferences */
 export const PreferencesIcon = ({ className }: IconProps) => (
   <svg
@@ -170,6 +187,7 @@ export const SETTINGS_ICONS: Record<SettingsSubpage, React.ComponentType<IconPro
   workspace: WorkspaceIcon,
   permissions: PermissionsIcon,
   labels: LabelsIcon,
+  server: ServerSettingsIcon,
   shortcuts: ShortcutsIcon,
   preferences: PreferencesIcon,
 }

@@ -140,6 +140,7 @@ interface TopBarProps {
   onSelectWorkspace: (workspaceId: string, openInNewWindow?: boolean) => void
   workspaceUnreadMap?: Record<string, boolean>
   onWorkspaceCreated?: (workspace: Workspace) => void
+  onWorkspaceRemoved?: () => void
   activeSessionId?: string | null
   onNewChat: () => void
   onNewWindow?: () => void
@@ -155,6 +156,8 @@ interface TopBarProps {
   onToggleFocusMode: () => void
   onAddSessionPanel: () => void
   onAddBrowserPanel: () => void
+  /** When true, hides controls that don't apply in compact/mobile layout */
+  isCompact?: boolean
 }
 
 export function TopBar({
@@ -163,6 +166,7 @@ export function TopBar({
   onSelectWorkspace,
   workspaceUnreadMap,
   onWorkspaceCreated,
+  onWorkspaceRemoved,
   activeSessionId,
   onNewChat,
   onNewWindow,
@@ -178,6 +182,7 @@ export function TopBar({
   onToggleFocusMode,
   onAddSessionPanel,
   onAddBrowserPanel,
+  isCompact,
 }: TopBarProps) {
   const [isDebugMode, setIsDebugMode] = useState(false)
   const [maxVisibleBrowserBadges, setMaxVisibleBrowserBadges] = useState(3)
@@ -243,6 +248,7 @@ export function TopBar({
       {/* Keep this container draggable. Only individual interactive controls should use titlebar-no-drag. */}
       <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-0.5" style={{ paddingLeft: menuLeftPadding }}>
         <div className="flex items-center gap-0.5">
+        {!isCompact && (
         <Tooltip>
           <TooltipTrigger asChild>
             <TopBarButton onClick={onToggleSidebar} aria-label="Toggle sidebar">
@@ -251,6 +257,7 @@ export function TopBar({
           </TooltipTrigger>
           <TooltipContent side="bottom">Toggle Sidebar</TooltipContent>
         </Tooltip>
+        )}
 
         {/* Craft Menu */}
         <DropdownMenu>
@@ -392,6 +399,7 @@ export function TopBar({
               activeWorkspaceId={activeWorkspaceId}
               onSelect={onSelectWorkspace}
               onWorkspaceCreated={onWorkspaceCreated}
+              onWorkspaceRemoved={onWorkspaceRemoved}
               workspaceUnreadMap={workspaceUnreadMap}
             />
           </div>

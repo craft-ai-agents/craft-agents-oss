@@ -39,6 +39,13 @@ describe('isClaudeModel', () => {
     expect(isClaudeModel('gemma2')).toBe(false);
   });
 
+  // Bedrock-native model IDs
+  it('detects Bedrock-native Claude model IDs', () => {
+    expect(isClaudeModel('anthropic.claude-opus-4-6-v1')).toBe(true);
+    expect(isClaudeModel('anthropic.claude-sonnet-4-6')).toBe(true);
+    expect(isClaudeModel('anthropic.claude-haiku-4-5-20251001-v1:0')).toBe(true);
+  });
+
   // Case insensitivity
   it('handles case variations', () => {
     expect(isClaudeModel('Claude-Sonnet-4-6')).toBe(true);

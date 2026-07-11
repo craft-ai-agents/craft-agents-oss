@@ -6,7 +6,7 @@
  * satisfy it at runtime.
  */
 
-import type { Workspace } from '@craft-agent/core/types'
+import type { Workspace, WorkspaceInfo, ActiveSessionInfo } from '@craft-agent/core/types'
 import type { StoredAttachment, AnnotationV1 } from '@craft-agent/core/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/mode-types'
 import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
@@ -23,6 +23,7 @@ import type {
   UnreadSummary,
   ShareResult,
 } from '@craft-agent/shared/protocol'
+import type { SessionBundle, DispatchMode } from '@craft-agent/shared/sessions'
 import type { EventSink } from '../transport'
 
 export interface ISessionManager {
@@ -129,6 +130,45 @@ export interface ISessionManager {
   revokeShare(sessionId: string): Promise<ShareResult>
 
   // ---------------------------------------------------------------------------
+  // Export / Import
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Export a session as a portable bundle.
+   * Flushes pending writes, serializes session data + files.
+   * Session must be stopped before export.
+   */
+  exportSession(sessionId: string, workspaceId: string): Promise<SessionBundle | null>
+
+  /**
+   * Export a session as a summary-based payload for cross-server transfer.
+   * Generates a mini-model summary instead of shipping the full transcript.
+   */
+  exportRemoteSessionTransfer(
+    sessionId: string,
+    workspaceId: string,
+  ): Promise<import('@craft-agent/shared/protocol').RemoteSessionTransferPayload | null>
+
+  /**
+   * Import a session bundle into a target workspace.
+   * Creates session directory, writes JSONL + files, registers in memory.
+   * Returns the new session ID and any compatibility warnings.
+   */
+  importSession(
+    workspaceId: string,
+    bundle: SessionBundle,
+    mode: DispatchMode,
+  ): Promise<{ sessionId: string; warnings?: string[] }>
+
+  /**
+   * Import a summary-based remote transfer payload into a target workspace.
+   */
+  importRemoteSessionTransfer(
+    workspaceId: string,
+    payload: import('@craft-agent/shared/protocol').RemoteSessionTransferPayload,
+  ): Promise<import('@craft-agent/shared/protocol').ImportRemoteSessionTransferResult>
+
+  // ---------------------------------------------------------------------------
   // Utilities
   // ---------------------------------------------------------------------------
 
@@ -142,7 +182,20 @@ export interface ISessionManager {
   // ---------------------------------------------------------------------------
 
   getWorkspaces(): Workspace[]
+  /** Return client-safe workspace list (no rootPath) for remote clients. */
+  getWorkspacesInfo(): WorkspaceInfo[]
   setupConfigWatcher(workspaceRootPath: string, workspaceId: string): void
+
+  // ---------------------------------------------------------------------------
+  // Server-level observability
+  // ---------------------------------------------------------------------------
+
+  /** Count of sessions with active backend processes. Pass workspaceId to scope. */
+  getActiveSessionCount(workspaceId?: string): number
+  /** Automation summary for a workspace (count of configured automations + scheduler state). */
+  getWorkspaceAutomationSummary(workspaceId: string): { automationCount: number; schedulerRunning: boolean }
+  /** Active sessions across all workspaces (sessions with running backend processes). */
+  getActiveSessionsInfo(): ActiveSessionInfo[]
 
   // ---------------------------------------------------------------------------
   // Auth

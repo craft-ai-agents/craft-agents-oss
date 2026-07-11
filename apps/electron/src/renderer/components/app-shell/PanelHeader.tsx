@@ -53,6 +53,8 @@ export interface PanelHeaderProps {
   badge?: React.ReactNode
   /** Optional dropdown menu content for interactive title (renders chevron when provided) */
   titleMenu?: React.ReactNode
+  /** Optional leading action rendered before the title (e.g., back button in compact mode) */
+  leadingAction?: React.ReactNode
   /** Optional center button rendered between title and right actions */
   centerButton?: React.ReactNode
   /** Optional action buttons rendered on the right */
@@ -76,6 +78,7 @@ export function PanelHeader({
   title,
   badge,
   titleMenu,
+  leadingAction,
   centerButton,
   actions,
   rightSidebarButton,
@@ -84,9 +87,11 @@ export function PanelHeader({
   className,
   isRegeneratingTitle,
 }: PanelHeaderProps) {
-  // Use context as fallback when prop is not explicitly set
+  // Use context as fallback when prop is not explicitly set.
+  // Skip stoplight compensation when leadingAction is present — the back button
+  // occupies the space where traffic lights would be.
   const contextCompensate = useCompensateForStoplight()
-  const shouldCompensate = compensateForStoplight ?? contextCompensate
+  const shouldCompensate = leadingAction ? false : (compensateForStoplight ?? contextCompensate)
 
   // Controlled dropdown state for anchoring to chevron while keeping full title clickable
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -110,15 +115,20 @@ export function PanelHeader({
 
   const content = (
     <>
+      {leadingAction && (
+        <div className="titlebar-no-drag shrink-0">
+          {leadingAction}
+        </div>
+      )}
       <div className="flex-1 min-w-0 flex items-center select-none">
-        <div className="mx-auto w-fit">
+        <div className={cn("max-w-full overflow-hidden", !leadingAction && "mx-auto")}>
           {titleMenu ? (
             <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
               {/* Wrapper button for the whole clickable area */}
               <button
                 onClick={() => setDropdownOpen(true)}
                 className={cn(
-                  "flex items-center gap-1 px-2 py-1 rounded-md titlebar-no-drag",
+                  "flex items-center gap-1 px-2 py-1 rounded-md titlebar-no-drag min-w-0",
                   "hover:bg-foreground/[0.03] transition-colors",
                   "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                   dropdownOpen && "bg-foreground/[0.03]"
@@ -159,13 +169,13 @@ export function PanelHeader({
     </>
   )
 
-  // Base padding (16px = pl-4)
-  const basePadding = 16
+  // Base padding (16px = pl-4, matches pr-2 when leading action present for symmetry)
+  const basePadding = leadingAction ? 8 : 16
 
   const baseClassName = cn(
     'flex shrink-0 items-center pr-2 min-w-0 gap-1.5 relative z-panel h-[42px]',
     // Only use static paddingLeft class when not animating
-    !shouldCompensate && (paddingLeft || 'pl-4'),
+    !shouldCompensate && (paddingLeft || (leadingAction ? 'pl-2' : 'pl-4')),
     className
   )
 

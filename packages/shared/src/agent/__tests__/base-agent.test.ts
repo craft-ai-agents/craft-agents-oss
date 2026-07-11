@@ -88,6 +88,7 @@ describe('BaseAgent', () => {
       agent.setWorkspace({
         id: 'new-workspace',
         name: 'New Workspace',
+        slug: 'path',
         rootPath: '/new/path',
         createdAt: Date.now(),
       });

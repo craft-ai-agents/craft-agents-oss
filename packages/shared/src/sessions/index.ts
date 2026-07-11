@@ -110,4 +110,17 @@ export {
   sanitizeSessionId,
 } from './validation.ts';
 
+// Session bundle (export/import/dispatch)
+export type {
+  SessionBundle,
+  BundleFile,
+  BundleBranchInfo,
+  DispatchMode,
+} from './bundle.ts';
+export {
+  serializeSession,
+  validateBundle,
+  MAX_BUNDLE_SIZE_BYTES,
+} from './bundle.ts';
+
 

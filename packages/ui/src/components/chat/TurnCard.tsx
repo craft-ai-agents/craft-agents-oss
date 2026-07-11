@@ -2476,7 +2476,7 @@ export function ResponseCard({
                 <button
                   onClick={handleCopy}
                   className={cn(
-                    "flex items-center gap-1.5 transition-colors select-none",
+                    "turn-action-btn flex items-center gap-1.5 transition-colors select-none",
                     copied ? "text-success" : "text-muted-foreground hover:text-foreground",
                     "focus:outline-none focus-visible:underline"
                   )}
@@ -2497,7 +2497,7 @@ export function ResponseCard({
                   <button
                     onClick={onPopOut}
                     className={cn(
-                      "flex items-center gap-1.5 transition-colors select-none",
+                      "turn-action-btn flex items-center gap-1.5 transition-colors select-none",
                       "text-muted-foreground hover:text-foreground",
                       "focus:outline-none focus-visible:underline"
                     )}

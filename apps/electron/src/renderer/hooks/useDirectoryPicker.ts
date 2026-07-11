@@ -23,8 +23,8 @@ interface DirectoryPickerResult {
 export function useDirectoryPicker(
   onSelect: (path: string) => void
 ): DirectoryPickerResult {
-  const transport = useTransportConnectionState()
-  const isRemote = transport?.mode === 'remote'
+  const connectionState = useTransportConnectionState()
+  const isRemote = connectionState?.mode === 'remote'
   const canBrowse = isRemote &&
     window.electronAPI.isChannelAvailable(RPC_CHANNELS.fs.LIST_DIRECTORY)
 

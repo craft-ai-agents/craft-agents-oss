@@ -1,5 +1,5 @@
 import { join } from 'path'
-import { readdirSync, statSync } from 'fs'
+import { existsSync, readdirSync, statSync } from 'fs'
 import { RPC_CHANNELS, type SkillFile } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import type { RpcServer } from '@craft-agent/server-core/transport'
@@ -22,8 +22,13 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       deps.platform.logger?.error(`SKILLS_GET: Workspace not found: ${workspaceId}`)
       return []
     }
+    // Validate workingDirectory exists on this server — a thin client may pass
+    // its local path which doesn't exist on the remote server's filesystem.
+    const effectiveWorkingDir = workingDirectory && existsSync(workingDirectory)
+      ? workingDirectory
+      : undefined
     const { loadAllSkills } = await import('@craft-agent/shared/skills')
-    const skills = loadAllSkills(workspace.rootPath, workingDirectory)
+    const skills = loadAllSkills(workspace.rootPath, effectiveWorkingDir)
     deps.platform.logger?.info(`SKILLS_GET: Loaded ${skills.length} skills from ${workspace.rootPath}`)
     return skills
   })
@@ -91,6 +96,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
   server.handle(RPC_CHANNELS.skills.OPEN_EDITOR, async (_ctx, workspaceId: string, skillSlug: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
+    if (workspace.remoteServer) throw new Error('Open in editor is not available for remote workspaces')
 
     const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
 
@@ -103,6 +109,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
   server.handle(RPC_CHANNELS.skills.OPEN_FINDER, async (_ctx, workspaceId: string, skillSlug: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
+    if (workspace.remoteServer) throw new Error('Show in Finder is not available for remote workspaces')
 
     const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
 

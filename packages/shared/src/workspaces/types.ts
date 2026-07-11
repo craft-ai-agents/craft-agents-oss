@@ -48,7 +48,6 @@ export interface WorkspaceConfig {
     workingDirectory?: string;
     thinkingLevel?: ThinkingLevel; // Default thinking level ('off', 'low', 'medium', 'high', 'max') - default: 'medium'
     colorTheme?: string; // Color theme override for this workspace (preset ID). Undefined = inherit from app default.
-    enable1MContext?: boolean; // Enable 1M context window for Opus 4.6 (default: true). Set false to use 200K and conserve usage limits.
   };
 
   /**

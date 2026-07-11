@@ -10,6 +10,10 @@ import { registerOAuthHandlers } from './oauth'
 import { registerOnboardingHandlers } from './onboarding'
 import { registerSessionsHandlers } from './sessions'
 export { registerSessionsHandlers, cleanupSessionFileWatchForClient } from './sessions'
+import { registerServerHandlers } from './server'
+import type { ServerHandlerContext } from '../../bootstrap/headless-start'
+export type { ServerHandlerContext } from '../../bootstrap/headless-start'
+export { getHealthCheck } from './server'
 import { registerSettingsHandlers } from './settings'
 import { registerSkillsHandlers } from './skills'
 import { registerSourcesHandlers } from './sources'
@@ -17,7 +21,11 @@ import { registerStatusesHandlers } from './statuses'
 import { registerSystemCoreHandlers } from './system'
 import { registerWorkspaceCoreHandlers } from './workspace'
 
-export function registerCoreRpcHandlers(server: RpcServer, deps: HandlerDeps): void {
+export function registerCoreRpcHandlers(
+  server: RpcServer,
+  deps: HandlerDeps,
+  serverCtx?: ServerHandlerContext,
+): void {
   registerAuthHandlers(server, deps)
   registerAutomationsHandlers(server, deps)
   registerFilesHandlers(server, deps)
@@ -26,6 +34,7 @@ export function registerCoreRpcHandlers(server: RpcServer, deps: HandlerDeps): v
   registerOAuthHandlers(server, deps)
   registerOnboardingHandlers(server, deps)
   registerSessionsHandlers(server, deps)
+  if (serverCtx) registerServerHandlers(server, deps, serverCtx)
   registerSettingsHandlers(server, deps)
   registerSkillsHandlers(server, deps)
   registerSourcesHandlers(server, deps)

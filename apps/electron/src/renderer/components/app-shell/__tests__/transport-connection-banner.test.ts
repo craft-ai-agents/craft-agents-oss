@@ -21,7 +21,7 @@ describe('shouldShowTransportConnectionBanner', () => {
     expect(shouldShowTransportConnectionBanner(null)).toBe(false)
   })
 
-  it('is hidden in local mode', () => {
+  it('is hidden when mode is local', () => {
     expect(shouldShowTransportConnectionBanner(state({ mode: 'local', status: 'failed' }))).toBe(false)
   })
 

@@ -121,22 +121,61 @@ export function parseMentions(
 }
 
 /**
- * Strip all mentions from text
+ * Strip all mentions from text, replacing skill/source mentions with their slug.
  *
  * @param text - The message text with mentions
- * @returns Text with all [bracket] mentions removed
+ * @returns Text with skill/source mentions replaced by their slug
+ *
+ * @deprecated Prefer resolveSkillMentions + resolveSourceMentions for richer output.
  */
 export function stripAllMentions(text: string): string {
   return text
-    // Remove [source:slug]
-    .replace(/\[source:[\w-]+\]/g, '')
-    // Remove [skill:slug] or [skill:workspaceId:slug]
-    // Workspace IDs can contain spaces, hyphens, underscores, and dots
-    .replace(new RegExp(`\\[skill:(?:${WS_ID_CHARS}+:)?[\\w-]+\\]`, 'g'), '')
+    // Replace [source:slug] with just the slug
+    .replace(/\[source:([\w-]+)\]/g, '$1')
+    // Replace [skill:slug] or [skill:workspaceId:slug] with just the slug
+    .replace(new RegExp(`\\[skill:(?:${WS_ID_CHARS}+:)?([\\w-]+)\\]`, 'g'), '$1')
     // Note: [file:...] and [folder:...] are NOT stripped — they are content
     // that gets resolved to absolute paths by resolveFileMentions().
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+/**
+ * Resolve skill mentions to semantic markers with display names.
+ *
+ * [skill:datadog-api]           → [Mentioned skill: Datadog API (slug: datadog-api)]
+ * [skill:My Workspace:commit]   → [Mentioned skill: Git Commit (slug: commit)]
+ *
+ * Skills not found in the map fall back to the slug as display name.
+ *
+ * @param text - The message text with skill mentions
+ * @param skillNames - Map of slug → display name (from loaded skill metadata)
+ */
+export function resolveSkillMentions(
+  text: string,
+  skillNames: Map<string, string>
+): string {
+  return text.replace(
+    new RegExp(`\\[skill:(?:${WS_ID_CHARS}+:)?([\\w-]+)\\]`, 'g'),
+    (_match, slug: string) => {
+      const name = skillNames.get(slug) || slug
+      return `[Mentioned skill: ${name} (slug: ${slug})]`
+    }
+  )
+}
+
+/**
+ * Resolve source mentions to semantic markers.
+ *
+ * [source:github] → [Mentioned source: github]
+ *
+ * @param text - The message text with source mentions
+ */
+export function resolveSourceMentions(text: string): string {
+  return text.replace(
+    /\[source:([\w-]+)\]/g,
+    (_match, slug: string) => `[Mentioned source: ${slug}]`
+  )
 }
 
 /**

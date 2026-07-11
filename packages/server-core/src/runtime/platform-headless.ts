@@ -41,7 +41,7 @@ function createConsoleLogger(): Logger {
  * - CRAFT_VERSION — app version string (default: '0.0.0-dev')
  * - CRAFT_DEBUG — 'true' to enable debug logging
  */
-export function createHeadlessPlatform(): PlatformServices {
+export function createHeadlessPlatform(options?: { appVersion?: string }): PlatformServices {
   const logger = createConsoleLogger()
   const isDebugMode = process.env.CRAFT_DEBUG === 'true' || process.env.CRAFT_IS_PACKAGED !== 'true'
 
@@ -49,7 +49,7 @@ export function createHeadlessPlatform(): PlatformServices {
     appRootPath: process.env.CRAFT_APP_ROOT || process.cwd(),
     resourcesPath: process.env.CRAFT_RESOURCES_PATH || join(process.cwd(), 'resources'),
     isPackaged: process.env.CRAFT_IS_PACKAGED === 'true',
-    appVersion: process.env.CRAFT_VERSION || '0.0.0-dev',
+    appVersion: process.env.CRAFT_VERSION || options?.appVersion || '0.0.0-dev',
 
     imageProcessor: {
       async getMetadata(buffer) {

@@ -1,0 +1,36 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_REPO_DIR\" && bunx prettier --write \"$CLAUDE_FILE_PATHS\" 2>/dev/null || true"
+          },
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_REPO_DIR\" && bunx eslint --fix \"$CLAUDE_FILE_PATHS\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "block",
+            "condition": "echo \"$CLAUDE_TOOL_INPUT\" | grep -qE '\\.env(\\.local|\\.production|\\.development)?$'",
+            "message": "Blocked: direct edits to .env files are not allowed. Edit the relevant source instead."
+          },
+          {
+            "type": "block",
+            "condition": "echo \"$CLAUDE_TOOL_INPUT\" | grep -qE '(bun\\.lock|package-lock\\.json|yarn\\.lock|pnpm-lock\\.yaml)$'",
+            "message": "Blocked: do not edit lock files directly. Run the appropriate package manager command instead."
+          }
+        ]
+      }
+    ]
+  }
+}

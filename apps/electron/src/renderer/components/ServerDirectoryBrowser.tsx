@@ -84,14 +84,48 @@ export function ServerDirectoryBrowser({
     }
 
     const init = async () => {
-      // Always fetch server home dir — needed for platform detection in both modes
-      const homeDir = await window.electronAPI.getHomeDir()
-      setServerHomePath(homeDir)
-
       if (mode === 'browse') {
-        // Only use initialPath if it matches the server's platform
-        const useInitial = initialPath && !isWrongPlatformPath(initialPath, homeDir)
-        void navigateTo(useInitial ? initialPath : homeDir)
+        setLoading(true)
+
+        // Resolve the start path with cascading fallback for backward compat:
+        // 1. initialPath (if provided and valid)
+        // 2. getServerHomeDir() — REMOTE_ELIGIBLE, returns server's home (new servers)
+        // 3. listServerDirectory('~') — server-side ~ resolution (medium-age servers)
+        // 4. listServerDirectory('/') — root directory (old servers)
+        const tryNavigate = async (path: string) => {
+          const result = await window.electronAPI.listServerDirectory(path)
+          setListing(result)
+          setPathInput(result.currentPath)
+          setServerHomePath(result.currentPath)
+        }
+
+        try {
+          if (initialPath) {
+            await tryNavigate(initialPath)
+          } else {
+            // Try server home dir API first (REMOTE_ELIGIBLE — correct for remote workspaces)
+            try {
+              const serverHome = await window.electronAPI.getServerHomeDir()
+              await tryNavigate(serverHome)
+            } catch {
+              // Fallback: ~ resolution (server-side)
+              try {
+                await tryNavigate('~')
+              } catch {
+                // Final fallback: root directory
+                await tryNavigate('/')
+              }
+            }
+          }
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to list directory')
+        } finally {
+          setLoading(false)
+        }
+      } else {
+        // Manual mode — fetch home dir for platform detection
+        const homeDir = await window.electronAPI.getHomeDir()
+        setServerHomePath(homeDir)
       }
     }
     void init()

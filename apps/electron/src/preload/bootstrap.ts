@@ -1,11 +1,15 @@
 /**
  * WS-mode preload — replaces the full IPC preload (index.ts).
  *
- * 1. Gets port + token from main via ipcRenderer.sendSync
- * 2. Creates WsRpcClient → connects to local WS server
- * 3. Builds the full ElectronAPI proxy via buildClientApi + CHANNEL_MAP
- * 4. Attaches performOAuth (multi-step orchestration, runs client-side)
- * 5. Exposes as window.electronAPI via contextBridge
+ * Normal mode (local server):
+ *   Creates a RoutedClient that routes LOCAL_ONLY channels to the local
+ *   Electron server and REMOTE_ELIGIBLE channels to whichever server owns
+ *   the active workspace (local or remote). Workspace switches swap the
+ *   workspace client transparently.
+ *
+ * Thin-client mode (CRAFT_SERVER_URL):
+ *   Creates a single WsRpcClient connected to the remote server.
+ *   All channels go to the remote server.
  *
  * On localhost the WS handshake completes in <1ms. The React app takes >100ms
  * to initialise, so by the time any component calls an API method, the
@@ -15,6 +19,7 @@
 import '@sentry/electron/preload'
 import { contextBridge, ipcRenderer, shell } from 'electron'
 import { WsRpcClient, type TransportConnectionState } from '../transport/client'
+import { RoutedClient } from '../transport/routed-client'
 import { buildClientApi } from '../transport/build-api'
 import { CHANNEL_MAP } from '../transport/channel-map'
 import { createCallbackServer } from '@craft-agent/shared/auth/callback-server'
@@ -28,20 +33,37 @@ import {
   LOCAL_CLIENT_CAPABILITIES,
 } from '@craft-agent/server-core/transport'
 import type { ConfirmDialogSpec, FileDialogSpec } from '@craft-agent/server-core/transport'
+import type { RpcClient } from '@craft-agent/server-core/transport'
+import type { RemoteServerConfig } from '@craft-agent/core/types'
 import type { ElectronAPI } from '../shared/types'
 
-// Connection details — from env (remote server) or main process (local)
-let wsUrl: string
-let wsToken: string
-let webContentsId: number
-let workspaceId: string
-let wsMode: 'local' | 'remote'
+// ---------------------------------------------------------------------------
+// Client interface — common surface for both RoutedClient and WsRpcClient
+// ---------------------------------------------------------------------------
 
-if (process.env.CRAFT_SERVER_URL) {
-  // Remote mode — connect to an external server
-  wsMode = 'remote'
-  wsUrl = process.env.CRAFT_SERVER_URL
-  wsToken = process.env.CRAFT_SERVER_TOKEN ?? ''
+interface TransportClient extends RpcClient {
+  isChannelAvailable(channel: string): boolean
+  getConnectionState(): TransportConnectionState
+  onConnectionStateChanged(callback: (state: TransportConnectionState) => void): () => void
+  reconnectNow(): void
+}
+
+// ---------------------------------------------------------------------------
+// Connection setup
+// ---------------------------------------------------------------------------
+
+const webContentsId: number = ipcRenderer.sendSync('__get-web-contents-id')
+const isClientOnly = !!process.env.CRAFT_SERVER_URL
+
+let client: TransportClient
+
+if (isClientOnly) {
+  // ── Thin-client mode ───────────────────────────────────────────────────
+  // Single WsRpcClient connected directly to the remote server.
+  // No local server, no routing — all channels go to remote.
+
+  const wsUrl = process.env.CRAFT_SERVER_URL!
+  const wsToken = process.env.CRAFT_SERVER_TOKEN ?? ''
 
   // Block unencrypted ws:// to non-localhost servers — tokens would be sent in cleartext
   const parsed = new URL(wsUrl)
@@ -53,30 +75,88 @@ if (process.env.CRAFT_SERVER_URL) {
       `Set CRAFT_RPC_TLS_CERT/KEY on the server to enable TLS.`
     )
   }
-  webContentsId = ipcRenderer.sendSync('__get-web-contents-id')
-  workspaceId = process.env.CRAFT_WORKSPACE_ID ?? ipcRenderer.sendSync('__get-workspace-id')
+
+  // Workspace ID is optional — if missing, renderer shows a workspace picker
+  const workspaceId = process.env.CRAFT_WORKSPACE_ID || ipcRenderer.sendSync('__get-workspace-id') || undefined
+
+  const wsClient = new WsRpcClient(wsUrl, {
+    token: wsToken,
+    workspaceId,
+    webContentsId,
+    autoReconnect: true,
+    mode: 'remote',
+    clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
+  })
+  wsClient.connect()
+  client = wsClient
+
 } else {
-  // Local mode — get connection details from main process (synchronous, runs during preload eval)
-  wsMode = 'local'
-  wsUrl = `ws://127.0.0.1:${ipcRenderer.sendSync('__get-ws-port')}`
-  wsToken = ipcRenderer.sendSync('__get-ws-token')
-  webContentsId = ipcRenderer.sendSync('__get-web-contents-id')
-  workspaceId = ipcRenderer.sendSync('__get-workspace-id')
+  // ── Normal mode ────────────────────────────────────────────────────────
+  // RoutedClient routes LOCAL_ONLY to local server, REMOTE_ELIGIBLE to
+  // whichever server owns the workspace (local or remote).
+
+  const wsPort: number = ipcRenderer.sendSync('__get-ws-port')
+  const wsToken: string = ipcRenderer.sendSync('__get-ws-token')
+  const workspaceId: string = ipcRenderer.sendSync('__get-workspace-id')
+
+  const localClient = new WsRpcClient(`ws://127.0.0.1:${wsPort}`, {
+    token: wsToken,
+    workspaceId,
+    webContentsId,
+    autoReconnect: true,
+    mode: 'local',
+    clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
+  })
+
+  // Check if the current workspace is remote (synchronous IPC during preload eval)
+  const remoteConfig: RemoteServerConfig | null = ipcRenderer.sendSync('__get-workspace-remote-config')
+
+  let initialWorkspaceClient: WsRpcClient
+  if (remoteConfig && typeof remoteConfig.url === 'string') {
+    // Workspace is remote — create a direct connection to the remote server
+    initialWorkspaceClient = new WsRpcClient(remoteConfig.url, {
+      token: remoteConfig.token,
+      workspaceId: remoteConfig.remoteWorkspaceId,
+      webContentsId,
+      autoReconnect: true,
+      mode: 'remote',
+      clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
+      tlsRejectUnauthorized: false,
+    })
+    initialWorkspaceClient.connect()
+  } else {
+    // Workspace is local — workspace client IS the local client
+    initialWorkspaceClient = localClient
+  }
+
+  const routedClient = new RoutedClient(localClient, initialWorkspaceClient)
+
+  // Set workspace ID mapping if initial workspace is remote
+  if (remoteConfig) {
+    routedClient.setWorkspaceMapping(workspaceId, remoteConfig.remoteWorkspaceId)
+  }
+
+  // Factory for creating remote workspace clients on switch
+  routedClient.setClientFactory((remoteServer: RemoteServerConfig) => {
+    return new WsRpcClient(remoteServer.url, {
+      token: remoteServer.token,
+      workspaceId: remoteServer.remoteWorkspaceId,
+      webContentsId,
+      autoReconnect: true,
+      mode: 'remote',
+      clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
+      tlsRejectUnauthorized: false,
+    })
+  })
+
+  localClient.connect()
+  client = routedClient
 }
 
-// Create WS client and connect immediately
-const client = new WsRpcClient(wsUrl, {
-  token: wsToken,
-  workspaceId,
-  webContentsId,
-  autoReconnect: true,
-  mode: wsMode,
-  clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
-})
-
+// ---------------------------------------------------------------------------
 // Register client-side capability handlers (server can invoke these)
-// shell.openExternal / openPath / showItemInFolder are available in both main and renderer.
-// dialog / BrowserWindow are main-process-only — bridged via ipcRenderer.invoke.
+// ---------------------------------------------------------------------------
+
 client.handleCapability(CLIENT_OPEN_EXTERNAL, (url: string) => shell.openExternal(url))
 
 client.handleCapability(CLIENT_OPEN_PATH, async (path: string) => {
@@ -89,20 +169,22 @@ client.handleCapability(CLIENT_SHOW_IN_FOLDER, (path: string) => {
 })
 
 client.handleCapability(CLIENT_CONFIRM_DIALOG, async (spec: ConfirmDialogSpec) => {
-  // dialog.showMessageBox is main-process-only — bridge via ipcRenderer
   return await ipcRenderer.invoke('__dialog:showMessageBox', spec)
 })
 
 client.handleCapability(CLIENT_OPEN_FILE_DIALOG, async (spec: FileDialogSpec) => {
-  // dialog.showOpenDialog is main-process-only — bridge via ipcRenderer
   return await ipcRenderer.invoke('__dialog:showOpenDialog', spec)
 })
 
-client.connect()
+// ---------------------------------------------------------------------------
+// Build ElectronAPI proxy
+// ---------------------------------------------------------------------------
 
-// Build the full ElectronAPI proxy — identical shape to the IPC preload.
-// Methods return promises (via client.invoke), listeners return unsubscribe fns.
 const api = buildClientApi(client, CHANNEL_MAP, (ch) => client.isChannelAvailable(ch))
+
+// ---------------------------------------------------------------------------
+// Transport connection state logging (for remote connections)
+// ---------------------------------------------------------------------------
 
 function formatTransportReason(state: TransportConnectionState): string {
   const err = state.lastError
@@ -119,43 +201,49 @@ function formatTransportReason(state: TransportConnectionState): string {
   return 'no additional details'
 }
 
-if (wsMode === 'remote') {
-  client.onConnectionStateChanged((state) => {
-    const emitToMain = (level: 'info' | 'warn' | 'error', message: string) => {
-      ipcRenderer.send('__transport:status', {
-        level,
-        message,
-        status: state.status,
-        attempt: state.attempt,
-        nextRetryInMs: state.nextRetryInMs,
-        error: state.lastError,
-        close: state.lastClose,
-        url: state.url,
-      })
-    }
+// Log remote connection state changes to main process (visible in terminal + main.log).
+// Activates whenever the workspace connection is remote (thin client or remote workspace).
+client.onConnectionStateChanged((state) => {
+  if (state.mode !== 'remote') return
 
-    if (state.status === 'connected') {
-      const message = `[transport] connected to ${state.url}`
-      console.info(message)
-      emitToMain('info', message)
-      return
-    }
+  const emitToMain = (level: 'info' | 'warn' | 'error', message: string) => {
+    ipcRenderer.send('__transport:status', {
+      level,
+      message,
+      status: state.status,
+      attempt: state.attempt,
+      nextRetryInMs: state.nextRetryInMs,
+      error: state.lastError,
+      close: state.lastClose,
+      url: state.url,
+    })
+  }
 
-    if (state.status === 'reconnecting') {
-      const retry = state.nextRetryInMs != null ? ` retry in ${state.nextRetryInMs}ms` : ''
-      const message = `[transport] reconnecting (attempt ${state.attempt})${retry} — ${formatTransportReason(state)}`
-      console.warn(message)
-      emitToMain('warn', message)
-      return
-    }
+  if (state.status === 'connected') {
+    const message = `[transport] connected to ${state.url}`
+    console.info(message)
+    emitToMain('info', message)
+    return
+  }
 
-    if (state.status === 'failed' || state.status === 'disconnected') {
-      const message = `[transport] ${state.status} — ${formatTransportReason(state)}`
-      console.error(message)
-      emitToMain('error', message)
-    }
-  })
-}
+  if (state.status === 'reconnecting') {
+    const retry = state.nextRetryInMs != null ? ` retry in ${state.nextRetryInMs}ms` : ''
+    const message = `[transport] reconnecting (attempt ${state.attempt})${retry} — ${formatTransportReason(state)}`
+    console.warn(message)
+    emitToMain('warn', message)
+    return
+  }
+
+  if (state.status === 'failed' || state.status === 'disconnected') {
+    const message = `[transport] ${state.status} — ${formatTransportReason(state)}`
+    console.error(message)
+    emitToMain('error', message)
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Transport state API (exposed to renderer)
+// ---------------------------------------------------------------------------
 
 ;(api as any).getTransportConnectionState = async () => client.getConnectionState()
 ;(api as any).onTransportConnectionStateChanged = (callback: (state: TransportConnectionState) => void) => {
@@ -310,6 +398,12 @@ if (wsMode === 'remote') {
     callbackServer?.close()
   }
 }
+
+// App lifecycle — direct IPC (not WS RPC) since it restarts the server itself
+;(api as ElectronAPI).relaunchApp = () => ipcRenderer.invoke('app:relaunch')
+;(api as ElectronAPI).removeWorkspace = (workspaceId: string) => ipcRenderer.invoke('workspace:remove', workspaceId)
+;(api as ElectronAPI).invokeOnServer = (url: string, token: string, channel: string, ...args: any[]) =>
+  ipcRenderer.invoke('server:invokeOnServer', url, token, channel, ...args)
 
 // System warnings — expose env-based flags set during main process startup
 // (preload-only: reads env var directly, no IPC round-trip needed)

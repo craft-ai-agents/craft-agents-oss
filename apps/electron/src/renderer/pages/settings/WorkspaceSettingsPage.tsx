@@ -62,7 +62,6 @@ export default function WorkspaceSettingsPage() {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('ask')
   const [workingDirectory, setWorkingDirectory] = useState('')
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
-  const [enable1MContext, setEnable1MContext] = useState(true)
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true)
 
   // Default sources state
@@ -90,7 +89,6 @@ export default function WorkspaceSettingsPage() {
           setPermissionMode(settings.permissionMode || 'ask')
           setWorkingDirectory(settings.workingDirectory || '')
           setLocalMcpEnabled(settings.localMcpEnabled ?? true)
-          setEnable1MContext(settings.enable1MContext ?? true)
           // Load cyclable permission modes from workspace settings
           if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
             setEnabledModes(settings.cyclablePermissionModes)
@@ -277,14 +275,6 @@ export default function WorkspaceSettingsPage() {
     async (enabled: boolean) => {
       setLocalMcpEnabled(enabled)
       await updateWorkspaceSetting('localMcpEnabled', enabled)
-    },
-    [updateWorkspaceSetting]
-  )
-
-  const handleEnable1MContextChange = useCallback(
-    async (enabled: boolean) => {
-      setEnable1MContext(enabled)
-      await updateWorkspaceSetting('enable1MContext', enabled)
     },
     [updateWorkspaceSetting]
   )
@@ -541,12 +531,6 @@ export default function WorkspaceSettingsPage() {
                       </button>
                     </div>
                   }
-                />
-                <SettingsToggle
-                  label="Extended Context (1M)"
-                  description="Use 1M token context window for Opus 4.6. Disable to use 200K and conserve usage limits."
-                  checked={enable1MContext}
-                  onCheckedChange={handleEnable1MContextChange}
                 />
                 <SettingsToggle
                   label="Local MCP Servers"

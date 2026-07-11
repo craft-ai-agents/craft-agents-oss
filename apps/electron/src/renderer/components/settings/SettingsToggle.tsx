@@ -53,6 +53,7 @@ export function SettingsToggle({
 
   return (
     <div
+      data-layout="settings-row"
       className={cn(
         'flex items-center justify-between',
         inCard ? 'px-4 py-3.5' : 'py-3',
@@ -71,6 +72,7 @@ export function SettingsToggle({
         checked={checked}
         onCheckedChange={onCheckedChange}
         disabled={disabled}
+        data-layout="settings-control"
         className="ml-4 shrink-0"
       />
     </div>

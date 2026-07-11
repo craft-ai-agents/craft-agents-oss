@@ -1,5 +1,6 @@
 import { readFile, writeFile, unlink, mkdir, readdir, stat } from 'fs/promises'
 import { join, resolve, dirname, parse as parsePath } from 'path'
+import { homedir } from 'os'
 import { validatePathFormat } from '../../utils/path-validation'
 import { randomUUID } from 'crypto'
 import { RPC_CHANNELS, type FileAttachment, type DirectoryListingResult } from '@craft-agent/shared/protocol'
@@ -13,9 +14,6 @@ import { MarkItDown } from 'markitdown-js'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
-
-// Re-export from server-core for backward compatibility
-export { sanitizeFilename, validateFilePath } from '@craft-agent/server-core/handlers'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.file.READ,
@@ -461,6 +459,11 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
   // List directories in a given path (for remote directory browsing).
   // Returns only directories (not files) — this is a folder picker.
   server.handle(RPC_CHANNELS.fs.LIST_DIRECTORY, async (_ctx, dirPath: string) => {
+    // Resolve ~ to server's home directory (thin clients don't know the server's home)
+    if (dirPath === '~' || dirPath.startsWith('~/')) {
+      dirPath = dirPath === '~' ? homedir() : join(homedir(), dirPath.slice(2))
+    }
+
     // Reject cross-platform and relative paths before resolve() can concatenate with cwd
     const pathCheck = validatePathFormat(dirPath)
     if (!pathCheck.valid) {

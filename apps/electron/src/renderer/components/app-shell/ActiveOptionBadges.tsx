@@ -567,9 +567,13 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
         sideOffset={4}
         onCloseAutoFocus={(e) => {
           e.preventDefault()
-          window.dispatchEvent(new CustomEvent('craft:focus-input', {
-            detail: { sessionId }
-          }))
+          // Don't auto-focus the text input on touch devices — it pulls up the virtual keyboard
+          const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+          if (!isTouchDevice) {
+            window.dispatchEvent(new CustomEvent('craft:focus-input', {
+              detail: { sessionId }
+            }))
+          }
         }}
       >
         <SlashCommandMenu

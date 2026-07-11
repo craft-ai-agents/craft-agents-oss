@@ -8,15 +8,38 @@
  */
 export type McpAuthType = 'workspace_oauth' | 'workspace_bearer' | 'public';
 
-export interface Workspace {
+/**
+ * Configuration for a remote Craft Agent Server.
+ * When set on a workspace, handler calls are proxied over WebSocket.
+ */
+export interface RemoteServerConfig {
+  url: string;              // ws://host:port or wss://host:port
+  token: string;            // Auth token for the remote server
+  remoteWorkspaceId: string; // ID of the workspace on the remote server
+}
+
+/**
+ * Client-facing workspace DTO — safe to send over RPC to remote clients.
+ * Does not expose server-internal filesystem paths.
+ */
+export interface WorkspaceInfo {
   id: string;
-  name: string;            // Read from workspace folder config (not stored in global config)
-  rootPath: string;        // Absolute path to workspace folder (e.g., ~/Projects/my-app/craft-agent)
-  createdAt: number;
-  lastAccessedAt?: number; // For sorting recent workspaces
+  name: string;
+  slug: string;              // Server-computed from rootPath basename
+  lastAccessedAt?: number;
   iconUrl?: string;
   mcpUrl?: string;
   mcpAuthType?: McpAuthType;
+  remoteServer?: RemoteServerConfig;
+}
+
+/**
+ * Full workspace with server-internal details.
+ * Used by server code and local Electron renderer (LOCAL_ONLY channels).
+ */
+export interface Workspace extends WorkspaceInfo {
+  rootPath: string;        // Absolute path to local workspace folder (metadata, config). Auto-created for remote workspaces.
+  createdAt: number;
 }
 
 /**
