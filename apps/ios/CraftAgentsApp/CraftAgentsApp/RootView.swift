@@ -6,19 +6,28 @@ struct RootView: View {
     @State private var connectionViewModel = ServerConnectionViewModel(
         store: ServerConnectionStore(keychain: KeychainStore())
     )
+    @State private var appClientProvider = AppClientProvider(
+        store: ServerConnectionStore(keychain: KeychainStore())
+    )
 
     var body: some View {
-        NavigationStack {
+        Group {
             if hasSavedConnection {
-                Text("Session list goes here (Task 11)")
+                SessionListView(viewModel: SessionListViewModel(client: appClientProvider.client))
             } else {
-                ServerConnectionSetupView(viewModel: connectionViewModel) {
-                    hasSavedConnection = true
+                NavigationStack {
+                    ServerConnectionSetupView(viewModel: connectionViewModel) {
+                        hasSavedConnection = true
+                    }
                 }
             }
         }
         .task {
-            hasSavedConnection = !((try? await ServerConnectionStore(keychain: KeychainStore()).list()) ?? []).isEmpty
+            let hasSaved = !((try? await ServerConnectionStore(keychain: KeychainStore()).list()) ?? []).isEmpty
+            if hasSaved {
+                await appClientProvider.connectToSavedServer()
+            }
+            hasSavedConnection = hasSaved
         }
     }
 }
