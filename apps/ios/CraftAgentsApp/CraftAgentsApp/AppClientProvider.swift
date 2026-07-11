@@ -12,6 +12,10 @@ import CraftAgentKit
 final class AppClientProvider {
     private(set) var client: RPCClient?
     private(set) var connectionState: ConnectionState = .idle
+    /// The workspace the active connection was established against. Used as the
+    /// primary source when creating a new session so the "+" action never has to
+    /// guess (fixes "No workspace available").
+    private(set) var workspaceId: String?
     private let store: ServerConnectionStore
 
     init(store: ServerConnectionStore) {
@@ -21,6 +25,7 @@ final class AppClientProvider {
     func connectToSavedServer() async {
         guard let connection = try? await store.list().first else { return }
         connectionState = .connecting
+        workspaceId = connection.workspaceId
         let transport = RPCTransport()
         let client = RPCClient(transport: transport)
         do {

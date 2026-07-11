@@ -17,7 +17,7 @@ struct RootView: View {
     var body: some View {
         Group {
             if hasSavedConnection {
-                SessionListView(viewModel: SessionListViewModel(client: appClientProvider.client, cache: cache))
+                SessionListView(viewModel: SessionListViewModel(client: appClientProvider.client, cache: cache, workspaceId: appClientProvider.workspaceId))
             } else {
                 NavigationStack {
                     ServerConnectionSetupView(viewModel: connectionViewModel) {

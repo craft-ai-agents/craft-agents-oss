@@ -10,10 +10,13 @@ final class SessionListViewModel: RPCTransportDelegate {
     var errorMessage: String?
     private(set) var client: RPCClient?
     private(set) var cache: SessionCacheRepository?
+    /// Workspace the app is connected to; primary source for new-session creation.
+    private let connectedWorkspaceId: String?
 
-    init(client: RPCClient?, cache: SessionCacheRepository? = nil) {
+    init(client: RPCClient?, cache: SessionCacheRepository? = nil, workspaceId: String? = nil) {
         self.client = client
         self.cache = cache
+        self.connectedWorkspaceId = workspaceId
     }
 
     func load() async {
@@ -57,9 +60,22 @@ final class SessionListViewModel: RPCTransportDelegate {
     }
 
     func resolveWorkspaceIdForNewSession() async -> String? {
+        if let connectedWorkspaceId { return connectedWorkspaceId }
         if let existing = sessions.first?.workspaceId { return existing }
         guard let client else { return nil }
         return try? await client.listWorkspaces().first?.id
+    }
+
+    /// Creates a new session for the "+" toolbar action and returns it. Resolves
+    /// the workspace from the active connection (falling back to existing sessions
+    /// or the server's workspace list); surfaces an error instead of silently
+    /// failing when none can be found.
+    func createNewSession() async -> Session? {
+        guard let workspaceId = await resolveWorkspaceIdForNewSession() else {
+            errorMessage = "No workspace available to create a session."
+            return nil
+        }
+        return await createSession(workspaceId: workspaceId)
     }
 
     nonisolated func transport(_ transport: RPCTransport, didChangeState state: ConnectionState) async {}

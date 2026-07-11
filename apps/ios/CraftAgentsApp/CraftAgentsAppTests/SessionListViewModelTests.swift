@@ -49,4 +49,20 @@ final class SessionListViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.sessions.map(\.id), ["new", "old"])
     }
+
+    func testResolvesConnectedWorkspaceIdForNewSession() async {
+        // The "+" action must resolve a workspace even with no sessions loaded
+        // yet — it prefers the connection's workspace id so it never shows
+        // "No workspace available".
+        let viewModel = SessionListViewModel(client: nil, cache: nil, workspaceId: "connected-ws")
+        let resolved = await viewModel.resolveWorkspaceIdForNewSession()
+        XCTAssertEqual(resolved, "connected-ws")
+    }
+
+    func testCreateNewSessionWithoutWorkspaceSurfacesError() async {
+        let viewModel = SessionListViewModel(client: nil, cache: nil, workspaceId: nil)
+        let created = await viewModel.createNewSession()
+        XCTAssertNil(created)
+        XCTAssertNotNil(viewModel.errorMessage)
+    }
 }

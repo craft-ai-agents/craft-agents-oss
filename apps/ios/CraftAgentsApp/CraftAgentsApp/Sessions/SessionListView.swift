@@ -5,8 +5,6 @@ import CraftAgentKit
 struct SessionListView: View {
     @Bindable var viewModel: SessionListViewModel
     @State private var selectedSessionId: String?
-    @State private var isShowingNewSessionSheet = false
-    @State private var newSessionWorkspaceId: String?
 
     var body: some View {
         NavigationSplitView(columnVisibility: .constant(.all)) {
@@ -27,25 +25,11 @@ struct SessionListView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Button("New Session", systemImage: "plus") {
                         Task {
-                            newSessionWorkspaceId = await viewModel.resolveWorkspaceIdForNewSession()
-                            isShowingNewSessionSheet = true
-                        }
-                    }
-                }
-            }
-            .sheet(isPresented: $isShowingNewSessionSheet) {
-                if let workspaceId = newSessionWorkspaceId {
-                    NewSessionSheet(workspaceId: workspaceId) { workspaceId in
-                        Task {
-                            if let created = await viewModel.createSession(workspaceId: workspaceId) {
+                            if let created = await viewModel.createNewSession() {
                                 selectedSessionId = created.id
                             }
                         }
                     }
-                } else {
-                    Text("No workspace available")
-                        .foregroundStyle(.secondary)
-                        .padding()
                 }
             }
         } detail: {
