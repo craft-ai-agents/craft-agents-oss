@@ -69,3 +69,25 @@ extension ChatViewModelTests {
         XCTAssertTrue(viewModel.isOffline)
     }
 }
+
+extension ChatViewModelTests {
+    func testUserMessageEventSurfacesOwnMessage() {
+        let viewModel = ChatViewModel(client: nil, sessionId: "s1")
+        let mine = ChatMessage(id: "m1", role: .user, content: "hello", timestamp: 1)
+        viewModel.apply(.userMessage(sessionId: "s1", message: mine, status: "sent"))
+
+        XCTAssertEqual(viewModel.messages.count, 1)
+        XCTAssertEqual(viewModel.messages.first?.id, "m1")
+        XCTAssertEqual(viewModel.messages.first?.content, "hello")
+        XCTAssertEqual(viewModel.messages.first?.role, .user)
+    }
+
+    func testDuplicateUserMessageEventIsDeduped() {
+        let viewModel = ChatViewModel(client: nil, sessionId: "s1")
+        let mine = ChatMessage(id: "m1", role: .user, content: "hello", timestamp: 1)
+        viewModel.apply(.userMessage(sessionId: "s1", message: mine, status: "sent"))
+        viewModel.apply(.userMessage(sessionId: "s1", message: mine, status: "sent"))
+
+        XCTAssertEqual(viewModel.messages.count, 1)
+    }
+}

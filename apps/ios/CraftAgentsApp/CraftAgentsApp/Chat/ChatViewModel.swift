@@ -81,6 +81,14 @@ final class ChatViewModel: RPCTransportDelegate {
         case .permissionRequest(let eventSessionId, let request):
             guard eventSessionId == sessionId else { return }
             pendingPermissionRequest = request
+        case .userMessage(let eventSessionId, let message, _):
+            guard eventSessionId == sessionId else { return }
+            // The server echoes the user's own message back as a `user_message`
+            // event; append it (deduped by id) so the sender sees their message
+            // immediately instead of only the assistant's reply.
+            if !messages.contains(where: { $0.id == message.id }) {
+                messages.append(message)
+            }
         default:
             break
         }
