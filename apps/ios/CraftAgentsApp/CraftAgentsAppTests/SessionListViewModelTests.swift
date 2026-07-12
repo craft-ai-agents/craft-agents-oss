@@ -142,4 +142,19 @@ final class SessionListViewModelTests: XCTestCase {
         viewModel.apply(.complete(sessionId: "s1"))
         XCTAssertTrue(viewModel.visibleSessions.isEmpty)
     }
+
+    func testConnectionStateMarksSessionListOfflineWhileReconnecting() async {
+        let transport = RPCTransport()
+        let viewModel = SessionListViewModel(
+            client: RPCClient(transport: transport),
+            workspaceId: "w1"
+        )
+        XCTAssertFalse(viewModel.isOffline)
+
+        await viewModel.transport(transport, didChangeState: .reconnecting(attempt: 1))
+        XCTAssertTrue(viewModel.isOffline)
+
+        await viewModel.transport(transport, didChangeState: .connected)
+        XCTAssertFalse(viewModel.isOffline)
+    }
 }

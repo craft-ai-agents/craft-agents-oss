@@ -39,11 +39,20 @@ final class SessionListViewModel: RPCTransportDelegate {
     var errorMessage: String?
     private(set) var client: RPCClient?
     private(set) var cache: SessionCacheRepository?
-    var isOffline: Bool { client == nil }
+    private(set) var connectionState: ConnectionState
+    var isOffline: Bool {
+        guard client != nil else { return true }
+        if case .connected = connectionState { return false }
+        return true
+    }
     /// Workspace-defined session categories (statuses), for the picker + labels.
     private(set) var statuses: [WorkspaceStatus] = []
     /// Workspace the app is connected to; primary source for new-session creation.
     private let connectedWorkspaceId: String?
+    private var isLoading = false
+    private var retryLoadWhenConnected = false
+    private var loadFailureActive = false
+    private var transientConnectionErrorActive = false
 
     var visibleSessions: [Session] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -68,21 +77,39 @@ final class SessionListViewModel: RPCTransportDelegate {
         self.client = client
         self.cache = cache
         self.connectedWorkspaceId = workspaceId
+        self.connectionState = client == nil ? .disconnected : .connected
     }
 
     func load() async {
+        guard !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+
         guard let client else {
             sessions = (try? cache?.cachedSessions()) ?? []
             return
         }
+
+        await client.transport.addDelegate(self)
+        connectionState = await client.transport.state
+
         do {
             sessions = try await client.listSessions()
             for session in sessions { try? cache?.upsert(session) }
-            await client.transport.addDelegate(self)
             await loadStatuses()
+            retryLoadWhenConnected = false
+            if loadFailureActive {
+                errorMessage = nil
+                loadFailureActive = false
+                transientConnectionErrorActive = false
+            }
         } catch {
-            errorMessage = "\(error)"
-            sessions = (try? cache?.cachedSessions()) ?? []
+            loadFailureActive = true
+            retryLoadWhenConnected = isRecoverableConnectionError(error)
+            record(error)
+            if sessions.isEmpty {
+                sessions = (try? cache?.cachedSessions()) ?? []
+            }
         }
     }
 
@@ -108,7 +135,7 @@ final class SessionListViewModel: RPCTransportDelegate {
                 sessions[index].sessionStatus = statusId
             }
         } catch {
-            errorMessage = "\(error)"
+            record(error)
         }
     }
 
@@ -136,7 +163,7 @@ final class SessionListViewModel: RPCTransportDelegate {
             try await client.deleteSession(sessionId: sessionId)
             remove(sessionId: sessionId)
         } catch {
-            errorMessage = "\(error)"
+            record(error)
         }
     }
 
@@ -149,7 +176,7 @@ final class SessionListViewModel: RPCTransportDelegate {
                 sessions[index].name = name
             }
         } catch {
-            errorMessage = "\(error)"
+            record(error)
         }
     }
 
@@ -161,7 +188,7 @@ final class SessionListViewModel: RPCTransportDelegate {
             try await client.archiveSession(sessionId: sessionId)
             remove(sessionId: sessionId)
         } catch {
-            errorMessage = "\(error)"
+            record(error)
         }
     }
 
@@ -173,7 +200,7 @@ final class SessionListViewModel: RPCTransportDelegate {
             try? cache?.upsert(session)
             return session
         } catch {
-            errorMessage = "\(error)"
+            record(error)
             return nil
         }
     }
@@ -241,7 +268,9 @@ final class SessionListViewModel: RPCTransportDelegate {
         }
     }
 
-    nonisolated func transport(_ transport: RPCTransport, didChangeState state: ConnectionState) async {}
+    nonisolated func transport(_ transport: RPCTransport, didChangeState state: ConnectionState) async {
+        await handleConnectionState(state)
+    }
 
     nonisolated func transport(_ transport: RPCTransport, didReceiveEvent envelope: MessageEnvelope) async {
         guard envelope.channel == RPCChannels.Sessions.event,
@@ -252,6 +281,30 @@ final class SessionListViewModel: RPCTransportDelegate {
 
     var clientForDetail: RPCClient? { client }
     var clientCache: SessionCacheRepository? { cache }
+
+    private func handleConnectionState(_ state: ConnectionState) async {
+        connectionState = state
+        if case .failed(let connectionError) = state {
+            errorMessage = connectionError.message
+            transientConnectionErrorActive = false
+            retryLoadWhenConnected = false
+            return
+        }
+        guard case .connected = state else { return }
+
+        if transientConnectionErrorActive {
+            errorMessage = nil
+            transientConnectionErrorActive = false
+        }
+        guard retryLoadWhenConnected else { return }
+        retryLoadWhenConnected = false
+        await load()
+    }
+
+    private func record(_ error: Error) {
+        errorMessage = userFacingTransportError(error)
+        transientConnectionErrorActive = isRecoverableConnectionError(error)
+    }
 
     private func matchesSelectedFilter(_ session: Session) -> Bool {
         switch selectedFilter {

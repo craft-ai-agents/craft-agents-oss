@@ -132,4 +132,45 @@ extension ChatViewModelTests {
         viewModel.apply(.userMessage(sessionId: "s1", message: mine, status: "sent"))
         XCTAssertEqual(viewModel.messages.filter { $0.id == "server-id-1" }.count, 1)
     }
+
+    func testConnectionStateDisablesChatWhileReconnecting() async {
+        let transport = RPCTransport()
+        let viewModel = ChatViewModel(
+            client: RPCClient(transport: transport),
+            sessionId: "s1"
+        )
+        XCTAssertFalse(viewModel.isOffline)
+
+        await viewModel.transport(transport, didChangeState: .reconnecting(attempt: 1))
+        XCTAssertTrue(viewModel.isOffline)
+
+        await viewModel.transport(transport, didChangeState: .connected)
+        XCTAssertFalse(viewModel.isOffline)
+    }
+
+    func testFailedSendRestoresDraftAndShowsFriendlyConnectionError() async {
+        let viewModel = ChatViewModel(
+            client: RPCClient(transport: RPCTransport()),
+            sessionId: "s1"
+        )
+        viewModel.draftText = "Keep this message"
+
+        await viewModel.send()
+
+        XCTAssertEqual(viewModel.draftText, "Keep this message")
+        XCTAssertFalse(viewModel.isProcessing)
+        XCTAssertEqual(
+            viewModel.errorMessage,
+            "The server connection is unavailable. Reconnecting..."
+        )
+    }
+
+    func testOversizedResponseIsNotTreatedAsRecoverableDisconnect() {
+        let error = URLError(.dataLengthExceedsMaximum)
+        XCTAssertFalse(isRecoverableConnectionError(error))
+        XCTAssertEqual(
+            userFacingTransportError(error),
+            "This session is too large to load on this device."
+        )
+    }
 }

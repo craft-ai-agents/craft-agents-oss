@@ -5,7 +5,10 @@ import XCTest
 final class RPCTransportMultiDelegateTests: XCTestCase {
     private final class RecordingDelegate: RPCTransportDelegate {
         nonisolated(unsafe) var receivedEventCount = 0
-        func transport(_ transport: RPCTransport, didChangeState state: ConnectionState) async {}
+        nonisolated(unsafe) var states: [ConnectionState] = []
+        func transport(_ transport: RPCTransport, didChangeState state: ConnectionState) async {
+            states.append(state)
+        }
         func transport(_ transport: RPCTransport, didReceiveEvent envelope: MessageEnvelope) async {
             receivedEventCount += 1
         }
@@ -28,6 +31,23 @@ final class RPCTransportMultiDelegateTests: XCTestCase {
 
         XCTAssertEqual(delegateA.receivedEventCount, 1)
         XCTAssertEqual(delegateB.receivedEventCount, 1)
+    }
+
+    func testStateNotificationsPreserveTransportOrder() async {
+        let transport = RPCTransport()
+        let delegate = RecordingDelegate()
+        await transport.addDelegate(delegate)
+
+        await transport.updateStateForTesting(.connecting)
+        await transport.updateStateForTesting(.connected)
+        await transport.updateStateForTesting(.reconnecting(attempt: 1))
+
+        await waitUntil { delegate.states.count == 3 }
+
+        XCTAssertEqual(
+            delegate.states,
+            [.connecting, .connected, .reconnecting(attempt: 1)]
+        )
     }
 
     /// Polls `condition` until true or a timeout elapses, yielding between

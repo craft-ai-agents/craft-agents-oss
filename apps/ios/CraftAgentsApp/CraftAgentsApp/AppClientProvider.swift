@@ -19,6 +19,9 @@ final class AppClientProvider {
     /// All workspaces available on the connected server (for the switcher).
     private(set) var workspaces: [Workspace] = []
     private(set) var lastError: String?
+    /// Changes whenever the provider replaces its underlying RPC client. Views
+    /// use this to discard view models bound to a disconnected transport.
+    private(set) var connectionRevision = 0
     private let store: ServerConnectionStore
     /// The connection currently in use, retained so we can reconnect with a
     /// different workspace id.
@@ -39,8 +42,6 @@ final class AppClientProvider {
     /// persisting the choice on the saved connection.
     func switchWorkspace(to id: String) async {
         guard let existing = connection, existing.workspaceId != id else { return }
-        await client?.disconnect()
-        client = nil
         let updated = ServerConnection(
             id: existing.id, name: existing.name, url: existing.url,
             token: existing.token, workspaceId: id
@@ -51,6 +52,11 @@ final class AppClientProvider {
     }
 
     private func connect(using connection: ServerConnection) async {
+        if let existingClient = client {
+            await existingClient.disconnect()
+        }
+        client = nil
+        connectionRevision += 1
         connectionState = .connecting
         lastError = nil
         workspaceId = connection.workspaceId
@@ -63,6 +69,7 @@ final class AppClientProvider {
                 workspaceId: connection.workspaceId
             )
             self.client = client
+            connectionRevision += 1
             connectionState = .connected
             workspaces = (try? await client.listWorkspaces()) ?? []
         } catch {

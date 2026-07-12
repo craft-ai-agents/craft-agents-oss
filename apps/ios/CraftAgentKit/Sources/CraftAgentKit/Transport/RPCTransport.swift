@@ -9,11 +9,43 @@ public actor RPCTransport: NSObject {
         let continuation: CheckedContinuation<JSONValue, Error>
     }
 
-    public enum TransportError: Error, Equatable {
+    public enum TransportError: Error, Equatable, LocalizedError {
         case notConnected
+        case connectionTimedOut
         case requestTimedOut
+        case messageTooLarge
         case remote(WireError)
         case invalidResponse
+
+        public var errorDescription: String? {
+            switch self {
+            case .notConnected:
+                "The server connection is unavailable. Reconnecting..."
+            case .connectionTimedOut:
+                "Could not reconnect to the server in time."
+            case .requestTimedOut:
+                "The server took too long to respond."
+            case .messageTooLarge:
+                "This session is too large to load on this device."
+            case .remote(let error):
+                error.message
+            case .invalidResponse:
+                "The server returned an invalid response."
+            }
+        }
+
+        public var isConnectionUnavailable: Bool {
+            switch self {
+            case .notConnected, .connectionTimedOut, .requestTimedOut:
+                true
+            case .remote(let error):
+                error.code == .clientDisconnected
+                    || error.code == .clientRequestTimeout
+                    || error.code == .requestTimeout
+            case .messageTooLarge, .invalidResponse:
+                false
+            }
+        }
     }
 
     private var session: URLSession!
@@ -27,6 +59,7 @@ public actor RPCTransport: NSObject {
     private var pending: [String: PendingRequest] = [:]
     private var heartbeatTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
     private var missedPongs = 0
     private var isExplicitlyDisconnected = false
 
@@ -38,6 +71,7 @@ public actor RPCTransport: NSObject {
     }
     
     private var delegateBoxes: [ObjectIdentifier: WeakDelegateBox] = [:]
+    private var delegateNotificationTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
 
     public override init() {
         super.init()
@@ -49,7 +83,9 @@ public actor RPCTransport: NSObject {
     }
 
     public func removeDelegate(_ delegate: RPCTransportDelegate) {
-        delegateBoxes.removeValue(forKey: ObjectIdentifier(delegate))
+        let id = ObjectIdentifier(delegate)
+        delegateBoxes.removeValue(forKey: id)
+        delegateNotificationTasks.removeValue(forKey: id)?.cancel()
     }
 
     /// Notifies all registered delegates concurrently in unordered fire-and-forget Tasks.
@@ -57,9 +93,16 @@ public actor RPCTransport: NSObject {
     private func notifyDelegates(_ body: @escaping @Sendable (RPCTransportDelegate) async -> Void) {
         // Prune boxes whose delegate has already been deallocated.
         delegateBoxes = delegateBoxes.filter { $0.value.delegate != nil }
-        for box in delegateBoxes.values {
+        delegateNotificationTasks = delegateNotificationTasks.filter { delegateBoxes[$0.key] != nil }
+
+        for (id, box) in delegateBoxes {
             guard let delegate = box.delegate else { continue }
-            Task { await body(delegate) }
+            let previous = delegateNotificationTasks[id]
+            delegateNotificationTasks[id] = Task {
+                await previous?.value
+                guard !Task.isCancelled else { return }
+                await body(delegate)
+            }
         }
     }
 
@@ -69,32 +112,57 @@ public actor RPCTransport: NSObject {
         await handle(envelope)
     }
 
+    func updateStateForTesting(_ state: ConnectionState) {
+        updateState(state)
+    }
+
     /// Opens the WebSocket, performs the handshake, and returns once the
     /// server has acknowledged (`handshake_ack`). Throws on auth failure,
     /// protocol mismatch, or timeout.
     public func connect(serverURL: URL, token: String, workspaceId: String?) async throws {
+        reconnectTask?.cancel()
+        reconnectTask = nil
         self.serverURL = serverURL
         self.token = token
         self.workspaceId = workspaceId
+        reconnectAttempt = 0
         isExplicitlyDisconnected = false
-        try await openSocketAndHandshake()
+        do {
+            try await openSocketAndHandshake()
+        } catch {
+            if task == nil, !isExplicitlyDisconnected {
+                updateState(.failed(Self.connectionError(from: error)))
+            }
+            throw error
+        }
     }
 
     public func disconnect() {
         isExplicitlyDisconnected = true
         heartbeatTask?.cancel()
         receiveTask?.cancel()
-        task?.cancel(with: .goingAway, reason: nil)
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        let activeTask = task
         task = nil
+        activeTask?.cancel(with: .goingAway, reason: nil)
+        failAllPending(error: TransportError.notConnected)
         updateState(.disconnected)
     }
 
     /// Sends a request envelope and awaits the correlated response/error.
     public func request(channel: String, args: [JSONValue] = []) async throws -> JSONValue {
+        let deadline = Date().addingTimeInterval(
+            TimeInterval(ProtocolConstants.requestTimeoutMs) / 1_000
+        )
+        try await ensureConnected(until: deadline)
         guard let task else { throw TransportError.notConnected }
         let id = UUID().uuidString
         let envelope = MessageEnvelope(id: id, type: .request, channel: channel, args: args)
         let wire = try ProtocolCodec.serialize(envelope)
+        let remainingSeconds = deadline.timeIntervalSinceNow
+        guard remainingSeconds > 0 else { throw TransportError.connectionTimedOut }
+        let timeoutNanoseconds = UInt64(remainingSeconds * 1_000_000_000)
 
         return try await withCheckedThrowingContinuation { continuation in
             pending[id] = PendingRequest(continuation: continuation)
@@ -102,12 +170,13 @@ public actor RPCTransport: NSObject {
                 do {
                     try await task.send(.string(wire))
                 } catch {
-                    await self.failPending(id: id, error: error)
+                    self.failPending(id: id, error: TransportError.notConnected)
+                    self.handleSocketFailure(error, failedTask: task)
                 }
             }
             Task {
-                try? await Task.sleep(nanoseconds: ProtocolConstants.requestTimeoutMs * 1_000_000)
-                await self.timeoutPending(id: id)
+                try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+                self.timeoutPending(id: id)
             }
         }
     }
@@ -119,6 +188,7 @@ public actor RPCTransport: NSObject {
         updateState(reconnectAttempt > 0 ? .reconnecting(attempt: reconnectAttempt) : .connecting)
 
         let newTask = session.webSocketTask(with: serverURL)
+        Self.configureWebSocketTask(newTask)
         newTask.resume()
         self.task = newTask
 
@@ -133,16 +203,27 @@ public actor RPCTransport: NSObject {
             handshake.lastSeq = lastSeenSeq
         }
 
-        let wire = try ProtocolCodec.serialize(handshake)
-        try await newTask.send(.string(wire))
+        do {
+            let wire = try ProtocolCodec.serialize(handshake)
+            try await newTask.send(.string(wire))
 
-        let ackEnvelope = try await receiveHandshakeAck(on: newTask, expectedId: handshakeId)
-        self.clientId = ackEnvelope.clientId
-        reconnectAttempt = 0
-        updateState(.connected)
+            let ackEnvelope = try await receiveHandshakeAck(on: newTask, expectedId: handshakeId)
+            guard let activeTask = task, activeTask === newTask else {
+                throw TransportError.notConnected
+            }
+            self.clientId = ackEnvelope.clientId
+            reconnectAttempt = 0
+            updateState(.connected)
 
-        startReceiveLoop(on: newTask)
-        startHeartbeat(on: newTask)
+            startReceiveLoop(on: newTask)
+            startHeartbeat(on: newTask)
+        } catch {
+            if let activeTask = task, activeTask === newTask {
+                task = nil
+            }
+            newTask.cancel(with: .goingAway, reason: nil)
+            throw error
+        }
     }
 
     private func receiveHandshakeAck(on task: URLSessionWebSocketTask, expectedId: String) async throws -> MessageEnvelope {
@@ -172,7 +253,7 @@ public actor RPCTransport: NSObject {
                     let envelope = try ProtocolCodec.deserialize(text)
                     await self.handle(envelope)
                 } catch {
-                    await self.handleSocketFailure(error)
+                    self.handleSocketFailure(error, failedTask: task)
                     break
                 }
             }
@@ -237,22 +318,50 @@ public actor RPCTransport: NSObject {
 
     // MARK: - Failure / reconnect
 
-    private func handleSocketFailure(_ error: Error) async {
+    private func handleSocketFailure(_ error: Error, failedTask: URLSessionWebSocketTask) {
+        guard let activeTask = task, activeTask === failedTask else { return }
         heartbeatTask?.cancel()
+        task = nil
+        activeTask.cancel(with: .abnormalClosure, reason: nil)
         guard !isExplicitlyDisconnected else { return }
-        for (id, _) in pending {
-            failPending(id: id, error: TransportError.notConnected)
+        let transportError = Self.transportError(forSocketFailure: error)
+        failAllPending(error: transportError)
+        guard Self.shouldReconnect(after: transportError) else {
+            updateState(.failed(Self.connectionError(from: transportError)))
+            return
         }
         reconnectAttempt += 1
         updateState(.reconnecting(attempt: reconnectAttempt))
+        scheduleReconnect()
+    }
 
-        let backoffMs = min(30_000, 1_000 * (1 << min(reconnectAttempt, 5)))
-        try? await Task.sleep(nanoseconds: UInt64(backoffMs) * 1_000_000)
-        guard !isExplicitlyDisconnected else { return }
-        do {
-            try await openSocketAndHandshake()
-        } catch {
-            updateState(.failed(ConnectionError(kind: .network, message: "\(error)")))
+    private func scheduleReconnect() {
+        guard reconnectTask == nil, !isExplicitlyDisconnected else { return }
+        reconnectTask = Task { [weak self] in
+            await self?.runReconnectLoop()
+        }
+    }
+
+    private func runReconnectLoop() async {
+        defer { reconnectTask = nil }
+        while !isExplicitlyDisconnected, !Task.isCancelled {
+            let attempt = max(reconnectAttempt, 1)
+            updateState(.reconnecting(attempt: attempt))
+            let backoffMs = min(30_000, 1_000 * (1 << min(attempt, 5)))
+            try? await Task.sleep(nanoseconds: UInt64(backoffMs) * 1_000_000)
+            guard !isExplicitlyDisconnected, !Task.isCancelled else { return }
+
+            do {
+                try await openSocketAndHandshake()
+                reconnectTask = nil
+                return
+            } catch {
+                guard Self.shouldReconnect(after: error) else {
+                    updateState(.failed(Self.connectionError(from: error)))
+                    return
+                }
+                reconnectAttempt = attempt + 1
+            }
         }
     }
 
@@ -271,6 +380,66 @@ public actor RPCTransport: NSObject {
     private func timeoutPending(id: String) {
         guard pending[id] != nil else { return }
         failPending(id: id, error: TransportError.requestTimedOut)
+    }
+
+    private func failAllPending(error: Error) {
+        for id in Array(pending.keys) {
+            failPending(id: id, error: error)
+        }
+    }
+
+    private func ensureConnected(until deadline: Date) async throws {
+        while true {
+            switch state {
+            case .connected:
+                guard task != nil else { throw TransportError.notConnected }
+                return
+            case .connecting, .reconnecting:
+                guard Date() < deadline else { throw TransportError.connectionTimedOut }
+                try await Task.sleep(nanoseconds: 50_000_000)
+            case .idle, .disconnected, .failed:
+                throw TransportError.notConnected
+            }
+        }
+    }
+
+    static func configureWebSocketTask(_ task: URLSessionWebSocketTask) {
+        task.maximumMessageSize = ProtocolConstants.maxIncomingMessageSizeBytes
+    }
+
+    static func transportError(forSocketFailure error: Error) -> TransportError {
+        if let urlError = error as? URLError,
+           urlError.code == .dataLengthExceedsMaximum {
+            return .messageTooLarge
+        }
+        if error.localizedDescription.localizedCaseInsensitiveContains("message too long") {
+            return .messageTooLarge
+        }
+        return .notConnected
+    }
+
+    static func shouldReconnect(after error: Error) -> Bool {
+        if let transportError = error as? TransportError {
+            return transportError.isConnectionUnavailable
+        }
+        if let urlError = error as? URLError {
+            return urlError.code != .dataLengthExceedsMaximum
+        }
+        return false
+    }
+
+    static func connectionError(from error: Error) -> ConnectionError {
+        if case .remote(let wireError)? = error as? TransportError {
+            switch wireError.code {
+            case .authFailed:
+                return ConnectionError(kind: .auth, message: wireError.message)
+            case .protocolVersionUnsupported:
+                return ConnectionError(kind: .protocolVersion, message: wireError.message)
+            default:
+                return ConnectionError(kind: .server, message: wireError.message)
+            }
+        }
+        return ConnectionError(kind: .network, message: error.localizedDescription)
     }
 
     private func updateState(_ newState: ConnectionState) {

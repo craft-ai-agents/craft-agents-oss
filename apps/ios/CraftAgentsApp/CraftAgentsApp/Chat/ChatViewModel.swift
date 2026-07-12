@@ -6,7 +6,11 @@ import CraftAgentKit
 @Observable
 @MainActor
 final class ChatViewModel: RPCTransportDelegate {
-    var isOffline: Bool { client == nil }
+    var isOffline: Bool {
+        guard client != nil else { return true }
+        if case .connected = connectionState { return false }
+        return true
+    }
     private(set) var messages: [ChatMessage] = []
     var draftText: String = ""
     var errorMessage: String?
@@ -19,12 +23,17 @@ final class ChatViewModel: RPCTransportDelegate {
     var permissionMode: String?
     private(set) var files: [SessionFile] = []
     private(set) var availableConnections: [LlmConnection] = []
+    private(set) var connectionState: ConnectionState
 
     private let client: RPCClient?
     let sessionId: String
     let workspaceId: String?
     private var streamingMessageId: String?
     private let cache: SessionCacheRepository?
+    private var isLoading = false
+    private var retryLoadWhenConnected = false
+    private var loadFailureActive = false
+    private var transientConnectionErrorActive = false
 
     init(
         client: RPCClient?,
@@ -36,6 +45,7 @@ final class ChatViewModel: RPCTransportDelegate {
         self.sessionId = sessionId
         self.cache = cache
         self.workspaceId = workspaceId
+        self.connectionState = client == nil ? .disconnected : .connected
     }
 
     // MARK: Notes / files / model / permission mode
@@ -50,7 +60,7 @@ final class ChatViewModel: RPCTransportDelegate {
     func saveNotes(_ content: String) async {
         guard let client else { return }
         do { try await client.setNotes(sessionId: sessionId, content: content) }
-        catch { errorMessage = "\(error)" }
+        catch { record(error) }
     }
 
     /// Loads the session file tree (`sessions:getFiles`).
@@ -65,7 +75,7 @@ final class ChatViewModel: RPCTransportDelegate {
         do {
             try await client.setModel(sessionId: sessionId, workspaceId: workspaceId, model: model, connection: connection)
             currentModel = model
-        } catch { errorMessage = "\(error)" }
+        } catch { record(error) }
     }
 
     /// Loads available model connections for the model picker
@@ -81,25 +91,42 @@ final class ChatViewModel: RPCTransportDelegate {
         do {
             try await client.setSessionPermissionMode(sessionId: sessionId, mode: mode)
             permissionMode = mode.rawValue
-        } catch { errorMessage = "\(error)" }
+        } catch { record(error) }
     }
 
     func load() async {
+        guard !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+
         guard let client else {
             messages = (try? cache?.cachedMessages(sessionId: sessionId)) ?? []
             return
         }
+
+        await client.transport.addDelegate(self)
+        connectionState = await client.transport.state
+
         do {
             messages = try await client.getMessages(sessionId: sessionId)
             for message in messages { try? cache?.upsert(message, sessionId: sessionId) }
-            await client.transport.addDelegate(self)
             if let workspaceId {
                 currentModel = try? await client.getModel(sessionId: sessionId, workspaceId: workspaceId)
             }
             permissionMode = (try? await client.getPermissionModeState(sessionId: sessionId))?.permissionMode
+            retryLoadWhenConnected = false
+            if loadFailureActive {
+                errorMessage = nil
+                loadFailureActive = false
+                transientConnectionErrorActive = false
+            }
         } catch {
-            errorMessage = "\(error)"
-            messages = (try? cache?.cachedMessages(sessionId: sessionId)) ?? []
+            loadFailureActive = true
+            retryLoadWhenConnected = isRecoverableConnectionError(error)
+            record(error)
+            if messages.isEmpty {
+                messages = (try? cache?.cachedMessages(sessionId: sessionId)) ?? []
+            }
         }
     }
 
@@ -126,7 +153,8 @@ final class ChatViewModel: RPCTransportDelegate {
                 ))
             }
         } catch {
-            errorMessage = "\(error)"
+            restoreDraft(text: text, attachments: attachments)
+            record(error)
             isProcessing = false
         }
     }
@@ -137,7 +165,7 @@ final class ChatViewModel: RPCTransportDelegate {
         do {
             try await client.cancelProcessing(sessionId: sessionId)
         } catch {
-            errorMessage = "\(error)"
+            record(error)
         }
         isProcessing = false
     }
@@ -149,7 +177,7 @@ final class ChatViewModel: RPCTransportDelegate {
             try await client.respondToCredential(sessionId: sessionId, requestId: request.requestId, response: response)
             pendingCredentialRequest = nil
         } catch {
-            errorMessage = "\(error)"
+            record(error)
         }
     }
 
@@ -240,7 +268,9 @@ final class ChatViewModel: RPCTransportDelegate {
         self.streamingMessageId = nil
     }
 
-    nonisolated func transport(_ transport: RPCTransport, didChangeState state: ConnectionState) async {}
+    nonisolated func transport(_ transport: RPCTransport, didChangeState state: ConnectionState) async {
+        await handleConnectionState(state)
+    }
 
     nonisolated func transport(_ transport: RPCTransport, didReceiveEvent envelope: MessageEnvelope) async {
         guard envelope.channel == RPCChannels.Sessions.event,
@@ -258,7 +288,40 @@ final class ChatViewModel: RPCTransportDelegate {
             )
             pendingPermissionRequest = nil
         } catch {
-            errorMessage = "\(error)"
+            record(error)
         }
+    }
+
+    private func handleConnectionState(_ state: ConnectionState) async {
+        connectionState = state
+        if case .failed(let connectionError) = state {
+            errorMessage = connectionError.message
+            transientConnectionErrorActive = false
+            retryLoadWhenConnected = false
+            return
+        }
+        guard case .connected = state else { return }
+
+        if transientConnectionErrorActive {
+            errorMessage = nil
+            transientConnectionErrorActive = false
+        }
+        guard retryLoadWhenConnected else { return }
+        retryLoadWhenConnected = false
+        await load()
+    }
+
+    private func record(_ error: Error) {
+        errorMessage = userFacingTransportError(error)
+        transientConnectionErrorActive = isRecoverableConnectionError(error)
+    }
+
+    private func restoreDraft(text: String, attachments: [FileAttachment]) {
+        if draftText.isEmpty {
+            draftText = text
+        } else if !text.isEmpty {
+            draftText = "\(text)\n\(draftText)"
+        }
+        pendingAttachments = attachments + pendingAttachments
     }
 }

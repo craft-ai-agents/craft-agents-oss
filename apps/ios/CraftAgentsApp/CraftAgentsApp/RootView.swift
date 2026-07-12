@@ -25,9 +25,9 @@ struct RootView: View {
                     currentWorkspaceId: appClientProvider.workspaceId,
                     onSwitchWorkspace: { await appClientProvider.switchWorkspace(to: $0) }
                 )
-                // Give the list a fresh identity per (workspace, connected) state
-                // so switching workspace rebuilds it and reloads sessions.
-                .id("\(appClientProvider.workspaceId ?? "none")-\(appClientProvider.client != nil)")
+                // Rebuild view models whenever the provider replaces its RPC
+                // client so no session remains bound to a disconnected transport.
+                .id("\(appClientProvider.workspaceId ?? "none")-\(appClientProvider.connectionRevision)")
             } else {
                 NavigationStack {
                     ServerConnectionSetupView(viewModel: connectionViewModel) {
