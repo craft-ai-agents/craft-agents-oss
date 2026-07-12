@@ -20,6 +20,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2" # iPhone + iPad
         SWIFT_VERSION: "6.0"
         CODE_SIGN_ENTITLEMENTS: CraftAgentsApp/CraftAgentsApp.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: CraftAgentsApp/Info.plist
       properties:
