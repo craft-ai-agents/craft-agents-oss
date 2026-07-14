@@ -14,8 +14,8 @@
  * Provider mappings:
  * - Anthropic: adaptive thinking + effort levels (current Opus models). On models that
  *   don't accept `xhigh`, the Anthropic SDK silently falls back to `high`.
- * - Pi/OpenAI: reasoning_effort via Pi SDK levels. Pi's ceiling is `xhigh`,
- *   so Craft's `max` saturates there.
+ * - Pi/OpenAI: reasoning_effort via Pi SDK levels, passed through 1:1 up to `max`.
+ *   Pi clamps models without native `max` support to their own ceiling.
  */
 
 /**

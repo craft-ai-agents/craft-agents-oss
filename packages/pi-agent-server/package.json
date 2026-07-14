@@ -14,9 +14,9 @@
     "validate": "bun run typecheck && bun run build"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "0.80.3",
-    "@earendil-works/pi-agent-core": "0.80.3",
-    "@earendil-works/pi-ai": "0.80.3",
+    "@earendil-works/pi-coding-agent": "0.80.6",
+    "@earendil-works/pi-agent-core": "0.80.6",
+    "@earendil-works/pi-ai": "0.80.6",
     "duck-duck-scrape": "^2.2.7",
     "@sinclair/typebox": "^0.34.0",
     "node-html-parser": "^6.1.0",

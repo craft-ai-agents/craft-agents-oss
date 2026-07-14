@@ -30,7 +30,7 @@
     "jose": "^6.0.0",
     "ws": "^8.19.0",
     "sharp": "0.34.5",
-    "@earendil-works/pi-ai": "0.80.3"
+    "@earendil-works/pi-ai": "0.80.6"
   },
   "devDependencies": {
     "typescript": "^5.8.2",
