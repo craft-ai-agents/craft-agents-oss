@@ -9,8 +9,8 @@
         "@anthropic-ai/sdk": "^0.100.0",
         "@dnd-kit/dom": "^0.4.0-beta-20260227032529",
         "@dnd-kit/helpers": "^0.4.0-beta-20260227032529",
-        "@earendil-works/pi-ai": "0.80.6",
-        "@earendil-works/pi-coding-agent": "0.80.6",
+        "@earendil-works/pi-ai": "0.80.7",
+        "@earendil-works/pi-coding-agent": "0.80.7",
         "@github/copilot-sdk": "^0.1.23",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@radix-ui/react-avatar": "^1.1.11",
@@ -268,9 +268,9 @@
         "pi-agent-server": "./dist/index.js",
       },
       "dependencies": {
-        "@earendil-works/pi-agent-core": "0.80.6",
-        "@earendil-works/pi-ai": "0.80.6",
-        "@earendil-works/pi-coding-agent": "0.80.6",
+        "@earendil-works/pi-agent-core": "0.80.7",
+        "@earendil-works/pi-ai": "0.80.7",
+        "@earendil-works/pi-coding-agent": "0.80.7",
         "@sinclair/typebox": "^0.34.0",
         "duck-duck-scrape": "^2.2.7",
         "node-html-parser": "^6.1.0",
@@ -305,7 +305,7 @@
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/shared": "workspace:*",
-        "@earendil-works/pi-ai": "0.80.6",
+        "@earendil-works/pi-ai": "0.80.7",
         "jose": "^6.0.0",
         "sharp": "0.34.5",
         "ws": "^8.19.0",
@@ -350,9 +350,9 @@
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/session-tools-core": "workspace:*",
-        "@earendil-works/pi-agent-core": "0.80.6",
-        "@earendil-works/pi-ai": "0.80.6",
-        "@earendil-works/pi-coding-agent": "0.80.6",
+        "@earendil-works/pi-agent-core": "0.80.7",
+        "@earendil-works/pi-ai": "0.80.7",
+        "@earendil-works/pi-coding-agent": "0.80.7",
         "@isaacs/ttlcache": "^2.1.4",
         "@leeoniya/ufuzzy": "^1.0.19",
         "bash-parser": "^0.5.0",
@@ -682,13 +682,13 @@
 
     "@dnd-kit/utilities": ["@dnd-kit/utilities@3.2.2", "", { "dependencies": { "tslib": "^2.0.0" }, "peerDependencies": { "react": ">=16.8.0" } }, "sha512-+MKAJEOfaBe5SmV6t34p80MMKhjvUz0vRrvVJbPT0WElzaOJ/1xs+D+KDv+tD/NE5ujfrChEcshd4fLn0wpiqg=="],
 
-    "@earendil-works/pi-agent-core": ["@earendil-works/pi-agent-core@0.80.6", "", { "dependencies": { "@earendil-works/pi-ai": "^0.80.6", "ignore": "7.0.5", "typebox": "1.1.38", "yaml": "2.9.0" } }, "sha512-Lvn89ko42h5ETUb6Z0Ku6ldskEqXaTdQBYvSa0+7bdG9V6rUEpXptv5e0OVZ1HDcvi8s6/2lGCQWsxKX+DFHNw=="],
+    "@earendil-works/pi-agent-core": ["@earendil-works/pi-agent-core@0.80.7", "", { "dependencies": { "@earendil-works/pi-ai": "^0.80.7", "ignore": "7.0.5", "typebox": "1.1.38", "yaml": "2.9.0" } }, "sha512-EFjyAuoz2kn24sR9Q5A86sZCG6mD+nz58DCsA2I2wxgmS50cF1tSLCBOZaHKI5U9Y3pJs4BefeK3LRkB5TdJag=="],
 
-    "@earendil-works/pi-ai": ["@earendil-works/pi-ai@0.80.6", "", { "dependencies": { "@anthropic-ai/sdk": "0.91.1", "@aws-sdk/client-bedrock-runtime": "3.1048.0", "@google/genai": "1.52.0", "@mistralai/mistralai": "2.2.6", "@opentelemetry/api": "1.9.0", "@smithy/node-http-handler": "4.7.3", "http-proxy-agent": "7.0.2", "https-proxy-agent": "7.0.6", "openai": "6.26.0", "partial-json": "0.1.7", "typebox": "1.1.38" }, "bin": { "pi-ai": "dist/cli.js" } }, "sha512-7xfLk8sANBp+bpPEbjoOZTbPxsa+++b1JXAoSJsNa3vbs9AHHEclmvg54XLQcxH+fuwaeti/g2jeIfJ+mVYLpA=="],
+    "@earendil-works/pi-ai": ["@earendil-works/pi-ai@0.80.7", "", { "dependencies": { "@anthropic-ai/sdk": "0.91.1", "@aws-sdk/client-bedrock-runtime": "3.1048.0", "@google/genai": "1.52.0", "@mistralai/mistralai": "2.2.6", "@opentelemetry/api": "1.9.0", "@smithy/node-http-handler": "4.7.3", "http-proxy-agent": "7.0.2", "https-proxy-agent": "7.0.6", "openai": "6.26.0", "partial-json": "0.1.7", "typebox": "1.1.38" }, "bin": { "pi-ai": "dist/cli.js" } }, "sha512-8RLKLwe5TFM9kKFMNu/lTzveduq4GxZbnlG6ba8FAhLeb5wJP4zbj1eBumKBRvggpFQnW5R/Vo2a8zTlHsV9SQ=="],
 
-    "@earendil-works/pi-coding-agent": ["@earendil-works/pi-coding-agent@0.80.6", "", { "dependencies": { "@earendil-works/pi-agent-core": "^0.80.6", "@earendil-works/pi-ai": "^0.80.6", "@earendil-works/pi-tui": "^0.80.6", "@silvia-odwyer/photon-node": "0.3.4", "chalk": "5.6.2", "cross-spawn": "7.0.6", "diff": "8.0.4", "glob": "13.0.6", "highlight.js": "10.7.3", "hosted-git-info": "9.0.3", "ignore": "7.0.5", "jiti": "2.7.0", "minimatch": "10.2.5", "proper-lockfile": "4.1.2", "semver": "7.8.0", "typebox": "1.1.38", "undici": "8.5.0", "yaml": "2.9.0" }, "optionalDependencies": { "@mariozechner/clipboard": "0.3.9" }, "bin": { "pi": "dist/cli.js" } }, "sha512-vcfD6tOk402isLl3Cm/qbn2O10TvgroMp1+/fEGM24ZdvETFCdOYv5VZ7m59EI5fPsjfSJh+CpQ5bhBrhfOg7g=="],
+    "@earendil-works/pi-coding-agent": ["@earendil-works/pi-coding-agent@0.80.7", "", { "dependencies": { "@earendil-works/pi-agent-core": "^0.80.7", "@earendil-works/pi-ai": "^0.80.7", "@earendil-works/pi-tui": "^0.80.7", "@silvia-odwyer/photon-node": "0.3.4", "chalk": "5.6.2", "cross-spawn": "7.0.6", "diff": "8.0.4", "glob": "13.0.6", "highlight.js": "10.7.3", "hosted-git-info": "9.0.3", "ignore": "7.0.5", "jiti": "2.7.0", "minimatch": "10.2.5", "proper-lockfile": "4.1.2", "semver": "7.8.0", "typebox": "1.1.38", "undici": "8.5.0", "yaml": "2.9.0" }, "optionalDependencies": { "@mariozechner/clipboard": "0.3.9" }, "bin": { "pi": "dist/cli.js" } }, "sha512-mxq3IClhdgmCrYiKuzKehs4QKCVJgKmlA70nUEzsgeNsGdxriT7o5sKQTCcxzVJkzDRMcHD/8tAP4/eGrV4gKQ=="],
 
-    "@earendil-works/pi-tui": ["@earendil-works/pi-tui@0.80.6", "", { "dependencies": { "get-east-asian-width": "1.6.0", "marked": "18.0.5" } }, "sha512-bSuzS4EVSqEPj/Qr/p9eqCESfKsGuDNbl77EGci8Iaqqt/C/XCBZL1MjXaxSWW1NsT5afjp/Cb0NTPzOLv/aPA=="],
+    "@earendil-works/pi-tui": ["@earendil-works/pi-tui@0.80.7", "", { "dependencies": { "get-east-asian-width": "1.6.0", "marked": "18.0.5" } }, "sha512-1B2++fLZfgI3XMzW2BTpuDuam2uyHnUUEmsOvi5R0Ne9RAt59WjFV0G8ozX6l1Xafa9P5Y3eT4aDtRr/v/CUTA=="],
 
     "@electron/asar": ["@electron/asar@4.0.1", "", { "dependencies": { "commander": "^13.1.0", "glob": "^11.0.1", "minimatch": "^10.0.1" }, "bin": { "asar": "bin/asar.mjs" } }, "sha512-F4Ykm1jiBGY1WV/o8Q8oFW8Nq0u+S2/vPujzNJtdSJ6C4LHC4CiGLn7c17s7SolZ23gcvCebMncmZtNc+MkxPQ=="],
 

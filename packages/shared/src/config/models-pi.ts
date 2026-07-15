@@ -14,7 +14,7 @@
  */
 
 import { getProviders, getModels } from '@earendil-works/pi-ai/compat';
-import type { KnownProvider, Model, Api } from '@earendil-works/pi-ai';
+import type { Model, Api } from '@earendil-works/pi-ai';
 import type { ModelDefinition } from './models.ts';
 
 // ============================================
@@ -99,7 +99,7 @@ function isBareBedrockClaudeModel(modelId: string): boolean {
  */
 export function getPiModelsForAuthProvider(piAuthProvider: string): ModelDefinition[] {
   try {
-    const models = getModels(piAuthProvider as KnownProvider);
+    const models = getModels(piAuthProvider as Parameters<typeof getModels>[0]);
     if (models.length > 0) {
       return models
         .filter(m => !isExcludedPiModel(m.id))
