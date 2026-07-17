@@ -91,6 +91,12 @@ RUN bun run scripts/build-wa-worker.ts
 # so low-RAM build hosts (e.g. 4GB VPS) can complete the build.
 RUN NODE_OPTIONS="--max-old-space-size=4096" bunx vite build --config apps/webui/vite.config.ts
 
+# Build the conversation-share viewer (apps/viewer) so the self-hosted share
+# server (packages/server-core/src/share, enabled by CRAFT_SHARE_PORT) has a
+# viewer bundle to serve. Same heap bump as the webui build. Without this, a
+# server started with CRAFT_SHARE_PORT set exits(1) on the missing viewer dir.
+RUN NODE_OPTIONS="--max-old-space-size=4096" bunx vite build --config apps/viewer/vite.config.ts
+
 # Pre-create .craft-agent so Docker named volumes inherit the correct permissions.
 RUN mkdir -p /home/craftagents/.craft-agent
 
@@ -106,6 +112,9 @@ USER craftagents
 ENV CRAFT_RPC_HOST=0.0.0.0
 ENV CRAFT_RPC_PORT=9100
 ENV CRAFT_WEBUI_DIR=/app/apps/webui/dist
+# Default location of the built share viewer; the share server only activates
+# when CRAFT_SHARE_PORT is also set (opt-in), so this is inert by itself.
+ENV CRAFT_SHARE_VIEWER_DIR=/app/apps/viewer/dist
 ENV CRAFT_BUNDLED_ASSETS_ROOT=/app/apps/electron
 # WhatsApp worker — Bun cannot run the CJS worker, so we point the adapter at
 # system `node` (installed above). If CRAFT_BUNDLED_ASSETS_ROOT changes, update
