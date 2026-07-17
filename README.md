@@ -245,6 +245,52 @@ docker run -d \
   craft-agents-server
 ```
 
+### Self-Hosted Conversation Sharing
+
+By default, **Share Conversation** uploads the transcript to the hosted viewer at `agents.craft.do`. To keep shared sessions on your own infrastructure, the headless server can host the open-source viewer (`apps/viewer`) and its `/s/api` store itself, on a **separate HTTP port** from the RPC/WebSocket port.
+
+**1. Build the viewer** (once):
+
+```bash
+bun install
+bun run --cwd apps/viewer build   # outputs apps/viewer/dist
+```
+
+**2. Enable the share server** by setting `CRAFT_SHARE_PORT`:
+
+```bash
+CRAFT_SERVER_TOKEN=<token> \
+CRAFT_SHARE_PORT=9200 \
+CRAFT_SHARE_PUBLIC_URL=https://share.example.com \
+bun run packages/server/src/index.ts
+# prints: CRAFT_SHARE_URL=https://share.example.com
+```
+
+**3. Point the client at it** so the Share button uploads here instead of the hosted viewer:
+
+```bash
+CRAFT_VIEWER_URL=https://share.example.com bun run electron:start
+```
+
+#### Share server environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CRAFT_SHARE_PORT` | `0` (disabled) | HTTP port for the share server (separate from `CRAFT_RPC_PORT`) |
+| `CRAFT_SHARE_HOST` | `0.0.0.0` | Bind address |
+| `CRAFT_SHARE_VIEWER_DIR` | `apps/viewer/dist` | Path to the built viewer |
+| `CRAFT_SHARE_ID_MODE` | `hash` | `hash` = unguessable id over an uploaded copy (mirrors the hosted service); `session` = zero-copy live serving addressed by the real session id |
+| `CRAFT_SHARE_PUBLIC_URL` | — | Absolute base URL used to build share links (e.g. behind a reverse proxy) |
+| `CRAFT_SHARE_BASIC_AUTH` | — | Optional `user:password` to gate all `/s/*` routes behind HTTP Basic auth |
+| `CRAFT_SHARE_MAX_BYTES` | `10485760` | Max upload size before returning `413` |
+| `CRAFT_VIEWER_URL` | `https://agents.craft.do` | **Client-side** — where the Share button uploads. Set to your share server. |
+
+**ID modes.** `hash` stores an uploaded copy under `~/.craft-agent/shares/<id>.json` and mints an unguessable ~21-char id — identical UX to the hosted service, and revoking deletes the copy. `session` serves the live session straight from workspace storage with no duplication; the link uses the real session id and "Share"/"Stop Sharing" simply flip the session's shared marker.
+
+**Auth.** For production, either set `CRAFT_SHARE_BASIC_AUTH` for built-in HTTP Basic auth, or place the port behind a reverse proxy (Traefik, nginx, Caddy) that enforces auth/TLS. The `/health` endpoint is always unauthenticated for probes.
+
+**Docker.** Publish the extra port and set the vars, e.g. `-p 9200:9200 -e CRAFT_SHARE_PORT=9200 -e CRAFT_SHARE_PUBLIC_URL=https://share.example.com`. The `-v craft-data:/root/.craft-agent` volume already persists `hash`-mode shares.
+
 ## CLI Client
 
 A terminal client that connects to a running Craft Agent server over WebSocket (`ws://` or `wss://`). Use it for scripting, CI/CD pipelines, server validation, or when you prefer the command line.

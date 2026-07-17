@@ -19,7 +19,8 @@
     "./handlers/rpc/*": "./src/handlers/rpc/*.ts",
     "./sessions": "./src/sessions/index.ts",
     "./tasks": "./src/tasks/index.ts",
-    "./webui": "./src/webui/index.ts"
+    "./webui": "./src/webui/index.ts",
+    "./share": "./src/share/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

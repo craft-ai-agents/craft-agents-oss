@@ -21,6 +21,18 @@
  *   CRAFT_WEBUI_PASSWORD       — optional shorter password for web login (falls back to CRAFT_SERVER_TOKEN)
  *   CRAFT_WEBUI_SECURE_COOKIE  — optional true/false override for the session cookie Secure flag
  *   CRAFT_WEBUI_WS_URL         — optional browser-facing ws:// or wss:// URL returned by /api/config
+ *
+ * Self-hosted conversation sharing (opt-in; serves the open-source viewer +
+ * /s/api store on its own HTTP port so shared transcripts stay on your infra):
+ *   CRAFT_SHARE_PORT           — bind port for the share server (default 0 = disabled)
+ *   CRAFT_SHARE_HOST           — bind address (default 0.0.0.0)
+ *   CRAFT_SHARE_VIEWER_DIR     — path to the built viewer (apps/viewer/dist); required to enable
+ *   CRAFT_SHARE_ID_MODE        — 'hash' (default, unguessable copy) or 'session' (zero-copy live)
+ *   CRAFT_SHARE_PUBLIC_URL     — absolute base URL for share links (e.g. https://share.example.com)
+ *   CRAFT_SHARE_BASIC_AUTH     — optional 'user:password' to gate all /s/* behind HTTP Basic auth
+ *   CRAFT_SHARE_MAX_BYTES      — max upload size before 413 (default 10485760 = 10 MiB)
+ *   (point the client at this server with CRAFT_VIEWER_URL=http(s)://<host>:<port>)
+ *
  *   CRAFT_MESSAGING_WA_WORKER  — absolute path to worker.cjs (default: packages/messaging-whatsapp-worker/dist/worker.cjs)
  *   CRAFT_MESSAGING_NODE_BIN   — Node binary used to spawn the WhatsApp worker (default: node)
  */
@@ -33,6 +45,7 @@ import { enableDebug } from '@craft-agent/shared/utils/debug'
 import { bootstrapServer, startHealthHttpServer, generateServerToken } from '@craft-agent/server-core/bootstrap'
 import { validateSession, createWebuiHandler, nodeHttpAdapter } from '@craft-agent/server-core/webui'
 import type { WebuiHandler } from '@craft-agent/server-core/webui'
+import { startShareHttpServer, createShareStore, type ShareIdMode, type BasicAuthCredentials } from '@craft-agent/server-core/share'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { getWorkspaces } from '@craft-agent/shared/config'
 import { createMessagingBootstrap, type MessagingBootstrapHandle } from '@craft-agent/messaging-gateway'
@@ -88,6 +101,23 @@ function parseOptionalWebSocketUrl(name: string, value: string | undefined): str
     console.error(`Invalid ${name}: ${message}`)
     process.exit(1)
   }
+}
+
+function parseShareIdMode(value: string | undefined): ShareIdMode {
+  const normalized = (value ?? 'hash').trim().toLowerCase()
+  if (normalized === 'hash' || normalized === 'session') return normalized
+  console.error(`Invalid CRAFT_SHARE_ID_MODE: expected 'hash' or 'session'.`)
+  process.exit(1)
+}
+
+function parseShareBasicAuth(value: string | undefined): BasicAuthCredentials | undefined {
+  if (value == null || value.trim() === '') return undefined
+  const idx = value.indexOf(':')
+  if (idx <= 0 || idx === value.length - 1) {
+    console.error(`Invalid CRAFT_SHARE_BASIC_AUTH: expected 'user:password'.`)
+    process.exit(1)
+  }
+  return { user: value.slice(0, idx), pass: value.slice(idx + 1) }
 }
 
 // In dev (monorepo), bundled assets root is the repo root (4 levels up from this file).
@@ -310,6 +340,36 @@ const healthServer = await startHealthHttpServer({
   platform: instance.platform,
 })
 
+// Start the self-hosted conversation-share server if CRAFT_SHARE_PORT is set.
+// It binds its own HTTP port (separate from the RPC/WSS port) and serves the
+// open-source viewer + /s/api store, keeping shared transcripts on this host.
+const sharePort = parseInt(process.env.CRAFT_SHARE_PORT ?? '0', 10)
+const shareViewerDir = process.env.CRAFT_SHARE_VIEWER_DIR
+  ?? join(bundledAssetsRoot, 'apps', 'viewer', 'dist')
+let shareServer: { port: number; stop: () => void } | null = null
+if (Number.isFinite(sharePort) && sharePort > 0) {
+  if (!existsSync(shareViewerDir)) {
+    console.error(
+      `[share] CRAFT_SHARE_PORT is set but the viewer build was not found at ${shareViewerDir}.\n` +
+      `        Build it (bun run --cwd apps/viewer build) or set CRAFT_SHARE_VIEWER_DIR.`,
+    )
+    process.exit(1)
+  }
+  const shareIdMode = parseShareIdMode(process.env.CRAFT_SHARE_ID_MODE)
+  const shareMaxBytes = parseInt(process.env.CRAFT_SHARE_MAX_BYTES ?? '10485760', 10)
+  shareServer = await startShareHttpServer({
+    port: sharePort,
+    host: process.env.CRAFT_SHARE_HOST ?? '0.0.0.0',
+    viewerDir: shareViewerDir,
+    store: createShareStore(shareIdMode),
+    publicBaseUrl: process.env.CRAFT_SHARE_PUBLIC_URL || undefined,
+    basicAuth: parseShareBasicAuth(process.env.CRAFT_SHARE_BASIC_AUTH),
+    maxBodyBytes: Number.isFinite(shareMaxBytes) && shareMaxBytes > 0 ? shareMaxBytes : 10485760,
+    logger: { info: console.log, warn: console.warn, error: console.error } as any,
+  })
+  console.log(`CRAFT_SHARE_URL=${process.env.CRAFT_SHARE_PUBLIC_URL || `http://0.0.0.0:${shareServer.port}`}`)
+}
+
 const serverProto = instance.protocol === 'wss' ? 'https' : 'http'
 console.log(`CRAFT_SERVER_URL=${instance.protocol}://${instance.host}:${instance.port}`)
 console.log(`CRAFT_SERVER_TOKEN=${instance.token}`)
@@ -343,6 +403,7 @@ if (!isLocalBind && instance.protocol === 'ws') {
 const shutdown = async () => {
   webuiHandler?.dispose()
   healthServer?.stop()
+  shareServer?.stop()
   if (messagingHandle) {
     try {
       await messagingHandle.dispose()
