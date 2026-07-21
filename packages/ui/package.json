@@ -18,12 +18,17 @@
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",
+    "@craft-agent/shared": "workspace:*",
     "@paper-design/shaders-react": "^0.0.69",
     "beautiful-mermaid": "*",
     "@types/mdast": "^4.0.0",
     "@uiw/react-json-view": "^2.0.0-alpha.40",
+    "@tiptap/core": "^3.20.4",
+    "@tiptap/extension-task-item": "^3.20.4",
+    "@tiptap/pm": "^3.20.4",
     "fflate": "^0.8.2",
     "nice-ticks": "^1.0.2",
+    "pdfjs-dist": "^5.4.296",
     "unified": "^11.0.0",
     "unist-util-visit": "^5.0.0"
   },
