@@ -4,12 +4,14 @@ import { getAllPiModels, getPiModelsForAuthProvider, isDeprecatedClaudeOpus46Mod
 import { getPiProviderBaseUrl } from '../../../../config/models-pi.ts';
 
 // ── Copilot model types ────────────────────────────────────────────────
-type RawCopilotModel = {
+export type RawCopilotModel = {
   id: string;
   name: string;
   supportedReasoningEfforts?: string[];
   policy?: { state: string };
   contextWindow?: number;
+  modelPickerEnabled?: boolean;
+  supportsToolCalls?: boolean;
 };
 
 // ── Direct HTTP approach ─────────────────────────────────────────────
@@ -82,13 +84,21 @@ async function listModelsViaHttp(
 
     console.warn(`[listModelsViaHttp] GET /models returned ${models.length} models`);
 
-    return models.map(m => ({
-      id: m.id as string,
-      name: (m.name || m.id) as string,
-      supportedReasoningEfforts: (m.supportedReasoningEfforts || m.supported_reasoning_efforts) as string[] | undefined,
-      policy: m.policy as { state: string } | undefined,
-      contextWindow: ((m.capabilities as Record<string, unknown>)?.limits as Record<string, unknown>)?.max_context_window_tokens as number | undefined,
-    }));
+    return models.map(m => {
+      const capabilities = m.capabilities as Record<string, unknown> | undefined;
+      const supports = capabilities?.supports as Record<string, unknown> | undefined;
+      return {
+        id: m.id as string,
+        name: (m.name || m.id) as string,
+        supportedReasoningEfforts: (m.supportedReasoningEfforts
+          || m.supported_reasoning_efforts
+          || supports?.reasoning_effort) as string[] | undefined,
+        policy: m.policy as { state: string } | undefined,
+        contextWindow: (capabilities?.limits as Record<string, unknown>)?.max_context_window_tokens as number | undefined,
+        modelPickerEnabled: (m.model_picker_enabled ?? m.modelPickerEnabled) as boolean | undefined,
+        supportsToolCalls: supports?.tool_calls as boolean | undefined,
+      };
+    });
   } catch (err) {
     if ((err as Error).name === 'AbortError') {
       throw new Error('Copilot models API timed out');
@@ -102,10 +112,12 @@ async function listModelsViaHttp(
 /** Model ID prefixes to exclude — legacy models that clutter the selector. */
 const EXCLUDED_MODEL_PREFIXES = ['gpt-4', 'gpt-3.5'];
 
-/** Filter raw models to only those explicitly enabled by policy, excluding legacy models. */
-function filterEnabledModels(models: RawCopilotModel[]): RawCopilotModel[] {
+/** Match the Pi SDK's GitHub Copilot model-selectability semantics. */
+export function filterSelectableCopilotModels(models: RawCopilotModel[]): RawCopilotModel[] {
   return models.filter(m =>
-    m.policy?.state === 'enabled'
+    m.modelPickerEnabled === true
+    && m.policy?.state !== 'disabled'
+    && m.supportsToolCalls !== false
     && !EXCLUDED_MODEL_PREFIXES.some(prefix => m.id.startsWith(prefix))
     && !isDeprecatedClaudeOpus46Model(m.id),
   );
@@ -134,7 +146,7 @@ function logModelBreakdown(tag: string, models: RawCopilotModel[]): void {
     byState.set(state, list);
   }
   const breakdown = [...byState.entries()].map(([s, ids]) => `${s}=${ids.length}(${ids.join(',')})`).join('; ');
-  console.warn(`[fetchCopilotModels] ${tag}: total=${models.length} enabled=${filterEnabledModels(models).length} | ${breakdown}`);
+  console.warn(`[fetchCopilotModels] ${tag}: total=${models.length} selectable=${filterSelectableCopilotModels(models).length} | ${breakdown}`);
 }
 
 /**
@@ -142,7 +154,7 @@ function logModelBreakdown(tag: string, models: RawCopilotModel[]): void {
  *
  * 1. **Direct HTTP API** – exchange the Pi SDK's GitHub OAuth token for
  *    a Copilot API token, then GET /models. Returns the live model list
- *    with policy state, so we show only enabled models. No CLI subprocess,
+ *    with policy state, so we show only selectable models. No CLI subprocess,
  *    no PATH issues, no env contamination.
  * 2. **Pi SDK static catalog** – hardcoded model registry shipped with
  *    the Pi SDK. Not filtered by the user's policy but always available
@@ -158,13 +170,11 @@ async function fetchCopilotModels(
     const raw = await listModelsViaHttp(piSdkGitHubToken, timeoutMs);
     if (raw.length > 0) {
       logModelBreakdown('tier1-httpApi', raw);
-      const enabled = filterEnabledModels(raw);
-      if (enabled.length > 0) {
-        return toModelDefinitions(enabled);
-      }
-      // All models disabled by policy — unusual but possible.
-      // Log it clearly and fall through to static catalog.
-      console.warn(`[fetchCopilotModels] tier1-httpApi: ${raw.length} models returned but 0 enabled by policy`);
+      const selectable = filterSelectableCopilotModels(raw);
+      // A successful live response is authoritative, including an empty
+      // selectable set. Falling back here would re-expose policy-disabled
+      // models from the account-agnostic static catalog.
+      return toModelDefinitions(selectable);
     }
   } catch (err) {
     console.warn(`[fetchCopilotModels] tier1-httpApi failed: ${(err as Error).message}`);
