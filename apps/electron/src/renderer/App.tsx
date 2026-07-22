@@ -79,6 +79,7 @@ import { TransportConnectionBanner, shouldShowTransportConnectionBanner } from '
 import { getFileManagerName } from '@/lib/platform'
 import { rendererLog } from '@/lib/logger'
 import { ActionRegistryProvider } from '@/actions'
+import { CommandPaletteHost } from '@/components/app-shell/CommandPaletteHost'
 import { toast } from 'sonner'
 
 type AppState = 'loading' | 'onboarding' | 'reauth' | 'workspace-picker' | 'ready'
@@ -2042,6 +2043,16 @@ export default function App() {
     <PlatformProvider actions={platformActions}>
     <ShikiThemeProvider shikiTheme={shikiTheme}>
       <ActionRegistryProvider>
+      <CommandPaletteHost
+        activeSessionId={sessionSelection.selected}
+        workspaceId={windowWorkspaceId}
+        onSetStatus={handleSessionStatusChange}
+        onArchive={handleArchiveSession}
+        onUnarchive={handleUnarchiveSession}
+        currentThinkingLevel={sessionSelection.selected ? sessionOptions.get(sessionSelection.selected)?.thinkingLevel : undefined}
+        onThinkingLevelChange={(level) => sessionSelection.selected && handleSessionOptionsChange(sessionSelection.selected, { thinkingLevel: level })}
+        onModelChange={(model, connection) => sessionSelection.selected && windowWorkspaceId && window.electronAPI.setSessionModel(sessionSelection.selected, windowWorkspaceId, model, connection)}
+      />
       <FocusProvider>
         <DismissibleLayerProvider>
         <ModalProvider>
