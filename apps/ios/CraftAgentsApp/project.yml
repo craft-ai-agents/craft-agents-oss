@@ -1,0 +1,40 @@
+# apps/ios/CraftAgentsApp/project.yml
+name: CraftAgentsApp
+options:
+  bundleIdPrefix: do.craft.agents
+  deploymentTarget:
+    iOS: "18.0"
+packages:
+  CraftAgentKit:
+    path: ../CraftAgentKit
+targets:
+  CraftAgentsApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: CraftAgentsApp
+    dependencies:
+      - package: CraftAgentKit
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1,2" # iPhone + iPad
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_ENTITLEMENTS: CraftAgentsApp/CraftAgentsApp.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: CraftAgentsApp/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UIApplicationSupportsMultipleScenes: true
+        UIRequiresFullScreen: false
+  CraftAgentsAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: CraftAgentsAppTests
+    dependencies:
+      - target: CraftAgentsApp
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
