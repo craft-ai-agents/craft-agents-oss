@@ -249,6 +249,7 @@
   "chat.stopTask": "Stop Task",
   "chat.tapToType": "Tap to type",
   "chat.taskOrphanedHint": "This background task was terminated when its turn ended.",
+  "chat.taskStaleHint": "No completion update was received. This task may still be running.",
   "chat.taskStatusDone": "done",
   "chat.taskStatusFailed": "failed",
   "chat.taskStatusOrphaned": "orphaned",

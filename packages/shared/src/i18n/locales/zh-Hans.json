@@ -249,6 +249,7 @@
   "chat.stopTask": "停止任务",
   "chat.tapToType": "点击输入",
   "chat.taskOrphanedHint": "This background task was terminated when its turn ended.",
+  "chat.taskStaleHint": "未收到完成更新。此任务可能仍在运行。",
   "chat.taskStatusDone": "done",
   "chat.taskStatusFailed": "failed",
   "chat.taskStatusOrphaned": "orphaned",

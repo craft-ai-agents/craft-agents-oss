@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from "react-i18next"
-import { ChevronDown, Square, ArrowUpRight, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
+import { useSetAtom } from 'jotai'
+import { ChevronDown, Square, ArrowUpRight, CheckCircle2, XCircle, AlertTriangle, X } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -12,6 +13,7 @@ import { Spinner } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { BackgroundTask } from './ActiveTasksBar'
+import { backgroundTasksAtomFamily } from '@/atoms/sessions'
 
 /** Terminal data for overlay display */
 export interface TerminalOverlayData {
@@ -59,13 +61,18 @@ export interface TaskActionMenuProps {
  *
  * Provides contextual actions for background tasks:
  * - View Output: Opens task output in terminal overlay
+ * - Dismiss: Hides the renderer-only chip without stopping the task
  * - Stop Task: Kills shell tasks (agent tasks show warning)
  */
 export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, onShowTerminalOverlay, className }: TaskActionMenuProps) {
   const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
+  const setTasks = useSetAtom(backgroundTasksAtomFamily(sessionId))
 
-  const isTerminal = task.status !== 'running'
+  const isTerminal = task.status === 'completed'
+    || task.status === 'failed'
+    || task.status === 'stopped'
+    || task.status === 'orphaned'
 
   // Wall-clock timer for RUNNING tasks. The async-by-default agent path emits no
   // task_progress events, so deriving elapsed from startTime (rather than relying
@@ -76,12 +83,12 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
   })
 
   React.useEffect(() => {
-    if (isTerminal) return
+    if (task.status !== 'running') return
     const interval = setInterval(() => {
       setLocalElapsed(Math.floor((Date.now() - task.startTime) / 1000))
     }, 1000)
     return () => clearInterval(interval)
-  }, [isTerminal, task.startTime])
+  }, [task.status, task.startTime])
 
   const displayElapsed = isTerminal
     ? Math.max(0, Math.floor(((task.completedAt ?? Date.now()) - task.startTime) / 1000))
@@ -122,6 +129,15 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
     setOpen(false)
   }
 
+  // Manually remove this chip from the bar. The chip is renderer-only state, so
+  // dismissing it just hides the indicator — it never kills the underlying task
+  // (shells use Stop for that). This is the escape hatch for a chip that got
+  // stuck 'running' because its task_completed was lost.
+  const handleDismiss = () => {
+    setTasks((prev) => prev.filter((t) => t.id !== task.id))
+    setOpen(false)
+  }
+
   // Status → icon + tint. Running shows the spinner; terminal/orphaned states
   // are visually distinct so a chip never falsely reads as "still running".
   const statusTint = cn(
@@ -129,7 +145,7 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
     "hover:bg-white/80 dark:hover:bg-white/15",
     "data-[state=open]:bg-white/80 dark:data-[state=open]:bg-white/15",
     task.status === 'failed' && "bg-destructive/10 hover:bg-destructive/15 dark:bg-destructive/15",
-    task.status === 'orphaned' && "bg-amber-500/10 hover:bg-amber-500/15 dark:bg-amber-500/15",
+    (task.status === 'orphaned' || task.status === 'stale') && "bg-amber-500/10 hover:bg-amber-500/15 dark:bg-amber-500/15",
   )
 
   const StatusIcon = () => {
@@ -141,6 +157,7 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
       case 'stopped':
         return <Square className="h-3 w-3 opacity-60" />
       case 'orphaned':
+      case 'stale':
         return <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-500" />
       default:
         return <Spinner className="text-xs" />
@@ -152,11 +169,14 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
     failed: t('chat.taskStatusFailed', 'failed'),
     stopped: t('chat.taskStatusStopped', 'stopped'),
     orphaned: t('chat.taskStatusOrphaned', 'orphaned'),
+    stale: t('common.unknown'),
   }
 
   const chipTitle = task.status === 'orphaned'
     ? t('chat.taskOrphanedHint', 'This background task was terminated when its turn ended.')
-    : t("chat.clickForTaskActions")
+    : task.status === 'stale'
+      ? t('chat.taskStaleHint')
+      : t("chat.clickForTaskActions")
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -229,6 +249,12 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
         <StyledDropdownMenuItem onClick={handleViewOutput}>
           <ArrowUpRight />
           {t('chat.viewOutput')}
+        </StyledDropdownMenuItem>
+
+        {/* Dismiss - remove the chip (renderer-only; does not kill the task) */}
+        <StyledDropdownMenuItem onClick={handleDismiss}>
+          <X />
+          {t('common.dismiss')}
         </StyledDropdownMenuItem>
 
         {/* Stop Task - Only show for shell tasks (inserts kill command into input) */}

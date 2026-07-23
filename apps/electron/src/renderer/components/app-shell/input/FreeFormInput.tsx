@@ -76,7 +76,7 @@ import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { hasOpenOverlay } from '@/lib/overlay-detection'
 import { ToolbarStatusSlot } from './ToolbarStatusSlot'
 import { buildPlanApprovalMessage } from '../plan-approval-message'
-import { shouldHandleScopedInputEvent } from './input-event-guards'
+import { shouldHandleScopedInputEvent, shouldRecallPromptOnArrowUp } from './input-event-guards'
 import { clearPendingFocusForSession, consumePendingFocusForSession } from './focus-input-events'
 import {
   getRecentWorkingDirs,
@@ -1355,6 +1355,31 @@ export function FreeFormInput({
         inlineLabel.close()
         return
       }
+    }
+
+    // Plain Arrow Up with no draft content cancels the running turn and recalls
+    // its prompt through ChatDisplay.handleStop. The pure guard deliberately
+    // treats whitespace, attachments, loading files, and follow-up chips as draft
+    // content so normal editing is never hijacked.
+    if (shouldRecallPromptOnArrowUp({
+      key: e.key,
+      shiftKey: e.shiftKey,
+      metaKey: e.metaKey,
+      ctrlKey: e.ctrlKey,
+      altKey: e.altKey,
+      isComposing: e.nativeEvent.isComposing,
+      isProcessing,
+      input,
+      attachmentCount: attachments.length,
+      loadingAttachmentCount: loadingCount,
+      followUpItemCount: followUpItems.length,
+      inlineMenuOpen: inlineMention.isOpen || inlineSlash.isOpen || inlineLabel.isOpen,
+      disabled,
+      disableSend,
+    })) {
+      e.preventDefault()
+      handleStop()
+      return
     }
 
     // Skip submission during IME composition - user is confirming composed characters, not sending

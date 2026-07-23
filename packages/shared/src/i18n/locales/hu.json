@@ -249,6 +249,7 @@
   "chat.stopTask": "Feladat leállítása",
   "chat.tapToType": "Koppintson az íráshoz",
   "chat.taskOrphanedHint": "This background task was terminated when its turn ended.",
+  "chat.taskStaleHint": "Nem érkezett befejezési frissítés. Lehet, hogy a feladat még fut.",
   "chat.taskStatusDone": "done",
   "chat.taskStatusFailed": "failed",
   "chat.taskStatusOrphaned": "orphaned",

@@ -249,6 +249,7 @@
   "chat.stopTask": "タスクを停止",
   "chat.tapToType": "タップして入力",
   "chat.taskOrphanedHint": "This background task was terminated when its turn ended.",
+  "chat.taskStaleHint": "完了通知を受信していません。このタスクはまだ実行中の可能性があります。",
   "chat.taskStatusDone": "done",
   "chat.taskStatusFailed": "failed",
   "chat.taskStatusOrphaned": "orphaned",
