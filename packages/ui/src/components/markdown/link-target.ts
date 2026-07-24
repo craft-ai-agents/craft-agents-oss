@@ -45,7 +45,14 @@ export function resolveMarkdownLinkTarget(target: string): ResolvedMarkdownLinkT
   }
 
   if (isFilePathTarget(trimmed)) {
-    return { kind: 'file', path: trimmed }
+    // Bare paths may carry percent-encoded octets (e.g. %20 for a space) since
+    // that's the only CommonMark-valid way to fit one in an unbracketed link
+    // destination — decode before handing off, mirroring resolveFileUrlPath above.
+    try {
+      return { kind: 'file', path: decodeURIComponent(trimmed) }
+    } catch {
+      return { kind: 'file', path: trimmed }
+    }
   }
 
   return { kind: 'url', url: trimmed }
