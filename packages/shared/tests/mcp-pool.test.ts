@@ -24,10 +24,16 @@ const mockTools: Tool[] = [
   },
 ];
 
-function makeMockClient(): PoolClient {
+function makeMockClient(
+  tools: Tool[] = mockTools,
+  onCallTool?: (name: string, args: Record<string, unknown>) => void
+): PoolClient {
   return {
-    listTools: async () => mockTools,
-    callTool: async () => ({ content: [{ type: 'text', text: 'ok' }] }),
+    listTools: async () => tools,
+    callTool: async (name, args) => {
+      onCallTool?.(name, args);
+      return { content: [{ type: 'text', text: 'ok' }] };
+    },
     close: async () => {},
   };
 }
@@ -48,6 +54,14 @@ class TestablePool extends McpClientPool {
     this.connectCalls.push({ slug, config });
     await this.registerClient(slug, makeMockClient());
     this.activeConfigs.set(slug, config);
+  }
+
+  async registerTools(
+    slug: string,
+    tools: Tool[],
+    onCallTool?: (name: string, args: Record<string, unknown>) => void
+  ): Promise<void> {
+    await this.registerClient(slug, makeMockClient(tools, onCallTool));
   }
 
   async disconnect(slug: string): Promise<void> {
@@ -182,5 +196,67 @@ describe('McpClientPool.sync — config change detection', () => {
 
     expect(failures).toContain('craft');
     expect(failPool.isConnected('craft')).toBe(false);
+  });
+});
+
+describe('McpClientPool proxy tool names', () => {
+  let pool: TestablePool;
+
+  beforeEach(() => {
+    pool = new TestablePool();
+  });
+
+  it('sanitizes invalid MCP tool names and routes calls to the original name', async () => {
+    const calledNames: string[] = [];
+
+    await pool.registerTools(
+      'dingtalk-ai-table',
+      [
+        {
+          name: 'pat.batch_plan',
+          description: 'A dotted MCP tool name',
+          inputSchema: { type: 'object' as const, properties: {} },
+        },
+      ],
+      (name) => calledNames.push(name)
+    );
+
+    const defs = pool.getProxyToolDefs();
+
+    expect(defs).toHaveLength(1);
+    expect(defs[0].name).toBe('mcp__dingtalk-ai-table__pat_batch_plan');
+    expect(defs[0].name).toMatch(/^[A-Za-z0-9_-]{1,128}$/);
+    expect(pool.getProxyToolLocalName('dingtalk-ai-table', 'pat.batch_plan')).toBe('pat_batch_plan');
+
+    await pool.callTool(defs[0].name, { ok: true });
+
+    expect(calledNames).toEqual(['pat.batch_plan']);
+  });
+
+  it('deduplicates tool names that collide after sanitization', async () => {
+    await pool.registerTools('source', [
+      { name: 'foo.bar', description: 'dot', inputSchema: { type: 'object' as const, properties: {} } },
+      { name: 'foo/bar', description: 'slash', inputSchema: { type: 'object' as const, properties: {} } },
+      { name: 'foo_bar', description: 'underscore', inputSchema: { type: 'object' as const, properties: {} } },
+    ]);
+
+    expect(pool.getProxyToolDefs().map(def => def.name)).toEqual([
+      'mcp__source__foo_bar',
+      'mcp__source__foo_bar_2',
+      'mcp__source__foo_bar_3',
+    ]);
+  });
+
+  it('keeps generated proxy names within provider length limits', async () => {
+    const longName = 'x'.repeat(200);
+
+    await pool.registerTools('source', [
+      { name: longName, description: 'long', inputSchema: { type: 'object' as const, properties: {} } },
+    ]);
+
+    const [def] = pool.getProxyToolDefs();
+
+    expect(def.name.length).toBeLessThanOrEqual(128);
+    expect(def.name).toMatch(/^[A-Za-z0-9_-]{1,128}$/);
   });
 });

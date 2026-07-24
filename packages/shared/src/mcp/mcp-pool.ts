@@ -55,6 +55,38 @@ export interface McpToolResult {
   sourceSlug?: string;
 }
 
+const LLM_TOOL_NAME_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const LLM_TOOL_NAME_MAX_LENGTH = 128;
+
+function sanitizeToolNamePart(value: string): string {
+  const sanitized = value.replace(/[^A-Za-z0-9_-]/g, '_');
+  return sanitized.length > 0 ? sanitized : 'tool';
+}
+
+function truncateWithSuffix(base: string, suffix: string): string {
+  return `${base.slice(0, LLM_TOOL_NAME_MAX_LENGTH - suffix.length)}${suffix}`;
+}
+
+function buildSafeProxyToolName(slug: string, originalName: string, usedNames: Set<string>): string {
+  const safeSlug = sanitizeToolNamePart(slug);
+  const safeTool = sanitizeToolNamePart(originalName);
+  let baseName = `mcp__${safeSlug}__${safeTool}`;
+
+  if (baseName.length > LLM_TOOL_NAME_MAX_LENGTH) {
+    baseName = baseName.slice(0, LLM_TOOL_NAME_MAX_LENGTH);
+  }
+
+  let candidate = baseName;
+  let counter = 2;
+  while (usedNames.has(candidate) || !LLM_TOOL_NAME_PATTERN.test(candidate)) {
+    const suffix = `_${counter}`;
+    candidate = truncateWithSuffix(baseName, suffix);
+    counter++;
+  }
+
+  return candidate;
+}
+
 /**
  * Convert SdkMcpServerConfig (used by backend types) to CraftMcpClient config.
  */
@@ -111,6 +143,9 @@ export class McpClientPool {
   /** Proxy tool name → { slug, originalName } (e.g., "mcp__linear__createIssue" → { slug: "linear", originalName: "createIssue" }) */
   private proxyTools = new Map<string, { slug: string; originalName: string }>();
 
+  /** Source slug → original tool name → safe proxy tool name */
+  private sourceToolProxyNames = new Map<string, Map<string, string>>();
+
   /** Optional debug logger */
   private debugFn: ((msg: string) => void) | undefined;
 
@@ -158,10 +193,15 @@ export class McpClientPool {
     this.clients.set(slug, client);
     this.toolCache.set(slug, tools);
 
+    const usedProxyNames = new Set(this.proxyTools.keys());
+    const sourceProxyNames = new Map<string, string>();
     for (const tool of tools) {
-      const proxyName = `mcp__${slug}__${tool.name}`;
+      const proxyName = buildSafeProxyToolName(slug, tool.name, usedProxyNames);
+      usedProxyNames.add(proxyName);
+      sourceProxyNames.set(tool.name, proxyName);
       this.proxyTools.set(proxyName, { slug, originalName: tool.name });
     }
+    this.sourceToolProxyNames.set(slug, sourceProxyNames);
 
     this.debug(`Connected source ${slug}: ${tools.length} tools`);
   }
@@ -203,6 +243,7 @@ export class McpClientPool {
     for (const [proxyName, info] of this.proxyTools) {
       if (info.slug === slug) this.proxyTools.delete(proxyName);
     }
+    this.sourceToolProxyNames.delete(slug);
     this.toolCache.delete(slug);
     this.activeConfigs.delete(slug);
     this.debug(`Disconnected source: ${slug}`);
@@ -217,6 +258,7 @@ export class McpClientPool {
     this.clients.clear();
     this.toolCache.clear();
     this.proxyTools.clear();
+    this.sourceToolProxyNames.clear();
     this.activeConfigs.clear();
     this.debug('Disconnected all MCP clients');
   }
@@ -333,6 +375,24 @@ export class McpClientPool {
   }
 
   /**
+   * Resolve the LLM-facing proxy name for an original MCP tool name.
+   */
+  getProxyToolName(slug: string, originalName: string): string | null {
+    return this.sourceToolProxyNames.get(slug)?.get(originalName) ?? null;
+  }
+
+  /**
+   * Resolve the source-local safe tool name used by SDK MCP servers.
+   */
+  getProxyToolLocalName(slug: string, originalName: string): string | null {
+    const proxyName = this.getProxyToolName(slug, originalName);
+    if (!proxyName) return null;
+
+    const prefix = `mcp__${sanitizeToolNamePart(slug)}__`;
+    return proxyName.startsWith(prefix) ? proxyName.slice(prefix.length) : proxyName;
+  }
+
+  /**
    * Generate proxy tool definitions for all connected sources (or a subset).
    * These are passed to backends for tool registration.
    */
@@ -343,11 +403,13 @@ export class McpClientPool {
     for (const slug of targetSlugs) {
       const tools = this.toolCache.get(slug) || [];
       for (const tool of tools) {
+        const proxyName = this.getProxyToolName(slug, tool.name);
+        if (!proxyName) continue;
         // Strip $schema — AJV (Pi agent) fails on unregistered meta-schema URIs.
         // Same pattern as getToolDefsAsJsonSchema() in tool-defs.ts.
         const { $schema, ...cleanSchema } = (tool.inputSchema as Record<string, unknown>) || {};
         defs.push({
-          name: `mcp__${slug}__${tool.name}`,
+          name: proxyName,
           description: tool.description || `Tool from ${slug}`,
           inputSchema: Object.keys(cleanSchema).length > 0 ? cleanSchema : { type: 'object', properties: {} },
         });

@@ -439,10 +439,12 @@ function createSourceProxyServers(pool: McpClientPool): Record<string, ReturnTyp
     const mcpTools = pool.getTools(slug);
     if (mcpTools.length === 0) continue;
 
-    const proxyTools = mcpTools.map(mcpTool => {
-      const proxyName = `mcp__${slug}__${mcpTool.name}`;
+    const proxyTools = mcpTools.flatMap(mcpTool => {
+      const proxyName = pool.getProxyToolName(slug, mcpTool.name);
+      const proxyLocalName = pool.getProxyToolLocalName(slug, mcpTool.name);
+      if (!proxyName || !proxyLocalName) return [];
       return tool(
-        mcpTool.name,
+        proxyLocalName,
         mcpTool.description || `Tool from ${slug}`,
         {
           ...jsonSchemaToZodShape((mcpTool.inputSchema as Record<string, unknown>) || {}),
