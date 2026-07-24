@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react'
-import { Brain, Search, Plus, Filter, Network, FileText, Tag, Calendar, Link2, MoreHorizontal } from 'lucide-react'
+import React, { useState, useMemo, useEffect, useCallback } from 'react'
+import { Brain, Search, Plus, Filter, Network, FileText, Tag, Calendar, Link2, MoreHorizontal, Loader2 } from 'lucide-react'
 import type { AnyMemory } from '@craft-agent/shared/memory/types'
 import { MemoryGraph } from './MemoryGraph'
 
@@ -10,75 +10,49 @@ export type MemoryPanelProps = {
   selectedMemoryId?: string
 }
 
-const MOCK_MEMORIES: AnyMemory[] = [
-  {
-    id: 'mem-1',
-    class: 'semantic',
-    title: 'User prefers dark mode',
-    content: 'User consistently chooses dark theme across all apps.',
-    confidence: 0.95,
-    tags: ['preferences', 'ui'],
-    createdAt: '2026-07-20T10:00:00Z',
-    updatedAt: '2026-07-22T08:30:00Z',
-    source: { sessionId: 's1', messageId: 'm1', toolCall: undefined, importOrigin: undefined },
-    scope: 'user',
-    scopeId: 'u1',
-    sensitivity: 'internal',
-    archived: false,
-    supersededById: undefined,
-    supersedesIds: [],
-    expiry: { expiresAt: undefined, ttlDays: undefined, archiveOnSupersede: false },
-  } as unknown as AnyMemory,
-  {
-    id: 'mem-2',
-    class: 'episodic',
-    title: 'Fixed build error in LayoutShell',
-    content: 'Resolved TypeScript error by changing db.pragma to db.run for SQLite pragmas.',
-    confidence: 0.88,
-    tags: ['debug', 'typescript', 'sqlite'],
-    createdAt: '2026-07-22T14:15:00Z',
-    updatedAt: '2026-07-22T14:15:00Z',
-    source: { sessionId: 's2', messageId: 'm2', toolCall: undefined, importOrigin: undefined },
-    scope: 'project',
-    scopeId: 'p1',
-    sensitivity: 'internal',
-    archived: false,
-    supersededById: undefined,
-    supersedesIds: [],
-    expiry: { expiresAt: undefined, ttlDays: undefined, archiveOnSupersede: false },
-  } as unknown as AnyMemory,
-  {
-    id: 'mem-3',
-    class: 'procedural',
-    title: 'Deploy workflow for Electron app',
-    content: '1. Build shared package. 2. Run electron typecheck. 3. Package with electron-builder.',
-    confidence: 0.92,
-    tags: ['deployment', 'electron', 'workflow'],
-    createdAt: '2026-07-21T09:00:00Z',
-    updatedAt: '2026-07-21T09:00:00Z',
-    source: { sessionId: 's3', messageId: 'm3', toolCall: undefined, importOrigin: undefined },
-    scope: 'workspace',
-    scopeId: 'w1',
-    sensitivity: 'internal',
-    archived: false,
-    supersededById: undefined,
-    supersedesIds: [],
-    expiry: { expiresAt: undefined, ttlDays: undefined, archiveOnSupersede: false },
-  } as unknown as AnyMemory,
-]
-
 export function MemoryPanel({
-  memories = MOCK_MEMORIES,
+  memories: externalMemories,
   onSelectMemory,
   onAddMemory,
   selectedMemoryId: controlledSelectedId,
 }: MemoryPanelProps) {
+  const [internalMemories, setInternalMemories] = useState<AnyMemory[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<string>('all')
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('list')
   const [selectedId, setSelectedId] = useState<string | undefined>(controlledSelectedId)
 
+  const memories = externalMemories ?? internalMemories
   const selectedIdFinal = controlledSelectedId ?? selectedId
+
+  useEffect(() => {
+    if (externalMemories) {
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    window.electronAPI
+      .listMemories()
+      .then((m) => {
+        if (cancelled) return
+        setInternalMemories(m)
+        setLoading(false)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        setError(e?.message ?? 'Failed to load memories')
+        setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [externalMemories])
+
+  const handleAdd = useCallback(() => {
+    onAddMemory?.()
+  }, [onAddMemory])
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -106,7 +80,7 @@ export function MemoryPanel({
           <button
             type="button"
             className="memory-panel__add"
-            onClick={onAddMemory}
+            onClick={handleAdd}
             title="Add memory"
           >
             <Plus size={16} />
@@ -134,6 +108,7 @@ export function MemoryPanel({
             <option value="semantic">Semantic</option>
             <option value="episodic">Episodic</option>
             <option value="procedural">Procedural</option>
+            <option value="profile">Profile</option>
             <option value="user">User scope</option>
             <option value="project">Project scope</option>
             <option value="workspace">Workspace scope</option>
@@ -160,10 +135,19 @@ export function MemoryPanel({
         </div>
 
         <div className="memory-panel__list">
-          {filtered.length === 0 && (
+          {loading && (
+            <div className="memory-panel__empty">
+              <Loader2 size={20} className="memory-panel__spinner" />
+              <span>Loading memories...</span>
+            </div>
+          )}
+          {error && !loading && (
+            <div className="memory-panel__empty memory-panel__error">{error}</div>
+          )}
+          {!loading && !error && filtered.length === 0 && (
             <div className="memory-panel__empty">No memories found.</div>
           )}
-          {filtered.map((m) => (
+          {!loading && !error && filtered.map((m) => (
             <button
               key={m.id}
               type="button"

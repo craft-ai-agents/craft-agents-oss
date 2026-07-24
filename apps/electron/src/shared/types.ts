@@ -621,6 +621,16 @@ export interface ElectronAPI {
   }): Promise<{ code: number | null; output: string; durationMs: number; killed: boolean }>
   killArchCommand(id: string): Promise<{ success: boolean }>
 
+  // Memory
+  listMemories(): Promise<import('@craft-agent/shared/memory/types').AnyMemory[]>
+  getMemory(id: string): Promise<import('@craft-agent/shared/memory/types').AnyMemory | null>
+  createMemory(memory: import('@craft-agent/shared/memory/types').AnyMemory): Promise<import('@craft-agent/shared/memory/types').AnyMemory>
+  updateMemory(id: string, patch: Partial<import('@craft-agent/shared/memory/types').AnyMemory>): Promise<import('@craft-agent/shared/memory/types').AnyMemory>
+  archiveMemory(id: string): Promise<import('@craft-agent/shared/memory/types').AnyMemory>
+  restoreMemory(id: string): Promise<import('@craft-agent/shared/memory/types').AnyMemory>
+  deleteMemory(id: string): Promise<{ success: boolean }>
+  searchMemories(query: import('@craft-agent/shared/memory/types').MemoryQuery): Promise<import('@craft-agent/shared/memory/types').AnyMemory[]>
+
   // Menu actions (from renderer to main)
   menuQuit(): Promise<void>
   menuNewWindow(): Promise<void>

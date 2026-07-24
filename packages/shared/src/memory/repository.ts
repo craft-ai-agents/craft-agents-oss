@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { Database } from 'bun:sqlite';
+import { Database } from './database-compat';
 import { openMemoryDatabase, bootstrapStorage, createAuditEntry } from './database';
 import type { AnyMemory, AuditEntry, MemoryQuery } from './types';
 

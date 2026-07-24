@@ -343,7 +343,17 @@ export const CHANNEL_MAP = {
   runArchCommand: invoke(RPC_CHANNELS.archCommand.RUN),
   killArchCommand: invoke(RPC_CHANNELS.archCommand.KILL),
 
-  // Menu actions
+  // Memory
+  listMemories: invoke(RPC_CHANNELS.memory.LIST),
+  getMemory: invoke(RPC_CHANNELS.memory.GET),
+  createMemory: invoke(RPC_CHANNELS.memory.CREATE),
+  updateMemory: invoke(RPC_CHANNELS.memory.UPDATE),
+  archiveMemory: invoke(RPC_CHANNELS.memory.ARCHIVE),
+  restoreMemory: invoke(RPC_CHANNELS.memory.RESTORE),
+  deleteMemory: invoke(RPC_CHANNELS.memory.DELETE),
+  searchMemories: invoke(RPC_CHANNELS.memory.SEARCH),
+
+  // Browser pane
   menuQuit: invoke(RPC_CHANNELS.menu.QUIT),
   menuNewWindow: invoke(RPC_CHANNELS.menu.NEW_WINDOW),
   menuMinimize: invoke(RPC_CHANNELS.menu.MINIMIZE),

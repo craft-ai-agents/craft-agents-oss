@@ -360,6 +360,16 @@ export const RPC_CHANNELS = {
     RUN: 'archCommand:run',
     KILL: 'archCommand:kill',
   },
+  memory: {
+    LIST: 'memory:list',
+    GET: 'memory:get',
+    CREATE: 'memory:create',
+    UPDATE: 'memory:update',
+    ARCHIVE: 'memory:archive',
+    RESTORE: 'memory:restore',
+    DELETE: 'memory:delete',
+    SEARCH: 'memory:search',
+  },
   browserPane: {
     CREATE: 'browser-pane:create',
     DESTROY: 'browser-pane:destroy',

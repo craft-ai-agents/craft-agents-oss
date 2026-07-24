@@ -1,4 +1,4 @@
-import { Database } from 'bun:sqlite';
+import { Database } from './database-compat';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import type { AnyMemory, AuditEntry, MemoryQuery } from './types';
