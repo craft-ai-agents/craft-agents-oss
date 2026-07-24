@@ -123,6 +123,18 @@ export const routes = {
         ? `view/${encodeURIComponent(viewId)}/session/${sessionId}` as const
         : `view/${encodeURIComponent(viewId)}` as const,
 
+    /** Runs view (runs navigator) — foreground/background jobs and subagents */
+    runs: (runId?: string) =>
+      runId ? `runs/run/${runId}` as const : 'runs' as const,
+
+    /** Memory view (memory navigator) — profile, facts, episodes, skills */
+    memory: (entryId?: string) =>
+      entryId ? `memory/entry/${encodeURIComponent(entryId)}` as const : 'memory' as const,
+
+    /** Media Lab view (media-lab navigator) — generations, workflows, queue, outputs */
+    mediaLab: (artifactId?: string) =>
+      artifactId ? `media-lab/artifact/${encodeURIComponent(artifactId)}` as const : 'media-lab' as const,
+
     /** Sources view (sources navigator) - supports type filtering */
     sources: (params?: { sourceSlug?: string; type?: 'api' | 'mcp' | 'local' }) => {
       const { sourceSlug, type } = params ?? {}
