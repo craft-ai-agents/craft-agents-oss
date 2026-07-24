@@ -33,6 +33,9 @@ import {
   Info,
   MailOpen,
   FolderKanban,
+  Activity,
+  Brain,
+  Clapperboard,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -116,6 +119,9 @@ import {
   isSkillsNavigation,
   isAutomationsNavigation,
   isProjectsNavigation,
+  isRunsNavigation,
+  isMemoryNavigation,
+  isMediaLabNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
@@ -1830,6 +1836,21 @@ function AppShellContent({
     navigate(routes.view.projects())
   }, [])
 
+  // Handler for runs view
+  const handleRunsClick = useCallback(() => {
+    navigate(routes.view.runs())
+  }, [])
+
+  // Handler for memory view
+  const handleMemoryClick = useCallback(() => {
+    navigate(routes.view.memory())
+  }, [])
+
+  // Handler for media lab view
+  const handleMediaLabClick = useCallback(() => {
+    navigate(routes.view.mediaLab())
+  }, [])
+
   const handleAutomationsScheduledClick = useCallback(() => {
     navigate(routes.view.automationsScheduled())
   }, [])
@@ -2137,11 +2158,14 @@ function AppShellContent({
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
     result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
+    result.push({ id: 'nav:runs', type: 'nav', action: handleRunsClick })
+    result.push({ id: 'nav:memory', type: 'nav', action: handleMemoryClick })
+    result.push({ id: 'nav:media-lab', type: 'nav', action: handleMediaLabClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick() })
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
-  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleSessionStatusClick, effectiveSessionStatuses, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
+  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleSessionStatusClick, effectiveSessionStatuses, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleAutomationsClick, handleRunsClick, handleMemoryClick, handleMediaLabClick, handleSettingsClick, handleWhatsNewClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2672,6 +2696,30 @@ function AppShellContent({
                           contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
                         },
                       ],
+                    },
+                    // --- Separator ---
+                    { id: "separator:automations-owner", type: "separator" },
+                    // --- Owner Agent: Runs, Memory, Media Lab ---
+                    {
+                      id: "nav:runs",
+                      title: t("sidebar.runs", "Runs"),
+                      icon: Activity,
+                      variant: isRunsNavigation(navState) ? "default" : "ghost",
+                      onClick: handleRunsClick,
+                    },
+                    {
+                      id: "nav:memory",
+                      title: t("sidebar.memory", "Memory"),
+                      icon: Brain,
+                      variant: isMemoryNavigation(navState) ? "default" : "ghost",
+                      onClick: handleMemoryClick,
+                    },
+                    {
+                      id: "nav:media-lab",
+                      title: t("sidebar.mediaLab", "Media Lab"),
+                      icon: Clapperboard,
+                      variant: isMediaLabNavigation(navState) ? "default" : "ghost",
+                      onClick: handleMediaLabClick,
                     },
                     // --- Separator ---
                     { id: "separator:skills-settings", type: "separator" },

@@ -921,6 +921,33 @@ export interface ProjectsNavigationState {
 }
 
 /**
+ * Runs navigation state — foreground/background jobs and subagents.
+ */
+export interface RunsNavigationState {
+  navigator: 'runs'
+  details: { type: 'run'; runId: string } | null
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
+ * Memory navigation state — owner profile, facts, episodes, skills.
+ */
+export interface MemoryNavigationState {
+  navigator: 'memory'
+  details: { type: 'memory'; memoryId: string } | null
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
+ * Media Lab navigation state — ComfyUI generations, workflows, queue, outputs.
+ */
+export interface MediaLabNavigationState {
+  navigator: 'media-lab'
+  details: { type: 'artifact'; artifactId: string } | null
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state
  */
 export type NavigationState =
@@ -930,6 +957,9 @@ export type NavigationState =
   | SkillsNavigationState
   | AutomationsNavigationState
   | ProjectsNavigationState
+  | RunsNavigationState
+  | MemoryNavigationState
+  | MediaLabNavigationState
 
 export const isSessionsNavigation = (
   state: NavigationState
@@ -954,6 +984,18 @@ export const isAutomationsNavigation = (
 export const isProjectsNavigation = (
   state: NavigationState
 ): state is ProjectsNavigationState => state.navigator === 'projects'
+
+export const isRunsNavigation = (
+  state: NavigationState
+): state is RunsNavigationState => state.navigator === 'runs'
+
+export const isMemoryNavigation = (
+  state: NavigationState
+): state is MemoryNavigationState => state.navigator === 'memory'
+
+export const isMediaLabNavigation = (
+  state: NavigationState
+): state is MediaLabNavigationState => state.navigator === 'media-lab'
 
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
   navigator: 'sessions',
@@ -985,6 +1027,24 @@ export const getNavigationStateKey = (state: NavigationState): string => {
       return `projects/project/${state.details.projectSlug}`
     }
     return 'projects'
+  }
+  if (state.navigator === 'runs') {
+    if (state.details?.type === 'run') {
+      return `runs/run/${state.details.runId}`
+    }
+    return 'runs'
+  }
+  if (state.navigator === 'memory') {
+    if (state.details?.type === 'memory') {
+      return `memory/entry/${state.details.memoryId}`
+    }
+    return 'memory'
+  }
+  if (state.navigator === 'media-lab') {
+    if (state.details?.type === 'artifact') {
+      return `media-lab/artifact/${state.details.artifactId}`
+    }
+    return 'media-lab'
   }
   if (state.navigator === 'settings') {
     if (state.subpage === null) return 'settings'

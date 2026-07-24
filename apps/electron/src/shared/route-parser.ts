@@ -653,6 +653,30 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
+  // Runs
+  if (compound.navigator === 'runs') {
+    if (!compound.details) {
+      return { navigator: 'runs', details: null }
+    }
+    return { navigator: 'runs', details: { type: 'run', runId: compound.details.id } }
+  }
+
+  // Memory
+  if (compound.navigator === 'memory') {
+    if (!compound.details) {
+      return { navigator: 'memory', details: null }
+    }
+    return { navigator: 'memory', details: { type: 'memory', memoryId: compound.details.id } }
+  }
+
+  // Media Lab
+  if (compound.navigator === 'media-lab') {
+    if (!compound.details) {
+      return { navigator: 'media-lab', details: null }
+    }
+    return { navigator: 'media-lab', details: { type: 'artifact', artifactId: compound.details.id } }
+  }
+
   // Sessions
   const filter = compound.sessionFilter || { kind: 'allSessions' as const }
   if (compound.details) {
@@ -853,6 +877,27 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
     return {
       navigator: 'projects',
       details: state.details ? { type: 'project', id: state.details.projectSlug } : null,
+    }
+  }
+
+  if (state.navigator === 'runs') {
+    return {
+      navigator: 'runs',
+      details: state.details ? { type: 'run', id: state.details.runId } : null,
+    }
+  }
+
+  if (state.navigator === 'memory') {
+    return {
+      navigator: 'memory',
+      details: state.details ? { type: 'memory', id: state.details.memoryId } : null,
+    }
+  }
+
+  if (state.navigator === 'media-lab') {
+    return {
+      navigator: 'media-lab',
+      details: state.details ? { type: 'artifact', id: state.details.artifactId } : null,
     }
   }
 
