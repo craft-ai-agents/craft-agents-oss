@@ -14,11 +14,14 @@ function isBun() {
 }
 
 function loadNative() {
+  // Use indirect eval to hide from bundler static analysis.
+  // Both bun:sqlite and node:sqlite are marked external in esbuild.
+  const req = (0, eval)('require');
   if (isBun()) {
-    return require('bun:sqlite');
+    return req('bun:sqlite');
   }
   try {
-    return require('node:sqlite');
+    return req('node:sqlite');
   } catch {
     throw new Error('No SQLite module available (tried bun:sqlite and node:sqlite)');
   }

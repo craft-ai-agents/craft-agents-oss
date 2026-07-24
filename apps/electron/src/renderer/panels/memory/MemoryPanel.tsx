@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import { Brain, Search, Plus, Filter, Network, FileText, Tag, Calendar, Link2, MoreHorizontal, Loader2 } from 'lucide-react'
 import type { AnyMemory } from '@craft-agent/shared/memory/types'
 import { MemoryGraph } from './MemoryGraph'
+import './MemoryPanel.css'
 
 export type MemoryPanelProps = {
   memories?: AnyMemory[]

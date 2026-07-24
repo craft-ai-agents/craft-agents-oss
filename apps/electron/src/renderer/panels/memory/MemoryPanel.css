@@ -124,9 +124,6 @@
   flex: 1;
   overflow-y: auto;
   padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 
 .memory-panel__empty {
@@ -146,7 +143,6 @@
   background: transparent;
   color: var(--color-text);
   cursor: pointer;
-  margin-bottom: 8px;
 }
 
 .memory-panel__item:hover {
