@@ -1,47 +1,33 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { existsSync, unlinkSync, writeFileSync } from 'fs';
+import { describe, it, expect, beforeEach, afterAll } from 'bun:test';
+import { existsSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { CONFIG_DIR } from '../../config/paths.ts';
-import { loadOwnerProfile, saveOwnerProfile, updateOwnerProfile, getOwnerProfilePath } from '../storage.ts';
 import { DEFAULT_OWNER_PROFILE } from '../schema.ts';
+
+// Set the override before importing modules that capture CONFIG_DIR at load time.
+// These tests must never read, delete, or restore a developer's real profile.
+const TEST_CONFIG_DIR = mkdtempSync(join(process.cwd(), '.owner-profile-test-'));
+process.env.CRAFT_CONFIG_DIR = TEST_CONFIG_DIR;
+
+const { CONFIG_DIR } = await import('../../config/paths.ts');
+const { loadOwnerProfile, saveOwnerProfile, updateOwnerProfile, getOwnerProfilePath } =
+  await import('../storage.ts');
 
 const OWNER_PROFILE_FILE = getOwnerProfilePath();
 const PREFERENCES_FILE = join(CONFIG_DIR, 'preferences.json');
 
 describe('owner profile storage and migration', () => {
-  // Backup existing configuration if any
-  let originalProfileContent: string | null = null;
-  let originalPreferencesContent: string | null = null;
-
   beforeEach(() => {
     if (existsSync(OWNER_PROFILE_FILE)) {
-      originalProfileContent = readFileSyncSafe(OWNER_PROFILE_FILE);
       unlinkSync(OWNER_PROFILE_FILE);
-    } else {
-      originalProfileContent = null;
     }
     if (existsSync(PREFERENCES_FILE)) {
-      originalPreferencesContent = readFileSyncSafe(PREFERENCES_FILE);
       unlinkSync(PREFERENCES_FILE);
-    } else {
-      originalPreferencesContent = null;
     }
   });
 
-  afterEach(() => {
-    if (existsSync(OWNER_PROFILE_FILE)) {
-      unlinkSync(OWNER_PROFILE_FILE);
-    }
-    if (existsSync(PREFERENCES_FILE)) {
-      unlinkSync(PREFERENCES_FILE);
-    }
-    // Restore originals
-    if (originalProfileContent !== null) {
-      writeFileSync(OWNER_PROFILE_FILE, originalProfileContent, 'utf-8');
-    }
-    if (originalPreferencesContent !== null) {
-      writeFileSync(PREFERENCES_FILE, originalPreferencesContent, 'utf-8');
-    }
+  afterAll(() => {
+    rmSync(TEST_CONFIG_DIR, { recursive: true, force: true });
+    delete process.env.CRAFT_CONFIG_DIR;
   });
 
   function readFileSyncSafe(path: string): string {

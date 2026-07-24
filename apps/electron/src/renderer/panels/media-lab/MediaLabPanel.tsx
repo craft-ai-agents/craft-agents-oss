@@ -3,6 +3,7 @@ import { useAtomValue } from 'jotai'
 import { Clapperboard, Image, Music, Video, FileText, Loader2, ExternalLink } from 'lucide-react'
 import type { SessionFile } from '@craft-agent/shared/protocol/dto'
 import { sessionMetaMapAtom } from '../../atoms/sessions'
+import { useAppShellContext } from '../../context/AppShellContext'
 import './MediaLabPanel.css'
 
 type MediaKind = 'image' | 'video' | 'audio' | 'doc'
@@ -68,6 +69,7 @@ function formatSize(bytes?: number): string {
 
 export function MediaLabPanel() {
   const metaMap = useAtomValue(sessionMetaMapAtom)
+  const { onOpenFile } = useAppShellContext()
   const [items, setItems] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -129,7 +131,7 @@ export function MediaLabPanel() {
   )
 
   const open = (item: MediaItem) => {
-    void window.electronAPI.openFile(item.path)
+    onOpenFile(item.path)
   }
 
   return (
