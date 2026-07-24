@@ -193,6 +193,12 @@ export function buildClaudeSubprocessEnv(
         CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
     };
 
+    // Strip CLAUDECODE from the subprocess env to prevent nested-session detection.
+    // The Claude Code CLI refuses to start when CLAUDECODE is set, interpreting it as
+    // an attempt to nest sessions. When the host process itself runs inside a Claude
+    // Code session this variable is inherited, so we remove it for standalone use.
+    delete env.CLAUDECODE;
+
     // Bedrock must never be routed through the Claude SDK path.
     // Strip only Claude-specific Bedrock routing vars here; keep generic AWS_*
     // untouched so user shell/tooling behavior inside the subprocess remains intact.
