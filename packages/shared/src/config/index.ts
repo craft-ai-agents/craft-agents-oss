@@ -3,6 +3,7 @@ export * from './llm-connections.ts';
 export * from './llm-validation.ts';
 export * from './models.ts';
 export * from './models-pi.ts';
+export * from './kimi-coding.ts';
 export * from './model-fetcher.ts';
 export * from './preferences.ts';
 export * from './storage.ts';

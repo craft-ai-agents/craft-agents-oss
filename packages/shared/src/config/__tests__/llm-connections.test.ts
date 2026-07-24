@@ -220,6 +220,16 @@ describe('Bedrock preferred defaults ordering', () => {
   })
 })
 
+describe('Kimi preferred defaults ordering', () => {
+  it('uses Kimi K3 as the default Kimi Code model', () => {
+    const models = getDefaultModelsForConnection('pi', 'kimi-coding')
+    if (models.length === 0) return // Pi resolver not registered in test env
+    const first = models[0]!
+    const firstId = typeof first === 'string' ? first : first.id
+    expect(firstId).toBe('pi/k3')
+  })
+})
+
 describe('fromBedrockNativeId', () => {
   it('maps US inference profile IDs back to bare Anthropic', () => {
     expect(fromBedrockNativeId('us.anthropic.claude-opus-4-8')).toBe('claude-opus-4-8')

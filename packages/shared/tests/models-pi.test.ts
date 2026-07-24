@@ -36,4 +36,21 @@ describe('models-pi filtering', () => {
     expect(ids).toContain('pi/deepseek-v4-flash');
     expect(ids).toContain('pi/deepseek-v4-pro');
   });
+
+  it('returns current Kimi Code models with K3 first-class metadata', () => {
+    const models = getPiModelsForAuthProvider('kimi-coding');
+    const ids = models.map(m => m.id);
+
+    expect(ids).toEqual([
+      'pi/k3',
+      'pi/kimi-for-coding',
+      'pi/kimi-for-coding-highspeed',
+    ]);
+
+    const k3 = models[0];
+    expect(k3?.name).toBe('Kimi K3');
+    expect(k3?.contextWindow).toBe(1_048_576);
+    expect(k3?.supportsThinking).toBe(true);
+    expect(k3?.supportsImages).toBe(true);
+  });
 });

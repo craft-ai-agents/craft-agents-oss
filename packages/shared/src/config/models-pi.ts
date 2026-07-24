@@ -16,6 +16,11 @@
 import { getProviders, getModels } from '@earendil-works/pi-ai/compat';
 import type { KnownProvider, Model, Api } from '@earendil-works/pi-ai';
 import type { ModelDefinition } from './models.ts';
+import {
+  KIMI_CODING_BASE_URL,
+  KIMI_CODING_HEADERS,
+  KIMI_CODING_MODELS,
+} from './kimi-coding.ts';
 
 // ============================================
 // PI MODEL DISCOVERY
@@ -36,7 +41,33 @@ function piModelToDefinition(m: Model<Api>): ModelDefinition {
     provider: 'pi',
     contextWindow: m.contextWindow,
     supportsThinking: m.reasoning,
+    ...(m.provider === 'kimi-coding'
+      ? { supportsImages: m.input.includes('image') }
+      : {}),
   };
+}
+
+function kimiCatalogModelToPiModel(
+  model: (typeof KIMI_CODING_MODELS)[number],
+): Model<'anthropic-messages'> {
+  return {
+    ...model,
+    api: 'anthropic-messages',
+    provider: 'kimi-coding',
+    baseUrl: KIMI_CODING_BASE_URL,
+    headers: { ...KIMI_CODING_HEADERS },
+  };
+}
+
+/**
+ * Return Pi-shaped models for a provider, with Craft's temporary Kimi catalog
+ * taking precedence until the pinned Pi SDK ships the same model IDs.
+ */
+export function getPiCatalogModelsForAuthProvider(piAuthProvider: string): Model<Api>[] {
+  if (piAuthProvider === 'kimi-coding') {
+    return KIMI_CODING_MODELS.map(kimiCatalogModelToPiModel);
+  }
+  return getModels(piAuthProvider as KnownProvider);
 }
 
 /**
@@ -99,7 +130,7 @@ function isBareBedrockClaudeModel(modelId: string): boolean {
  */
 export function getPiModelsForAuthProvider(piAuthProvider: string): ModelDefinition[] {
   try {
-    const models = getModels(piAuthProvider as KnownProvider);
+    const models = getPiCatalogModelsForAuthProvider(piAuthProvider);
     if (models.length > 0) {
       return models
         .filter(m => !isExcludedPiModel(m.id))
@@ -122,7 +153,7 @@ export function getAllPiModels(): ModelDefinition[] {
   const allModels: ModelDefinition[] = [];
   for (const provider of getProviders()) {
     try {
-      const models = getModels(provider);
+      const models = getPiCatalogModelsForAuthProvider(provider);
       allModels.push(...models
         .filter(m => !isExcludedPiModel(m.id))
         .map(piModelToDefinition)
@@ -215,7 +246,7 @@ export function getPiApiKeyProviders(): PiProviderInfo[] {
  */
 export function getPiProviderBaseUrl(provider: string): string | undefined {
   try {
-    const models = getModels(provider as Parameters<typeof getModels>[0]);
+    const models = getPiCatalogModelsForAuthProvider(provider);
     return models[0]?.baseUrl || undefined;
   } catch {
     return undefined;
