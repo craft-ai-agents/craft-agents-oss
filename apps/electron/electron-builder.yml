@@ -155,6 +155,9 @@ win:
         - x64
   # Use predictable naming: Craft-Agents-x64.exe
   artifactName: "Craft-Agents-${arch}.${ext}"
+  # Disable code signing (no elevated privileges needed for local builds)
+  signAndEditExecutable: false
+  verifyUpdateCodeSignature: false
   files:
     # Exclude binaries for other platforms
     - "!**/resources/bin/darwin-*/**"
