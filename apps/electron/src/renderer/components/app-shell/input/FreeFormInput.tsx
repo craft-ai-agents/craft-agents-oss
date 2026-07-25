@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
+  Globe,
   Image as ImageIcon,
 } from 'lucide-react'
 import { Icon_Home, Spinner } from '@craft-agent/ui'
@@ -1846,6 +1847,18 @@ export function FreeFormInput({
             tooltip={t("chat.attachFilesTooltip")}
             disabled={disabled}
           />
+          {isWebUI && (
+            <FreeFormInputContextBadge
+              icon={<Globe className="h-4 w-4" />}
+              label="浏览器"
+              isExpanded={false}
+              hasSelection={false}
+              showChevron={false}
+              onClick={() => window.dispatchEvent(new Event('craft:open-vps-browser'))}
+              tooltip="打开 VPS 浏览器"
+              disabled={disabled}
+            />
+          )}
           {onSourcesChange && (
             <div className="relative shrink min-w-0">
               <FreeFormInputContextBadge
@@ -1946,6 +1959,19 @@ export function FreeFormInput({
             tooltip={t("chat.attachFilesTooltip")}
             disabled={disabled}
           />
+
+          {isWebUI && (
+            <FreeFormInputContextBadge
+              icon={<Globe className="h-4 w-4" />}
+              label="浏览器"
+              isExpanded={false}
+              hasSelection={false}
+              showChevron={false}
+              onClick={() => window.dispatchEvent(new Event('craft:open-vps-browser'))}
+              tooltip="打开 VPS 浏览器"
+              disabled={disabled}
+            />
+          )}
 
           {/* 2. Source Selector Badge - only show if onSourcesChange is provided */}
           {onSourcesChange && (

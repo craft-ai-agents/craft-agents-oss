@@ -2023,6 +2023,14 @@ function AppShellContent({
   // permanent slugs (new-project, new-project-1, …).
   const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false)
   const [webBrowserOpen, setWebBrowserOpen] = useState(false)
+
+  React.useEffect(() => {
+    if (!isWebUI) return
+    const handleOpenBrowser = () => setWebBrowserOpen(true)
+    window.addEventListener('craft:open-vps-browser', handleOpenBrowser)
+    return () => window.removeEventListener('craft:open-vps-browser', handleOpenBrowser)
+  }, [])
+
   const openAddProject = useCallback(() => {
     if (!activeWorkspace?.id) return
     setCreateProjectDialogOpen(true)
