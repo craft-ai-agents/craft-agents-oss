@@ -11,5 +11,9 @@ export const markdownUrlTransform: UrlTransform = (value, key, node) => {
   // while still writing a separately sanitized DOM href. Keep default
   // sanitization for images and every other URL-bearing attribute.
   if (key === 'href' && tagName === 'a') return value
+  // Local markdown images are loaded through PlatformContext by Markdown.tsx.
+  // Preserve file:// here so the custom image component can convert it to a
+  // filesystem path; ReactMarkdown's default transform strips file: URLs.
+  if (key === 'src' && tagName === 'img' && /^file:/i.test(value)) return value
   return defaultUrlTransform(value)
 }

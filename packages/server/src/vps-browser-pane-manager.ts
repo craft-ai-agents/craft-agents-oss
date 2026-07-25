@@ -48,6 +48,17 @@ type AgentBrowserOptions = {
   sessionName?: string
 }
 
+function normalizeBrowserUrl(input: string): string {
+  const value = input.trim()
+  if (!value) return 'about:blank'
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value) || value.startsWith('about:')) return value
+
+  const looksLikeHost = /^(localhost|\d{1,3}(?:\.\d{1,3}){3}|[\w-]+(?:\.[\w-]+)+)(?::\d+)?(?:\/|$)/i.test(value)
+  return looksLikeHost
+    ? `https://${value}`
+    : `https://duckduckgo.com/?q=${encodeURIComponent(value)}`
+}
+
 /**
  * Headless browser adapter for the VPS deployment.
  *
@@ -311,7 +322,7 @@ export class VpsBrowserPaneManager implements IBrowserPaneManager {
   }
 
   navigate(id: string, url: string): Promise<{ url: string; title: string }> {
-    return this.withBrowser(id, async () => await this.runCommand<{ title: string; url: string }>(['open', url]))
+    return this.withBrowser(id, async () => await this.runCommand<{ title: string; url: string }>(['open', normalizeBrowserUrl(url)]))
   }
   goBack(id: string): Promise<void> { return this.withBrowser(id, async () => { await this.runCommand(['back']); this.state!.canGoBack = true }) }
   goForward(id: string): Promise<void> { return this.withBrowser(id, async () => { await this.runCommand(['forward']); this.state!.canGoForward = true }) }

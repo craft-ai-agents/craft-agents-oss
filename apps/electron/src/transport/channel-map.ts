@@ -367,6 +367,7 @@ export const CHANNEL_MAP = {
   'browserPane.reload': invoke(RPC_CHANNELS.browserPane.RELOAD),
   'browserPane.stop': invoke(RPC_CHANNELS.browserPane.STOP),
   'browserPane.focus': invoke(RPC_CHANNELS.browserPane.FOCUS),
+  'browserPane.resize': invoke(RPC_CHANNELS.browserPane.RESIZE),
   'browserPane.snapshot': invoke(RPC_CHANNELS.browserPane.SNAPSHOT),
   'browserPane.click': invoke(RPC_CHANNELS.browserPane.CLICK),
   'browserPane.clickAt': invoke(RPC_CHANNELS.browserPane.CLICK_AT),

@@ -18,6 +18,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.browserPane.CREATE, RPC_CHANNELS.browserPane.DESTROY, RPC_CHANNELS.browserPane.LIST,
   RPC_CHANNELS.browserPane.NAVIGATE, RPC_CHANNELS.browserPane.GO_BACK, RPC_CHANNELS.browserPane.GO_FORWARD,
   RPC_CHANNELS.browserPane.RELOAD, RPC_CHANNELS.browserPane.STOP, RPC_CHANNELS.browserPane.FOCUS,
+  RPC_CHANNELS.browserPane.RESIZE,
   RPC_CHANNELS.browserPane.SNAPSHOT, RPC_CHANNELS.browserPane.CLICK, RPC_CHANNELS.browserPane.CLICK_AT,
   RPC_CHANNELS.browserPane.FILL, RPC_CHANNELS.browserPane.TYPE, RPC_CHANNELS.browserPane.KEY,
   RPC_CHANNELS.browserPane.SELECT, RPC_CHANNELS.browserPane.SCREENSHOT, RPC_CHANNELS.browserPane.EVALUATE,
@@ -45,6 +46,7 @@ export function registerBrowserPaneHandlers(server: RpcServer, deps: HandlerDeps
   server.handle(RPC_CHANNELS.browserPane.RELOAD, (_ctx, id: string) => manager.reload?.(id))
   server.handle(RPC_CHANNELS.browserPane.STOP, (_ctx, id: string) => manager.stop?.(id))
   server.handle(RPC_CHANNELS.browserPane.FOCUS, (_ctx, id: string) => manager.focus(id))
+  server.handle(RPC_CHANNELS.browserPane.RESIZE, (_ctx, id: string, width: number, height: number) => manager.windowResize(id, width, height))
   server.handle(RPC_CHANNELS.browserPane.SNAPSHOT, (_ctx, id: string) => manager.getAccessibilitySnapshot(id))
   server.handle(RPC_CHANNELS.browserPane.CLICK, (_ctx, id: string, ref: string) => manager.clickElement(id, ref))
   server.handle(RPC_CHANNELS.browserPane.CLICK_AT, (_ctx, id: string, x: number, y: number) => manager.clickAtCoordinates(id, x, y))

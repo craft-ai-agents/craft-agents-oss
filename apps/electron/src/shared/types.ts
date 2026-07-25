@@ -640,6 +640,7 @@ export interface ElectronAPI {
     reload(id: string): Promise<void>
     stop(id: string): Promise<void>
     focus(id: string): Promise<void>
+    resize(id: string, width: number, height: number): Promise<{ width: number; height: number }>
     snapshot(id: string): Promise<{ url: string; title: string; nodes: Array<{ ref: string; role: string; name: string; value?: string; description?: string; focused?: boolean; checked?: boolean; disabled?: boolean }> }>
     click(id: string, ref: string): Promise<void>
     clickAt(id: string, x: number, y: number): Promise<void>
