@@ -44,6 +44,14 @@ body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Web-only compact sizing. The shared renderer keeps the larger touch layout
+   for narrow Electron windows; browser mobile UI gets the tighter chrome. */
+@media (max-width: 768px) {
+  :root {
+    --topbar-height: 40px;
+  }
+}
+
 /* 120% zoom on mobile viewports for better readability */
 @media (max-width: 768px) {
   html {

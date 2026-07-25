@@ -29,8 +29,9 @@
 
 import * as React from 'react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { motion } from 'motion/react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Menu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCompensateForStoplight } from '@/context/StoplightContext'
 import { useAppShellContext } from '@/context/AppShellContext'
@@ -39,6 +40,15 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { StyledDropdownMenuContent } from '@/components/ui/styled-dropdown'
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from '@/components/ui/drawer'
+import { PanelHeaderCenterButton } from '@/components/ui/PanelHeaderCenterButton'
+import { CompactWorkspaceSwitcher } from './CompactWorkspaceSwitcher'
 
 // Spring transition for smooth animations (matches sidebar)
 const springTransition = { type: 'spring' as const, stiffness: 300, damping: 30 }
@@ -61,6 +71,89 @@ function compactTitleInset(controlCount: number): number {
     + (controlCount * COMPACT_HEADER_BUTTON_SIZE)
     + (controlCount * COMPACT_HEADER_GAP)
     + COMPACT_HEADER_TITLE_GAP
+}
+
+interface CompactChatHeaderProps {
+  leadingAction?: React.ReactNode
+  titleNode: React.ReactNode
+  centerButton?: React.ReactNode
+  actions?: React.ReactNode
+  rightSidebarButton?: React.ReactNode
+}
+
+function CompactChatHeader({ leadingAction, titleNode, centerButton, actions, rightSidebarButton }: CompactChatHeaderProps) {
+  const { t } = useTranslation()
+  const {
+    workspaces,
+    activeWorkspaceId,
+    onSelectWorkspace,
+    onRefreshWorkspaces,
+  } = useAppShellContext()
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  return (
+    <div className="relative flex h-full min-w-0 flex-1 items-center justify-between">
+      <div className="titlebar-no-drag shrink-0">
+        {leadingAction}
+      </div>
+      <div className="absolute inset-y-0 left-10 right-10 flex min-w-0 items-center justify-center overflow-hidden">
+        <div className="min-w-0 max-w-full overflow-hidden [&>button]:w-full [&>button]:max-w-full">
+          {titleNode}
+        </div>
+      </div>
+      <Drawer open={menuOpen} onOpenChange={setMenuOpen}>
+        <DrawerTrigger asChild>
+          <PanelHeaderCenterButton
+            icon={<Menu className="h-4 w-4" />}
+            aria-label={t('menu.craftMenu')}
+          />
+        </DrawerTrigger>
+        <DrawerContent className="max-h-[80vh]">
+          <DrawerHeader>
+            <DrawerTitle>{t('menu.craftMenu')}</DrawerTitle>
+          </DrawerHeader>
+          <div className="flex flex-col gap-2 px-3 pb-6">
+            <CompactWorkspaceSwitcher
+              workspaces={workspaces}
+              activeWorkspaceId={activeWorkspaceId}
+              onSelect={onSelectWorkspace}
+              onWorkspaceCreated={onRefreshWorkspaces}
+              onWorkspaceRemoved={onRefreshWorkspaces}
+            />
+            {(centerButton || actions) && (
+              <div className="flex items-center justify-end gap-2">
+                {centerButton}
+                {actions}
+              </div>
+            )}
+            {rightSidebarButton && <div className="flex items-center justify-end">{rightSidebarButton}</div>}
+          </div>
+        </DrawerContent>
+      </Drawer>
+    </div>
+  )
+}
+
+function CompactSettingsHeader({ leadingAction, titleNode, centerButton, actions, rightSidebarButton }: CompactChatHeaderProps) {
+  return (
+    <div className="relative flex h-full min-w-0 flex-1 items-center justify-between">
+      <div className="titlebar-no-drag z-[1] shrink-0">
+        {leadingAction}
+      </div>
+      <div className="absolute inset-y-0 left-12 right-12 flex min-w-0 items-center justify-center overflow-hidden">
+        <div className="min-w-0 max-w-full overflow-hidden [&>button]:w-full [&>button]:max-w-full">
+          {titleNode}
+        </div>
+      </div>
+      {(centerButton || actions || rightSidebarButton) && (
+        <div className="titlebar-no-drag z-[1] flex shrink-0 items-center gap-1">
+          {centerButton}
+          {actions}
+          {rightSidebarButton}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export interface PanelHeaderProps {
@@ -119,8 +212,17 @@ export function PanelHeader({
   // PanelSlot in compact mode) propagate to every page's PanelHeader without each
   // page having to forward the prop manually. ChatPage explicitly passes its own
   // value, which overrides the context.
-  const { leadingAction: contextLeadingAction, isCompactMode } = useAppShellContext()
+  const {
+    leadingAction: contextLeadingAction,
+    isCompactMode,
+    isCompactChatMode,
+    isCompactSettingsMode,
+    isFocusedPanel,
+    registerCompactHeader,
+    unregisterCompactHeader,
+  } = useAppShellContext()
   const leadingAction = explicitLeadingAction ?? contextLeadingAction
+  const compactHeaderId = React.useId()
 
   // Use context as fallback when prop is not explicitly set.
   // Skip stoplight compensation when leadingAction is present — the back button
@@ -187,6 +289,68 @@ export function PanelHeader({
   ) : titleContent
 
   const titleNode = (isCompactMode && compactTitleMenu) ? compactTitleMenu : desktopTitleNode
+
+  // On narrow screens the shell owns the only header row so workspace, title,
+  // and actions share the same limited width. Keep a render callback in the
+  // registry so the top bar always reads the latest title/action nodes without
+  // re-registering on every parent render.
+  const compactHeaderRef = React.useRef<React.ReactNode>(null)
+  compactHeaderRef.current = (
+    isCompactChatMode ? (
+      <CompactChatHeader
+        leadingAction={leadingAction}
+        titleNode={titleNode}
+        centerButton={centerButton}
+        actions={actions}
+        rightSidebarButton={rightSidebarButton}
+      />
+    ) : isCompactSettingsMode ? (
+      <CompactSettingsHeader
+        leadingAction={leadingAction}
+        titleNode={titleNode}
+        centerButton={centerButton}
+        actions={actions}
+        rightSidebarButton={rightSidebarButton}
+      />
+    ) : (
+      <div className="flex h-full min-w-0 flex-1 items-center gap-1">
+        {leadingAction && (
+          <div className="titlebar-no-drag shrink-0">
+            {leadingAction}
+          </div>
+        )}
+        <div className="min-w-0 flex-1 overflow-hidden [&>button]:max-w-full">
+          {titleNode}
+        </div>
+        {centerButton && (
+          <div className="titlebar-no-drag shrink-0">
+            {centerButton}
+          </div>
+        )}
+        {actions && (
+          <div className="titlebar-no-drag shrink-0">
+            {actions}
+          </div>
+        )}
+        {rightSidebarButton && (
+          <div className="titlebar-no-drag shrink-0">
+            {rightSidebarButton}
+          </div>
+        )}
+      </div>
+    )
+  )
+
+  React.useEffect(() => {
+    if (!isCompactMode || !registerCompactHeader) return
+
+    registerCompactHeader(
+      compactHeaderId,
+      () => compactHeaderRef.current,
+      isFocusedPanel ? 2 : 1,
+    )
+    return () => unregisterCompactHeader?.(compactHeaderId)
+  }, [compactHeaderId, isCompactMode, isFocusedPanel, registerCompactHeader, unregisterCompactHeader])
 
   // Compact (mobile) layout puts the title in an absolute-positioned overlay.
   // The side insets are based on the actual number of control slots so a long
@@ -261,6 +425,10 @@ export function PanelHeader({
       )}
     </>
   )
+
+  // The shell's compact top bar renders this header. Returning no local row
+  // prevents settings and chat pages from consuming a second mobile row.
+  if (isCompactMode && registerCompactHeader) return null
 
   // Base padding (16px = pl-4, matches pr-2 when leading action present for symmetry)
   const basePadding = leadingAction ? 8 : 16

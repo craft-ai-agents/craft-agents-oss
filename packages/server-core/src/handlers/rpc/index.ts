@@ -25,6 +25,7 @@ import { registerTasksHandlers } from './tasks'
 import { registerTransferHandlers } from './transfer'
 import { registerWorkspaceCoreHandlers } from './workspace'
 import { registerMessagingHandlers } from './messaging'
+import { registerBrowserPaneHandlers } from './browser-pane'
 
 export function registerCoreRpcHandlers(
   server: RpcServer,
@@ -51,4 +52,5 @@ export function registerCoreRpcHandlers(
   registerTransferHandlers(server)
   registerWorkspaceCoreHandlers(server, deps)
   registerMessagingHandlers(server, deps)
+  registerBrowserPaneHandlers(server, deps)
 }

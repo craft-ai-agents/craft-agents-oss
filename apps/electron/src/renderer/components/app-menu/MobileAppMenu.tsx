@@ -18,6 +18,7 @@ import {
   type MobileMenuRow,
 } from './mobile-menu-pages'
 import type { AppMenuProps } from './types'
+import { isWebUI } from '@/lib/platform'
 
 const SNAPPY_SPRING = { type: 'spring' as const, stiffness: 400, damping: 36, mass: 0.8 }
 const BACKDROP_FADE = { duration: 0.18 }
@@ -214,7 +215,7 @@ function MobileMenuSheet({ state, pages, onPop, onClose, onActivateRow, t }: She
       {state.isOpen && (
         <motion.div
           key="mobile-app-menu-sheet"
-          className="absolute inset-0 z-modal"
+          className={isWebUI ? 'fixed inset-0 z-modal' : 'absolute inset-0 z-modal'}
           initial="closed"
           animate="open"
           exit="closed"

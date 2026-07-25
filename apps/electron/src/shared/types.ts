@@ -640,6 +640,17 @@ export interface ElectronAPI {
     reload(id: string): Promise<void>
     stop(id: string): Promise<void>
     focus(id: string): Promise<void>
+    resize(id: string, width: number, height: number): Promise<{ width: number; height: number }>
+    snapshot(id: string): Promise<{ url: string; title: string; nodes: Array<{ ref: string; role: string; name: string; value?: string; description?: string; focused?: boolean; checked?: boolean; disabled?: boolean }> }>
+    click(id: string, ref: string): Promise<void>
+    clickAt(id: string, x: number, y: number): Promise<void>
+    fill(id: string, ref: string, value: string): Promise<void>
+    typeText(id: string, text: string): Promise<void>
+    sendKey(id: string, args: { key: string; modifiers?: Array<'shift' | 'control' | 'alt' | 'meta'> }): Promise<void>
+    select(id: string, ref: string, value: string): Promise<void>
+    screenshotImage(id: string, options?: { format?: 'png' | 'jpeg'; annotate?: boolean }): Promise<{ base64: string; imageFormat: 'png' | 'jpeg'; metadata?: Record<string, unknown> }>
+    scroll(id: string, direction: 'up' | 'down' | 'left' | 'right', amount?: number): Promise<void>
+    evaluate(id: string, expression: string): Promise<unknown>
     emptyStateLaunch(payload: BrowserEmptyStateLaunchPayload): Promise<BrowserEmptyStateLaunchResult>
     onStateChanged(callback: (info: BrowserInstanceInfo) => void): () => void
     onRemoved(callback: (id: string) => void): () => void
