@@ -21,6 +21,9 @@
  *   CRAFT_WEBUI_PASSWORD       — optional shorter password for web login (falls back to CRAFT_SERVER_TOKEN)
  *   CRAFT_WEBUI_SECURE_COOKIE  — optional true/false override for the session cookie Secure flag
  *   CRAFT_WEBUI_WS_URL         — optional browser-facing ws:// or wss:// URL returned by /api/config
+ *   CRAFT_BROWSER_BACKEND       — headless browser backend (agent-browser, none; default: agent-browser)
+ *   CRAFT_BROWSER_PROFILE       — persistent Chrome profile directory
+ *   CRAFT_AGENT_BROWSER_BIN     — agent-browser executable path (default: agent-browser)
  *   CRAFT_MESSAGING_WA_WORKER  — absolute path to worker.cjs (default: packages/messaging-whatsapp-worker/dist/worker.cjs)
  *   CRAFT_MESSAGING_NODE_BIN   — Node binary used to spawn the WhatsApp worker (default: node)
  */
@@ -36,6 +39,7 @@ import type { WebuiHandler } from '@craft-agent/server-core/webui'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { getWorkspaces } from '@craft-agent/shared/config'
 import { createMessagingBootstrap, type MessagingBootstrapHandle } from '@craft-agent/messaging-gateway'
+import { VpsBrowserPaneManager } from './vps-browser-pane-manager'
 
 // --generate-token: print a crypto-random token and exit
 if (process.argv.includes('--generate-token')) {
@@ -117,6 +121,8 @@ const webuiEnabled = webuiDir && existsSync(webuiDir)
 const webuiSecureCookies = parseOptionalBooleanEnv('CRAFT_WEBUI_SECURE_COOKIE', process.env.CRAFT_WEBUI_SECURE_COOKIE)
 const webuiWsUrl = parseOptionalWebSocketUrl('CRAFT_WEBUI_WS_URL', process.env.CRAFT_WEBUI_WS_URL)
 const serverToken = process.env.CRAFT_SERVER_TOKEN
+const browserBackend = (process.env.CRAFT_BROWSER_BACKEND ?? 'agent-browser').trim().toLowerCase()
+const vpsBrowserManager = browserBackend === 'none' ? null : new VpsBrowserPaneManager()
 
 // ---------------------------------------------------------------------------
 // Create WebUI handler early so it can be embedded in the WsRpcServer.
@@ -207,6 +213,7 @@ const instance = await (async () => {
       createSessionManager: () => new SessionManager(),
       bindRpcServer: (sm, server) => sm.setRpcServer(server),
       createHandlerDeps: ({ sessionManager, platform, oauthFlowStore }) => {
+        if (vpsBrowserManager) sessionManager.setBrowserPaneManager(vpsBrowserManager)
         messagingHandle = createMessagingBootstrap({
           sessionManager,
           credentialManager: getCredentialManager(),
@@ -223,6 +230,7 @@ const instance = await (async () => {
           sessionManager,
           platform,
           oauthFlowStore,
+          browserPaneManager: vpsBrowserManager ?? undefined,
           messagingRegistry: messagingHandle.registry,
         }
       },

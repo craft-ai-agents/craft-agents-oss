@@ -31,6 +31,21 @@ import { defaultSessionOptions } from '../hooks/useSessionOptions'
 import { sessionAtomFamily } from '../atoms/sessions'
 
 export interface AppShellContextType {
+  /** Registers a panel header for the compact top-bar slot. */
+  registerCompactHeader?: (
+    id: string,
+    render: () => React.ReactNode,
+    priority: number,
+  ) => void
+  /** Removes a panel header from the compact top-bar slot. */
+  unregisterCompactHeader?: (id: string) => void
+  /** Renderer for the highest-priority active compact panel header. */
+  compactHeaderRenderer?: () => React.ReactNode
+  /** Whether the active compact panel is a selected chat session. */
+  isCompactChatMode?: boolean
+  /** Whether the active compact panel is a Web UI settings detail page. */
+  isCompactSettingsMode?: boolean
+
   // Data
   // NOTE: sessions is NOT included here - use sessionMetaMapAtom for listing
   // and useSession(id) hook for individual sessions. This prevents closures

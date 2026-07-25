@@ -78,7 +78,9 @@ export function buildMobileMenuPages({ hasNewWindow, isDebugMode }: BuildOptions
       id: 'settings',
       iconName: 'Settings',
       labelKey: 'sidebar.settings',
-      action: { kind: 'navigate', to: 'settings' },
+      // Open the real settings route so the normal Web UI top bar remains
+      // visible instead of nesting settings below a second Craft-menu header.
+      action: { kind: 'callback', key: 'openSettings' },
     },
     {
       id: 'help',
