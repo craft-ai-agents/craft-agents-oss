@@ -1,17 +1,25 @@
+/* ================================================================
+   Integrations Panel
+   Tabbed layout: Sources | Messaging
+   ================================================================ */
+
 .integrations-panel {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  background: var(--background);
+  color: var(--foreground);
 }
+
+/* ── Header ───────────────────────────────────── */
 
 .integrations-panel__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--panel-border, #293044);
+  padding: 16px 20px 0;
 }
 
 .integrations-panel__title {
@@ -26,23 +34,318 @@
   font-weight: 600;
 }
 
-.integrations-panel__count {
-  padding: 1px 8px;
+/* ── Tabs ─────────────────────────────────────── */
+
+.integrations-panel__tabs {
+  display: flex;
+  gap: 0;
+  padding: 12px 20px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.integrations-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: color-mix(in srgb, var(--foreground) 50%, transparent);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.integrations-tab:hover {
+  color: var(--foreground);
+}
+
+.integrations-tab.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Messaging tab ────────────────────────────── */
+
+.integrations-panel__messaging {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.integrations-panel__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 64px 16px;
+  color: color-mix(in srgb, var(--foreground) 45%, transparent);
+  font-size: 14px;
+}
+
+.integrations-panel__error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--destructive) 12%, transparent);
+  color: var(--destructive);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.integrations-panel__platforms {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.integrations-panel__info {
+  margin-top: 20px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--foreground) 2%, var(--background));
+  font-size: 12px;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--foreground) 60%, transparent);
+}
+
+.integrations-panel__info p {
+  margin: 0;
+}
+
+/* ── Platform card ────────────────────────────── */
+
+.int-platform-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.int-platform-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.int-platform-card--connected {
+  border-color: color-mix(in srgb, #22c55e 30%, transparent);
+}
+
+.int-platform-card__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.int-platform-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  flex-shrink: 0;
+}
+
+.int-platform-card__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.int-platform-card__info h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.int-platform-card__info p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--foreground) 50%, transparent);
+  line-height: 1.4;
+}
+
+.int-platform-card__status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.int-platform-card__status-dot.is-connected {
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+}
+
+.int-platform-card__status-dot.is-connecting {
+  background: #fbbf24;
+  animation: int-pulse 1s ease-in-out infinite;
+}
+
+.int-platform-card__status-dot.is-disconnected {
+  background: color-mix(in srgb, var(--foreground) 25%, transparent);
+}
+
+.int-platform-card__status-dot.is-reconnect {
+  background: #f97316;
+}
+
+.int-platform-card__status-dot.is-error {
+  background: var(--destructive);
+}
+
+.int-platform-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.int-platform-card__identity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--foreground) 65%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.int-platform-card__status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.int-platform-card__status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
   border-radius: 999px;
   font-size: 11px;
-  color: var(--text-secondary, #a7afc0);
-  background: rgba(255, 255, 255, 0.06);
+  font-weight: 600;
+  border: 1px solid transparent;
 }
+
+.int-platform-card__status-badge.is-connected {
+  color: #22c55e;
+  background: color-mix(in srgb, #22c55e 12%, transparent);
+  border-color: color-mix(in srgb, #22c55e 25%, transparent);
+}
+
+.int-platform-card__status-badge.is-connecting {
+  color: #fbbf24;
+  background: color-mix(in srgb, #fbbf24 12%, transparent);
+  border-color: color-mix(in srgb, #fbbf24 25%, transparent);
+}
+
+.int-platform-card__status-badge.is-disconnected {
+  color: color-mix(in srgb, var(--foreground) 40%, transparent);
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+.int-platform-card__status-badge.is-reconnect {
+  color: #f97316;
+  background: color-mix(in srgb, #f97316 12%, transparent);
+  border-color: color-mix(in srgb, #f97316 25%, transparent);
+}
+
+.int-platform-card__status-badge.is-error {
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 12%, transparent);
+  border-color: color-mix(in srgb, var(--destructive) 25%, transparent);
+}
+
+.int-platform-card__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--destructive) 8%, transparent);
+  font-size: 12px;
+  color: color-mix(in srgb, var(--destructive) 85%, transparent);
+  line-height: 1.4;
+}
+
+.int-platform-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.int-platform-card__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.int-platform-card__btn:hover {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  border-color: color-mix(in srgb, var(--foreground) 20%, transparent);
+}
+
+.int-platform-card__btn--primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.int-platform-card__btn--primary:hover {
+  opacity: 0.9;
+}
+
+.int-platform-card__btn--danger {
+  color: var(--destructive);
+  border-color: color-mix(in srgb, var(--destructive) 30%, transparent);
+}
+
+.int-platform-card__btn--danger:hover {
+  background: color-mix(in srgb, var(--destructive) 8%, transparent);
+  border-color: var(--destructive);
+}
+
+.int-platform-card__meta {
+  margin-left: auto;
+  font-size: 10px;
+  color: color-mix(in srgb, var(--foreground) 35%, transparent);
+}
+
+/* ── Sources tab (existing styles) ────────────── */
 
 .integrations-panel__search {
   display: flex;
   align-items: center;
   gap: 6px;
+  margin: 12px 20px 0;
   padding: 6px 10px;
   border-radius: 8px;
-  border: 1px solid var(--panel-border, #293044);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text-secondary, #a7afc0);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--foreground) 3%, var(--background));
+  color: color-mix(in srgb, var(--foreground) 45%, transparent);
 }
 
 .integrations-panel__search input {
@@ -54,12 +357,16 @@
   width: 180px;
 }
 
+.integrations-panel__search input::placeholder {
+  color: color-mix(in srgb, var(--foreground) 35%, transparent);
+}
+
 .integrations-panel__filters {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   padding: 12px 20px;
-  border-bottom: 1px solid var(--panel-border, #293044);
+  border-bottom: 1px solid var(--border);
 }
 
 .integrations-chip {
@@ -68,9 +375,9 @@
   gap: 6px;
   padding: 5px 10px;
   border-radius: 999px;
-  border: 1px solid var(--panel-border, #293044);
+  border: 1px solid var(--border);
   background: transparent;
-  color: var(--text-secondary, #a7afc0);
+  color: color-mix(in srgb, var(--foreground) 50%, transparent);
   font-size: 12px;
   cursor: pointer;
 }
@@ -82,8 +389,14 @@
 
 .integrations-chip.is-active {
   color: #fff;
-  border-color: #8c42ff;
-  background: rgba(140, 66, 255, 0.15);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.integrations-chip.is-connected.is-active {
+  color: #22c55e;
+  border-color: #22c55e;
+  background: color-mix(in srgb, #22c55e 15%, transparent);
 }
 
 .integrations-panel__grid {
@@ -104,7 +417,7 @@
   align-items: center;
   gap: 12px;
   padding: 64px 16px;
-  color: var(--text-muted, #6b7085);
+  color: color-mix(in srgb, var(--foreground) 40%, transparent);
 }
 
 .integrations-panel__empty p {
@@ -118,21 +431,20 @@
   gap: 10px;
   padding: 14px;
   border-radius: 12px;
-  border: 1px solid var(--panel-border, #293044);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--foreground) 2%, var(--background));
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s ease, transform 0.15s ease;
+  transition: border-color 0.15s;
 }
 
 .integrations-card:hover {
-  border-color: rgba(115, 240, 74, 0.4);
-  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .integrations-card.is-selected {
-  border-color: #8c42ff;
-  background: rgba(140, 66, 255, 0.08);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .integrations-card.is-off {
@@ -155,7 +467,7 @@
   font-size: 16px;
   font-weight: 600;
   color: #fff;
-  background: linear-gradient(135deg, rgba(115, 240, 74, 0.85), rgba(140, 66, 255, 0.85));
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000));
 }
 
 .integrations-card__id {
@@ -173,14 +485,14 @@
 
 .integrations-card__provider {
   font-size: 11px;
-  color: var(--text-muted, #6b7085);
+  color: color-mix(in srgb, var(--foreground) 50%, transparent);
 }
 
 .integrations-card__tagline {
   margin: 0;
   font-size: 12px;
   line-height: 1.45;
-  color: var(--text-secondary, #a7afc0);
+  color: color-mix(in srgb, var(--foreground) 55%, transparent);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -206,42 +518,341 @@
   border: 1px solid transparent;
 }
 
-.integrations-status.is-connected,
-.integrations-chip.is-connected.is-active {
-  color: #73f04a;
-  background: rgba(115, 240, 74, 0.12);
-  border-color: rgba(115, 240, 74, 0.3);
+.integrations-status.is-connected {
+  color: #22c55e;
+  background: color-mix(in srgb, #22c55e 12%, transparent);
+  border-color: color-mix(in srgb, #22c55e 25%, transparent);
 }
 
 .integrations-status.is-needs-auth {
-  color: #ffb547;
-  background: rgba(255, 181, 71, 0.12);
-  border-color: rgba(255, 181, 71, 0.3);
+  color: #fbbf24;
+  background: color-mix(in srgb, #fbbf24 12%, transparent);
+  border-color: color-mix(in srgb, #fbbf24 25%, transparent);
 }
 
 .integrations-status.is-failed {
-  color: #ff5c70;
-  background: rgba(255, 92, 112, 0.12);
-  border-color: rgba(255, 92, 112, 0.3);
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 12%, transparent);
+  border-color: color-mix(in srgb, var(--destructive) 25%, transparent);
 }
 
 .integrations-status.is-untested,
 .integrations-status.is-disabled {
-  color: var(--text-muted, #6b7085);
-  background: rgba(255, 255, 255, 0.05);
-  border-color: var(--panel-border, #293044);
+  color: color-mix(in srgb, var(--foreground) 40%, transparent);
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
 }
 
 .integrations-card__off {
   font-size: 11px;
-  color: var(--text-muted, #6b7085);
+  color: color-mix(in srgb, var(--foreground) 40%, transparent);
 }
 
 .integrations-card__error {
   margin: 0;
   font-size: 11px;
-  color: #ff5c70;
+  color: var(--destructive);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ── Wizard modal overlay ─────────────────────── */
+
+.int-wizard-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  animation: int-fade-in 0.15s ease-out;
+}
+
+.int-wizard {
+  width: 480px;
+  max-width: 90vw;
+  max-height: 80vh;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: int-slide-up 0.18s ease-out;
+}
+
+.int-wizard__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.int-wizard__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.int-wizard__title h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.int-wizard__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: color-mix(in srgb, var(--foreground) 40%, transparent);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.int-wizard__close:hover {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  color: var(--foreground);
+}
+
+.int-wizard__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.int-wizard__guide {
+  margin: 0 0 16px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--foreground) 60%, transparent);
+}
+
+.int-wizard__guide a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.int-wizard__guide a:hover {
+  text-decoration: underline;
+}
+
+.int-wizard__form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.int-wizard__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.int-wizard__field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--foreground) 55%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.int-wizard__field input,
+.int-wizard__field select {
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--foreground) 3%, var(--background));
+  color: var(--foreground);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.int-wizard__field input:focus,
+.int-wizard__field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.int-wizard__result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.int-wizard__result--ok {
+  background: color-mix(in srgb, #22c55e 10%, transparent);
+  color: #22c55e;
+  border: 1px solid color-mix(in srgb, #22c55e 25%, transparent);
+}
+
+.int-wizard__result--error {
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+  color: var(--destructive);
+  border: 1px solid color-mix(in srgb, var(--destructive) 25%, transparent);
+}
+
+.int-wizard__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.int-wizard__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.int-wizard__btn:hover {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  border-color: color-mix(in srgb, var(--foreground) 20%, transparent);
+}
+
+.int-wizard__btn--primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.int-wizard__btn--primary:hover {
+  opacity: 0.9;
+  background: var(--accent);
+}
+
+.int-wizard__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── WhatsApp wizard specifics ────────────────── */
+
+.int-wizard__connecting {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--foreground) 3%, var(--background));
+  font-size: 13px;
+  color: color-mix(in srgb, var(--foreground) 60%, transparent);
+}
+
+.int-wizard__qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+.int-wizard__qr img {
+  width: 200px;
+  height: 200px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.int-wizard__qr p {
+  margin: 0;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--foreground) 55%, transparent);
+}
+
+.int-wizard__pairing-code {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+}
+
+.int-wizard__pairing-code code {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.int-wizard__pairing-code p {
+  margin: 0;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--foreground) 55%, transparent);
+}
+
+.int-wizard__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--foreground) 50%, transparent);
+}
+
+/* ── Shared animations ────────────────────────── */
+
+@keyframes int-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes int-slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes int-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.int-spin {
+  animation: int-spin 0.8s linear infinite;
+}
+
+@keyframes int-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Scrollbar ────────────────────────────────── */
+
+.integrations-panel__grid::-webkit-scrollbar,
+.integrations-panel__messaging::-webkit-scrollbar {
+  width: 5px;
+}
+
+.integrations-panel__grid::-webkit-scrollbar-track,
+.integrations-panel__messaging::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.integrations-panel__grid::-webkit-scrollbar-thumb,
+.integrations-panel__messaging::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
 }

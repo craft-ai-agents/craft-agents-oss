@@ -1,0 +1,539 @@
+/* Providers Panel
+   Shows connected LLM providers with status badges, model counts, etc.
+   Follows the same CSS variable patterns as MemoryPanel.
+*/
+
+.providers-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* ---- Header ----------------------------------------------------------- */
+
+.providers-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.providers-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--accent);
+}
+
+.providers-panel__title h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.providers-panel__count {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+
+.providers-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.providers-panel__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.providers-panel__btn:hover {
+  background: color-mix(in srgb, var(--foreground) 5%, var(--background));
+  border-color: color-mix(in srgb, var(--foreground) 20%, transparent);
+}
+
+.providers-panel__btn--primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.providers-panel__btn--primary:hover {
+  opacity: 0.9;
+  background: var(--accent);
+}
+
+.providers-panel__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- Quick-add form --------------------------------------------------- */
+
+.providers-panel__quick-add {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--foreground) 2%, var(--background));
+}
+
+.providers-panel__quick-add h3 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.providers-panel__quick-add-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.providers-panel__preset-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-size: 13px;
+}
+
+.providers-panel__preset-btn:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--background));
+  border-color: var(--accent);
+}
+
+.providers-panel__preset-icon {
+  color: var(--accent);
+}
+
+/* ---- Error banner ----------------------------------------------------- */
+
+.providers-panel__error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 24px 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--destructive) 12%, transparent);
+  color: var(--destructive);
+  font-size: 13px;
+}
+
+/* ---- List ------------------------------------------------------------- */
+
+.providers-panel__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---- Empty state ------------------------------------------------------ */
+
+.providers-panel__empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: color-mix(in srgb, var(--foreground) 50%, transparent);
+  font-size: 14px;
+  text-align: center;
+}
+
+.providers-panel__empty-icon {
+  opacity: 0.3;
+  margin-bottom: 8px;
+}
+
+.providers-panel__empty p {
+  margin: 0;
+}
+
+.providers-panel__empty-hint {
+  font-size: 12px;
+  max-width: 280px;
+  line-height: 1.4;
+}
+
+/* ---- Provider card ---------------------------------------------------- */
+
+.providers-panel__card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--background);
+  overflow: hidden;
+  transition: box-shadow 0.15s;
+}
+
+.providers-panel__card:hover {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.providers-panel__card--default {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 3%, var(--background));
+}
+
+/* ---- Card header ------------------------------------------------------ */
+
+.providers-panel__card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+}
+
+.providers-panel__card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.providers-panel__card-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.providers-panel__card-name h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.providers-panel__card-type {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--foreground) 55%, transparent);
+}
+
+.providers-panel__card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.providers-panel__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: color-mix(in srgb, var(--foreground) 45%, transparent);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.providers-panel__icon-btn:hover {
+  background: color-mix(in srgb, var(--foreground) 8%, var(--background));
+  color: var(--foreground);
+}
+
+.providers-panel__icon-btn:first-of-type:hover {
+  color: var(--accent);
+}
+
+.providers-panel__icon-btn:last-of-type:hover {
+  color: var(--destructive);
+}
+
+/* ---- Status dot ------------------------------------------------------- */
+
+.providers-panel__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.providers-panel__status-dot--ok {
+  box-shadow: 0 0 4px currentColor;
+}
+
+.providers-panel__status-dot--err {
+  opacity: 0.3;
+}
+
+.providers-panel__status-dot--cloud {
+  color: var(--accent);
+}
+
+.providers-panel__status-dot--local {
+  color: color-mix(in srgb, #22c55e 80%, transparent);
+}
+
+.providers-panel__status-dot--other {
+  color: color-mix(in srgb, var(--foreground) 40%, transparent);
+}
+
+/* ---- Default badge ---------------------------------------------------- */
+
+.providers-panel__default-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+
+/* ---- Card body -------------------------------------------------------- */
+
+.providers-panel__card-body {
+  padding: 0 16px 12px;
+}
+
+.providers-panel__status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.providers-panel__status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.providers-panel__status-badge--ok {
+  background: color-mix(in srgb, #22c55e 12%, transparent);
+  color: color-mix(in srgb, #22c55e 85%, transparent);
+}
+
+.providers-panel__status-badge--err {
+  background: color-mix(in srgb, var(--destructive) 12%, transparent);
+  color: var(--destructive);
+}
+
+.providers-panel__endpoint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--foreground) 50%, transparent);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.providers-panel__auth-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--destructive) 8%, transparent);
+  font-size: 12px;
+  color: color-mix(in srgb, var(--destructive) 85%, transparent);
+}
+
+/* ---- Details grid ----------------------------------------------------- */
+
+.providers-panel__details-grid {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 6px 16px;
+  margin-bottom: 10px;
+}
+
+.providers-panel__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.providers-panel__detail--wide {
+  grid-column: 3;
+}
+
+.providers-panel__detail-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--foreground) 45%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.providers-panel__detail-value {
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+.providers-panel__detail-value--mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+/* ---- Model chips ------------------------------------------------------ */
+
+.providers-panel__models {
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.providers-panel__models-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--foreground) 45%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+
+.providers-panel__models-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.providers-panel__model-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--foreground) 6%, var(--background));
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: color-mix(in srgb, var(--foreground) 70%, transparent);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.providers-panel__model-chip--more {
+  color: var(--accent);
+  font-weight: 600;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* ---- Card footer ------------------------------------------------------ */
+
+.providers-panel__card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--foreground) 2%, var(--background));
+}
+
+.providers-panel__footer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: color-mix(in srgb, var(--foreground) 60%, transparent);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.providers-panel__footer-btn:hover {
+  background: color-mix(in srgb, var(--foreground) 5%, var(--background));
+  color: var(--foreground);
+}
+
+.providers-panel__footer-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.providers-panel__last-used {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--foreground) 40%, transparent);
+}
+
+/* ---- Shared spinner --------------------------------------------------- */
+
+.providers-panel__spinner {
+  animation: providers-spin 0.8s linear infinite;
+}
+
+@keyframes providers-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---- Live indicator ---- */
+
+.providers-panel__btn--live {
+  border-color: color-mix(in srgb, #22c55e 40%, transparent);
+  color: #22c55e;
+}
+
+.providers-panel__btn--live:hover {
+  background: color-mix(in srgb, #22c55e 8%, transparent);
+  border-color: #22c55e;
+}
+
+.providers-panel__live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: providers-pulse 2s ease-in-out infinite;
+}
+
+.providers-panel__btn--live .providers-panel__live-dot {
+  background: #22c55e;
+}
+
+.providers-panel__btn:not(.providers-panel__btn--live) .providers-panel__live-dot {
+  background: color-mix(in srgb, var(--foreground) 35%, transparent);
+  animation: none;
+}
+
+@keyframes providers-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
