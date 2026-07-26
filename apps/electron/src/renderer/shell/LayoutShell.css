@@ -4,28 +4,113 @@
    ================================================================ */
 
 .layout-shell {
+  /* ---------------------------------------------------------------------
+     Shell palette.
+
+     Every value derives from the theme's --background / --foreground, so the
+     window follows light, dark, scenic, and user themes. This file previously
+     hardcoded a navy palette (#06080d, rgba(255,255,255,.09), …) with no light
+     variant at all, which is why the shell ignored the active theme entirely.
+
+     The mix direction does the right thing in both polarities: mixing
+     background toward foreground lifts a surface off a dark canvas and
+     recesses it on a light one.
+     --------------------------------------------------------------------- */
+  --shell-base: var(--background);
+  --shell-surface: color-mix(in oklch, var(--background) 95%, var(--foreground));
+  --shell-surface-muted: color-mix(in oklch, var(--background) 91%, var(--foreground));
+  --shell-surface-hover: color-mix(in oklch, var(--background) 86%, var(--foreground));
+  --shell-sidebar-bg: color-mix(in oklch, var(--background) 97%, var(--foreground));
+  --shell-topbar-bg: color-mix(in oklch, var(--background) 98%, var(--foreground));
+
+  --shell-border: color-mix(in oklch, var(--foreground) 13%, transparent);
+  --shell-border-soft: color-mix(in oklch, var(--foreground) 8%, transparent);
+  --shell-fill: color-mix(in oklch, var(--foreground) 4%, transparent);
+  --shell-fill-strong: color-mix(in oklch, var(--foreground) 8%, transparent);
+
+  --shell-text-muted: color-mix(in oklch, var(--foreground) 62%, transparent);
+  --shell-text-dim: color-mix(in oklch, var(--foreground) 42%, transparent);
+
+  /* Legacy aliases — rules written against these keep working. */
+  --color-surface: var(--shell-surface);
+  --color-surface-muted: var(--shell-surface-muted);
+  --color-surface-hover: var(--shell-surface-hover);
+  --color-text: var(--foreground);
+  --color-muted: var(--shell-text-muted);
+  --color-border: var(--shell-border);
+  --color-accent: var(--brand-purple);
+  position: relative;
   display: flex;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  background: var(--color-background);
-  color: var(--color-foreground);
+  background:
+    radial-gradient(circle at 82% 12%, color-mix(in oklch, var(--brand-purple) 8%, transparent), transparent 28%),
+    radial-gradient(circle at 18% 86%, color-mix(in oklch, var(--brand-lime) 5%, transparent), transparent 24%),
+    var(--shell-base);
+  color: var(--foreground);
+}
+
+/*
+ * Ambient gradient overlay — slow, subtle color drift across the shell.
+ * A full-screen ::before layer with its own radial gradients (offset
+ * positions) fades in and out on a 14-second loop. The base gradients stay
+ * fixed while this layer breathes, creating the feel of shifting studio
+ * light throughout the day.
+ *
+ * The pseudo-element sits BELOW the sidebar and main content (z-index: 0)
+ * so interactive elements remain unaffected. respects prefers-reduced-motion.
+ */
+.layout-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 22% 78%, color-mix(in oklch, var(--brand-lime) 6%, transparent), transparent 26%),
+    radial-gradient(circle at 78% 22%, color-mix(in oklch, var(--brand-purple) 7%, transparent), transparent 24%),
+    transparent;
+  animation: layout-shell-ambient 14s ease-in-out infinite;
+}
+
+/*
+ * Ensure the sidebar and main content sit above the ambient layer.
+ * .layout-sidebar and .layout-main are siblings of ::before, so they
+ * naturally stack above it (no explicit z-index needed unless they have
+ * their own stacking context).
+ */
+
+@keyframes layout-shell-ambient {
+  0%, 100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layout-shell::before {
+    animation: none;
+    opacity: 0.35;
+  }
 }
 
 /* Sidebar */
 .layout-sidebar {
   display: flex;
   flex-direction: column;
-  width: 240px;
-  min-width: 240px;
-  border-right: 1px solid rgba(120, 120, 120, 0.25);
-  background: rgba(20, 20, 20, 0.04);
+  width: 214px;
+  min-width: 214px;
+  border-right: 1px solid var(--shell-border-soft);
+  background: var(--shell-sidebar-bg);
   transition: width 160ms ease, min-width 160ms ease, padding 160ms ease;
 }
 
 .layout-shell--dark .layout-sidebar {
-  background: rgba(255, 255, 255, 0.04);
-  border-right-color: rgba(255, 255, 255, 0.12);
+  background: var(--shell-sidebar-bg);
+  border-right-color: var(--shell-border-soft);
 }
 
 .layout-sidebar--collapsed {
@@ -38,14 +123,25 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 14px 12px;
+  min-height: 64px;
+  padding: 14px 14px 12px 16px;
+  border-bottom: 1px solid var(--shell-border-soft);
 }
 
 .layout-sidebar__brand {
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  white-space: nowrap;
-  overflow: hidden;
+  display: block;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  /* border-radius is the SOURCE OF TRUTH for the tile shape: it wins over the
+     PNG's baked-in corners and is what the outline traces. Bumped to 9px so
+     the CSS clip and the PNG's natural radius (rx=115 on a 512 viewBox ≈ 9px
+     on a 40px render) align — no double-AA, no edge seam. */
+  border-radius: 9px;
+  outline: 1px solid var(--shell-border);
+  outline-offset: -1px;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .layout-sidebar__toggle {
@@ -55,21 +151,108 @@
   height: 32px;
   width: 32px;
   border-radius: 8px;
-  border: 1px solid rgba(120, 120, 120, 0.35);
+  border: 1px solid var(--shell-border);
   background: transparent;
   color: inherit;
   cursor: pointer;
 }
 
 .layout-sidebar__toggle:hover {
-  background: rgba(120, 120, 120, 0.12);
+  background: var(--shell-fill-strong);
+}
+
+/* New chat — the shell's primary action, so it carries the brand gradient and
+   sits above navigation. Always reachable: closing the last chat used to leave
+   no path back into a conversation. */
+.layout-new-chat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 12px 10px 2px;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in oklch, var(--brand-purple) 40%, transparent);
+  border-radius: var(--ds-radius-md, 9px);
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--brand-lime) 20%, transparent),
+    color-mix(in oklch, var(--brand-purple) 30%, transparent)
+  );
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  transition:
+    filter 140ms var(--ds-ease-standard, ease),
+    box-shadow 200ms var(--ds-ease-standard, ease),
+    transform 140ms var(--ds-ease-standard, ease);
+}
+
+.layout-new-chat:hover {
+  filter: brightness(1.14);
+  box-shadow: 0 4px 18px color-mix(in oklch, var(--brand-purple) 30%, transparent);
+}
+
+.layout-new-chat:active {
+  transform: translateY(1px);
+}
+
+.layout-new-chat:focus-visible {
+  outline: 2px solid var(--brand-purple);
+  outline-offset: 2px;
+}
+
+.layout-sidebar--collapsed .layout-new-chat {
+  margin-inline: 8px;
+  padding-inline: 0;
+}
+
+/* Empty-state call to action, shown on the Command view when no chat is open. */
+.layout-start-chat {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(420px, 100%);
+  margin: 0 auto;
+  padding: 14px 18px;
+  border: 1px solid color-mix(in oklch, var(--brand-purple) 32%, transparent);
+  border-radius: var(--ds-radius-lg, 12px);
+  background: var(--shell-surface);
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 140ms var(--ds-ease-standard, ease),
+    box-shadow 200ms var(--ds-ease-standard, ease),
+    background-color 140ms var(--ds-ease-standard, ease);
+}
+
+.layout-start-chat:hover {
+  border-color: color-mix(in oklch, var(--brand-purple) 55%, transparent);
+  background: var(--shell-surface-hover);
+  box-shadow: 0 6px 22px color-mix(in oklch, var(--brand-purple) 20%, transparent);
+}
+
+.layout-start-chat span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.layout-start-chat strong {
+  font-size: 14px;
+}
+
+.layout-start-chat small {
+  font-size: 12px;
+  color: var(--shell-text-muted);
 }
 
 .layout-sidebar__nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 6px;
+  gap: 4px;
+  padding: 14px 10px;
   overflow-y: auto;
 }
 
@@ -78,23 +261,28 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 9px 10px;
-  border-radius: 10px;
+  min-height: 38px;
+  padding: 9px 11px;
+  border-radius: 8px;
   border: 1px solid transparent;
   background: transparent;
-  color: inherit;
+  color: var(--shell-text-muted);
   cursor: pointer;
   text-align: left;
   font: inherit;
+  outline: none;
 }
 
 .layout-nav-item:hover {
-  background: rgba(120, 120, 120, 0.10);
+  background: var(--shell-border-soft);
+  color: var(--foreground);
 }
 
 .layout-nav-item--active {
-  background: rgba(120, 120, 120, 0.14);
-  border-color: rgba(120, 120, 120, 0.25);
+  background: linear-gradient(90deg, color-mix(in oklch, var(--brand-lime) 13%, transparent), color-mix(in oklch, var(--brand-purple) 11%, transparent));
+  border-color: color-mix(in oklch, var(--brand-purple) 42%, transparent);
+  color: var(--foreground);
+  box-shadow: inset 2px 0 0 var(--brand-lime);
 }
 
 .layout-nav-item__label {
@@ -108,23 +296,48 @@
 
 .layout-theme-toggle {
   display: flex;
-  gap: 6px;
+  gap: 4px;
+}
+
+.layout-theme-toggle--topbar {
+  padding: 2px;
+  border: 1px solid var(--shell-border);
+  border-radius: 8px;
+  background: var(--shell-fill);
+}
+
+.layout-theme-toggle--live {
+  margin-left: 6px;
+  padding: 2px;
+  border: 1px solid var(--shell-border);
+  border-radius: 8px;
+  background: var(--shell-fill);
 }
 
 .layout-theme-option {
-  flex: 1;
-  height: 28px;
-  border-radius: 8px;
-  border: 1px solid rgba(120, 120, 120, 0.35);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid transparent;
   background: transparent;
-  color: inherit;
+  color: var(--shell-text-muted);
   cursor: pointer;
   font-size: 12px;
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.layout-theme-option:hover {
+  color: var(--foreground);
+  background: var(--shell-fill-strong);
 }
 
 .layout-theme-option--active {
-  background: rgba(120, 120, 120, 0.18);
-  border-color: rgba(120, 120, 120, 0.55);
+  background: color-mix(in oklch, var(--brand-purple) 18%, transparent);
+  border-color: color-mix(in oklch, var(--brand-purple) 45%, transparent);
+  color: var(--foreground);
 }
 
 /* Main region */
@@ -134,6 +347,7 @@
   min-width: 0;
   flex: 1;
   overflow: hidden;
+  background: var(--shell-base);
 }
 
 .layout-topbar {
@@ -141,15 +355,18 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  height: 56px;
-  min-height: 56px;
-  padding: 0 18px;
-  border-bottom: 1px solid rgba(120, 120, 120, 0.25);
+  height: 64px;
+  min-height: 64px;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--shell-border-soft);
+  background: var(--shell-topbar-bg);
+  backdrop-filter: blur(18px);
 }
 
 .layout-topbar__title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
 }
 
 .layout-topbar__actions {
@@ -161,7 +378,294 @@
 .layout-content {
   flex: 1;
   overflow: auto;
-  padding: 18px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at 92% 6%, color-mix(in oklch, var(--brand-purple) 7%, transparent), transparent 22%),
+    radial-gradient(circle at 4% 98%, color-mix(in oklch, var(--brand-lime) 4%, transparent), transparent 20%),
+    var(--shell-base);
+}
+
+.layout-topbar__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--shell-border);
+  border-radius: 999px;
+  color: var(--shell-text-muted);
+  background: var(--shell-fill);
+  font-size: 11px;
+}
+
+.layout-topbar__status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand-lime);
+  box-shadow: 0 0 10px color-mix(in oklch, var(--brand-lime) 75%, transparent);
+}
+
+.layout-topbar__status[data-status="offline"] i {
+  background: var(--destructive);
+  box-shadow: 0 0 10px color-mix(in oklch, var(--destructive) 55%, transparent);
+}
+
+.layout-topbar__status[data-status="loading"] i {
+  background: var(--shell-text-dim);
+  box-shadow: none;
+  animation: layout-status-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes layout-status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.layout-content > .flex,
+.layout-content > [class*="panel"] {
+  min-height: 0;
+}
+
+/* NOTE: there was a blanket `.layout-content [class*="bg-background"]` override
+   here that repainted every themed surface inside the shell — including the
+   chat cards — with one flat shell colour. Removed: components own their own
+   background, and the shell tokens now match the theme anyway, so nothing needs
+   to be forced. Reintroducing it will flatten the chat surface again. */
+
+.arch-agent-workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--brand-purple) 16%, transparent);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 78% 8%, color-mix(in oklch, var(--brand-purple) 10%, transparent), transparent 28%),
+    radial-gradient(circle at 12% 92%, color-mix(in oklch, var(--brand-lime) 5%, transparent), transparent 24%),
+    var(--shell-surface);
+  box-shadow: 0 18px 60px color-mix(in oklch, var(--ds-shadow-color) 55%, transparent), inset 0 0 80px color-mix(in oklch, var(--brand-purple) 4%, transparent);
+}
+
+.arch-agent-workspace__tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 48px;
+  min-height: 48px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--shell-border-soft);
+  background: var(--shell-surface-muted);
+}
+
+.arch-agent-workspace__tabs button {
+  height: 30px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--shell-text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.arch-agent-workspace__tabs button:hover,
+.arch-agent-workspace__tabs button.is-active {
+  color: var(--foreground);
+  background: color-mix(in oklch, var(--brand-purple) 14%, transparent);
+}
+
+.arch-agent-workspace__tabs button.is-active {
+  box-shadow: inset 0 -2px 0 var(--brand-purple);
+}
+
+.arch-agent-workspace__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--shell-text-muted);
+  font-size: 11px;
+}
+
+.arch-agent-workspace__live i,
+.arch-agent-card > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand-lime);
+  box-shadow: 0 0 10px color-mix(in oklch, var(--brand-lime) 55%, transparent);
+}
+
+.arch-agent-workspace__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 236px;
+  min-height: 0;
+  flex: 1;
+}
+
+.arch-agent-workspace__session {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 90% 10%, color-mix(in oklch, var(--brand-purple) 8%, transparent), transparent 26%),
+    var(--shell-surface);
+}
+
+.arch-agent-workspace__session > * {
+  height: 100%;
+}
+
+.arch-context-rail {
+  min-width: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--shell-border-soft);
+  background: var(--shell-surface-muted);
+}
+
+.arch-context-rail__tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 42px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--shell-fill-strong);
+  color: var(--shell-text-dim);
+  font-size: 10px;
+}
+
+.arch-context-rail__tabs button {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--shell-text-muted);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.arch-context-rail__tabs button:hover,
+.arch-context-rail__tabs button.is-active {
+  color: var(--foreground);
+  background: color-mix(in oklch, var(--brand-purple) 14%, transparent);
+}
+
+.arch-context-rail__tabs strong,
+.arch-context-rail__tabs button.is-active {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.arch-context-rail section {
+  padding: 14px;
+  border-bottom: 1px solid var(--shell-border-soft);
+}
+
+.arch-context-rail label {
+  display: block;
+  margin-bottom: 9px;
+  color: var(--shell-text-dim);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.arch-agent-card,
+.arch-context-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.arch-agent-card__mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid color-mix(in oklch, var(--brand-purple) 48%, transparent);
+  border-radius: 9px;
+  background: linear-gradient(135deg, color-mix(in oklch, var(--brand-lime) 16%, transparent), color-mix(in oklch, var(--brand-purple) 22%, transparent));
+  color: color-mix(in oklch, var(--brand-lime) 70%, var(--foreground));
+  font-weight: 750;
+}
+
+.arch-agent-card div {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.arch-agent-card strong,
+.arch-context-row strong {
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.arch-agent-card small,
+.arch-context-row span {
+  color: var(--shell-text-dim);
+  font-size: 9px;
+}
+
+.arch-context-row {
+  justify-content: space-between;
+}
+
+.arch-context-row span {
+  color: var(--brand-lime);
+}
+
+.arch-capability-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.arch-capability-grid span {
+  padding: 7px 8px;
+  border: 1px solid var(--shell-border-soft);
+  border-radius: 7px;
+  color: var(--shell-text-muted);
+  background: var(--shell-fill);
+  font-size: 9px;
+  text-align: center;
+}
+
+.arch-context-rail__meter > div {
+  display: flex;
+  justify-content: space-between;
+  color: var(--shell-text-dim);
+  font-size: 9px;
+}
+
+.arch-context-rail__meter > div label {
+  margin: 0;
+}
+
+.arch-context-rail__meter > b {
+  display: block;
+  height: 3px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--shell-border-soft);
+}
+
+.arch-context-rail__meter > b i {
+  display: block;
+  width: 64%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--brand-lime), var(--brand-purple));
+}
+
+@media (max-width: 980px) {
+  .arch-agent-workspace__body { grid-template-columns: minmax(0, 1fr); }
+  .arch-context-rail { display: none; }
 }
 
 .layout-placeholder {
@@ -180,6 +684,16 @@
 }
 
 .layout-command-view > .command-panel {
-  flex: 1;
-  min-height: 240px;
+  flex: 1 1 46%;
+  min-height: 260px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.layout-command-view > .home-hero {
+  height: auto;
+  min-height: 380px;
+  flex: 1 1 54%;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
 }

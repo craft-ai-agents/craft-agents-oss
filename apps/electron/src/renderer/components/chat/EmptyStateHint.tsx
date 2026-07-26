@@ -147,7 +147,7 @@ interface EntityBadgeProps {
  */
 function EntityBadge({ label }: EntityBadgeProps) {
   return (
-    <span className="inline-flex pl-[8px] pr-[10px] py-0.5 mx-[2px] rounded-[8px] bg-foreground/5 shadow-minimal text-foreground/40">
+    <span className="inline-flex px-[7px] py-0.5 mx-[2px] rounded-[6px] bg-foreground/[0.07] text-foreground/55">
       {label}
     </span>
   )
@@ -192,7 +192,10 @@ export function EmptyStateHint({ hintIndex, className }: EmptyStateHintProps) {
       className={cn(
         'text-center leading-relaxed tracking-tight',
         'max-w-md mx-auto select-none',
-        'text-[20px] font-bold text-black',
+        // `text-black` was hardcoded here, so the hint was unreadable in dark
+        // and scenic themes. Theme-aware and sized to sit inside a pill rather
+        // than act as a headline.
+        'text-[13px] font-medium text-foreground/70',
         className
       )}
     >

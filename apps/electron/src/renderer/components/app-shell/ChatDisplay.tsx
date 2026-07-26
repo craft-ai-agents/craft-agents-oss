@@ -78,6 +78,7 @@ import { handleErrorMessageAction } from "./error-message-actions"
 
 // Studio surface styling
 import './ChatSurface.css'
+import { ChatEmptyState } from '../chat/ChatEmptyState'
 
 // ============================================================================
 // CSS Custom Highlight API helper
@@ -1590,6 +1591,14 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                     <div className="absolute inset-0 flex flex-col items-center justify-center select-none gap-1 pointer-events-none">
                       <span className="text-sm text-muted-foreground">{t("editPopover.whatToChange")}</span>
                       <span className="text-xs text-muted-foreground/50">{t("editPopover.justDescribe")}</span>
+                    </div>
+                  )}
+                  {/* Empty state for the desktop chat. The transcript is
+                      bottom-anchored, so without this a fresh session renders a
+                      full-height void above the composer. */}
+                  {!compactMode && !messagesLoading && turns.length === 0 && !hasUnrenderedLoadedMessages && (
+                    <div className="absolute inset-0 pointer-events-none">
+                      <ChatEmptyState />
                     </div>
                   )}
                   {!compactMode && hasUnrenderedLoadedMessages && (

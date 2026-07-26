@@ -83,6 +83,7 @@ import { LeftSidebar } from "./LeftSidebar"
 import { useSession } from "@/hooks/useSession"
 import { ensureSessionMessagesLoadedAtom } from "@/atoms/sessions"
 import { AppShellProvider, type AppShellContextType } from "@/context/AppShellContext"
+import { LayoutShell } from "@/shell"
 import { EscapeInterruptProvider, useEscapeInterrupt } from "@/context/EscapeInterruptContext"
 import { useTheme } from "@/context/ThemeContext"
 import { getResizeGradientStyle } from "@/hooks/useResizeGradient"
@@ -1296,6 +1297,17 @@ function AppShellContent({
   // Theme toggle (CMD+SHIFT+A)
   useAction('app.toggleTheme', () => setMode(resolvedMode === 'dark' ? 'light' : 'dark'))
 
+  // Provider refresh (CTRL+SHIFT+R) — force-refresh LLM connections
+  useAction('providers.refresh', async () => {
+    try {
+      const updated = await window.electronAPI.listLlmConnectionsWithStatus()
+      // The ProvidersPanel's 5-second poll picks up the new data automatically.
+      toast.success(`Provider list updated (${updated.length} connections)`)
+    } catch (e) {
+      toast.error('Failed to refresh providers')
+    }
+  })
+
   // Global paste listener for file attachments
   // Fires when Cmd+V is pressed anywhere in the app (not just textarea)
   React.useEffect(() => {
@@ -2380,8 +2392,9 @@ function AppShellContent({
 
   return (
     <AppShellProvider value={appShellContextValue}>
+      <LayoutShell initialView="command" onNewChat={openNewChat ? () => { void openNewChat() } : undefined}>
         {/* === TOP BAR === */}
-        <TopBar
+        {!isFocusedMode && <TopBar
           workspaces={workspaces}
           activeWorkspaceId={activeWorkspaceId}
           onSelectWorkspace={onSelectWorkspace}
@@ -2404,7 +2417,7 @@ function AppShellContent({
           onAddSessionPanel={() => handleNewChat(true)}
           onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
           isCompact={isAutoCompact}
-        />
+        />}
 
       {/* === OUTER LAYOUT: Unified Panel Stack | Right Sidebar === */}
       <div
@@ -2704,6 +2717,7 @@ function AppShellContent({
                       id: "nav:runs",
                       title: t("sidebar.runs", "Runs"),
                       icon: Activity,
+                      iconColor: 'var(--brand-lime)',
                       variant: isRunsNavigation(navState) ? "default" : "ghost",
                       onClick: handleRunsClick,
                     },
@@ -2711,6 +2725,7 @@ function AppShellContent({
                       id: "nav:memory",
                       title: t("sidebar.memory", "Memory"),
                       icon: Brain,
+                      iconColor: 'var(--brand-purple)',
                       variant: isMemoryNavigation(navState) ? "default" : "ghost",
                       onClick: handleMemoryClick,
                     },
@@ -2718,6 +2733,7 @@ function AppShellContent({
                       id: "nav:media-lab",
                       title: t("sidebar.mediaLab", "Media Lab"),
                       icon: Clapperboard,
+                      iconColor: 'var(--brand-lime-deep)',
                       variant: isMediaLabNavigation(navState) ? "default" : "ghost",
                       onClick: handleMediaLabClick,
                     },
@@ -3954,6 +3970,7 @@ function AppShellContent({
           Mounted here so they survive context-menu / dropdown close. */}
       <MessagingDialogHost />
 
+      </LayoutShell>
     </AppShellProvider>
   )
 }
