@@ -1,36 +1,12 @@
 // ============================================================================
-// SQLite compat layer: bun:sqlite on Bun, node:sqlite on Node/Electron
+// SQLite compat layer: bun:sqlite on Bun, better-sqlite3 on Node/Electron
 // ============================================================================
-// IMPORTANT: This module does a lazy runtime require so bundlers (esbuild)
-// don't try to resolve bun:sqlite at bundle time.
-//
-// Usage: mark "bun:sqlite" as external in esbuild so the require() call
-// is emitted into the bundle, then at runtime this module picks the right
-// driver (bun:sqlite or node:sqlite).
+// Only loads better-sqlite3 for Electron. Bun support removed for Electron builds.
 // ============================================================================
 
-function isBun() {
-  return typeof (process as any).versions?.bun !== 'undefined';
-}
+let cachedDatabase: any = null;
 
-function loadNative() {
-  // Use indirect eval to hide from bundler static analysis.
-  // Both bun:sqlite and node:sqlite are marked external in esbuild.
-  const req = (0, eval)('require');
-  if (isBun()) {
-    return req('bun:sqlite');
-  }
-  try {
-    return req('node:sqlite');
-  } catch {
-    throw new Error('No SQLite module available (tried bun:sqlite and node:sqlite)');
-  }
-}
-
-const native = loadNative();
-const isBunRuntime = isBun();
-
-/** Statement wrapper that normalises bun:sqlite vs node:sqlite APIs */
+/** Statement wrapper that normalises better-sqlite3 API */
 export class Statement {
   private inner: any;
 
@@ -57,20 +33,32 @@ export class Statement {
   }
 }
 
-/** Database wrapper that normalises bun:sqlite vs node:sqlite APIs */
+/** Database wrapper for better-sqlite3 */
 export class Database {
   private inner: any;
 
   constructor(path: string, _opts?: { create?: boolean; readwrite?: boolean }) {
-    if (isBunRuntime) {
-      this.inner = new native.Database(path, { create: true, readwrite: true });
-    } else {
-      this.inner = new native.DatabaseSync(path);
-      this.inner.exec('PRAGMA journal_mode = WAL');
-      this.inner.exec('PRAGMA foreign_keys = ON');
-      this.inner.exec('PRAGMA busy_timeout = 5000');
-      this.inner.exec('PRAGMA cache_size = -4000');
+    // Lazy-load better-sqlite3 only when a Database is first created
+    if (!cachedDatabase) {
+      try {
+        // Use require in a way that esbuild won't statically analyze
+        const req = (0, eval)('require') as any;
+        cachedDatabase = req('better-sqlite3');
+      } catch (e) {
+        throw new Error(
+          `Failed to load better-sqlite3. Ensure it's installed with: npm install better-sqlite3 or bun install better-sqlite3. Error: ${e instanceof Error ? e.message : String(e)}`
+        );
+      }
     }
+
+    // Create database instance
+    this.inner = new cachedDatabase(path);
+
+    // Set up PRAGMAs for optimal performance
+    this.inner.pragma('journal_mode = WAL');
+    this.inner.pragma('foreign_keys = ON');
+    this.inner.pragma('busy_timeout = 5000');
+    this.inner.pragma('cache_size = -4000');
   }
 
   prepare(sql: string): Statement {
@@ -78,9 +66,6 @@ export class Database {
   }
 
   run(sql: string) {
-    if (isBunRuntime) {
-      return this.inner.run(sql);
-    }
     return this.inner.exec(sql);
   }
 

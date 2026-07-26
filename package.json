@@ -2,7 +2,7 @@
   "name": "archstudio",
   "version": "0.11.2",
   "license": "Apache-2.0",
-  "description": "ARCHstudio AI Agent",
+  "description": "ARCHstudio AI Super Studio",
   "type": "module",
   "private": true,
   "trustedDependencies": [
@@ -39,8 +39,9 @@
     "test:shared:config": "cd packages/shared && bun test src/config/__tests__/llm-connections.test.ts src/config/__tests__/storage-migrations.test.ts src/config/__tests__/storage-startup-migration.test.ts src/config/__tests__/default-thinking-level.test.ts",
     "test:shared:all": "bun run test:shared:llm-connections && bun run test:shared:models-pi && bun run test:shared:config",
     "test:doc-tools": "bun scripts/run-doc-tool-tests.ts",
-    "validate:dev": "bun run typecheck:all && bun run test:shared:all && bun run test:doc-tools",
-    "validate:ci": "bun run validate:dev && bun run lint:i18n:parity && bun run lint:i18n:sorted && bun run lint:i18n:coverage",
+    "validate:dev": "bun run typecheck:all && bun run icon-check && bun run test:shared:all && bun run test:doc-tools",
+    "validate:dev:fast": "bun run typecheck:all && bun run icon-check",
+    "validate:ci": "bun run validate:dev && bun run lint:i18n:parity && bun run lint:i18n:sorted && bun run lint:i18n:coverage && bun run anim:regress",
     "lint:ipc-sends": "bash scripts/check-raw-sends.sh",
     "lint:tool-name-checks": "bash scripts/check-task-tool-checks.sh",
     "lint:electron": "cd apps/electron && bun run lint",
@@ -52,6 +53,13 @@
     "lint:i18n:coverage": "bun run scripts/check-i18n-coverage.ts",
     "sort-locales": "bun scripts/sort-locales.ts",
     "lint:i18n:sorted": "bun scripts/sort-locales.ts --check",
+    "icon-check": "bun scripts/icon-fingerprint.ts",
+    "icon-check:verbose": "bun scripts/icon-fingerprint.ts --verbose",
+    "icon-check:json": "bun scripts/icon-fingerprint.ts --json",
+    "anim:generate": "node apps/electron/resources/generate-animated-emblem.mjs",
+    "anim:generate:256": "node apps/electron/resources/generate-animated-emblem.mjs --size=256",
+    "anim:regress": "node scripts/anim-regress.mjs",
+    "anim:generate:24fps": "node apps/electron/resources/generate-animated-emblem.mjs --fps=24",
     "lint": "bun run lint:ipc-sends && bun run lint:tool-name-checks && bun run lint:electron && bun run lint:shared && bun run lint:ui",
     "link": "bun link",
     "electron:clean": "bun run scripts/electron-clean.ts",
@@ -208,6 +216,7 @@
     "@img/sharp-libvips-darwin-arm64": "1.2.4",
     "@img/sharp-libvips-darwin-x64": "1.2.4",
     "@img/sharp-libvips-linux-arm64": "1.2.4",
-    "@img/sharp-libvips-linux-x64": "1.2.4"
+    "@img/sharp-libvips-linux-x64": "1.2.4",
+    "better-sqlite3": "^9.0.0"
   }
 }
