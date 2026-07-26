@@ -1091,8 +1091,8 @@ export class ClaudeAgent extends BaseAgent {
       // Build full MCP servers set first, then filter for mini agents
       const fullMcpServers: Options['mcpServers'] = {
         // Session-scoped tools (SubmitPlan, source_test, update_user_preferences, transform_data, etc.)
-        session: getSessionScopedTools(sessionId, this.workspaceRootPath),
-        // Craft Agents documentation - always available for searching setup guides
+        session: getSessionScopedTools(sessionId, this.workspaceRootPath, undefined, this.config.memoryRepository),
+        // ARCHstudio documentation - always available for searching setup guides
         // This is a public Mintlify MCP server, no auth needed
         'craft-agents-docs': {
           type: 'http',
@@ -1232,6 +1232,7 @@ export class ClaudeAgent extends BaseAgent {
                 undefined, // backendName
                 this.pinnedIncludeCoAuthoredBy ?? undefined,
                 this.pinnedProjectContext ?? undefined,
+                true, // includeContextFileContent — inject full AGENTS.md/CLAUDE.md content
               ),
             },
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
@@ -1783,6 +1784,7 @@ This is a branched conversation. All prior messages in this conversation are par
                   this.onDebug?.(`Source "${sourceSlug}" activation failed (may need auth)`);
                   // Let the original error through, but with more context
                   const toolResultEvent = event as Extract<AgentEvent, { type: 'tool_result' }>;
+                  this.recordToolCall(false, toolResultEvent.toolName ?? 'unknown');
                   yield {
                     type: 'tool_result' as const,
                     toolUseId: toolResultEvent.toolUseId,
@@ -1817,6 +1819,8 @@ This is a branched conversation. All prior messages in this conversation are par
                 contextWindow: this.usageTracker.getContextWindow(),
               });
               if (guarded) {
+                // Guarded results wrap a successful tool result; record as successful.
+                this.recordToolCall(true, event.toolName ?? 'unknown');
                 yield { ...event, result: guarded };
                 continue;
               }
@@ -1831,6 +1835,8 @@ This is a branched conversation. All prior messages in this conversation are par
                 if (hint) {
                   // Split "or" alternatives into separate backtick-wrapped commands
                   const commands = hint.split(' or ').map(cmd => `\`${cmd} "${filePath}"\``).join(' or ');
+                  // Read failed on a convertible file type; record as failed.
+                  this.recordToolCall(false, event.toolName ?? 'unknown');
                   yield { ...event, result: `${event.result}\n\nTip: Use ${commands} to convert this file to readable text.` };
                   continue;
                 }
@@ -1876,6 +1882,13 @@ This is a branched conversation. All prior messages in this conversation are par
 
             if (event.type === 'complete') {
               receivedComplete = true;
+            }
+            // Record tool-call outcomes in the inference store for the
+            // ProvidersPanel sparkline. Adapted events carry `type` and
+            // `isError` matching the AgentEvent union; guard defensively
+            // so unknown shapes won't crash the event loop.
+            if (event.type === 'tool_result') {
+              this.recordToolCall(!event.isError, event.toolName ?? 'unknown');
             }
             yield event;
           }
@@ -2234,7 +2247,7 @@ This is a branched conversation. All prior messages in this conversation are par
               message:
                 'The Claude Agent SDK binary expected on disk is not present. ' +
                 'This usually means the app bundle is incomplete (interrupted download, partial update, ' +
-                'or a security tool removed it). Reinstalling Craft Agents typically fixes this.',
+                'or a security tool removed it). Reinstalling ARCHstudio typically fixes this.',
               details: [
                 probedBinary ? `Expected binary: ${probedBinary}` : 'Binary path: unknown',
                 probedCwd ? `Subprocess cwd: ${probedCwd} (${cwdExists ? 'exists' : 'missing'})` : '',

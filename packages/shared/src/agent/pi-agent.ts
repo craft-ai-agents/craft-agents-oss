@@ -157,7 +157,7 @@ function mapBrowserToolErrorCode(code: string): string | null {
  * planning heuristics, config watching, usage tracking).
  */
 export class PiAgent extends BaseAgent {
-  protected backendName = 'Craft Agents Backend';
+  protected backendName = 'ARCHstudio Backend';
 
   // ============================================================
   // Subprocess State
@@ -1154,6 +1154,11 @@ export class PiAgent extends BaseAgent {
         this.resetPrerequisiteState();
       }
 
+      // Record tool-call outcomes in the inference store
+      if (agentEvent.type === 'tool_result') {
+        this.recordToolCall(!agentEvent.isError, agentEvent.toolName ?? 'unknown');
+      }
+
       // Fire PostToolUse / PostToolUseFailure hook events (fire-and-forget)
       if (agentEvent.type === 'tool_result') {
         const hookEvent = agentEvent.isError ? 'PostToolUseFailure' : 'PostToolUse';
@@ -1487,6 +1492,7 @@ export class PiAgent extends BaseAgent {
       sessionId,
       workspacePath,
       workspaceId,
+      memoryRepository: this.config.memoryRepository,
       onPlanSubmitted: (planPath: string) => {
         setLastPlanFilePath(sessionId, planPath);
         this.onPlanSubmitted?.(planPath);
@@ -2034,9 +2040,10 @@ export class PiAgent extends BaseAgent {
         this.config.workspace.rootPath,
         this.config.session?.workingDirectory,
         this.config.systemPromptPreset,
-        'Craft Agents Backend', // backendName
+        'ARCHstudio Backend', // backendName
         getCoAuthorPreference(), // respect user's includeCoAuthoredBy preference (#576)
         projectContext ?? undefined,
+        true, // includeContextFileContent — inject full AGENTS.md/CLAUDE.md content
       );
 
       // Build context from sources

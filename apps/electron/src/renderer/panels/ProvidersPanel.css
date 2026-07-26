@@ -89,6 +89,13 @@
   cursor: not-allowed;
 }
 
+.providers-panel__btn--testing {
+  opacity: 0.7;
+  cursor: wait;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ---- Quick-add form --------------------------------------------------- */
 
 .providers-panel__quick-add {
@@ -156,6 +163,439 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* ---- Test history timeline (below card footer) ----------------------- */
+
+/* Notification history — collapsible auth/health transition log */
+.providers-panel__notification-section {
+  padding: 6px 16px 6px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.providers-panel__notification-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--foreground) 50%, transparent);
+  padding: 2px 0;
+  transition: color 0.15s ease;
+}
+
+.providers-panel__notification-toggle:hover {
+  color: color-mix(in srgb, var(--foreground) 80%, transparent);
+}
+
+.providers-panel__notification-count {
+  font-size: 10px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+  border-radius: 8px;
+  padding: 0 5px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 16px;
+}
+
+.providers-panel__notification-history {
+  margin-top: 4px;
+}
+
+.providers-panel__notification-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.providers-panel__notification-entry {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: background 0.12s ease;
+}
+
+.providers-panel__notification-entry:hover {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.providers-panel__notification-icon {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.providers-panel__notification-msg {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--foreground) 65%, transparent);
+}
+
+.providers-panel__notification-time {
+  flex-shrink: 0;
+  font-size: 9.5px;
+  color: color-mix(in srgb, var(--foreground) 40%, transparent);
+}
+
+.providers-panel__test-history {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  background: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
+}
+
+.providers-panel__test-history-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--foreground) 35%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
+
+.providers-panel__test-history-dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.providers-panel__test-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: help;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.providers-panel__test-dot:hover {
+  transform: scale(1.4);
+}
+
+.providers-panel__test-dot--ok {
+  background: #22c55e;
+  box-shadow: 0 0 3px color-mix(in srgb, #22c55e 40%, transparent);
+}
+
+.providers-panel__test-dot--err {
+  background: #ef4444;
+  box-shadow: 0 0 3px color-mix(in srgb, #ef4444 40%, transparent);
+}
+
+/* ---- Expanded test history log (from footer icon) -------------------- */
+
+.providers-panel__test-log {
+  padding: 8px 16px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  background: color-mix(in srgb, var(--foreground) 1%, var(--background));
+  animation: providers-fade-in 0.12s ease-out;
+}
+
+.providers-panel__test-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.providers-panel__test-log-entry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  transition: background 0.12s ease;
+}
+
+.providers-panel__test-log-entry:hover {
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+
+.providers-panel__test-log-icon {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  width: 14px;
+  text-align: center;
+}
+
+.providers-panel__test-log-entry--ok .providers-panel__test-log-icon {
+  color: #22c55e;
+}
+
+.providers-panel__test-log-entry--err .providers-panel__test-log-icon {
+  color: #ef4444;
+}
+
+.providers-panel__test-log-source {
+  flex-shrink: 0;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  color: color-mix(in srgb, var(--foreground) 50%, transparent);
+}
+
+.providers-panel__test-log-msg {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--foreground) 70%, transparent);
+}
+
+.providers-panel__test-log-time {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: color-mix(in srgb, var(--foreground) 40%, transparent);
+}
+
+.providers-panel__test-log-latency {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  color: color-mix(in srgb, var(--foreground) 55%, transparent);
+}
+
+.providers-panel__test-log-latency--slow {
+  color: #ef4444;
+  background: color-mix(in srgb, #ef4444 10%, transparent);
+}
+
+.providers-panel__footer-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: color-mix(in srgb, var(--foreground) 40%, transparent);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.providers-panel__footer-icon-btn:hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--background));
+  color: var(--foreground);
+  border-color: var(--border);
+}
+
+.providers-panel__footer-icon-btn--active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--background));
+}
+
+.providers-panel__footer-icon-btn--active:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--background));
+  border-color: var(--accent);
+}
+
+/* ---- 7-day uptime heatmap -------------------------------------------- */
+
+.providers-panel__heatmap {
+  padding: 8px 16px 6px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.providers-panel__heatmap-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--foreground) 35%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+
+.providers-panel__heatmap-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.providers-panel__heatmap-day {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.providers-panel__heatmap-day-label {
+  flex-shrink: 0;
+  width: 60px;
+  font-size: 9px;
+  color: color-mix(in srgb, var(--foreground) 40%, transparent);
+  text-align: right;
+}
+
+.providers-panel__heatmap-cells {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.providers-panel__heatmap-cell {
+  width: 8px;
+  height: 8px;
+  border-radius: 1.5px;
+  flex-shrink: 0;
+  cursor: help;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+
+.providers-panel__heatmap-cell:hover {
+  transform: scale(1.6);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--foreground) 30%, transparent);
+  z-index: 1;
+}
+
+.providers-panel__heatmap-cell--empty {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--background));
+  border: 1px solid color-mix(in srgb, var(--border) 30%, transparent);
+}
+
+.providers-panel__heatmap-cell--bad {
+  background: #ef4444;
+  opacity: 0.7;
+}
+
+.providers-panel__heatmap-cell--mixed {
+  background: #f59e0b;
+  opacity: 0.75;
+}
+
+.providers-panel__heatmap-cell--good {
+  background: #22c55e;
+  opacity: 0.7;
+}
+
+.providers-panel__heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  justify-content: flex-end;
+}
+
+.providers-panel__heatmap-legend-label {
+  font-size: 8.5px;
+  color: color-mix(in srgb, var(--foreground) 30%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.providers-panel__heatmap-legend-cells {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.providers-panel__heatmap-legend-cells .providers-panel__heatmap-cell {
+  cursor: default;
+}
+
+.providers-panel__heatmap-legend-cells .providers-panel__heatmap-cell:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* ---- Latency histogram ----------------------------------------------- */
+
+.providers-panel__latency-histogram {
+  padding: 8px 0 2px;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+
+.providers-panel__latency-histogram-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--foreground) 35%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+
+.providers-panel__latency-histogram-buckets {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 48px;
+}
+
+.providers-panel__latency-bucket {
+  flex: 1;
+  min-height: 4px;
+  border-radius: 3px 3px 2px 2px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  transition: opacity 0.15s, transform 0.15s;
+  cursor: help;
+  position: relative;
+}
+
+.providers-panel__latency-bucket:hover {
+  opacity: 0.85;
+  transform: scaleY(1.03);
+  transform-origin: bottom;
+}
+
+.providers-panel__latency-bucket--fast {
+  background: linear-gradient(to top, #22c55e, #4ade80);
+}
+
+.providers-panel__latency-bucket--mid {
+  background: linear-gradient(to top, #eab308, #facc15);
+}
+
+.providers-panel__latency-bucket--slow {
+  background: linear-gradient(to top, #ef4444, #f87171);
+}
+
+.providers-panel__latency-bucket-count {
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--foreground) 65%, transparent);
+  line-height: 1;
+  margin-top: 3px;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.providers-panel__latency-histogram-labels {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.providers-panel__latency-histogram-labels span {
+  flex: 1;
+  font-size: 9px;
+  color: color-mix(in srgb, var(--foreground) 40%, transparent);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- Empty state ------------------------------------------------------ */
@@ -299,6 +739,57 @@
 
 .providers-panel__status-dot--other {
   color: color-mix(in srgb, var(--foreground) 40%, transparent);
+}
+
+/* ---- Health dot (green/red/yellow heartbeat) -------------------------- */
+
+.providers-panel__health-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1.5px solid transparent;
+  transition: background 0.3s, border-color 0.3s, box-shadow 0.3s;
+}
+
+/* Unknown / not yet checked — muted gray */
+.providers-panel__health-dot--unknown {
+  background: color-mix(in srgb, var(--foreground) 25%, transparent);
+  border-color: color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+/* Healthy — green pulse */
+.providers-panel__health-dot--healthy {
+  background: #22c55e;
+  border-color: #22c55e;
+  box-shadow: 0 0 5px color-mix(in srgb, #22c55e 50%, transparent);
+  animation: providers-health-pulse 2.5s ease-in-out infinite;
+}
+
+/* Degraded / intermittent — yellow */
+.providers-panel__health-dot--degraded {
+  background: #eab308;
+  border-color: #eab308;
+  box-shadow: 0 0 5px color-mix(in srgb, #eab308 50%, transparent);
+  animation: providers-health-pulse 1.5s ease-in-out infinite;
+}
+
+/* Unhealthy / offline — red */
+.providers-panel__health-dot--unhealthy {
+  background: #ef4444;
+  border-color: #ef4444;
+  box-shadow: 0 0 5px color-mix(in srgb, #ef4444 50%, transparent);
+  animation: providers-health-flash 1s ease-in-out infinite;
+}
+
+@keyframes providers-health-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+@keyframes providers-health-flash {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
 }
 
 /* ---- Default badge ---------------------------------------------------- */
@@ -454,6 +945,95 @@
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
+/* ---- Connection-usage sparkline ------------------------------------- */
+
+.providers-panel__reliability {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  margin-bottom: 0;
+}
+
+.providers-panel__reliability-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--foreground) 45%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+  min-width: 60px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.providers-panel__reliability-source {
+  font-weight: 400;
+  font-size: 10px;
+  opacity: 0.6;
+}
+}
+
+.providers-panel__sparkline-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.providers-panel__sparkline {
+  width: 100%;
+  height: 20px;
+  border-radius: 3px;
+  overflow: visible;
+}
+
+.providers-panel__sparkline-label {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--foreground) 50%, transparent);
+  flex-shrink: 0;
+  min-width: 32px;
+  text-align: right;
+}
+
+/* ---- Inline test latency badge -------------------------------------- */
+
+.providers-panel__test-latency {
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  color: color-mix(in srgb, var(--foreground) 50%, transparent);
+  flex-shrink: 0;
+}
+
+.providers-panel__test-latency--slow {
+  color: #ef4444;
+  background: color-mix(in srgb, #ef4444 10%, transparent);
+}
+
+/* ---- Rolling average latency (sparkline area) ----------------------- */
+
+.providers-panel__avg-latency {
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--foreground) 45%, transparent);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.providers-panel__avg-latency--slow {
+  color: #ef4444;
+}
+
 /* ---- Card footer ------------------------------------------------------ */
 
 .providers-panel__card-footer {
@@ -492,6 +1072,40 @@
 .providers-panel__last-used {
   font-size: 11px;
   color: color-mix(in srgb, var(--foreground) 40%, transparent);
+}
+
+/* ---- Inline test result ---- */
+
+.providers-panel__test-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: providers-fade-in 0.15s ease-out;
+}
+
+.providers-panel__test-result--ok {
+  color: #22c55e;
+  background: color-mix(in srgb, #22c55e 10%, transparent);
+  border: 1px solid color-mix(in srgb, #22c55e 25%, transparent);
+}
+
+.providers-panel__test-result--err {
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--destructive) 25%, transparent);
+}
+
+@keyframes providers-fade-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* ---- Shared spinner --------------------------------------------------- */
