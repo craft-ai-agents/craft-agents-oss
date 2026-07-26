@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils"
-import { WelcomeStep } from "./WelcomeStep"
+import { OnboardingMural, type MuralScene } from "./OnboardingMural"
+import { WelcomeScene } from "./WelcomeScene"
 import type { ApiSetupMethod } from "./APISetupStep"
 import { ProviderSelectStep, type ProviderChoice } from "./ProviderSelectStep"
 import { CredentialsStep, type CredentialStatus } from "./CredentialsStep"
@@ -9,13 +10,7 @@ import { GitBashWarning, type GitBashStatus } from "./GitBashWarning"
 import type { ApiKeySubmitData } from "../apisetup"
 import type { CustomEndpointApi } from '@config/llm-connections'
 
-export type OnboardingStep =
-  | 'welcome'
-  | 'git-bash'
-  | 'provider-select'
-  | 'local-model'
-  | 'credentials'
-  | 'complete'
+export type OnboardingStep = MuralScene
 
 export type LoginStatus = 'idle' | 'waiting' | 'success' | 'error'
 
@@ -120,7 +115,7 @@ export function OnboardingWizard({
     switch (state.step) {
       case 'welcome':
         return (
-          <WelcomeStep
+          <WelcomeScene
             isExistingUser={state.isExistingUser}
             onContinue={onContinue}
             isLoading={state.isCheckingGitBash}
@@ -190,9 +185,10 @@ export function OnboardingWizard({
   }
 
   return (
-    <div
+    <OnboardingMural
+      scene={state.step}
+      sceneKey={state.step}
       className={cn(
-        "bg-foreground-2 overflow-y-auto",
         !className?.includes('h-full') && "h-dvh",
         className
       )}
@@ -200,11 +196,9 @@ export function OnboardingWizard({
       {/* Draggable title bar region for transparent window (macOS) */}
       <div className="titlebar-drag-region fixed top-0 left-0 right-0 h-[50px] z-titlebar" />
 
-      {/* Main content — min-h-full + flex center means: center when content fits,
-          natural flow + scroll when content is taller than the viewport (mobile). */}
-      <main className="flex min-h-full items-center justify-center p-4 sm:p-8">
+      <div className="onboarding-mural__scene-content">
         {renderStep()}
-      </main>
-    </div>
+      </div>
+    </OnboardingMural>
   )
 }

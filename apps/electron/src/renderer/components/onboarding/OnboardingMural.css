@@ -1,0 +1,504 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   ONBOARDING MURAL
+   Full-bleed visual journey that flows from the splash aesthetic
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Mural container ──────────────────────────────────────────────────── */
+
+.onboarding-mural {
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--background);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Brand glow ────────────────────────────────────────────────────────── */
+
+.onboarding-mural__glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% -10%,
+      color-mix(in oklch, var(--brand-purple) 22%, transparent) 0%,
+      color-mix(in oklch, var(--brand-lime) 6%, transparent) 45%,
+      transparent 75%);
+  animation: mural-glow-pulse 6s ease-in-out infinite;
+}
+
+@keyframes mural-glow-pulse {
+  0%, 100% { opacity: 0.65; }
+  50%      { opacity: 1; }
+}
+
+/* ── Light ray ─────────────────────────────────────────────────────────── */
+
+.onboarding-mural__light-ray {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      135deg,
+      transparent 30%,
+      color-mix(in oklch, oklch(1 0 0) 3%, transparent) 50%,
+      transparent 70%
+    );
+  background-size: 200% 200%;
+  animation: mural-light-sweep 12s linear infinite;
+}
+
+@keyframes mural-light-sweep {
+  from { background-position: 100% 100%; }
+  to   { background-position: -100% -100%; }
+}
+
+/* ── Ambient particles ─────────────────────────────────────────────────── */
+
+.onboarding-mural__particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.onboarding-mural__particle {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--brand-purple);
+  will-change: transform, opacity;
+}
+
+/* ── Journey indicator bar ─────────────────────────────────────────────── */
+
+.onboarding-mural__journey {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 20px 24px 0;
+  flex-shrink: 0;
+}
+
+.onboarding-mural__step-dot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.onboarding-mural__step-dot-circle {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in oklch, var(--foreground) 14%, transparent);
+  transition: all 0.4s var(--ds-ease-standard);
+  position: relative;
+}
+
+.onboarding-mural__step-dot--active .onboarding-mural__step-dot-circle {
+  width: 10px;
+  height: 10px;
+  background: var(--brand-gradient);
+  box-shadow: 0 0 12px color-mix(in oklch, var(--brand-purple) 30%, transparent);
+}
+
+.onboarding-mural__step-dot--done .onboarding-mural__step-dot-circle {
+  background: color-mix(in oklch, var(--brand-lime) 60%, transparent);
+}
+
+.onboarding-mural__step-dot-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: color-mix(in oklch, var(--foreground) 25%, transparent);
+  transition: color 0.3s;
+}
+
+.onboarding-mural__step-dot--active .onboarding-mural__step-dot-label {
+  color: color-mix(in oklch, var(--foreground) 55%, transparent);
+}
+
+/* Connector line between dots */
+.onboarding-mural__step-connector {
+  width: 24px;
+  height: 1px;
+  background: color-mix(in oklch, var(--foreground) 8%, transparent);
+  flex-shrink: 0;
+  transition: background 0.4s;
+}
+
+.onboarding-mural__step-connector--active {
+  background: color-mix(in oklch, var(--brand-purple) 25%, transparent);
+}
+
+/* ── Content stage — glass panel ───────────────────────────────────────── */
+
+.onboarding-mural__stage {
+  position: relative;
+  z-index: 5;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 20px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.onboarding-mural__glass {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  border-radius: 16px;
+  padding: 28px 28px 20px;
+  background: color-mix(in oklch, var(--background) 72%, transparent);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid color-mix(in oklch, var(--foreground) 8%, transparent);
+  box-shadow:
+    var(--ds-elevation-2),
+    0 0 40px color-mix(in oklch, var(--brand-purple) 4%, transparent);
+}
+
+/* ── Scene typography ──────────────────────────────────────────────────── */
+
+.onboarding-mural__emblem {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.onboarding-mural__title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--foreground);
+}
+
+.onboarding-mural__title--gradient {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.onboarding-mural__subtitle {
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+  color: color-mix(in oklch, var(--foreground) 35%, transparent);
+  margin-top: 8px;
+  max-width: 360px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.onboarding-mural__decorative-rule {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.onboarding-mural__decorative-rule::before,
+.onboarding-mural__decorative-rule::after {
+  content: '';
+  display: block;
+  width: 20px;
+  height: 1px;
+  background: color-mix(in oklch, var(--foreground) 12%, transparent);
+}
+
+.onboarding-mural__decorative-rule-text {
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: color-mix(in oklch, var(--foreground) 18%, transparent);
+}
+
+/* ── Provider cards in the mural ───────────────────────────────────────── */
+
+.onboarding-mural__provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.onboarding-mural__provider-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--foreground) 3%, transparent);
+  border: 1px solid color-mix(in oklch, var(--foreground) 6%, transparent);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s var(--ds-ease-standard);
+  color: var(--foreground);
+}
+
+.onboarding-mural__provider-card:hover {
+  background: color-mix(in oklch, var(--brand-purple) 6%, transparent);
+  border-color: color-mix(in oklch, var(--brand-purple) 15%, transparent);
+  transform: translateX(2px);
+}
+
+.onboarding-mural__provider-card:active {
+  transform: translateX(0);
+}
+
+.onboarding-mural__provider-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: color-mix(in oklch, var(--foreground) 6%, transparent);
+  color: color-mix(in oklch, var(--foreground) 40%, transparent);
+}
+
+.onboarding-mural__provider-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.onboarding-mural__provider-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.onboarding-mural__provider-desc {
+  font-size: 10px;
+  color: color-mix(in oklch, var(--foreground) 30%, transparent);
+  margin-top: 1px;
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .onboarding-mural__provider-desc {
+    display: block;
+  }
+}
+
+.onboarding-mural__provider-arrow {
+  font-size: 11px;
+  color: color-mix(in oklch, var(--foreground) 15%, transparent);
+  flex-shrink: 0;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: all 0.2s;
+}
+
+.onboarding-mural__provider-card:hover .onboarding-mural__provider-arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ── Skip link ──────────────────────────────────────────────────────────── */
+
+.onboarding-mural__skip-link {
+  display: block;
+  text-align: center;
+  margin-top: 14px;
+  font-size: 10px;
+  font-weight: 500;
+  color: color-mix(in oklch, var(--foreground) 20%, transparent);
+  transition: color 0.2s;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.onboarding-mural__skip-link:hover {
+  color: color-mix(in oklch, var(--foreground) 40%, transparent);
+}
+
+/* ── Action buttons within glass ───────────────────────────────────────── */
+
+.onboarding-mural__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.onboarding-mural__actions--centered {
+  justify-content: center;
+}
+
+.onboarding-mural__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s var(--ds-ease-standard);
+  border: none;
+  flex: 1;
+  max-width: 220px;
+}
+
+.onboarding-mural__btn--primary {
+  background: var(--brand-gradient);
+  color: #fff;
+  box-shadow: 0 0 16px color-mix(in oklch, var(--brand-purple) 15%, transparent);
+}
+
+.onboarding-mural__btn--primary:hover {
+  box-shadow: 0 0 24px color-mix(in oklch, var(--brand-purple) 25%, transparent);
+  transform: translateY(-1px);
+}
+
+.onboarding-mural__btn--ghost {
+  background: color-mix(in oklch, var(--foreground) 5%, transparent);
+  color: color-mix(in oklch, var(--foreground) 50%, transparent);
+  border: 1px solid color-mix(in oklch, var(--foreground) 6%, transparent);
+}
+
+.onboarding-mural__btn--ghost:hover {
+  background: color-mix(in oklch, var(--foreground) 8%, transparent);
+  color: var(--foreground);
+}
+
+.onboarding-mural__btn--full {
+  flex: none;
+  width: 100%;
+  max-width: none;
+}
+
+/* ── Error / success panels within glass ────────────────────────────────── */
+
+.onboarding-mural__message {
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  margin-top: 12px;
+}
+
+.onboarding-mural__message--error {
+  background: color-mix(in oklch, var(--ds-error) 8%, transparent);
+  color: var(--ds-error);
+}
+
+.onboarding-mural__message--success {
+  background: color-mix(in oklch, var(--ds-success) 8%, transparent);
+  color: var(--ds-success);
+}
+
+/* ── Input field within glass ──────────────────────────────────────────── */
+
+.onboarding-mural__input {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--foreground) 5%, transparent);
+  border: 1px solid color-mix(in oklch, var(--foreground) 8%, transparent);
+  color: var(--foreground);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.onboarding-mural__input:focus {
+  border-color: color-mix(in oklch, var(--brand-purple) 30%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand-purple) 8%, transparent);
+}
+
+.onboarding-mural__input::placeholder {
+  color: color-mix(in oklch, var(--foreground) 20%, transparent);
+}
+
+/* ── Completion state ───────────────────────────────────────────────────── */
+
+.onboarding-mural__completion-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+  background: color-mix(in oklch, var(--brand-lime) 10%, transparent);
+  border: 2px solid color-mix(in oklch, var(--brand-lime) 20%, transparent);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SCENE CONTENT OVERRIDES
+   Make existing step components render seamlessly inside the glass panel
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Target StepFormLayout inside the mural — remove max-width constraint so content
+   fills the glass panel naturally instead of being double-nested */
+.onboarding-mural__scene-content > .max-w-\[28rem\] {
+  max-width: 100% !important;
+}
+
+/* Hide duplicate step icons inside the mural (the glass panel already shows the
+   emblem on the welcome scene, and the journey indicator provides visual context) */
+.onboarding-mural__scene-content .step-icon,
+.onboarding-mural__scene-content [class*="size-16 items-center justify-center"] {
+  display: none !important;
+}
+
+/* Provider cards inside the mural — use mural's own card styling instead of
+   the old bg-foreground-2 solid background */
+.onboarding-mural__scene-content [class*="rounded-xl bg-foreground-2"] {
+  background: color-mix(in oklch, var(--foreground) 3%, transparent) !important;
+  border: 1px solid color-mix(in oklch, var(--foreground) 6%, transparent) !important;
+  box-shadow: none !important;
+  border-radius: 12px !important;
+  transition: all 0.2s var(--ds-ease-standard) !important;
+}
+
+.onboarding-mural__scene-content [class*="rounded-xl bg-foreground-2"]:hover {
+  background: color-mix(in oklch, var(--brand-purple) 6%, transparent) !important;
+  border-color: color-mix(in oklch, var(--brand-purple) 15%, transparent) !important;
+  transform: translateX(2px) !important;
+}
+
+/* Completion step button inside mural — use brand gradient like the welcome scene */
+.onboarding-mural__scene-content [class*="bg-background shadow-minimal rounded-lg"] {
+  background: var(--brand-gradient) !important;
+  color: #fff !important;
+  box-shadow: 0 0 16px color-mix(in oklch, var(--brand-purple) 15%, transparent) !important;
+  border: none !important;
+}
+
+.onboarding-mural__scene-content [class*="bg-background shadow-minimal rounded-lg"]:hover {
+  box-shadow: 0 0 24px color-mix(in oklch, var(--brand-purple) 25%, transparent) !important;
+  transform: translateY(-1px) !important;
+  opacity: 1 !important;
+}
+
+/* Remove the `mt-8` from StepActions inside the mural — use mural spacing */
+.onboarding-mural__scene-content .step-actions {
+  margin-top: 12px !important;
+}
+
+/* ── Scrollbar hidden (content scrolls within the glass) ────────────────── */
+
+.onboarding-mural__glass::-webkit-scrollbar {
+  width: 0;
+}
