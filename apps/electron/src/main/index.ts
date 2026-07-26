@@ -4,6 +4,16 @@ import { loadShellEnv } from './shell-env'
 loadShellEnv()
 
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
+
+// Some Windows systems fail before the first window is created when Chromium's
+// GPU helper cannot load its graphics runtime (0xc0000135). ARCHstudio does not
+// require hardware acceleration for its desktop shell, so use Electron's stable
+// software rendering path on Windows. This must run before app.whenReady().
+if (process.platform === 'win32') {
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('in-process-gpu')
+}
 import { createHash, randomUUID } from 'crypto'
 import { hostname, homedir } from 'os'
 import * as Sentry from '@sentry/electron/main'
@@ -82,7 +92,7 @@ const machineId = createHash('sha256').update(hostname() + homedir()).digest('he
 Sentry.setUser({ id: machineId })
 
 import { join, delimiter } from 'path'
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
 import { registerAllRpcHandlers } from './handlers/index'
@@ -225,8 +235,8 @@ let messagingHandle: MessagingBootstrapHandle | null = null
 let pendingDeepLink: string | null = null
 
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
-// Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Craft Agents [1]")
-app.setName(process.env.CRAFT_APP_NAME || 'Craft Agents')
+// Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "ARCHstudio [1]")
+app.setName(process.env.CRAFT_APP_NAME || 'ARCHstudio')
 
 // Register as default protocol client for craftagents:// URLs
 // This must be done before app.whenReady() on some platforms
@@ -756,6 +766,45 @@ app.whenReady().then(async () => {
         // without a process restart.
         const baseSink = instance.wsServer.push.bind(instance.wsServer)
         instance.sessionManager.setEventSink(messagingHandle.wrapSink(baseSink))
+
+        // Wire the shared MemoryRepository so agent tools (memory_search,
+        // memory_recall) and MemoryPanel IPC handlers share the same SQLite
+        // connection and FTS5 index.
+        try {
+          const { getMemoryRepository, getVaultSync } = await import('./handlers/memory')
+          const repo = await getMemoryRepository()
+          instance.sessionManager.setMemoryRepository(repo)
+          mainLog.info('[memory] Shared MemoryRepository wired to SessionManager')
+
+          // Vault round-trip: auto-import Obsidian vault .md files into memory
+          // on startup so vault edits are reflected without a manual import click.
+          try {
+            const vault = await getVaultSync()
+            const readResult = vault.readVault()
+            if (readResult.records.length > 0) {
+              const importStats = repo.importMemories(readResult.records, 'system')
+              mainLog.info(
+                `[memory] Vault auto-import: ${importStats.imported} imported, ` +
+                `${importStats.skipped} skipped, ${importStats.errors.length} errors`
+              )
+              if (importStats.errors.length > 0) {
+                for (const err of importStats.errors.slice(0, 5)) {
+                  mainLog.warn(`[memory] Vault import error: ${err.message} (${err.filePath ?? 'n/a'})`)
+                }
+              }
+            } else {
+              mainLog.info('[memory] No vault records to import on startup')
+            }
+          } catch (vaultErr) {
+            mainLog.warn('[memory] Vault auto-import skipped (vault not configured or unreadable):', vaultErr)
+          }
+        } catch (err) {
+          mainLog.error(
+            '[memory] Failed to wire MemoryRepository:',
+            err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err),
+          )
+        }
+
         if (messagingHandle.registry.size > 0) {
           mainLog.info(`[messaging] Fan-out sink active for ${messagingHandle.registry.size} workspace(s)`)
         }
@@ -909,6 +958,159 @@ app.whenReady().then(async () => {
       ipcMain.handle('app:relaunch', () => {
         app.relaunch()
         app.exit(0)
+      })
+
+      // Launch at login preference
+      ipcMain.handle('app:getLaunchAtLogin', () => {
+        const settings = app.getLoginItemSettings()
+        return settings.openAtLogin
+      })
+      ipcMain.handle('app:setLaunchAtLogin', (_event, openAtLogin: boolean) => {
+        app.setLoginItemSettings({ openAtLogin })
+      })
+
+      // Confirm before exit preference (stored in preferences.json)
+      ipcMain.handle('app:getConfirmBeforeExit', async () => {
+        try {
+          const { readPreferences } = await import('@craft-agent/shared/config')
+          const { content } = await readPreferences()
+          const prefs = JSON.parse(content)
+          return prefs.confirmBeforeExit ?? true
+        } catch {
+          return true // default to confirmed exit
+        }
+      })
+      ipcMain.handle('app:setConfirmBeforeExit', async (_event, value: boolean) => {
+        try {
+          const { readPreferences, writePreferences } = await import('@craft-agent/shared/config')
+          const { content } = await readPreferences()
+          const prefs = JSON.parse(content)
+          prefs.confirmBeforeExit = value
+          await writePreferences(JSON.stringify(prefs, null, 2))
+        } catch {
+          // preferences file may not exist — silently degrade
+        }
+      })
+
+      // Settings export: dump config.json + preferences.json + themes as a portable bundle.
+      ipcMain.handle('app:exportSettings', async (_event) => {
+        try {
+          const config = loadStoredConfig()
+          const exportBundle: Record<string, unknown> = {
+            version: app.getVersion(),
+            exportedAt: Date.now(),
+            config,
+          }
+          // Include preferences if they exist
+          try {
+            const { readPreferences } = await import('@craft-agent/shared/config')
+            const { content, exists } = await readPreferences()
+            if (exists) {
+              exportBundle.preferences = JSON.parse(content)
+            }
+          } catch {
+            // preferences file may not exist — that's fine
+          }
+          // Include custom themes (list files in themes directory)
+          try {
+            const { getAppThemesDir } = await import('@craft-agent/shared/config')
+            const themesDir = getAppThemesDir()
+            if (existsSync(themesDir)) {
+              const themeFiles = readdirSync(themesDir).filter(f => f.endsWith('.json'))
+              const themes: Record<string, string> = {}
+              for (const file of themeFiles) {
+                themes[file] = readFileSync(join(themesDir, file), 'utf-8')
+              }
+              if (Object.keys(themes).length > 0) {
+                exportBundle.themes = themes
+              }
+            }
+          } catch {
+            // themes directory may not exist — optional
+          }
+          // Open save dialog so user picks where to write
+          const win = BrowserWindow.fromWebContents(_event.sender)
+            || BrowserWindow.getFocusedWindow()
+            || BrowserWindow.getAllWindows()[0]
+          const { filePath } = await dialog.showSaveDialog(win, {
+            title: 'Export Settings',
+            defaultPath: `archstudio-settings-${new Date().toISOString().slice(0, 10)}.json`,
+            filters: [{ name: 'JSON', extensions: ['json'] }],
+          })
+          if (!filePath) return { success: false, canceled: true }
+          writeFileSync(filePath, JSON.stringify(exportBundle, null, 2), 'utf-8')
+          mainLog.info('[settings] Settings exported to', filePath)
+          return { success: true, path: filePath }
+        } catch (err) {
+          mainLog.error('[settings] Export settings failed:', err)
+          return { success: false, error: err instanceof Error ? err.message : String(err) }
+        }
+      })
+
+      // Settings import: read a bundle file, validate, and restore config + preferences + themes.
+      ipcMain.handle('app:importSettings', async (_event) => {
+        try {
+          const win = BrowserWindow.fromWebContents(_event.sender)
+            || BrowserWindow.getFocusedWindow()
+            || BrowserWindow.getAllWindows()[0]
+          const { filePaths, canceled } = await dialog.showOpenDialog(win, {
+            title: 'Import Settings',
+            filters: [{ name: 'JSON', extensions: ['json'] }],
+            properties: ['openFile'],
+          })
+          if (canceled || !filePaths?.[0]) return { success: false, canceled: true }
+          const raw = readFileSync(filePaths[0], 'utf-8')
+          let bundle: Record<string, unknown>
+          try {
+            bundle = JSON.parse(raw)
+          } catch {
+            return { success: false, error: 'Invalid JSON file' }
+          }
+          // Validate bundle structure
+          if (!bundle.config || typeof bundle.config !== 'object') {
+            return { success: false, error: 'Bundle is missing the "config" object' }
+          }
+          const configObj = bundle.config as Record<string, unknown>
+          if (!Array.isArray(configObj.workspaces)) {
+            return { success: false, error: 'Bundle config is missing the "workspaces" array' }
+          }
+          // Restore config.json
+          const { saveConfig, getAppThemesDir } = await import('@craft-agent/shared/config')
+          saveConfig(bundle.config as any)
+          mainLog.info('[settings] Config restored from import')
+          // Restore preferences if present
+          if (bundle.preferences && typeof bundle.preferences === 'object') {
+            try {
+              const { writePreferences } = await import('@craft-agent/shared/config')
+              await writePreferences(JSON.stringify(bundle.preferences, null, 2))
+              mainLog.info('[settings] Preferences restored from import')
+            } catch {
+              // non-critical
+            }
+          }
+          // Restore themes if present
+          if (bundle.themes && typeof bundle.themes === 'object') {
+            try {
+              const themesDir = getAppThemesDir()
+              if (!existsSync(themesDir)) {
+                mkdirSync(themesDir, { recursive: true })
+              }
+              for (const [filename, content] of Object.entries(bundle.themes as Record<string, string>)) {
+                if (filename.endsWith('.json') && typeof content === 'string') {
+                  writeFileSync(join(themesDir, filename), content, 'utf-8')
+                }
+              }
+              mainLog.info('[settings] Themes restored from import')
+            } catch {
+              // non-critical
+            }
+          }
+          mainLog.info('[settings] Settings imported from', filePaths[0])
+          return { success: true }
+        } catch (err) {
+          mainLog.error('[settings] Import settings failed:', err)
+          return { success: false, error: err instanceof Error ? err.message : String(err) }
+        }
       })
 
       // Language change: sync from renderer to main process, persist, and rebuild native menu.
@@ -1256,6 +1458,15 @@ app.on('before-quit', async (event) => {
       } catch (err) {
         mainLog.error('[messaging] dispose failed:', err)
       }
+    }
+
+    // Close the shared MemoryRepository connection (WAL checkpoint + release lock)
+    try {
+      const { closeMemoryRepository } = await import('./handlers/memory')
+      await closeMemoryRepository()
+      mainLog.info('[memory] MemoryRepository connection closed')
+    } catch (err) {
+      mainLog.error('[memory] Failed to close MemoryRepository:', err)
     }
 
     // Clean up power manager (release power blocker)

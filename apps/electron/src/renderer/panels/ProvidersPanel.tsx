@@ -24,10 +24,14 @@ import {
   Search,
   Server,
   X,
+  ArrowUpDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { LlmConnectionWithStatus, LlmProviderType } from '@craft-agent/shared/config'
-import { providerLabel } from '@craft-agent/shared/config'
+// Import the direct subpath, not the '@craft-agent/shared/config' barrel: the
+// barrel re-exports config/storage.ts, which pulls sessions/jsonl.ts and `fs`
+// into the renderer bundle and blanks the window at module init.
+import { providerLabel } from '@craft-agent/shared/config/provider-labels'
 import './ProvidersPanel.css'
 
 export type ProvidersPanelProps = {
@@ -424,6 +428,23 @@ export function ProvidersPanel({
   onEditProvider,
 }: ProvidersPanelProps) {
   const [providers, setProviders] = useState<LlmConnectionWithStatus[]>([])
+  // Shake animation for the category-filter X button — brief feedback without a toast
+  // Shake animation for the category-filter X button — brief feedback without a toast.
+  // Fires when the user clears a filter (i.e., exits a "stale" filtered view),
+  // subtly confirming the action without a toast notification.
+  const [filterShaking, setFilterShaking] = useState(false)
+  const filterShakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  function triggerFilterShake() {
+    if (filterShakeTimerRef.current) clearTimeout(filterShakeTimerRef.current)
+    setFilterShaking(true)
+    filterShakeTimerRef.current = setTimeout(() => setFilterShaking(false), 400)
+  }
+  // Clean up the shake timer on unmount
+  useEffect(() => {
+    return () => {
+      if (filterShakeTimerRef.current) clearTimeout(filterShakeTimerRef.current)
+    }
+  }, [])
   const SEARCH_KEY = 'archstudio:providersSearch'
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const [searchQuery, setSearchQuery] = useState<string>(
@@ -441,12 +462,58 @@ export function ProvidersPanel({
       return ''
     }
   )
-  const [categoryFilter, setCategoryFilter] = useState<'local' | 'cloud' | 'datacenter' | null>(null)
+  const CATEGORY_KEY = 'archstudio:providersCategory'
+  const [categoryFilter, setCategoryFilter] = useState<'local' | 'cloud' | 'datacenter' | null>(
+    () => {
+      try {
+        const saved = localStorage.getItem(CATEGORY_KEY)
+        if (saved === 'local' || saved === 'cloud' || saved === 'datacenter') return saved
+      } catch {
+        // localStorage read error — start fresh
+      }
+      return null
+    }
+  )
+  const SORT_ORDER_KEY = 'archstudio:providersSortOrder'
+  const SORT_DIR_KEY = 'archstudio:providersSortDir'
+  type SortOrder = 'default' | 'name' | 'type' | 'health'
+  type SortDir = 'asc' | 'desc'
+  const [sortOrder, setSortOrder] = useState<SortOrder>(
+    () => {
+      try {
+        const saved = localStorage.getItem(SORT_ORDER_KEY)
+        if (saved === 'name' || saved === 'type' || saved === 'health') return saved
+      } catch {
+        // localStorage read error
+      }
+      return 'default'
+    }
+  )
+  const [sortDir, setSortDir] = useState<SortDir>(
+    () => {
+      try {
+        const saved = localStorage.getItem(SORT_DIR_KEY)
+        if (saved === 'asc' || saved === 'desc') return saved
+      } catch {
+        // localStorage read error
+      }
+      return 'asc'
+    }
+  )
 
   /** Toggle a category filter — clicking the active category clears it */
   const toggleCategoryFilter = useCallback((cat: 'local' | 'cloud' | 'datacenter') => {
     setCategoryFilter(prev => prev === cat ? null : cat)
   }, [])
+
+  /** Count providers per category for the filter chips */
+  const categoryCounts = React.useMemo(() => {
+    return {
+      local: providers.filter(p => providerCategory(p.providerType) === 'local').length,
+      cloud: providers.filter(p => providerCategory(p.providerType) === 'cloud').length,
+      datacenter: providers.filter(p => providerCategory(p.providerType) === 'datacenter').length,
+    }
+  }, [providers])
 
   /** Filter providers by name, type label, or model names, plus category */
   const filteredProviders = React.useMemo(() => {
@@ -482,6 +549,38 @@ export function ProvidersPanel({
 
     return result
   }, [providers, searchQuery, categoryFilter])
+
+  // Declared before `sortedProviders`: that useMemo's dependency array is
+  // evaluated during render, so declaring this below it puts it in its TDZ and
+  // throws "Cannot access 'healthStatuses' before initialization".
+  const [healthStatuses, setHealthStatuses] = useState<Record<string, HealthCheckResult>>({})
+
+  /** Sort filtered providers by the chosen order + direction */
+  const sortedProviders = React.useMemo(() => {
+    const sorted = [...filteredProviders]
+    if (sortOrder === 'default') {
+      // default = no reordering (respect the API order), but respect direction
+      if (sortDir === 'desc') sorted.reverse()
+      return sorted
+    }
+    sorted.sort((a, b) => {
+      let cmp = 0
+      if (sortOrder === 'name') {
+        cmp = a.name.localeCompare(b.name)
+      } else if (sortOrder === 'type') {
+        cmp = providerLabel(a.providerType, a.isLocalModel).localeCompare(
+          providerLabel(b.providerType, b.isLocalModel),
+        )
+      } else if (sortOrder === 'health') {
+        const ha = healthStatuses[a.slug]?.status ?? 'unknown'
+        const hb = healthStatuses[b.slug]?.status ?? 'unknown'
+        const rank: Record<string, number> = { healthy: 0, degraded: 1, unknown: 2, unhealthy: 3 }
+        cmp = (rank[ha] ?? 2) - (rank[hb] ?? 2)
+      }
+      return sortDir === 'desc' ? -cmp : cmp
+    })
+    return sorted
+  }, [filteredProviders, sortOrder, sortDir, healthStatuses])
   const [loading, setLoading] = useState(true)
   const [testing, setTesting] = useState<string | null>(null)
   const [batchTesting, setBatchTesting] = useState(false)
@@ -491,7 +590,6 @@ export function ProvidersPanel({
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; error?: string; latencyMs?: number } | null>>({})
   const testTimeoutRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
-  const [healthStatuses, setHealthStatuses] = useState<Record<string, HealthCheckResult>>({})
   const lastHealthCheckRef = useRef<Record<string, number>>({})
   const HEALTH_CHECK_COOLDOWN = 30_000 // 30 seconds between checks per provider
 
@@ -840,7 +938,14 @@ export function ProvidersPanel({
     return () => cleanup()
   }, [fetchInferenceHistory])
 
-  // Keyboard shortcuts — Ctrl+F to focus search, Escape to clear
+  // Ref-based handleClearAllSavedFilters so the keyboard handler can call it
+  // without worrying about temporal-dead-zone ordering (handleClearAllSavedFilters
+  // is defined later in the component). The ref is updated after the callback
+  // definition below.
+  const clearFiltersRef = useRef<() => void>(() => {})
+
+  // Keyboard shortcuts — Ctrl+F to focus search, Escape to clear,
+  // Ctrl+Shift+Backspace/Delete to clear all filters
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       // Ctrl+F or Cmd+F — focus search input
@@ -858,10 +963,30 @@ export function ProvidersPanel({
         searchInputRef.current?.blur()
         return
       }
+      // Ctrl+Shift+Backspace or Ctrl+Shift+Delete — clear all filters
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'Backspace' || e.key === 'Delete')) {
+        e.preventDefault()
+        clearFiltersRef.current()
+        return
+      }
     }
     window.addEventListener('keydown', onKeyDown, { capture: true })
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
   }, [searchQuery])
+
+  // ── Ctrl+F shortcut hint ─────────────────────────────────────────────
+  // Show "Press Ctrl+F to search" with a delayed fade-in so the user sees
+  // the empty search bar first and discovers the shortcut naturally.
+  const [showShortcutHint, setShowShortcutHint] = useState(false)
+  const [inputFocused, setInputFocused] = useState(false)
+  useEffect(() => {
+    if (searchQuery || inputFocused || providers.length < 2) {
+      setShowShortcutHint(false)
+      return
+    }
+    const handle = setTimeout(() => setShowShortcutHint(true), 3000)
+    return () => clearTimeout(handle)
+  }, [searchQuery, inputFocused, providers.length])
 
   // Persist search query to localStorage whenever it changes
   useEffect(() => {
@@ -876,11 +1001,86 @@ export function ProvidersPanel({
     }
   }, [searchQuery])
 
-  // Track which cards have expanded notification history
-  const [expandedNotifications, setExpandedNotifications] = useState<Record<string, boolean>>({})
+  // Persist category filter to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      if (categoryFilter) {
+        localStorage.setItem(CATEGORY_KEY, categoryFilter)
+      } else {
+        localStorage.removeItem(CATEGORY_KEY)
+      }
+    } catch {
+      // localStorage write failure — silently degrade
+    }
+  }, [categoryFilter])
 
-  // Track which cards have expanded test history log
-  const [expandedTestLog, setExpandedTestLog] = useState<Record<string, boolean>>({})
+  const EXPANDED_NOTIF_KEY = 'archstudio:providersExpandedNotifications'
+  const EXPANDED_TEST_KEY = 'archstudio:providersExpandedTestLog'
+
+  // Both expanded-state hooks are declared before the persistence effects
+  // below: an effect's dependency array is evaluated during render, so
+  // declaring these after them puts them in their TDZ and throws
+  // "Cannot access 'expandedNotifications' before initialization".
+
+  // Track which cards have expanded notification history (persisted)
+  const [expandedNotifications, setExpandedNotifications] = useState<Record<string, boolean>>(
+    () => {
+      try {
+        const saved = localStorage.getItem(EXPANDED_NOTIF_KEY)
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          if (typeof parsed === 'object' && parsed !== null) return parsed as Record<string, boolean>
+        }
+      } catch {
+        // localStorage read error — start fresh
+      }
+      return {}
+    }
+  )
+
+  // Track which cards have expanded test history log (persisted)
+  const [expandedTestLog, setExpandedTestLog] = useState<Record<string, boolean>>(
+    () => {
+      try {
+        const saved = localStorage.getItem(EXPANDED_TEST_KEY)
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          if (typeof parsed === 'object' && parsed !== null) return parsed as Record<string, boolean>
+        }
+      } catch {
+        // localStorage read error — start fresh
+      }
+      return {}
+    }
+  )
+
+  // Persist notification expanded state to localStorage
+  useEffect(() => {
+    try {
+      const hasExpanded = Object.values(expandedNotifications).some(Boolean)
+      if (hasExpanded) {
+        localStorage.setItem(EXPANDED_NOTIF_KEY, JSON.stringify(expandedNotifications))
+      } else {
+        localStorage.removeItem(EXPANDED_NOTIF_KEY)
+      }
+    } catch {
+      // localStorage write failure — silently degrade
+    }
+  }, [expandedNotifications])
+
+  // Persist test-log expanded state to localStorage
+  useEffect(() => {
+    try {
+      const hasExpanded = Object.values(expandedTestLog).some(Boolean)
+      if (hasExpanded) {
+        localStorage.setItem(EXPANDED_TEST_KEY, JSON.stringify(expandedTestLog))
+      } else {
+        localStorage.removeItem(EXPANDED_TEST_KEY)
+      }
+    } catch {
+      // localStorage write failure — silently degrade
+    }
+  }, [expandedTestLog])
 
   // Clean up stale health-status and history entries when providers are deleted
   useEffect(() => {
@@ -990,6 +1190,169 @@ export function ProvidersPanel({
     await fetchProviders()
   }, [fetchProviders])
 
+  /**
+   * Clear ALL saved filter state — resets search query, category filter,
+   * health statuses, test results, inference history, heatmap data, and
+   * all ref-backed history buffers (health, test, notification, latency
+   * averages). Also removes the localStorage keys so the clean state
+   * survives panel close/reopen.
+   */
+  const handleClearAllSavedFilters = useCallback(() => {
+    // Clear UI state
+    setSearchQuery('')
+    setCategoryFilter(null)
+    setHealthStatuses({})
+    setTestResults({})
+    setInferenceHistory({})
+    setHealthHeatmap({})
+
+    // Clear ref-based history buffers
+    healthHistoryRef.current = {}
+    testHistoryRef.current = {}
+    notificationHistoryRef.current = {}
+    avgLatencyRef.current = {}
+    lastHealthCheckRef.current = {}
+    prevStatusRef.current = {}
+
+    // Clear persisted keys
+    try {
+      localStorage.removeItem('archstudio:providersSearch')
+      localStorage.removeItem('archstudio:providersCategory')
+      localStorage.removeItem('archstudio:avgLatency')
+      localStorage.removeItem('archstudio:providersSortOrder')
+      localStorage.removeItem('archstudio:providersSortDir')
+    } catch {
+      // localStorage write failure — silently degrade
+    }
+
+    // Clear any active test-result auto-dismiss timers
+    for (const slug of Object.keys(testTimeoutRef.current)) {
+      clearTimeout(testTimeoutRef.current[slug]!)
+    }
+    testTimeoutRef.current = {}
+
+    toast.success('Saved filters and history cleared', {
+      position: 'bottom-right',
+      duration: 3000,
+    })
+  }, [])
+
+  /**
+   * Reset to defaults — clears ALL per-provider data (health history,
+   * inference history, test history, latency averages, heatmap data,
+   * notification history, expanded-section state, localStorage keys)
+   * without modifying the provider connections themselves or the
+   * current search/category filters.
+   *
+   * This is a "factory reset" for the provider panel's accessory data:
+   * connections stay, but everything computed/accumulated about them
+   * is wiped so the user starts with a clean slate.
+   */
+  const handleResetToDefaults = useCallback(() => {
+    // Clear UI state
+    setHealthStatuses({})
+    setTestResults({})
+    setInferenceHistory({})
+    setHealthHeatmap({})
+    setExpandedNotifications({})
+    setExpandedTestLog({})
+    // Reset sort to default
+    setSortOrder('default')
+    setSortDir('asc')
+
+    // Clear ref-based history buffers
+    healthHistoryRef.current = {}
+    testHistoryRef.current = {}
+    notificationHistoryRef.current = {}
+    avgLatencyRef.current = {}
+    lastHealthCheckRef.current = {}
+    prevStatusRef.current = {}
+
+    // Clear all provider-data localStorage keys
+    try {
+      localStorage.removeItem('archstudio:avgLatency')
+      localStorage.removeItem('archstudio:providersExpandedNotifications')
+      localStorage.removeItem('archstudio:providersExpandedTestLog')
+    } catch {
+      // localStorage write failure — silently degrade
+    }
+
+    // Clear any active test-result auto-dismiss timers
+    for (const slug of Object.keys(testTimeoutRef.current)) {
+      clearTimeout(testTimeoutRef.current[slug]!)
+    }
+    testTimeoutRef.current = {}
+
+    // Reset health-check history in the backend by re-recording a single
+    // "reset" entry per provider (fire-and-forget — the next poll tick
+    // will populate fresh health data).
+    for (const p of providers) {
+      window.electronAPI.recordHealthCheck(p.slug, true, 0).catch(() => {})
+    }
+
+    toast.success('Provider panel reset to defaults', {
+      position: 'bottom-right',
+      duration: 3000,
+    })
+  }, [providers])
+
+  // Sync the ref so the keyboard handler (defined above) can call
+  // handleClearAllSavedFilters without a temporal-dead-zone issue.
+  clearFiltersRef.current = handleClearAllSavedFilters
+
+  // Dropdown state for the header's clear/reset menu
+  const [showClearMenu, setShowClearMenu] = useState(false)
+  const clearMenuRef = useRef<HTMLDivElement | null>(null)
+  const [showSortMenu, setShowSortMenu] = useState(false)
+  const sortMenuRef = useRef<HTMLDivElement | null>(null)
+
+  // Close the clear/reset dropdown on outside click
+  useEffect(() => {
+    if (!showClearMenu) return
+    function onDocClick(e: MouseEvent) {
+      if (clearMenuRef.current && !clearMenuRef.current.contains(e.target as Node)) {
+        setShowClearMenu(false)
+      }
+    }
+    // Delay registration so the click that opened the menu doesn't close it
+    const handle = setTimeout(() => {
+      document.addEventListener('click', onDocClick)
+    }, 0)
+    return () => {
+      clearTimeout(handle)
+      document.removeEventListener('click', onDocClick)
+    }
+  }, [showClearMenu])
+
+  // Close the sort dropdown on outside click
+  useEffect(() => {
+    if (!showSortMenu) return
+    function onDocClick(e: MouseEvent) {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
+        setShowSortMenu(false)
+      }
+    }
+    const handle = setTimeout(() => {
+      document.addEventListener('click', onDocClick)
+    }, 0)
+    return () => {
+      clearTimeout(handle)
+      document.removeEventListener('click', onDocClick)
+    }
+  }, [showSortMenu])
+
+  // Persist sort order and direction to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(SORT_ORDER_KEY, sortOrder)
+    } catch { /* localStorage write error */ }
+  }, [sortOrder])
+  useEffect(() => {
+    try {
+      localStorage.setItem(SORT_DIR_KEY, sortDir)
+    } catch { /* localStorage write error */ }
+  }, [sortDir])
+
   const handleSetDefault = useCallback(async (slug: string) => {
     await window.electronAPI.setDefaultLlmConnection(slug)
     await fetchProviders()
@@ -999,6 +1362,29 @@ export function ProvidersPanel({
    * Test all providers in parallel, show aggregated results as a toast,
    * and set inline per-provider results that auto-dismiss after 6 seconds.
    */
+  /** True when any provider has an expanded notification or test-log section */
+  const anyExpanded = React.useMemo(() => {
+    return Object.values(expandedNotifications).some(Boolean) || Object.values(expandedTestLog).some(Boolean)
+  }, [expandedNotifications, expandedTestLog])
+
+  /**
+   * Toggle ALL expanded sections (notifications + test-logs) across every
+   * provider to the given state. Persists to localStorage via the existing
+   * useEffect hooks that watch expandedNotifications / expandedTestLog.
+   */
+  const handleToggleAllExpanded = useCallback((expand: boolean) => {
+    const allTrue: Record<string, boolean> = {}
+    for (const p of providers) {
+      allTrue[p.slug] = expand
+    }
+    setExpandedNotifications(prev => ({ ...prev, ...allTrue }))
+    setExpandedTestLog(prev => ({ ...prev, ...allTrue }))
+    toast.success(expand ? 'All sections expanded' : 'All sections collapsed', {
+      position: 'bottom-right',
+      duration: 2000,
+    })
+  }, [providers])
+
   const handleTestAll = useCallback(async () => {
     if (providers.length === 0) return
     setBatchTesting(true)
@@ -1017,9 +1403,13 @@ export function ProvidersPanel({
 
     for (let i = 0; i < results.length; i++) {
       const wrapped = results[i]!
+      // Hoisted out of the branches below: the auto-dismiss block after them
+      // needs the slug too. A rejected promise carries no value, so fall back
+      // to the input mapping (same index).
+      const slug = wrapped.status === 'fulfilled' ? wrapped.value.slug : slugs[i]!
 
       if (wrapped.status === 'fulfilled') {
-        const { slug, result, latencyMs } = wrapped.value
+        const { result, latencyMs } = wrapped.value
         if (result.success) {
           successCount++
           pushTestHistory(slug, true, undefined, 'batch', latencyMs)
@@ -1031,8 +1421,6 @@ export function ProvidersPanel({
         }
       } else {
         failCount++
-        // wrapped.status === 'rejected' — the slug index is the same as the input mapping
-        const slug = slugs[i]!
         const errMsg = wrapped.reason instanceof Error ? wrapped.reason.message : String(wrapped.reason)
         pushTestHistory(slug, false, errMsg, 'batch')
         setTestResults(prev => ({ ...prev, [slug]: { success: false, error: errMsg } }))
@@ -1115,16 +1503,65 @@ export function ProvidersPanel({
             <Radio size={12} />
             <span className="providers-panel__live-dot" />
             <span>Live</span>
-          </button>
-          <button
-            type="button"
-            className="providers-panel__btn"
-            onClick={() => fetchProviders()}
-            disabled={loading}
-            title="Refresh now"
-          >
-            <RefreshCw size={14} className={loading ? 'providers-panel__spinner' : ''} />
-          </button>
+          </button>            <button
+              type="button"
+              className="providers-panel__btn"
+              onClick={() => fetchProviders()}
+              disabled={loading}
+              title="Refresh now"
+            >
+              <RefreshCw size={14} className={loading ? 'providers-panel__spinner' : ''} />
+            </button>
+          {/* Clear / reset dropdown — always visible */}
+          <div className="providers-panel__clear-menu" ref={clearMenuRef}>
+            <button
+              type="button"
+              className={`providers-panel__btn ${showClearMenu || searchQuery || categoryFilter ? 'providers-panel__btn--clear-active' : ''}`}
+              onClick={() => setShowClearMenu(v => !v)}
+              title="Clear filters or reset provider data"
+            >
+              <Trash2 size={13} />
+              <span>Clear</span>
+              <ChevronDown size={10} className={`providers-panel__clear-chevron ${showClearMenu ? 'providers-panel__clear-chevron--open' : ''}`} />
+            </button>
+            {showClearMenu && (
+              <div className="providers-panel__clear-dropdown">
+                <button
+                  type="button"
+                  className="providers-panel__clear-dropdown-item"
+                  onClick={() => { handleClearAllSavedFilters(); setShowClearMenu(false) }}
+                  disabled={!searchQuery && !categoryFilter}
+                  title={!searchQuery && !categoryFilter ? 'No active filters to clear' : 'Clear search, category filter, test history, latency averages, and health history'}
+                >
+                  <Trash2 size={13} />
+                  <span>Clear filters &amp; history</span>
+                  <kbd className="providers-panel__clear-kbd">⇧⌫</kbd>
+                </button>
+                <div className="providers-panel__clear-dropdown-divider" />
+                <button
+                  type="button"
+                  className="providers-panel__clear-dropdown-item"
+                  onClick={() => { handleResetToDefaults(); setShowClearMenu(false) }}
+                  title="Reset all per-provider data without deleting connections"
+                >
+                  <RefreshCw size={13} />
+                  <span>Reset to defaults</span>
+                </button>
+              </div>
+            )}
+          </div>
+          {providers.length >= 1 && (
+            <button
+              type="button"
+              className={`providers-panel__btn ${anyExpanded ? 'providers-panel__btn--expand-active' : ''}`}
+              onClick={() => handleToggleAllExpanded(!anyExpanded)}
+              title={anyExpanded ? 'Collapse all expanded sections' : 'Expand all notification and test-log sections'}
+              aria-pressed={anyExpanded}
+            >
+              {anyExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              <span>{anyExpanded ? 'Collapse all' : 'Expand all'}</span>
+            </button>
+          )}
           {providers.length >= 2 && (
             <button
               type="button"
@@ -1141,6 +1578,47 @@ export function ProvidersPanel({
               <span>{batchTesting ? 'Testing…' : 'Test All'}</span>
             </button>
           )}
+          {/* Sort dropdown */}
+          <div className="providers-panel__clear-menu" ref={sortMenuRef} style={{ position: 'relative', display: 'inline-flex' }}>
+            <button
+              type="button"
+              className={`providers-panel__btn ${sortOrder !== 'default' ? 'providers-panel__btn--sort-active' : ''}`}
+              onClick={() => setShowSortMenu(v => !v)}
+              title={`Sort by: ${sortOrder === 'default' ? 'Default order' : sortOrder + (sortDir === 'desc' ? ' ↓' : ' ↑')}`}
+            >
+              <ArrowUpDown size={13} />
+              <span className="providers-panel__clear-chevron" style={showSortMenu ? { transform: 'rotate(180deg)' } : {}}>
+                <ChevronDown size={10} />
+              </span>
+            </button>
+            {showSortMenu && (
+              <div className="providers-panel__clear-dropdown">
+                {(['default', 'name', 'type', 'health'] as const).map(opt => (
+                  <button
+                    key={opt}
+                    type="button"
+                    className="providers-panel__clear-dropdown-item"
+                    style={opt === sortOrder ? { color: 'var(--accent)' } : {}}
+                    onClick={() => {
+                      if (sortOrder === opt) {
+                        // Same key — flip direction
+                        setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                      } else {
+                        setSortOrder(opt)
+                        setSortDir('asc')
+                      }
+                      setShowSortMenu(false)
+                    }}
+                  >
+                    {opt === 'default' ? 'Default order' : opt.charAt(0).toUpperCase() + opt.slice(1)}
+                    {sortOrder === opt && (
+                      <span style={{ marginLeft: 'auto', fontSize: 11 }}>{sortDir === 'asc' ? ' ↑' : ' ↓'}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             type="button"
             className="providers-panel__btn providers-panel__btn--primary"
@@ -1195,22 +1673,91 @@ export function ProvidersPanel({
             placeholder="Filter by name, type, or model…"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
           />
-          {searchQuery || categoryFilter ? (
-            <>
-              <span className="providers-panel__search-count" title={`${filteredProviders.length} of ${providers.length} providers shown`}>
-                {filteredProviders.length}/{providers.length}
-              </span>
-              <button
-                type="button"
-                className="providers-panel__search-clear"
-                onClick={() => { setSearchQuery(''); setCategoryFilter(null) }}
-                title="Clear all filters"
-              >
-                <X size={12} />
-              </button>
-            </>
-          ) : null}
+          <span
+            className={`providers-panel__shortcut-hint ${showShortcutHint ? 'providers-panel__shortcut-hint--visible' : ''}`}
+            aria-hidden={!showShortcutHint}
+          >
+            Press Ctrl+F to search
+          </span>
+          <span
+            className={`providers-panel__search-count ${!searchQuery && !categoryFilter ? 'providers-panel__search-count--idle' : ''}`}
+            title={searchQuery || categoryFilter ? `${filteredProviders.length} of ${providers.length} providers shown` : `${providers.length} total`}
+          >
+            {searchQuery || categoryFilter ? `${filteredProviders.length}/${providers.length}` : `${providers.length} total`}
+          </span>
+          {searchQuery && (
+            <button
+              type="button"
+              className="providers-panel__search-clear"
+              onClick={() => setSearchQuery('')}
+              title="Clear search filter"
+            >
+              <X size={12} />
+            </button>
+          )}
+          {categoryFilter && (
+            <button
+              type="button"
+              className={`providers-panel__search-clear providers-panel__search-clear--category${filterShaking ? ' providers-panel__search-clear--shaking' : ''}`}
+              onClick={() => { setCategoryFilter(null); triggerFilterShake() }}
+              title={`Clear ${categoryFilter} category filter`}
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Active filter chips — individually dismissible pills */}
+      {!loading && !error && providers.length >= 2 && (searchQuery || categoryFilter) && (
+        <div className="providers-panel__filter-chips">
+          {categoryFilter === 'local' && (
+            <button
+              type="button"
+              className="providers-panel__filter-chip providers-panel__filter-chip--local"
+              onClick={() => setCategoryFilter(null)}
+              title="Remove Local filter"
+            >
+              Local ({categoryCounts.local})
+              <X size={10} />
+            </button>
+          )}
+          {categoryFilter === 'cloud' && (
+            <button
+              type="button"
+              className="providers-panel__filter-chip providers-panel__filter-chip--cloud"
+              onClick={() => setCategoryFilter(null)}
+              title="Remove Cloud filter"
+            >
+              Cloud ({categoryCounts.cloud})
+              <X size={10} />
+            </button>
+          )}
+          {categoryFilter === 'datacenter' && (
+            <button
+              type="button"
+              className="providers-panel__filter-chip providers-panel__filter-chip--datacenter"
+              onClick={() => setCategoryFilter(null)}
+              title="Remove Data Center filter"
+            >
+              Data Center ({categoryCounts.datacenter})
+              <X size={10} />
+            </button>
+          )}
+          {searchQuery && (
+            <button
+              type="button"
+              className="providers-panel__filter-chip providers-panel__filter-chip--search"
+              onClick={() => setSearchQuery('')}
+              title="Remove search filter"
+            >
+              search: {searchQuery.length > 18 ? searchQuery.slice(0, 18) + '…' : searchQuery}
+              <X size={10} />
+            </button>
+          )}
         </div>
       )}
 
@@ -1266,7 +1813,7 @@ export function ProvidersPanel({
               </button>
             </div>
           ) : (
-            filteredProviders.map((provider) => (
+            sortedProviders.map((provider) => (
               <div
                 key={provider.slug}
                 className={`providers-panel__card providers-panel__card--${providerCategory(provider.providerType)} ${provider.isDefault ? 'providers-panel__card--default' : ''}`}

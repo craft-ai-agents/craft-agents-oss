@@ -45,13 +45,24 @@ export default defineConfig({
         playground: resolve(__dirname, 'src/renderer/playground.html'),
         'browser-toolbar': resolve(__dirname, 'src/renderer/browser-toolbar.html'),
         'browser-empty-state': resolve(__dirname, 'src/renderer/browser-empty-state.html'),
-      }
+      },
+      external: ['@anthropic-ai/claude-agent-sdk']
     }
   },
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src/renderer'),
       '@config': resolve(__dirname, '../../packages/shared/src/config'),
+      // Brand assets (PNG / ICO / ICNS) live next to the Electron app's
+      // extra-resources so electron-builder packages them. Mirrored as a
+      // `@resources` alias so renderer code can `import url from '@resources/...'`.
+      '@resources': resolve(__dirname, 'resources'),
+      // Vite externalizes Node builtins for the browser, so any renderer module
+      // (ours or a dependency's) that touches `path` throws on first member
+      // access and blanks the window. Route it to a pure-string shim instead.
+      'path': resolve(__dirname, 'src/renderer/shims/path-browser.ts'),
+      'node:path': resolve(__dirname, 'src/renderer/shims/path-browser.ts'),
+      'path/posix': resolve(__dirname, 'src/renderer/shims/path-browser.ts'),
       // Force all React imports to use the root node_modules React
       // Bun hoists deps to root. This prevents "multiple React copies" error from @craft-agent/ui
       'react': resolve(__dirname, '../../node_modules/react'),
@@ -61,7 +72,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'jotai', 'pdfjs-dist'],
-    exclude: ['@craft-agent/ui'],
+    exclude: ['@craft-agent/ui', '@anthropic-ai/claude-agent-sdk'],
     esbuildOptions: {
       supported: { 'top-level-await': true },
       target: 'esnext'

@@ -3,7 +3,9 @@ import {
   type LlmConnection,
 } from '@config/llm-connections'
 
-export { getConnectionDisplayName } from '@craft-agent/shared/config'
+// Direct subpath, not the '@craft-agent/shared/config' barrel — the barrel
+// re-exports config/storage.ts (fs) and would break the renderer bundle.
+export { getConnectionDisplayName } from '@craft-agent/shared/config/provider-labels'
 
 /**
  * Format token count for display (e.g., 1500 -> "1.5k", 200000 -> "200k").
