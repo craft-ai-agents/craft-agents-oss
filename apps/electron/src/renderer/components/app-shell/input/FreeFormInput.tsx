@@ -6,6 +6,7 @@ import {
   ArrowUp,
   Square,
   Check,
+  Bolt,
   DatabaseZap,
   ChevronDown,
   ChevronUp,
@@ -87,6 +88,7 @@ import { CompactPermissionModeSelector } from './CompactPermissionModeSelector'
 import { CompactModelSelector } from './CompactModelSelector'
 import {
   formatTokenCount,
+  getConnectionDisplayName,
   groupConnectionsByProvider,
   stripPiPrefixForDisplay,
 } from './model-picker-helpers'
@@ -2173,7 +2175,8 @@ export function FreeFormInput({
                             <div className="text-left flex-1">
                               <div className="font-medium text-sm flex items-center gap-1.5">
                                 <ConnectionIcon connection={conn} size={14} />
-                                {conn.name}
+                                {conn.isLocalModel && <Bolt size={12} className="shrink-0" style={{ color: 'var(--ds-success)' }} />}
+                                {getConnectionDisplayName(conn)}
                                 {isCurrentConnection && <Check className="h-3 w-3 text-foreground" />}
                               </div>
                               {!isAuthenticated && (

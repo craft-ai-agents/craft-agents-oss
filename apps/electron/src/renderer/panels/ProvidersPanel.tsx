@@ -18,9 +18,16 @@ import {
   ChevronDown,
   ChevronUp,
   History,
+  Bolt,
+  Globe,
+  HelpCircle,
+  Search,
+  Server,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { LlmConnectionWithStatus, LlmProviderType } from '@craft-agent/shared/config'
+import { providerLabel } from '@craft-agent/shared/config'
 import './ProvidersPanel.css'
 
 export type ProvidersPanelProps = {
@@ -28,23 +35,11 @@ export type ProvidersPanelProps = {
   onEditProvider?: (slug: string) => void
 }
 
-/** Human-readable label per provider type */
-function providerLabel(type: LlmProviderType): string {
-  switch (type) {
-    case 'anthropic':       return 'Anthropic (Claude)'
-    case 'pi':              return 'Pi SDK'
-    case 'pi_compat':       return 'OpenAI-compatible'
-    case 'openai':          return 'OpenAI'
-    case 'vertex':          return 'Vertex AI'
-    case 'bedrock':         return 'Bedrock'
-    default:                return String(type)
-  }
-}
-
 /** Semantic grouping for the provider card header icon color */
-function providerCategory(type: LlmProviderType): 'cloud' | 'local' | 'other' {
+function providerCategory(type: LlmProviderType): 'cloud' | 'local' | 'datacenter' | 'other' {
   if (type === 'pi_compat' || type === 'openai-compat') return 'local'
-  if (type === 'anthropic' || type === 'openai' || type === 'pi' || type === 'vertex' || type === 'bedrock') return 'cloud'
+  if (type === 'anthropic' || type === 'openai' || type === 'pi') return 'cloud'
+  if (type === 'vertex' || type === 'bedrock') return 'datacenter'
   return 'other'
 }
 
@@ -429,6 +424,64 @@ export function ProvidersPanel({
   onEditProvider,
 }: ProvidersPanelProps) {
   const [providers, setProviders] = useState<LlmConnectionWithStatus[]>([])
+  const SEARCH_KEY = 'archstudio:providersSearch'
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const [searchQuery, setSearchQuery] = useState<string>(
+    () => {
+      try {
+        const saved = localStorage.getItem(SEARCH_KEY)
+        // Validate it's a string (not a corrupted value)
+        if (typeof saved === 'string') {
+          // Cap length to prevent abuse
+          return saved.slice(0, 200)
+        }
+      } catch {
+        // localStorage read error — start fresh
+      }
+      return ''
+    }
+  )
+  const [categoryFilter, setCategoryFilter] = useState<'local' | 'cloud' | 'datacenter' | null>(null)
+
+  /** Toggle a category filter — clicking the active category clears it */
+  const toggleCategoryFilter = useCallback((cat: 'local' | 'cloud' | 'datacenter') => {
+    setCategoryFilter(prev => prev === cat ? null : cat)
+  }, [])
+
+  /** Filter providers by name, type label, or model names, plus category */
+  const filteredProviders = React.useMemo(() => {
+    let result = providers
+
+    // Apply category filter first (faster than text search)
+    if (categoryFilter !== null) {
+      result = result.filter(p => providerCategory(p.providerType) === categoryFilter)
+    }
+
+    // Apply text search
+    const q = searchQuery.toLowerCase().trim()
+    if (q) {
+      result = result.filter(p => {
+        // Search by connection name
+        if (p.name.toLowerCase().includes(q)) return true
+        // Search by provider type label
+        if (providerLabel(p.providerType, p.isLocalModel).toLowerCase().includes(q)) return true
+        // Search by base URL
+        if (p.baseUrl && p.baseUrl.toLowerCase().includes(q)) return true
+        // Search by default model
+        if (p.defaultModel && p.defaultModel.toLowerCase().includes(q)) return true
+        // Search by model names
+        if (p.models && p.models.some(m => {
+          const id = typeof m === 'string' ? m : m.id
+          return id.toLowerCase().includes(q)
+        })) return true
+        // Search by auth type
+        if (p.authType && p.authType.toLowerCase().includes(q)) return true
+        return false
+      })
+    }
+
+    return result
+  }, [providers, searchQuery, categoryFilter])
   const [loading, setLoading] = useState(true)
   const [testing, setTesting] = useState<string | null>(null)
   const [batchTesting, setBatchTesting] = useState(false)
@@ -787,6 +840,42 @@ export function ProvidersPanel({
     return () => cleanup()
   }, [fetchInferenceHistory])
 
+  // Keyboard shortcuts — Ctrl+F to focus search, Escape to clear
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      // Ctrl+F or Cmd+F — focus search input
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+        return
+      }
+      // Escape — clear search and blur input
+      if (e.key === 'Escape' && document.activeElement === searchInputRef.current) {
+        e.preventDefault()
+        if (searchQuery) {
+          setSearchQuery('')
+        }
+        searchInputRef.current?.blur()
+        return
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, { capture: true })
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
+  }, [searchQuery])
+
+  // Persist search query to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      if (searchQuery) {
+        localStorage.setItem(SEARCH_KEY, searchQuery)
+      } else {
+        localStorage.removeItem(SEARCH_KEY)
+      }
+    } catch {
+      // localStorage write failure — silently degrade
+    }
+  }, [searchQuery])
+
   // Track which cards have expanded notification history
   const [expandedNotifications, setExpandedNotifications] = useState<Record<string, boolean>>({})
 
@@ -990,6 +1079,32 @@ export function ProvidersPanel({
           <Plug size={20} />
           <h2>Providers</h2>
           <span className="providers-panel__count">{providers.length}</span>
+          <div className="providers-panel__legend-trigger">
+            <HelpCircle size={13} />
+            <div className="providers-panel__legend-popover">
+              <div className="providers-panel__legend-arrow" />
+              <div className="providers-panel__legend-content">
+                <div className="providers-panel__legend-title">Badge colors</div>
+                <div className="providers-panel__legend-row">
+                  <span className="providers-panel__legend-swatch providers-panel__legend-swatch--local" />
+                  <span>Local — providers on your machine</span>
+                </div>
+                <div className="providers-panel__legend-row">
+                  <span className="providers-panel__legend-swatch providers-panel__legend-swatch--cloud" />
+                  <span>Cloud — remote providers</span>
+                </div>
+                <div className="providers-panel__legend-row">
+                  <span className="providers-panel__legend-swatch providers-panel__legend-swatch--datacenter" />
+                  <span>Data Center — self-hosted / on-prem</span>
+                </div>
+                <div className="providers-panel__legend-row">
+                  <span className="providers-panel__legend-swatch providers-panel__legend-swatch--default" />
+                  <span>Default — primary for new sessions</span>
+                </div>
+                <div className="providers-panel__legend-hint">Click any badge to filter by category</div>
+              </div>
+            </div>
+          </div>
         </div>          <div className="providers-panel__actions">
           <button
             type="button"
@@ -1069,6 +1184,36 @@ export function ProvidersPanel({
         </div>
       )}
 
+      {/* Search filter — only shown when 2+ providers connected */}
+      {providers.length >= 2 && !loading && !error && (
+        <div className="providers-panel__search">
+          <Search size={13} className="providers-panel__search-icon" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            className="providers-panel__search-input"
+            placeholder="Filter by name, type, or model…"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+          />
+          {searchQuery || categoryFilter ? (
+            <>
+              <span className="providers-panel__search-count" title={`${filteredProviders.length} of ${providers.length} providers shown`}>
+                {filteredProviders.length}/{providers.length}
+              </span>
+              <button
+                type="button"
+                className="providers-panel__search-clear"
+                onClick={() => { setSearchQuery(''); setCategoryFilter(null) }}
+                title="Clear all filters"
+              >
+                <X size={12} />
+              </button>
+            </>
+          ) : null}
+        </div>
+      )}
+
       {/* Error state */}
       {error && (
         <div className="providers-panel__error">
@@ -1104,11 +1249,27 @@ export function ProvidersPanel({
                 <span>Add Connection</span>
               </button>
             </div>
+          ) : filteredProviders.length === 0 ? (
+            <div className="providers-panel__empty">
+              <Search size={24} className="providers-panel__empty-icon" />
+              <p>No providers match your filter.</p>
+              <p className="providers-panel__empty-hint">
+                Try a different name, type, or model name.
+              </p>
+              <button
+                type="button"
+                className="providers-panel__btn"
+                onClick={() => { setSearchQuery(''); setCategoryFilter(null) }}
+              >
+                <X size={12} />
+                <span>{categoryFilter ? 'Clear all filters' : 'Clear filter'}</span>
+              </button>
+            </div>
           ) : (
-            providers.map((provider) => (
+            filteredProviders.map((provider) => (
               <div
                 key={provider.slug}
-                className={`providers-panel__card ${provider.isDefault ? 'providers-panel__card--default' : ''}`}
+                className={`providers-panel__card providers-panel__card--${providerCategory(provider.providerType)} ${provider.isDefault ? 'providers-panel__card--default' : ''}`}
               >
                 {/* Card header */}
                 <div className="providers-panel__card-header">
@@ -1122,16 +1283,64 @@ export function ProvidersPanel({
                         title={healthDotTitle(healthStatuses[provider.slug])}
                       />
                       <h3>{provider.name}</h3>
+                      {provider.isLocalModel && (
+                        <button
+                          type="button"
+                          className={`providers-panel__filter-badge providers-panel__local-badge providers-panel__badge--copyable ${categoryFilter === 'local' ? 'providers-panel__filter-badge--active' : ''}`}
+                          onClick={() => {
+                            toggleCategoryFilter('local')
+                            if (provider.baseUrl) {
+                              navigator.clipboard.writeText(provider.baseUrl).then(() => {
+                                toast.success('URL copied', {
+                                  position: 'bottom-right',
+                                  duration: 2000,
+                                })
+                              }).catch(() => {
+                                console.warn('[ProvidersPanel] Clipboard write rejected for', provider.slug)
+                              })
+                            }
+                          }}
+                          title={`${categoryFilter === 'local' ? 'Clear local filter — show all providers' : 'Filter to show only local providers'}${provider.baseUrl ? `\nClick to copy endpoint URL: ${provider.baseUrl}` : ''}${provider.models?.length ? `\n${provider.models.length} model${provider.models.length === 1 ? '' : 's'}` : ''}${(() => { const hs = healthStatuses[provider.slug]; if (!hs) return '\nHealth: not checked'; const labels: Record<string, string> = { healthy: 'healthy', degraded: 'degraded', unhealthy: 'unreachable', unknown: 'not checked' }; const label = labels[hs.status] ?? hs.status; return hs.message ? `\n${label} — ${hs.message}` : `\n${label}` })()}`}
+                        >
+                          <Bolt size={12} />
+                          Local
+                        </button>
+                      )}
+                      {providerCategory(provider.providerType) === 'cloud' && !provider.isLocalModel && (
+                        <button
+                          type="button"
+                          className={`providers-panel__filter-badge providers-panel__cloud-badge ${categoryFilter === 'cloud' ? 'providers-panel__filter-badge--active' : ''}`}
+                          onClick={() => toggleCategoryFilter('cloud')}
+                          title={`${categoryFilter === 'cloud' ? 'Clear cloud filter — show all providers' : 'Filter to show only cloud providers'}\n${providerLabel(provider.providerType)}${provider.piAuthProvider ? ` \n${provider.piAuthProvider}` : ''}`}
+                        >
+                          <Globe size={12} />
+                          Cloud
+                        </button>
+                      )}
+                      {providerCategory(provider.providerType) === 'datacenter' && !provider.isLocalModel && (
+                        <button
+                          type="button"
+                          className={`providers-panel__filter-badge providers-panel__datacenter-badge ${categoryFilter === 'datacenter' ? 'providers-panel__filter-badge--active' : ''}`}
+                          onClick={() => toggleCategoryFilter('datacenter')}
+                          title={`${categoryFilter === 'datacenter' ? 'Clear data-center filter — show all providers' : 'Filter to show only data-center providers'}\n${providerLabel(provider.providerType)}`}
+                        >
+                          <Server size={12} />
+                          Data Center
+                        </button>
+                      )}
                       {provider.isDefault && (
-                        <span className="providers-panel__default-badge" title="Default provider">
+                        <span
+                          className="providers-panel__default-badge"
+                          title={`Default provider — primary for new sessions${provider.lastUsedAt ? `\nLast used ${formatTimeAgo(provider.lastUsedAt)}` : ''}${provider.defaultModel ? `\nDefault model: ${provider.defaultModel}` : ''}`}
+                        >
                           <Star size={12} />
                           Default
                         </span>
                       )}
                     </div>
                     <span className="providers-panel__card-type">
-                      {providerLabel(provider.providerType)}
-                      {provider.piAuthProvider && ` · ${provider.piAuthProvider}`}
+                      {providerLabel(provider.providerType, provider.isLocalModel)}
+                      {provider.piAuthProvider && !provider.isLocalModel && ` · ${provider.piAuthProvider}`}
                     </span>
                   </div>
                   <div className="providers-panel__card-actions">
@@ -1221,6 +1430,11 @@ export function ProvidersPanel({
                   {provider.models && provider.models.length > 0 && (
                     <div className="providers-panel__models">
                       <span className="providers-panel__models-label">Models</span>
+                      {provider.isLocalModel && (
+                        <span className="providers-panel__models-source">
+                          Auto-discovered from running instance
+                        </span>
+                      )}
                       <div className="providers-panel__models-list">
                         {provider.models.slice(0, 8).map((m) => {
                           const id = typeof m === 'string' ? m : m.id

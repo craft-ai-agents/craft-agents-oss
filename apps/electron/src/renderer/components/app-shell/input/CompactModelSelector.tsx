@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   AlertCircle,
+  Bolt,
   Check,
   ChevronDown,
   ChevronRight,
@@ -39,6 +40,7 @@ import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { derivePickerMode } from './picker-mode'
 import {
   formatTokenCount,
+  getConnectionDisplayName,
   groupConnectionsByProvider,
   stripPiPrefixForDisplay,
 } from './model-picker-helpers'
@@ -260,7 +262,10 @@ export function CompactModelSelector({
                       >
                         <ConnectionIcon connection={conn} size={14} />
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{conn.name}</div>
+                          <div className="text-sm font-medium truncate flex items-center gap-1">
+                            {conn.isLocalModel && <Bolt size={12} className="shrink-0" style={{ color: 'var(--ds-success)' }} />}
+                            <span className="truncate">{getConnectionDisplayName(conn)}</span>
+                          </div>
                           {!isAuthenticated && (
                             <div className="text-xs text-muted-foreground">
                               {t('settings.ai.notAuthenticated')}

@@ -3,6 +3,8 @@ import {
   type LlmConnection,
 } from '@config/llm-connections'
 
+export { getConnectionDisplayName } from '@craft-agent/shared/config'
+
 /**
  * Format token count for display (e.g., 1500 -> "1.5k", 200000 -> "200k").
  * Shared by the desktop model dropdown and the compact (drawer) model picker.
@@ -30,7 +32,7 @@ export type ConnectionGroup = [groupName: string, connections: LlmConnection[]]
 /**
  * Group connections by provider type for hierarchical picker rendering.
  * Each provider section can contain multiple connections (API Key, OAuth, …).
- * Order is significant for UI: Anthropic, Local, Craft Agents Backend.
+ * Order is significant for UI: Anthropic, Local, ARCHstudio Backend.
  * Empty groups are dropped.
  */
 export function groupConnectionsByProvider<T extends LlmConnection>(
@@ -39,7 +41,7 @@ export function groupConnectionsByProvider<T extends LlmConnection>(
   const groups: Record<string, T[]> = {
     'Anthropic': [],
     'Local': [],
-    'Craft Agents Backend': [],
+    'ARCHstudio Backend': [],
   }
   for (const conn of connections) {
     const provider = conn.providerType || 'anthropic'
@@ -48,8 +50,22 @@ export function groupConnectionsByProvider<T extends LlmConnection>(
     } else if (provider === 'pi_compat' && isLocalConnection(conn)) {
       groups['Local'].push(conn)
     } else if (provider === 'pi' || provider === 'pi_compat') {
-      groups['Craft Agents Backend'].push(conn)
+      groups['ARCHstudio Backend'].push(conn)
     }
   }
-  return Object.entries(groups).filter(([, conns]) => conns.length > 0)
+
+  // Rename 'Local' to 'Ollama' when all connections in that group are
+  // flagged as local-model (isLocalModel=true), e.g. Ollama instances.
+  // When there's a mix of flagged and legacy local connections, keep 'Local'.
+  const localGroupName = (
+    groups['Local'].length > 0 && groups['Local'].every(c => c.isLocalModel)
+  ) ? 'Ollama' : 'Local'
+
+  // Rebuild with guaranteed order: Anthropic → Ollama/Local → ARCHstudio Backend
+  const result: Array<[string, T[]]> = [
+    ['Anthropic', groups['Anthropic']],
+    [localGroupName, groups['Local']],
+    ['ARCHstudio Backend', groups['ARCHstudio Backend']],
+  ]
+  return result.filter(([, conns]) => conns.length > 0)
 }

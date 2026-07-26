@@ -12,6 +12,12 @@ import { setupI18n, i18n } from '@craft-agent/shared/i18n'
 import { initReactI18next } from 'react-i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import './index.css'
+import './design-system'
+
+// Install the Electron IPC mock so the renderer can run standalone
+// in the browser (Vite dev server) without the Electron main process.
+// This must be imported before any component that accesses window.electronAPI.
+import './electron-api-mock'
 
 // Initialize i18n before any React rendering
 setupI18n([LanguageDetector, initReactI18next])
