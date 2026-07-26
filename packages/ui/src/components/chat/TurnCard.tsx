@@ -2447,7 +2447,12 @@ export function ResponseCard({
 
     return (
       <>
-        <div className="bg-background shadow-minimal rounded-[8px] overflow-hidden relative group">
+        <div
+          data-chat-card="response"
+          data-chat-streaming="false"
+          data-chat-variant={isPlan ? 'plan' : 'response'}
+          className="bg-background shadow-minimal rounded-[8px] overflow-hidden relative group"
+        >
           {/* Fullscreen button - desktop only; compact mode keeps message chrome minimal */}
           {!compactMode && (
           <button
@@ -2622,7 +2627,11 @@ export function ResponseCard({
   // Streaming response - show throttled content with spinner
   return (
     <>
-      <div className="bg-background shadow-minimal rounded-[8px] overflow-hidden group">
+      <div
+        data-chat-card="response"
+        data-chat-streaming="true"
+        className="bg-background shadow-minimal rounded-[8px] overflow-hidden relative group"
+      >
         {/* Content area - uses displayedText (throttled) for performance */}
         {/* Subtle fade at top and bottom edges (dark mode only) */}
         <div

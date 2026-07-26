@@ -1,0 +1,391 @@
+/* ===========================================================================
+   CHAT SURFACE — studio workspace treatment
+
+   Styles the chat transcript, user notes, and composer on top of the design
+   tokens so the surface follows the active theme (including scenic/dark) with
+   no literal colours here.
+
+   IMPORTANT — how these selectors attach:
+   This file hooks explicit `data-chat-*` attributes set by the components
+   (TurnCard, UserMessageBubble, ChatDisplay) plus the stable `.input-container`
+   class. It deliberately does NOT target Tailwind utility class names: those
+   need CSS escapes (`.rounded-\[8px\]`), churn whenever a utility changes, and
+   collide with unrelated components that happen to share a utility.
+=========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   0. Surface-local tokens
+
+   Derived from the theme so every rule below inherits light/dark/scenic and
+   any user theme override automatically.
+   --------------------------------------------------------------------------- */
+
+/* Declared on :root, not on the chat zone, because TurnCard also renders
+   outside the transcript (playground, fullscreen view) and must not lose its
+   surface colour there. */
+:root {
+  --chat-accent: var(--brand-purple);
+  --chat-accent-soft: color-mix(in oklch, var(--brand-purple) 12%, transparent);
+  --chat-card-surface: color-mix(in oklch, var(--paper, var(--background)) 96%, var(--foreground));
+  --chat-rail-width: 2px;
+  --chat-inset: 26px;
+
+  /* Light hitting the top edge of a raised surface. This one inset highlight is
+     what separates a card from a grey rectangle. */
+  --chat-edge-light: inset 0 1px 0 color-mix(in oklch, var(--foreground) 7%, transparent);
+  /* Brand bloom in the card's top-left corner — barely there, but it stops the
+     surface from reading as flat neutral grey. */
+  --chat-bloom: radial-gradient(
+    80% 120% at 0% 0%,
+    color-mix(in oklch, var(--brand-purple) 7%, transparent) 0%,
+    transparent 60%
+  );
+}
+
+.dark,
+html[data-scenic] {
+  /* On a dark field the card must lift off the canvas rather than sink into it. */
+  --chat-card-surface: color-mix(in oklch, var(--paper, var(--background)) 92%, oklch(1 0 0));
+  --chat-edge-light: inset 0 1px 0 color-mix(in oklch, oklch(1 0 0) 8%, transparent);
+  --chat-bloom: radial-gradient(
+    80% 120% at 0% 0%,
+    color-mix(in oklch, var(--brand-purple) 14%, transparent) 0%,
+    transparent 62%
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   1. ATMOSPHERE — a whisper of brand at the top of the transcript
+
+   Kept under 1% mix so it reads as depth, never as a coloured background.
+   --------------------------------------------------------------------------- */
+
+.bg-paper[data-focus-zone='chat'] {
+  position: relative;
+  background:
+    radial-gradient(
+      120% 60% at 50% 0%,
+      color-mix(in oklch, var(--brand-purple) 4%, transparent) 0%,
+      transparent 70%
+    ),
+    var(--paper);
+}
+
+/* Drop the transcript's edge mask. The fade-to-transparent at top/bottom reads
+   well over scenic wallpapers but feels claustrophobic on a solid surface.
+   (Attribute selector on the inline style set by ChatDisplay.) */
+div[style*='mask-image: linear-gradient(to bottom, transparent 0%, black 32px'] {
+  mask-image: none !important;
+  -webkit-mask-image: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+   2. RESPONSE CARD — the assistant turn
+
+   A bordered card with a brand rail down its left edge. The rail is the
+   signature element: static when the turn is settled, travelling while the
+   response streams.
+   --------------------------------------------------------------------------- */
+
+[data-chat-card='response'] {
+  position: relative;
+  border: 1px solid var(--ds-panel-border);
+  border-radius: var(--ds-radius-lg);
+  background: var(--chat-bloom), var(--chat-card-surface);
+  box-shadow: var(--ds-elevation-1), var(--chat-edge-light);
+  transition:
+    box-shadow var(--ds-duration-medium) var(--ds-ease-standard),
+    border-color var(--ds-duration-medium) var(--ds-ease-standard),
+    transform var(--ds-duration-fast) var(--ds-ease-standard);
+  animation: chat-card-enter var(--ds-duration-slow) var(--ds-ease-decelerate) both;
+}
+
+[data-chat-card='response']:hover {
+  border-color: color-mix(in oklch, var(--brand-purple) 30%, var(--ds-panel-border-strong));
+  box-shadow: var(--ds-elevation-2), var(--chat-edge-light);
+}
+
+/* The brand rail. `background-size: 100% 200%` gives the streaming animation
+   somewhere to travel without changing the gradient's colours. */
+[data-chat-card='response']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: var(--chat-rail-width);
+  border-radius: 0 2px 2px 0;
+  /* Purple leads (brand primary) and resolves to lime at the bottom. Repeating
+     the stop order means the travelling animation loops seamlessly. */
+  background: linear-gradient(
+    180deg,
+    var(--brand-purple) 0%,
+    var(--brand-lime) 50%,
+    var(--brand-purple) 100%
+  );
+  background-size: 100% 200%;
+  background-position: 0 0;
+  opacity: 0.5;
+  z-index: 1;
+  pointer-events: none;
+  transition: opacity var(--ds-duration-medium) var(--ds-ease-standard);
+}
+
+[data-chat-card='response']:hover::before {
+  opacity: 0.9;
+}
+
+/* Live turn: rail brightens, travels, and casts a faint glow. This is the one
+   place the surface animates continuously — it marks "the agent is working". */
+[data-chat-card='response'][data-chat-streaming='true']::before {
+  opacity: 1;
+  width: 3px;
+  animation: chat-rail-travel 2.4s linear infinite;
+  box-shadow: 0 0 12px color-mix(in oklch, var(--brand-purple) 45%, transparent);
+}
+
+/* Plan turns read as success, not brand — matches the existing plan header. */
+[data-chat-card='response'][data-chat-variant='plan']::before {
+  background: linear-gradient(
+    180deg,
+    var(--ds-success) 0%,
+    color-mix(in oklch, var(--ds-success) 55%, var(--brand-lime)) 100%
+  );
+}
+
+/* Response body — inset past the rail, with generous line height for reading. */
+[data-chat-card='response'] [data-search-root='response'] {
+  padding-left: var(--chat-inset);
+  padding-right: var(--ds-space-5);
+  padding-top: var(--ds-space-3);
+  padding-bottom: var(--ds-space-3);
+  line-height: 1.68;
+}
+
+/* Footer action row (Copy / Fullscreen / Branch) — recessed so it reads as
+   chrome attached to the card rather than more content inside it.
+   Direct children only: every footer variant in TurnCard is a direct child, and
+   scoping this way keeps the tint off nested content that happens to use
+   `border-t`. */
+[data-chat-card='response'] > .border-t {
+  border-top-color: var(--ds-panel-border);
+  background: color-mix(in oklch, var(--foreground) 3%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+   3. USER NOTE — right-aligned, brand-tinted
+
+   Treated as a note pinned to the workspace: tinted toward brand so the eye
+   can separate "what I asked" from "what came back" at a glance.
+   --------------------------------------------------------------------------- */
+
+[data-chat-bubble='user'] {
+  position: relative;
+  border: 1px solid color-mix(in oklch, var(--brand-purple) 28%, transparent);
+  /* Tinted clearly enough to identify at a glance while scrolling, but the text
+     still sits on a near-neutral field so it stays readable. */
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--brand-purple) 20%, var(--paper, var(--background))) 0%,
+    color-mix(in oklch, var(--brand-purple) 9%, var(--paper, var(--background))) 100%
+  );
+  box-shadow:
+    var(--ds-elevation-1),
+    inset 0 1px 0 color-mix(in oklch, oklch(1 0 0) 10%, transparent);
+  transition:
+    box-shadow var(--ds-duration-medium) var(--ds-ease-standard),
+    border-color var(--ds-duration-fast) var(--ds-ease-standard),
+    transform var(--ds-duration-fast) var(--ds-ease-standard);
+}
+
+[data-chat-bubble='user']:hover {
+  border-color: color-mix(in oklch, var(--brand-purple) 45%, transparent);
+  box-shadow:
+    var(--ds-elevation-2),
+    0 0 22px color-mix(in oklch, var(--brand-purple) 16%, transparent),
+    inset 0 1px 0 color-mix(in oklch, oklch(1 0 0) 12%, transparent);
+}
+
+/* Turn entrances. User notes arrive from the right (where they were typed),
+   assistant cards rise from below — direction encodes authorship. */
+[data-chat-turn='user'] {
+  animation: chat-note-enter var(--ds-duration-medium) var(--ds-ease-decelerate) both;
+  /* A user note starts a new exchange, so it gets the larger gap above and a
+     tight gap below — the reply belongs to it. */
+  margin-top: var(--ds-space-3);
+}
+
+[data-chat-turn='user']:first-child {
+  margin-top: 0;
+}
+
+[data-chat-turn='system'] {
+  animation: chat-card-enter var(--ds-duration-medium) var(--ds-ease-decelerate) both;
+}
+
+/* ---------------------------------------------------------------------------
+   4. COMPOSER — workbench surface
+
+   Recessed by default; on focus it picks up the brand ring so the active
+   input is unmistakable without a heavy border.
+   --------------------------------------------------------------------------- */
+
+.input-container {
+  border: 1px solid var(--ds-command-border);
+  background: var(--ds-command-surface);
+  box-shadow: var(--ds-elevation-1), var(--chat-edge-light);
+  transition:
+    border-color var(--ds-duration-fast) var(--ds-ease-standard),
+    box-shadow var(--ds-duration-medium) var(--ds-ease-standard);
+}
+
+.input-container:hover:not(:focus-within) {
+  border-color: color-mix(in oklch, var(--brand-purple) 24%, var(--ds-command-border));
+}
+
+.input-container:focus-within {
+  border-color: var(--ds-command-border-focus);
+  box-shadow:
+    0 0 0 3px var(--ds-command-ring),
+    0 4px 20px color-mix(in oklch, var(--brand-purple) 14%, transparent);
+}
+
+/* Hairline of brand across the top edge, revealed on focus. */
+.input-container::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: var(--brand-gradient);
+  /* Faintly present at rest so the composer always carries brand, then it
+     widens and brightens on focus. */
+  opacity: 0.3;
+  transform: scaleX(0.35);
+  transform-origin: center;
+  pointer-events: none;
+  z-index: 2;
+  transition:
+    opacity var(--ds-duration-medium) var(--ds-ease-standard),
+    transform var(--ds-duration-medium) var(--ds-ease-decelerate);
+}
+
+.input-container:focus-within::after {
+  opacity: 0.85;
+  transform: scaleX(1);
+}
+
+.input-container .border-t {
+  border-top-color: var(--ds-panel-border);
+}
+
+/* ---------------------------------------------------------------------------
+   5. THINKING INDICATOR
+
+   Aligned to the response text inset so the spinner sits where the turn's
+   content will appear, and the label breathes while work is in flight.
+   --------------------------------------------------------------------------- */
+
+[data-chat-thinking] {
+  padding-left: var(--chat-inset);
+  padding-top: var(--ds-space-2);
+  padding-bottom: var(--ds-space-2);
+  /* Secondary, not muted: at 45% foreground this row disappears on a light
+     surface, and it is the only signal that work is in flight. */
+  color: var(--ds-text-secondary);
+}
+
+[data-chat-thinking] > span {
+  animation: chat-breathe 2.8s var(--ds-ease-standard) infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   6. TIMELINE DIVIDER — "scroll up for earlier"
+   --------------------------------------------------------------------------- */
+
+[data-focus-zone='chat'] .text-center.text-xs.py-3 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ds-space-2);
+  padding-top: var(--ds-space-4);
+  padding-bottom: var(--ds-space-4);
+}
+
+[data-focus-zone='chat'] .text-center.text-xs.py-3::before,
+[data-focus-zone='chat'] .text-center.text-xs.py-3::after {
+  content: '';
+  flex: 1;
+  max-width: 64px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--ds-panel-border), transparent);
+}
+
+/* ---------------------------------------------------------------------------
+   7. KEYFRAMES
+   --------------------------------------------------------------------------- */
+
+@keyframes chat-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes chat-note-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(10px, 4px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Travels the oversized gradient down the rail — reads as flow, not blink. */
+@keyframes chat-rail-travel {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 -200%;
+  }
+}
+
+@keyframes chat-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   8. Accessibility — no motion means no motion
+
+   Entrances collapse and the streaming rail holds a solid state rather than
+   travelling, so "live" is still legible without animation.
+   --------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  [data-chat-card='response'],
+  [data-chat-turn='user'],
+  [data-chat-turn='system'] {
+    animation: none;
+  }
+
+  [data-chat-card='response'][data-chat-streaming='true']::before,
+  [data-chat-thinking] > span {
+    animation: none;
+  }
+
+  [data-chat-card='response'][data-chat-streaming='true']::before {
+    opacity: 1;
+  }
+}
