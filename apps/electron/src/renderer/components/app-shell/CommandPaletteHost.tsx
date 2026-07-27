@@ -21,6 +21,10 @@ import {
 import { useStatuses } from '@/hooks/useStatuses'
 import { sessionMetaMapAtom } from '@/atoms/sessions'
 import { ANTHROPIC_MODELS, getModelDisplayName } from '@config/models'
+import {
+  resolveEffectiveConnectionSlug,
+  type LlmConnectionWithStatus,
+} from '@config/llm-connections'
 import { THINKING_LEVELS, type ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { cn } from '@/lib/utils'
 
@@ -44,6 +48,10 @@ export interface CommandPaletteHostProps {
   onThinkingLevelChange?: (level: ThinkingLevel) => void
   /** Change the active session's model. */
   onModelChange?: (model: string, connection?: string) => void
+  /** LLM connections (their live model lists drive the Model group). */
+  llmConnections?: LlmConnectionWithStatus[]
+  /** Workspace default connection slug (for resolving the effective connection). */
+  workspaceDefaultConnectionSlug?: string | null
 }
 
 /**
@@ -65,6 +73,8 @@ export function CommandPaletteHost({
   currentThinkingLevel,
   onThinkingLevelChange,
   onModelChange,
+  llmConnections = [],
+  workspaceDefaultConnectionSlug,
 }: CommandPaletteHostProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -80,6 +90,22 @@ export function CommandPaletteHost({
   const isArchived = Boolean(activeMeta?.isArchived)
   const currentModel = activeMeta?.model
   const currentConnection = activeMeta?.llmConnection
+
+  // Mirror CompactModelSelector: use the active connection's live model list
+  // (this is where newer models like Opus 5 appear), falling back to the
+  // static Anthropic registry when a connection exposes no list.
+  const effectiveConnectionSlug = resolveEffectiveConnectionSlug(
+    currentConnection,
+    workspaceDefaultConnectionSlug ?? undefined,
+    llmConnections,
+  )
+  const effectiveConnection = effectiveConnectionSlug
+    ? llmConnections.find((c) => c.slug === effectiveConnectionSlug) ?? null
+    : null
+  const availableModels = effectiveConnection?.models ?? ANTHROPIC_MODELS
+  // Entries may be full ModelDefinition objects or bare id strings.
+  const modelIdOf = (m: (typeof availableModels)[number]) =>
+    typeof m === 'string' ? m : m.id
 
   const runAction = (id: ActionId) => {
     setOpen(false)
@@ -180,15 +206,16 @@ export function CommandPaletteHost({
 
             {activeSessionId && onModelChange && (
               <CommandGroup heading={t('commandPalette.modelGroup', 'Model')}>
-                {ANTHROPIC_MODELS.map((m) => {
-                  const isCurrent = m.id === currentModel
+                {availableModels.map((m) => {
+                  const modelId = modelIdOf(m)
+                  const isCurrent = modelId === currentModel
                   return (
                     <CommandItem
-                      key={`model-${m.id}`}
-                      value={`model ${m.name} ${m.shortName} ${m.id}`}
-                      onSelect={() => runSetModel(m.id)}
+                      key={`model-${modelId}`}
+                      value={`model ${getModelDisplayName(modelId)} ${modelId}`}
+                      onSelect={() => runSetModel(modelId)}
                     >
-                      <span>{getModelDisplayName(m.id)}</span>
+                      <span>{getModelDisplayName(modelId)}</span>
                       {isCurrent && <Check className="ml-auto opacity-60" />}
                     </CommandItem>
                   )

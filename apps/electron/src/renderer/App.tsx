@@ -2053,6 +2053,8 @@ export default function App() {
         currentThinkingLevel={sessionSelection.selected ? sessionOptions.get(sessionSelection.selected)?.thinkingLevel : undefined}
         onThinkingLevelChange={(level) => sessionSelection.selected && handleSessionOptionsChange(sessionSelection.selected, { thinkingLevel: level })}
         onModelChange={(model, connection) => sessionSelection.selected && windowWorkspaceId && window.electronAPI.setSessionModel(sessionSelection.selected, windowWorkspaceId, model, connection)}
+        llmConnections={llmConnections}
+        workspaceDefaultConnectionSlug={defaultLlmConnectionSlug}
       />
       <FocusProvider>
         <DismissibleLayerProvider>
