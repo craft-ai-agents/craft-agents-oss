@@ -8,4 +8,6 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Bug Fixes
 
+- **New sessions respect excluded filters** — Creating a session while status, label, or project exclusions are active now ignores those exclusions and uses workspace defaults unless exactly one included filter is selected. [#970](https://github.com/craft-ai-agents/craft-agents-oss/issues/970) · `6a3ba29`
+
 ## Breaking Changes
