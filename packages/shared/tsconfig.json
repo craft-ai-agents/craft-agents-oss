@@ -26,7 +26,9 @@
       "@craft-agent/core": ["../core/src/index.ts"],
       "@craft-agent/core/*": ["../core/src/*"],
       "@craft-agent/shared": ["./src/index.ts"],
-      "@craft-agent/shared/*": ["./src/*"]
+      "@craft-agent/shared/*": ["./src/*"],
+      "@craft-agent/session-tools-core": ["../session-tools-core/src/index.ts"],
+      "@craft-agent/session-tools-core/*": ["../session-tools-core/src/*"]
     }
   },
   "include": ["src/**/*"],

@@ -20,12 +20,10 @@ import {
   WifiOff,
   Trash2,
   UserCheck,
+  type LucideIcon,
 } from 'lucide-react'
 import type { SourceConnectionStatus } from '@craft-agent/shared/sources/types'
-import type {
-  MessagingPlatformRuntimeInfo,
-  WhatsAppUiEvent,
-} from '@craft-agent/shared/types'
+import type { MessagingPlatformRuntimeInfo } from '../../../shared/types'
 import { sourcesAtom } from '../../atoms/sources'
 import './IntegrationsPanel.css'
 
@@ -33,7 +31,7 @@ import './IntegrationsPanel.css'
 // Source integrations (existing)
 // ────────────────────────────────────────────────
 
-type IntegrationsPanelProps = {
+export type IntegrationsPanelProps = {
   onSelectSource?: (sourceId: string) => void
   selectedSourceId?: string
 }
@@ -76,7 +74,7 @@ const PLATFORMS: PlatformDef[] = [
   { id: 'lark', name: 'Lark / Feishu', description: 'Lark bot API — connect your team chat', color: '#3370ff' },
 ]
 
-const PLATFORM_ICONS: Record<PlatformId, React.ComponentType<{ size?: number }>> = {
+const PLATFORM_ICONS: Record<PlatformId, LucideIcon> = {
   telegram: Bot,
   whatsapp: Smartphone,
   lark: Globe,

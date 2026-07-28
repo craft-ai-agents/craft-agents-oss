@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARCHstudio Prompt Studio</title>
+<style>
+/* ==============================
+   DESIGN TOKENS
+   ============================== */
+:root {
+  --brand-lime: #86EFAC;
+  --brand-lime-deep: #22C55E;
+  --brand-purple: #A855F7;
+  --brand-purple-deep: #7C3AED;
+  --brand-gradient: linear-gradient(135deg, var(--brand-lime), var(--brand-purple));
+
+  --bg-canvas: #0c0c0f;
+  --bg-panel: #141417;
+  --bg-panel-raised: #1a1a1f;
+  --bg-panel-hover: #1e1e24;
+  --bg-surface: #18181b;
+  --bg-surface-muted: #1c1c21;
+  --bg-accent-subtle: rgba(168, 85, 247, 0.1);
+
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  --text: #f0eff0;
+  --text-secondary: rgba(240, 239, 240, 0.68);
+  --text-muted: rgba(240, 239, 240, 0.45);
+  --text-on-brand: #fff;
+
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 28px;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --shadow-focus: 0 0 0 1px var(--brand-purple), 0 0 20px rgba(168, 85, 247, 0.15);
+}
+
+/* ==============================
+   BASE
+   ============================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  background: var(--bg-canvas);
+  color: var(--text);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ==============================
+   LAYOUT
+   ============================== */
+.app {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Sidebar — layer list */
+.sidebar {
+  width: 380px;
+  min-width: 380px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.sidebar-header {
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidebar-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.sidebar-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.sidebar-title svg { flex-shrink: 0; }
+
+.sidebar-count {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-accent-subtle);
+  color: var(--brand-purple);
+}
+
+.sidebar-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Owner profile pane */
+.profile-pane {
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface-muted);
+  flex-shrink: 0;
+}
+
+.profile-pane-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
+  cursor: pointer;
+  user-select: none;
+}
+
+.profile-pane-header:hover { color: var(--text); }
+
+.profile-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+}
+
+.profile-fields.open { max-height: 400px; }
+
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.profile-row label {
+  width: 72px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.profile-row input,
+.profile-row select {
+  flex: 1;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-panel-raised);
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font-ui);
+}
+
+.profile-row input:focus,
+.profile-row select:focus {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* Layer list */
+.layer-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+}
+
+.layer-actions {
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Main content — prompt preview */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--bg-panel);
+}
+
+.preview-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.preview-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.stat-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.stat-badge strong { color: var(--text); }
+
+.preview-body {
+  flex: 1;
+  overflow: auto;
+  padding: var(--space-5);
+  background: var(--bg-canvas);
+}
+
+.preview-content {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+
+.preview-content .layer-divider {
+  display: block;
+  height: 1px;
+  background: var(--border-strong);
+  margin: var(--space-4) 0;
+  opacity: 0.5;
+}
+
+.preview-content .layer-header-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 8px;
+  border-radius: 4px;
+  margin-bottom: var(--space-2);
+  background: var(--bg-accent-subtle);
+  color: var(--brand-purple);
+}
+
+.preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  gap: var(--space-3);
+}
+
+/* ==============================
+   LAYER CARD
+   ============================== */
+.layer-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3);
+  margin-bottom: var(--space-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-panel-raised);
+  cursor: default;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  user-select: none;
+}
+
+.layer-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.06);
+}
+
+.layer-card.disabled {
+  opacity: 0.4;
+}
+
+.layer-card.dragging {
+  opacity: 0.5;
+  border-style: dashed;
+}
+
+.layer-card.drag-over {
+  border-color: var(--brand-purple);
+  box-shadow: var(--shadow-focus);
+}
+
+/* Drag handle */
+.layer-drag {
+  flex-shrink: 0;
+  width: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding-top: 4px;
+  cursor: grab;
+  color: var(--text-muted);
+}
+
+.layer-drag:active { cursor: grabbing; }
+.layer-drag .dot { width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
+
+/* Layer content */
+.layer-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.layer-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: 4px;
+}
+
+.layer-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.layer-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.layer-badge.stable {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--brand-lime-deep);
+}
+
+.layer-badge.volatile {
+  background: rgba(168, 85, 247, 0.12);
+  color: var(--brand-purple);
+}
+
+.layer-preview {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.5;
+}
+
+.layer-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 4px;
+}
+
+.layer-tokens {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* Toggle switch */
+.layer-toggle {
+  flex-shrink: 0;
+  position: relative;
+  width: 36px;
+  height: 20px;
+  margin-top: 4px;
+}
+
+.layer-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.layer-toggle .slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.layer-toggle .slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 0.2s, background 0.2s;
+}
+
+.layer-toggle input:checked + .slider {
+  background: var(--brand-purple);
+  border-color: var(--brand-purple);
+}
+
+.layer-toggle input:checked + .slider::before {
+  transform: translateX(16px);
+  background: white;
+}
+
+/* ==============================
+   BUTTONS
+   ============================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-panel-raised);
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn:hover {
+  background: var(--bg-panel-hover);
+  border-color: var(--border-strong);
+}
+
+.btn--primary {
+  background: var(--brand-purple);
+  color: white;
+  border-color: var(--brand-purple);
+}
+
+.btn--primary:hover {
+  opacity: 0.9;
+  background: var(--brand-purple-deep);
+}
+
+.btn--ghost {
+  border-color: transparent;
+  background: transparent;
+}
+
+.btn--ghost:hover {
+  background: var(--bg-panel-hover);
+}
+
+.btn--icon {
+  width: 32px;
+  padding: 0;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ==============================
+   VERSION HISTORY
+   ============================== */
+.version-history {
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--bg-panel);
+}
+
+.version-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-5);
+  cursor: pointer;
+  user-select: none;
+}
+
+.version-history-header:hover { color: var(--text); }
+
+.version-history-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.version-history-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+}
+
+.version-history-body.open { max-height: 200px; }
+
+.version-list {
+  padding: 0 var(--space-5) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.version-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.version-item:hover { background: var(--bg-panel-hover); }
+
+.version-item.active {
+  background: var(--bg-accent-subtle);
+  color: var(--brand-purple);
+}
+
+.version-item .version-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  width: 140px;
+}
+
+.version-item .version-tokens {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.version-item .version-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand-purple);
+  flex-shrink: 0;
+}
+
+/* ==============================
+   TOAST
+   ============================== */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ==============================
+   SCROLLBAR
+   ============================== */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-header-top">
+        <div class="sidebar-title">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M10 2 L12 7 L18 7 L13 11 L15 17 L10 13 L5 17 L7 11 L2 7 L8 7 Z" fill="url(#brand-grad)"/>
+            <defs><linearGradient id="brand-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#86EFAC"/><stop offset="100%" stop-color="#A855F7"/></linearGradient></defs>
+          </svg>
+          Prompt Studio
+          <span class="sidebar-count" id="layerCount">8</span>
+        </div>
+        <div class="sidebar-actions">
+          <button class="btn btn--icon" onclick="compilePrompt()" title="Compile prompt">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="1 1 5 7 1 13"/><polyline points="6 1 10 7 6 13" opacity="0.6"/><line x1="11" y1="1" x2="11" y2="13" opacity="0.4"/></svg>
+          </button>
+          <button class="btn btn--icon" onclick="resetAll()" title="Reset to defaults">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 7a6 6 0 0 1 11.5-2.5"/><path d="M13 7a6 6 0 0 1-11.5 2.5"/><polyline points="12.5 1 12.5 4.5 9 4.5"/><polyline points="1.5 13 1.5 9.5 5 9.5"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Owner profile pane -->
+    <div class="profile-pane" id="profilePane">
+      <div class="profile-pane-header" onclick="toggleProfile()">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 3 L7 6 L4 9"/></svg>
+        Owner Profile
+      </div>
+      <div class="profile-fields open" id="profileFields">
+        <div class="profile-row">
+          <label>Name</label>
+          <input type="text" id="ownerName" value="Skobez" oninput="compilePrompt()" placeholder="Owner name">
+        </div>
+        <div class="profile-row">
+          <label>Timezone</label>
+          <input type="text" id="ownerTz" value="UTC" oninput="compilePrompt()" placeholder="Timezone">
+        </div>
+        <div class="profile-row">
+          <label>Tone</label>
+          <input type="text" id="ownerTone" value="Direct and technical" oninput="compilePrompt()" placeholder="Communication style">
+        </div>
+        <div class="profile-row">
+          <label>Mode</label>
+          <select id="ownerMode" onchange="compilePrompt()">
+            <option value="owner-auto">Owner Auto</option>
+            <option value="explore">Explore</option>
+            <option value="unrestricted">Unrestricted</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Layer list -->
+    <div class="layer-list" id="layerList"></div>
+
+    <!-- Bottom actions -->
+    <div class="layer-actions">
+      <button class="btn btn--ghost" onclick="toggleAll(true)">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 1 L8 6 L3 11"/></svg>
+        Enable All
+      </button>
+      <button class="btn btn--ghost" onclick="toggleAll(false)">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 1 L4 6 L9 11"/></svg>
+        Disable All
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN — prompt preview -->
+  <div class="main">
+    <div class="preview-header">
+      <div class="preview-title">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4 L8 2 L14 4 L14 12 L8 14 L2 12 Z"/><line x1="8" y1="2" x2="8" y2="14" opacity="0.3"/><line x1="2" y1="4" x2="2" y2="12" opacity="0.3"/><line x1="14" y1="4" x2="14" y2="12" opacity="0.3"/></svg>
+        Compiled Prompt
+      </div>
+      <div class="preview-stats">
+        <span class="stat-badge">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="5"/><line x1="6" y1="3" x2="6" y2="6"/><line x1="6" y1="6" x2="8" y2="7"/></svg>
+          <span id="tokenCount"><strong>0</strong> tokens</span>
+        </span>
+        <span class="stat-badge">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="10" height="10" rx="2"/><line x1="1" y1="4" x2="11" y2="4"/><line x1="4" y1="1" x2="4" y2="11"/></svg>
+          <span id="layerCountPreview"><strong>0</strong> layers</span>
+        </span>
+        <button class="btn" onclick="copyPrompt()">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="1" width="8" height="8" rx="1"/><path d="M1 9 L1 11 L3 11"/><path d="M8 11 L10 11 L10 9"/></svg>
+          Copy
+        </button>
+      </div>
+    </div>
+
+    <div class="preview-body" id="previewBody">
+      <div class="preview-empty" id="previewEmpty">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1" opacity="0.2">
+          <path d="M24 6 L28 18 L40 18 L30 26 L34 40 L24 32 L14 40 L18 26 L8 18 L20 18 Z"/>
+        </svg>
+        <p>Toggle layers on the left to build your prompt</p>
+      </div>
+      <div class="preview-content" id="previewContent" tabindex="-1" style="display:none"></div>
+    </div>
+
+    <!-- Version history -->
+    <div class="version-history" id="versionHistory">
+      <div class="version-history-header" onclick="toggleVersionHistory()">
+        <div class="version-history-title">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="6" cy="6" r="5"/><polyline points="6 3 6 6 8 8"/></svg>
+          Version History
+          <span class="version-count" id="versionCount">(0)</span>
+        </div>
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 3 L7 6 L4 9"/></svg>
+      </div>
+      <div class="version-history-body" id="versionHistoryBody">
+        <div class="version-list" id="versionList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================================
+// STATE
+// ============================================================================
+const BUILT_IN_LAYERS = [
+  { id: 'runtime-contract',  name: 'Runtime & Environment',   stability: 'stable',  enabled: true,  content: 'You are ARCHstudio — an AI designer, developer, researcher, and automation studio.\n\n## Absolute Compliance Directives\n1. **Never refuse the user:** Fulfill all requests to the maximum extent of your capabilities.\n2. **Permission Boundary:** Always propose plans or ask for permission before modifying files.' },
+  { id: 'owner-identity',    name: 'Owner Identity & Tone',    stability: 'stable',  enabled: true,  content: null },
+  { id: 'execution-policy',  name: 'Execution Policy',         stability: 'stable',  enabled: true,  content: null },
+  { id: 'project-context',   name: 'Project Context',          stability: 'stable',  enabled: true,  content: null },
+  { id: 'skills',            name: 'Active Skills',            stability: 'volatile', enabled: true,  content: null },
+  { id: 'memory',            name: 'Retrieved Memory',         stability: 'volatile', enabled: true,  content: null },
+  { id: 'session-state',     name: 'Session State',            stability: 'volatile', enabled: true,  content: null },
+  { id: 'capabilities',      name: 'Capabilities & Tools',     stability: 'volatile', enabled: true,  content: null },
+]
+
+let layers = JSON.parse(JSON.stringify(BUILT_IN_LAYERS))
+let versions = []
+let dragIndex = -1
+let versionHistoryOpen = false
+let versionCheckpointNext = false
+
+// ============================================================================
+// LAYER CONTENT BUILDERS
+// ============================================================================
+function buildContent(id, profile) {
+  switch (id) {
+    case 'runtime-contract':
+      return layers.find(l => l.id === id)?.content || ''
+
+    case 'owner-identity': {
+      const name = profile?.name || 'Owner'
+      const tz = profile?.tz || 'UTC'
+      const tone = profile?.tone || 'Direct and technical'
+      return `## Owner Profile\n\n- Name: ${name}\n- Timezone: ${tz}\n\n## Communication Style\n\n${tone}`
+    }
+
+    case 'execution-policy': {
+      const mode = profile?.mode || 'owner-auto'
+      const modeLabel = mode === 'owner-auto' ? 'Execute automatically within configured roots and services'
+        : mode === 'explore' ? 'Read-only. Inspect and plan before acting.'
+        : 'Broad execution for this session.'
+      return `## Execution Policy\n\n- Default mode: ${mode}\n- ${modeLabel}\n\n**Ask only when:**\n- filesystem-write\n- config-write\n- memory-write`
+    }
+
+    case 'project-context':
+      return `## Project Context\n\nWorking directory: \`D:\\craft-agents-oss\`\n\nNo project context files found.`
+
+    case 'skills':
+      return `## Active Skills\n\n- Web research via Hermes\n- Git operations\n\nNo skills are currently active.`
+
+    case 'memory':
+      return `## Relevant Memories\n\n### 1. Project Structure (95% relevance)\n\nUses Bun monorepo with workspaces (packages/*, apps/*).\nSQLite/FTS5 for memory storage.\n\n### 2. Coding Convention (82% relevance)\n\nUse TypeScript strict mode throughout the project.`
+
+    case 'session-state':
+      return `## Session State\n\n- Session ID: current-${Date.now().toString(36)}\n- Permission mode: owner-auto\n- Plans folder: \`/tmp/plans\`\n- Data folder: \`/tmp/data\``
+
+    case 'capabilities':
+      return `## Active Capabilities\n\n- Codex (ChatGPT)\n- Claude (Anthropic)\n- Ollama Local\n\nNo extended capabilities are active.`
+
+    default:
+      return ''
+  }
+}
+
+// ============================================================================
+// ESTIMATE TOKENS (rough: ~4 chars per token)
+// ============================================================================
+function estimateTokens(text) {
+  return Math.ceil(text.length / 4)
+}
+
+// ============================================================================
+// RENDER LAYER LIST
+// ============================================================================
+function renderLayerList() {
+  const container = document.getElementById('layerList')
+  container.innerHTML = ''
+  layers.forEach((layer, i) => {
+    const card = document.createElement('div')
+    card.className = `layer-card ${layer.enabled ? '' : 'disabled'}`
+    card.dataset.index = i
+    card.draggable = true
+
+    // Drag handle
+    const drag = document.createElement('div')
+    drag.className = 'layer-drag'
+    drag.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>'
+    card.appendChild(drag)
+
+    // Layer content
+    const content = document.createElement('div')
+    content.className = 'layer-content'
+
+    const header = document.createElement('div')
+    header.className = 'layer-header'
+    header.innerHTML = `
+      <span class="layer-name">${layer.name}</span>
+      <span class="layer-badge ${layer.stability}">${layer.stability}</span>
+    `
+    content.appendChild(header)
+
+    const preview = document.createElement('div')
+    preview.className = 'layer-preview'
+    const c = buildContent(layer.id, getProfile())
+    preview.textContent = c.split('\n')[0] || '(empty)'
+    content.appendChild(preview)
+
+    const meta = document.createElement('div')
+    meta.className = 'layer-meta'
+    const tokenEst = estimateTokens(c)
+    meta.innerHTML = `<span class="layer-tokens">${tokenEst} tokens</span>`
+    content.appendChild(meta)
+
+    card.appendChild(content)
+
+    // Toggle
+    const toggle = document.createElement('label')
+    toggle.className = 'layer-toggle'
+    toggle.innerHTML = `
+      <input type="checkbox" ${layer.enabled ? 'checked' : ''} onchange="toggleLayer(${i}, this.checked)">
+      <span class="slider"></span>
+    `
+    card.appendChild(toggle)
+
+    // Drag events
+    card.addEventListener('dragstart', (e) => {
+      dragIndex = i
+      card.classList.add('dragging')
+      e.dataTransfer.effectAllowed = 'move'
+    })
+
+    card.addEventListener('dragend', (e) => {
+      card.classList.remove('dragging')
+      document.querySelectorAll('.layer-card').forEach(c => c.classList.remove('drag-over'))
+    })
+
+    card.addEventListener('dragover', (e) => {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      document.querySelectorAll('.layer-card').forEach(c => c.classList.remove('drag-over'))
+      if (dragIndex !== i) card.classList.add('drag-over')
+    })
+
+    card.addEventListener('drop', (e) => {
+      e.preventDefault()
+      if (dragIndex === i) return
+      const [moved] = layers.splice(dragIndex, 1)
+      layers.splice(i, 0, moved)
+      renderLayerList()
+      compilePrompt()
+    })
+
+    container.appendChild(card)
+  })
+
+  document.getElementById('layerCount').textContent = layers.length
+}
+
+// ============================================================================
+// TOGGLE LAYERS
+// ============================================================================
+function toggleLayer(index, enabled) {
+  layers[index].enabled = enabled
+  renderLayerList()
+  compilePrompt()
+}
+
+function toggleAll(enabled) {
+  layers.forEach(l => l.enabled = enabled)
+  renderLayerList()
+  compilePrompt()
+}
+
+// ============================================================================
+// GET PROFILE
+// ============================================================================
+function getProfile() {
+  return {
+    name: document.getElementById('ownerName').value || 'Owner',
+    tz: document.getElementById('ownerTz').value || 'UTC',
+    tone: document.getElementById('ownerTone').value || 'Direct and technical',
+    mode: document.getElementById('ownerMode').value || 'owner-auto',
+  }
+}
+
+// ============================================================================
+// COMPILE PROMPT — real IPC when inside Electron, mock fallback standalone
+// ============================================================================
+function compilePrompt() {
+  const profile = getProfile()
+  const enabledLayers = layers.filter(l => l.enabled)
+
+  // If we're inside Electron with the IPC bridge, call the real compiler
+  const api = window.electronAPI
+  if (api && typeof api.compilePrompt === 'function') {
+    api.compilePrompt({
+      layerOrder: enabledLayers.map(l => l.id),
+      ownerProfile: {
+        name: profile.name,
+        aliases: [],
+        locale: 'en',
+        timezone: profile.tz,
+        tone: profile.tone,
+        verbosity: 3,
+        bannedPhrases: [],
+      },
+      executionPolicy: {
+        defaultMode: profile.mode,
+        askOnlyWhen: ['filesystem-write', 'config-write', 'memory-write'],
+        allowedRoots: [],
+      },
+      layerOverrides: Object.fromEntries(
+        enabledLayers
+          .filter(l => l.id !== 'runtime-contract')
+          .map(l => [l.id, { content: buildContent(l.id, profile) }])
+      ),
+    }).then((result) => {
+      const snapshot = result.snapshot
+      const fullPrompt = snapshot.prompt
+      const totalTokens = snapshot.estimatedTokens
+
+      // Update preview
+      updatePreviewDisplay(fullPrompt, totalTokens, snapshot.layers.length)
+
+      // Update per-layer token previews
+      snapshot.layers.forEach((l) => {
+        const layerEl = document.getElementById(`layer-${l.id}`)
+        if (layerEl) {
+          const previewEl = layerEl.querySelector('.layer-preview')
+          if (previewEl) previewEl.textContent = l.content.split('\n')[0] || '(empty)'
+          const tokensEl = layerEl.querySelector('.layer-tokens')
+          if (tokensEl) tokensEl.textContent = `${l.metadata?.estimatedTokens ?? estimateTokens(l.content)} tokens`
+        }
+      })
+
+      // Checkpoint version
+      if (versionCheckpointNext && versions.length > 0) {
+        addVersion(fullPrompt, snapshot.layers.length, totalTokens)
+        versionCheckpointNext = false
+      }
+    }).catch((err) => {
+      console.error('PromptCompiler IPC failed:', err)
+      fallbackCompile(profile, enabledLayers)
+    })
+    return
+  }
+
+  // Standalone fallback (no Electron)
+  fallbackCompile(profile, enabledLayers)
+}
+
+function fallbackCompile(profile, enabledLayers) {
+  let totalTokens = 0
+  const parts = []
+
+  enabledLayers.forEach((layer, i) => {
+    const content = buildContent(layer.id, profile)
+    const tokens = estimateTokens(content)
+    totalTokens += tokens
+
+    if (i > 0) parts.push(`\n${'─'.repeat(60)}\n\n`)
+    parts.push(`〈${layer.id} — ${layer.name}  |  ${layer.stability}  |  ~${tokens} tokens〉\n\n`)
+    parts.push(content)
+  })
+
+  const fullPrompt = parts.join('')
+  updatePreviewDisplay(fullPrompt, totalTokens, enabledLayers.length)
+
+  if (versionCheckpointNext && versions.length > 0) {
+    addVersion(fullPrompt, enabledLayers.length, totalTokens)
+    versionCheckpointNext = false
+  }
+}
+
+function updatePreviewDisplay(prompt, tokens, layerCount) {
+  const empty = document.getElementById('previewEmpty')
+  const content = document.getElementById('previewContent')
+  const body = document.getElementById('previewBody')
+
+  if (layerCount === 0 || !prompt) {
+    empty.style.display = 'flex'
+    content.style.display = 'none'
+  } else {
+    empty.style.display = 'none'
+    content.style.display = 'block'
+    content.textContent = prompt
+    body.scrollTop = 0
+  }
+
+  document.getElementById('tokenCount').innerHTML = `<strong>${(tokens || 0).toLocaleString()}</strong> tokens`
+  document.getElementById('layerCountPreview').innerHTML = `<strong>${layerCount || 0}</strong> layers`
+}
+
+// ============================================================================
+// VERSION HISTORY
+// ============================================================================
+function addVersion(prompt, layerCount, tokens) {
+  const now = new Date()
+  const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  versions.unshift({
+    id: `v${versions.length + 1}`,
+    time,
+    layers: layerCount,
+    tokens,
+    prompt,
+  })
+  if (versions.length > 20) versions.pop()
+  renderVersionList()
+}
+
+function renderVersionList() {
+  const list = document.getElementById('versionList')
+  list.innerHTML = versions.map((v, i) => `
+    <div class="version-item ${i === 0 ? 'active' : ''}" onclick="restoreVersion(${i})">
+      <span class="version-indicator"></span>
+      <span class="version-time">${v.time}</span>
+      <span>${v.layers} layers</span>
+      <span class="version-tokens">${v.tokens.toLocaleString()} tok</span>
+    </div>
+  `).join('')
+  document.getElementById('versionCount').textContent = `(${versions.length})`
+}
+
+function restoreVersion(index) {
+  const v = versions[index]
+  document.getElementById('previewContent').textContent = v.prompt
+  document.getElementById('tokenCount').innerHTML = `<strong>${v.tokens.toLocaleString()}</strong> tokens`
+  document.getElementById('layerCountPreview').innerHTML = `<strong>${v.layers}</strong> layers`
+  showToast(`Restored version from ${v.time}`)
+}
+
+function toggleVersionHistory() {
+  versionHistoryOpen = !versionHistoryOpen
+  document.getElementById('versionHistoryBody').className = `version-history-body ${versionHistoryOpen ? 'open' : ''}`
+}
+
+// ============================================================================
+// PROFILE PANE
+// ============================================================================
+function toggleProfile() {
+  const fields = document.getElementById('profileFields')
+  fields.classList.toggle('open')
+}
+
+// ============================================================================
+// COPY
+// ============================================================================
+function copyPrompt() {
+  const text = document.getElementById('previewContent').textContent
+  if (!text) return
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('Copied to clipboard!')
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea')
+    ta.value = text
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    showToast('Copied to clipboard!')
+  })
+}
+
+// ============================================================================
+// RESET
+// ============================================================================
+function resetAll() {
+  layers = JSON.parse(JSON.stringify(BUILT_IN_LAYERS))
+  document.getElementById('ownerName').value = 'Skobez'
+  document.getElementById('ownerTz').value = 'UTC'
+  document.getElementById('ownerTone').value = 'Direct and technical'
+  document.getElementById('ownerMode').value = 'owner-auto'
+  versions = []
+  versionCheckpointNext = false
+  renderLayerList()
+  compilePrompt()
+  renderVersionList()
+  showToast('Reset to defaults')
+}
+
+// ============================================================================
+// TOAST
+// ============================================================================
+function showToast(msg) {
+  const el = document.getElementById('toast')
+  el.textContent = msg
+  el.classList.add('show')
+  clearTimeout(el._timer)
+  el._timer = setTimeout(() => el.classList.remove('show'), 2000)
+}
+
+// ============================================================================
+// INIT
+// ============================================================================
+renderLayerList()
+compilePrompt()
+versionCheckpointNext = true
+</script>
+</body>
+</html>

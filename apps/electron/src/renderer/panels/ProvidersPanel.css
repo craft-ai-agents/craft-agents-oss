@@ -341,8 +341,10 @@
 .providers-panel__preset-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
+  gap: 10px;
+  padding: 10px 14px;
+  min-width: 208px;
+  text-align: left;
   border-radius: var(--ds-radius-md);
   border: 1px solid var(--ds-panel-border);
   background: var(--background);
@@ -358,8 +360,39 @@
   border-color: var(--accent);
 }
 
+.providers-panel__preset-btn:focus-visible {
+  outline: 2px solid var(--ds-command-ring);
+  outline-offset: 2px;
+}
+
+.providers-panel__preset-btn--browse {
+  border-style: dashed;
+}
+
 .providers-panel__preset-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   color: var(--accent);
+}
+
+.providers-panel__preset-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.providers-panel__preset-label {
+  font-weight: var(--ds-weight-medium);
+  line-height: 1.25;
+}
+
+.providers-panel__preset-hint {
+  font-size: var(--ds-text-2xs);
+  color: var(--ds-text-muted);
+  line-height: 1.3;
 }
 
 /* ---- Error banner ----------------------------------------------------- */
@@ -1186,6 +1219,27 @@
   color: var(--ds-error);
 }
 
+/* Toggle state — workspace-default button when this connection is the one */
+.providers-panel__icon-btn--active {
+  color: var(--ds-info);
+  background: color-mix(in oklch, var(--ds-info) 12%, transparent);
+}
+
+.providers-panel__icon-btn--danger:hover {
+  color: var(--ds-error);
+}
+
+/* Armed delete — widens to hold the "Confirm?" label */
+.providers-panel__icon-btn--confirming {
+  width: auto;
+  gap: 5px;
+  padding: 0 9px;
+  color: var(--ds-error);
+  background: var(--ds-error-bg);
+  font-size: var(--ds-text-2xs);
+  font-weight: var(--ds-weight-semibold);
+}
+
 /* ---- Status dot ------------------------------------------------------- */
 
 .providers-panel__status-dot {
@@ -1436,6 +1490,19 @@
   color: var(--brand-purple);
 }
 
+/* Workspace default — distinct from the app-wide default badge above */
+.providers-panel__workspace-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--ds-radius-pill);
+  font-size: var(--ds-text-2xs);
+  font-weight: var(--ds-weight-semibold);
+  background: color-mix(in oklch, var(--ds-info) 15%, transparent);
+  color: var(--ds-info);
+}
+
 /* ---- Card body -------------------------------------------------------- */
 
 .providers-panel__card-body {
@@ -1642,6 +1709,18 @@
   overflow: visible;
 }
 
+/* Bar fills live here rather than as SVG `fill` attributes so the chart
+   follows the theme tokens instead of hard-coded hex. */
+.providers-panel__sparkline-bar--ok {
+  fill: var(--ds-success);
+  opacity: 0.65;
+}
+
+.providers-panel__sparkline-bar--err {
+  fill: var(--ds-error);
+  opacity: 0.85;
+}
+
 .providers-panel__sparkline-label {
   font-size: var(--ds-text-xs);
   font-weight: var(--ds-weight-bold);
@@ -1804,4 +1883,38 @@
 @keyframes providers-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
+}
+
+/* ---- Add/edit connection wizard overlay ------------------------------ */
+
+/* The wizard renders through a Radix portal, so this button lives outside
+   `.providers-panel` in the DOM — hence the standalone selector. */
+.providers-panel__wizard-close {
+  position: fixed;
+  top: 12px;
+  right: 20px;
+  z-index: var(--z-fullscreen, 350);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--ds-radius-sm);
+  border: 1px solid var(--ds-panel-border);
+  background: var(--background);
+  color: var(--ds-text-muted);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: color var(--ds-duration-fast) var(--ds-ease-standard),
+              background var(--ds-duration-fast) var(--ds-ease-standard);
+}
+
+.providers-panel__wizard-close:hover {
+  color: var(--foreground);
+  background: color-mix(in oklch, var(--foreground) 6%, var(--background));
+}
+
+.providers-panel__wizard-close:focus-visible {
+  outline: 2px solid var(--ds-command-ring);
+  outline-offset: 2px;
 }

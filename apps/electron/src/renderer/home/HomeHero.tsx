@@ -1,7 +1,13 @@
 import React from 'react'
 import { ArrowRight, Brain, Zap, Shield } from 'lucide-react'
+import './HomeHero.css'
 
-export function HomeHero() {
+export type HomeHeroProps = {
+  onOpenCommand?: () => void
+  onExploreMemory?: () => void
+}
+
+export function HomeHero({ onOpenCommand, onExploreMemory }: HomeHeroProps) {
   return (
     <div className="home-hero">
       <div className="home-hero__bg" aria-hidden="true" />
@@ -20,11 +26,11 @@ export function HomeHero() {
           A project-based operating environment for agents, memory, media, and automation.
         </p>
         <div className="home-hero__actions">
-          <button type="button" className="home-hero__primary">
+          <button type="button" className="home-hero__primary" onClick={onOpenCommand}>
             Open Command
             <ArrowRight size={16} />
           </button>
-          <button type="button" className="home-hero__secondary">
+          <button type="button" className="home-hero__secondary" onClick={onExploreMemory}>
             Explore Memory
             <Brain size={16} />
           </button>

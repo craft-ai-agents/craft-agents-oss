@@ -1,0 +1,139 @@
+/* =============================================================================
+   ARCHSTUDIO BRAND IDENTITY
+
+   Pushes brand colors through the existing Tailwind CSS variable pipeline.
+   The components use Tailwind utilities (bg-background, text-accent, etc.)
+   that reference CSS variables defined in index.css. By overriding those
+   variables here, every component inherits ARCHstudio brand identity
+   without touching any component source code.
+
+   All --brand-* values are defined in tokens.css.
+============================================================================= */
+
+/* --- Accent color → brand purple -------------------------------------------
+   text-accent, bg-accent, border-accent, ring-accent all use --accent.
+   Overriding it to brand purple immediately gives ARCHstudio identity to:
+   - Active/selected list items
+   - Mode indicators
+   - Progress spinners in TurnCard
+   - Icon colors throughout the UI
+   - Link hover states
+============================================================================= */
+
+.dark :root,
+.dark {
+  --accent: oklch(0.65 0.22 293);              /* brighter purple in dark */
+}
+
+:root {
+  --accent: oklch(0.58 0.24 295);              /* brand purple */
+  --accent-rgb: 130, 75, 185;                   /* for shadow-tinted */
+}
+
+/* --- Focus ring → brand ----------------------------------------------------
+   *:focus-visible uses --ring. Changing it to brand purple makes every
+   keyboard-focusable element show ARCHstudio identity on focus.
+============================================================================= */
+
+:root {
+  --ring: oklch(from var(--brand-purple) l c h / 0.6);
+}
+
+/* --- Selected/hover state → brand glow ------------------------------------
+   The session list uses [data-selected] attributes and foreground opacities.
+   We add a subtle brand background and left-edge accent bar.
+============================================================================= */
+
+/* Add brand accent to selected navigator items.
+   The [data-selected] attribute is used by the LeftSidebar session list
+   (verified in grep output: data-filter-selected and related attributes). */
+[data-filter-selected="true"],
+[data-selected="true"] {
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--brand-purple) 12%, var(--background)) 0%,
+    color-mix(in oklch, var(--brand-lime) 8%, var(--background)) 100%
+  ) !important;
+}
+
+/* Left-edge brand accent bar for selected items */
+[data-filter-selected="true"]::before,
+[data-selected="true"]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--brand-gradient);
+}
+
+/* --- Composer/input focus → brand glow -------------------------------------
+   The input container class IS used (verified: InputContainer.tsx uses
+   explicit class names for the composer area). When focused, show brand glow.
+============================================================================= */
+
+/* Target any input-like element that receives focus inside the chat area */
+textarea:focus,
+input:focus,
+[contenteditable="true"]:focus {
+  --tw-ring-color: var(--brand-purple);
+}
+
+/* General focus-visible ring upgrade */
+*:focus-visible {
+  --tw-ring-color: var(--brand-purple) !important;
+  outline-color: var(--brand-purple) !important;
+}
+
+/* --- Status indicators → brand colors --------------------------------------
+   Running/active status uses lime green; completed uses brand-purple tint.
+   Components use data-status attributes (verified across the app).
+============================================================================= */
+
+[data-status="running"],
+[data-status="processing"] {
+  --tw-ring-color: var(--brand-lime) !important;
+}
+
+/* --- Toast accent ----------------------------------------------------------
+   Toast close buttons and interactive elements inherit brand purple on hover.
+============================================================================= */
+
+[data-sonner-toast] [data-close-button]:hover {
+  color: var(--brand-purple) !important;
+}
+
+/* --- Scrollbar hover → brand tint ------------------------------------------
+
+   ::-webkit-scrollbar-thumb:hover inherits from the existing theme variable.
+   We add a subtle brand tint to the hover state.
+============================================================================= */
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--brand-purple) 20%, var(--foreground-50)) !important;
+}
+
+/* =============================================================================
+   UTILITY CLASSES — for components that explicitly opt into branding
+   
+   These are utility classes that component code can add (e.g., 
+   className="brand-primary") to get ARCHstudio gradient styling.
+   They won't affect anything unless a component author adds them.
+============================================================================= */
+
+.brand-accent {
+  color: var(--brand-purple) !important;
+}
+
+.brand-gradient-text {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.border-brand {
+  border-color: var(--brand-purple) !important;
+}

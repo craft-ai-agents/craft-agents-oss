@@ -264,7 +264,7 @@ export function InputContainer({
         className={cn(
           "input-container relative rounded-[12px] overflow-hidden transition-colors",
           isFocusedPanel ? "shadow-middle" : "shadow-minimal",
-          "bg-background"
+          "bg-input"
         )}
         style={{
           height: heightMotionValue,

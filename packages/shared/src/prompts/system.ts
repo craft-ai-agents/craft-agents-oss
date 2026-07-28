@@ -284,6 +284,61 @@ ${fileList}
 </project_context_files>`;
 }
 
+/**
+ * Get a full-content project context files prompt section for the system prompt.
+ * Reads every discovered AGENTS.md / CLAUDE.md file in the working directory
+ * (and subdirectories, for monorepos) and includes the full file content inside
+ * the `<project_context_files>` block, rather than just listing filenames.
+ *
+ * Each file is wrapped in `<context_file path="...">...</context_file>` so the
+ * model can distinguish between files. Files are capped at MAX_CONTEXT_FILE_SIZE
+ * (10 KB) and the total number of files is capped at MAX_CONTEXT_FILES (30).
+ *
+ * Returns empty string if no working directory or no context files found.
+ */
+export function getFullProjectContextFilesPrompt(workingDirectory?: string): string {
+  if (!workingDirectory) {
+    return '';
+  }
+
+  const contextFiles = findAllProjectContextFiles(workingDirectory);
+  if (contextFiles.length === 0) {
+    return '';
+  }
+
+  // Read each file and format with content
+  const fileBlocks: string[] = [];
+  for (const relativePath of contextFiles) {
+    const fullPath = join(workingDirectory, relativePath);
+    // readProjectContextFile only searches the top-level directory, so for
+    // nested files we need to read from the full path instead
+    try {
+      const rawContent = readFileSync(fullPath, 'utf-8');
+      const truncated = rawContent.length > MAX_CONTEXT_FILE_SIZE
+        ? rawContent.slice(0, MAX_CONTEXT_FILE_SIZE) + '\n\n... (truncated)'
+        : rawContent;
+      // Sanitize: strip dangerous control chars (NUL, etc.) and defang the
+      // closing </context_file> tag so file content can't prematurely close
+      // the XML block.
+      const safe = stripDangerousControlChars(truncated);
+      const clean = defangBlockTag(safe, 'context_file');
+      fileBlocks.push(`<context_file path="${relativePath}">\n${clean}\n</context_file>`);
+    } catch {
+      // Skip files that can't be read
+      continue;
+    }
+  }
+
+  if (fileBlocks.length === 0) {
+    return '';
+  }
+
+  return `
+<project_context_files working_directory="${workingDirectory}">
+${fileBlocks.join('\n\n')}
+</project_context_files>`;
+}
+
 /** Options for getSystemPrompt */
 export interface SystemPromptOptions {
   pinnedPreferencesPrompt?: string;
@@ -293,6 +348,12 @@ export interface SystemPromptOptions {
   workingDirectory?: string;
   /** Backend name for "powered by X" text (default: 'Claude Code') */
   backendName?: string;
+  /**
+   * When true, inject the full file content of AGENTS.md / CLAUDE.md into
+   * the `<project_context_files>` block, rather than just listing filenames.
+   * Default: false (filename-only listing, for backwards compatibility).
+   */
+  includeContextFileContent?: boolean;
 }
 
 /**
@@ -354,6 +415,7 @@ export function getSystemPrompt(
   backendName?: string,
   includeCoAuthoredBy?: boolean,
   projectContext?: ProjectPromptContext,
+  includeContextFileContent?: boolean,
 ): string {
   // Use mini agent prompt for quick edits (pass workspace root for config paths)
   if (preset === 'mini') {
@@ -366,7 +428,9 @@ export function getSystemPrompt(
   const debugContext = debugMode?.enabled ? formatDebugModeContext(debugMode.logFilePath) : '';
 
   // Get project context files for monorepo support (lives in system prompt for persistence across compaction)
-  const projectContextFiles = getProjectContextFilesPrompt(workingDirectory);
+  const projectContextFiles = includeContextFileContent
+    ? getFullProjectContextFilesPrompt(workingDirectory)
+    : getProjectContextFilesPrompt(workingDirectory);
 
   // Optional workspace-project context (injected after preferences, before debug+context-files)
   const projectBlock = projectContext ? formatProjectContextForPrompt(projectContext) : '';
@@ -984,7 +1048,7 @@ If you get a "Labels rejected" error, the reason is per-entry — common causes 
 - Do NOT call \`list_sessions\` with a high limit just to scan all sessions — filter first.
 
 **Creating tasks:**
-\`create_task\` — creates a Craft Agents Task on the board: title, description (becomes the goal and the initial node prompt), optional acceptance criteria, sources, skills, llmConnection + model, working directory, and project. An explicit project overrides the invoking session's project; when omitted, the current project is inherited. The task is created in "todo" and is NOT run — starting it is the user's (or an automation's) decision. Use it when the user asks to capture or queue work as a task ("add a task for…", "put this on the board"); to execute work right now, stay in this session or use \`spawn_session\`. Returns the task slug + orchestrator session id, plus warnings for unknown source/skill slugs.
+\`create_task\` — creates a ARCHstudio Task on the board: title, description (becomes the goal and the initial node prompt), optional acceptance criteria, sources, skills, llmConnection + model, working directory, and project. An explicit project overrides the invoking session's project; when omitted, the current project is inherited. The task is created in "todo" and is NOT run — starting it is the user's (or an automation's) decision. Use it when the user asks to capture or queue work as a task ("add a task for…", "put this on the board"); to execute work right now, stay in this session or use \`spawn_session\`. Returns the task slug + orchestrator session id, plus warnings for unknown source/skill slugs.
 
 **Background task status:**
 \`list_background_tasks\` — enumerate the background agents/tasks tracked for a session (running, finished, or orphaned). This is the ONLY reliable way to answer "what is running / what's the status?" — it reads the main-process registry, which tracks tasks across turns. The SDK's in-subprocess task tools cannot see tasks from a prior turn's subprocess. If asked for status, call this and report exactly what it returns — never guess, and never claim "the app restarted." A \`status: 'orphaned'\` task was terminated when the turn that launched it ended.

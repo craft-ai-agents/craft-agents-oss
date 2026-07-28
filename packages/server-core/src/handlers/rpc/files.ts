@@ -3,7 +3,7 @@ import { isAbsolute, join, resolve, dirname, parse as parsePath } from 'path'
 import { homedir } from 'os'
 import { validatePathFormat } from '../../utils/path-validation'
 import { randomUUID } from 'crypto'
-import { RPC_CHANNELS, type FileAttachment, type DirectoryListingResult } from '@craft-agent/shared/protocol'
+import { RPC_CHANNELS, type FileAttachment, type DirectoryListingResult, type ReadDirectoryResult, type SessionFile } from '@craft-agent/shared/protocol'
 import type { StoredAttachment } from '@craft-agent/core/types'
 import { readFileAttachment, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
 import { getSessionAttachmentsPath, validateSessionId } from '@craft-agent/shared/sessions'
@@ -27,6 +27,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.file.GENERATE_THUMBNAIL,
   RPC_CHANNELS.fs.SEARCH,
   RPC_CHANNELS.fs.LIST_DIRECTORY,
+  RPC_CHANNELS.fs.READ_DIRECTORY,
 ] as const
 
 export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -593,5 +594,78 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
       totalEntries,
       entries,
     } satisfies DirectoryListingResult
+  })
+
+  // Read directory with file metadata for the working-directory file browser.
+  // Returns both files and directories with size/mtime info.
+  server.handle(RPC_CHANNELS.fs.READ_DIRECTORY, async (_ctx, dirPath: string) => {
+    // Resolve ~ to home directory
+    if (dirPath === '~' || dirPath.startsWith('~/')) {
+      dirPath = dirPath === '~' ? homedir() : join(homedir(), dirPath.slice(2))
+    }
+
+    const pathCheck = validatePathFormat(dirPath)
+    if (!pathCheck.valid) {
+      throw new Error(pathCheck.reason!)
+    }
+
+    const resolved = resolve(dirPath)
+    const raw = await readdir(resolved, { withFileTypes: true })
+
+    const entries: Array<{
+      name: string
+      path: string
+      type: 'file' | 'directory'
+      size?: number
+      mtime?: number
+      isSymlink: boolean
+    }> = []
+
+    for (const entry of raw) {
+      // Skip hidden entries
+      if (entry.name.startsWith('.')) continue
+
+      const fullPath = join(resolved, entry.name)
+      const isDir = entry.isDirectory()
+      const isSymlink = entry.isSymbolicLink()
+
+      try {
+        const info = await stat(fullPath)
+        entries.push({
+          name: entry.name,
+          path: fullPath,
+          type: isDir ? 'directory' : 'file',
+          size: isDir ? undefined : info.size,
+          mtime: info.mtimeMs,
+          isSymlink,
+        })
+      } catch {
+        // Can't stat — symlink target missing, permissions, etc.
+        entries.push({
+          name: entry.name,
+          path: fullPath,
+          type: isDir ? 'directory' : 'file',
+          isSymlink,
+        })
+      }
+    }
+
+    // Sort: directories first, then files, alphabetical within each group
+    entries.sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    })
+
+    const totalEntries = entries.length
+    const truncated = totalEntries > 500
+    if (truncated) entries.length = 500
+
+    const parentPath = resolved === parsePath(resolved).root ? null : dirname(resolved)
+
+    return {
+      currentPath: resolved,
+      parentPath,
+      entries,
+    } satisfies ReadDirectoryResult
   })
 }

@@ -1,6 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync, readdirSync } from 'fs';
 import { join, dirname, basename } from 'path';
-import { getCredentialManager } from '../credentials/index.ts';
 import { getOrCreateLatestSession, type SessionConfig } from '../sessions/index.ts';
 import {
   discoverWorkspacesInDefaultLocation,
@@ -88,6 +87,8 @@ export interface StoredConfig {
   // Windows: path to Git Bash (bash.exe) for the SDK subprocess
   gitBashPath?: string;
   // User chose "Setup later" during onboarding — skip showing onboarding on next launch
+  // The human-readable provider name from the most recent onboarding completion
+  lastConnectedProvider?: string;
   setupDeferred?: boolean;
   // Server mode — embedded remote server settings
   serverConfig?: import('./server-config.ts').ServerConfig;
@@ -113,7 +114,7 @@ let configDefaultsSynced = false;
 /** Minimal config-defaults used when bundled assets aren't available (CI, standalone server). */
 const FALLBACK_CONFIG_DEFAULTS: ConfigDefaults = {
   version: '1.0',
-  description: 'Default configuration values for Craft Agents',
+  description: 'Default configuration values for ARCHstudio',
   defaults: {
     notificationsEnabled: true,
     colorTheme: 'default',
@@ -354,6 +355,36 @@ export function setNotificationsEnabled(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.notificationsEnabled = enabled;
+  saveConfig(config);
+}
+
+/**
+ * Get the last connected provider name from onboarding.
+ * Returns null if not set.
+ */
+export function getLastConnectedProvider(): string | null {
+  const config = loadStoredConfig();
+  return config?.lastConnectedProvider ?? null;
+}
+
+/**
+ * Set the last connected provider name from onboarding.
+ * Used by QuickStart overlay to show which provider was connected.
+ */
+export function setLastConnectedProvider(name: string): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.lastConnectedProvider = name;
+  saveConfig(config);
+}
+
+/**
+ * Clear the last connected provider name.
+ */
+export function clearLastConnectedProvider(): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  delete config.lastConnectedProvider;
   saveConfig(config);
 }
 
@@ -888,7 +919,11 @@ export async function removeWorkspace(workspaceId: string): Promise<boolean> {
 
   saveConfig(config);
 
-  // Clean up credential store credentials for this workspace
+  // Clean up credential store credentials for this workspace.
+  // Lazy-imported so this Node-only credential backend (uses `crypto`,
+  // `child_process`) doesn't get pulled into the browser-facing config
+  // barrel that the renderer imports from.
+  const { getCredentialManager } = await import('../credentials/index.ts');
   const manager = getCredentialManager();
   await manager.deleteWorkspaceCredentials(workspaceId);
 
@@ -2553,6 +2588,7 @@ function ensureDefaultLlmConnection(config: StoredConfig): boolean {
  * stale data and reduce credential store clutter.
  */
 export async function migrateLegacyCredentials(): Promise<void> {
+  const { getCredentialManager } = await import('../credentials/index.ts');
   const manager = getCredentialManager();
   const debug = (await import('../utils/debug.ts')).debug;
 
@@ -2792,13 +2828,17 @@ export function deleteLlmConnection(slug: string): boolean {
   }
 
   // Clean up stored credentials for this connection (API keys, OAuth tokens)
-  // This is fire-and-forget but we log errors for debugging
-  const credentialManager = getCredentialManager();
-  credentialManager.delete({ type: 'llm_api_key', connectionSlug: slug }).catch((error) => {
-    console.error(`[storage] Failed to delete API key credential for connection '${slug}':`, error);
-  });
-  credentialManager.delete({ type: 'llm_oauth', connectionSlug: slug }).catch((error) => {
-    console.error(`[storage] Failed to delete OAuth credential for connection '${slug}':`, error);
+  // This is fire-and-forget but we log errors for debugging. Lazy-imported
+  // (see removeWorkspace above) to keep this Node-only backend out of the
+  // browser-facing config barrel.
+  import('../credentials/index.ts').then(({ getCredentialManager }) => {
+    const credentialManager = getCredentialManager();
+    credentialManager.delete({ type: 'llm_api_key', connectionSlug: slug }).catch((error) => {
+      console.error(`[storage] Failed to delete API key credential for connection '${slug}':`, error);
+    });
+    credentialManager.delete({ type: 'llm_oauth', connectionSlug: slug }).catch((error) => {
+      console.error(`[storage] Failed to delete OAuth credential for connection '${slug}':`, error);
+    });
   });
 
   return true;

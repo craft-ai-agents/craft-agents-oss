@@ -1,0 +1,191 @@
+{
+  "id": "sample-test-session-001",
+  "workspaceId": "workspace-1",
+  "name": "ARCHstudio Sample Session",
+  "createdAt": 1720000000000,
+  "lastUsedAt": 1720000100000,
+  "messages": [
+    {
+      "id": "msg-1",
+      "type": "user",
+      "content": "Can you help me refactor the authentication module? I want to move from async/await to a more functional pattern using pipes.",
+      "timestamp": 1720000000000
+    },
+    {
+      "id": "msg-2",
+      "type": "assistant",
+      "content": "I'll analyze the current auth module and propose a refactored version using functional pipes with Either types for error handling.\n\nLet me first read the existing code to understand what we're working with.",
+      "timestamp": 1720000010000,
+      "turnId": "turn-1"
+    },
+    {
+      "id": "msg-3",
+      "type": "tool",
+      "content": "Read 3 files — auth.ts, tokens.ts, middleware.ts",
+      "timestamp": 1720000020000,
+      "toolName": "Read",
+      "toolUseId": "tool-1",
+      "toolInput": {
+        "file_path": "src/auth/index.ts"
+      },
+      "toolStatus": "completed",
+      "turnId": "turn-1"
+    },
+    {
+      "id": "msg-4",
+      "type": "assistant",
+      "content": "I've reviewed the existing auth code. Here's my plan:\n\n1. Create an `AuthPipeline` type that composes validation, token exchange, and session creation\n2. Use `pipe()` from fp-ts for the main authenticate flow\n3. Wrap each step in `Either` for typed error handling\n4. Keep the same public API surface so callers don't break",
+      "timestamp": 1720000030000,
+      "turnId": "turn-2",
+      "isIntermediate": true
+    },
+    {
+      "id": "msg-5",
+      "type": "tool",
+      "content": "Wrote 30 lines to src/auth/pipeline.ts",
+      "timestamp": 1720000040000,
+      "toolName": "Write",
+      "toolUseId": "tool-2",
+      "toolInput": {
+        "file_path": "src/auth/pipeline.ts",
+        "content": "import { pipe } from 'fp-ts/function';\nimport { either, taskEither } from 'fp-ts';\nimport type { AuthContext, AuthError, Session } from './types';\n\nexport const authenticate = (ctx: AuthContext): TaskEither<AuthError, Session> =>\n  pipe(\n    validateCredentials(ctx),\n    TE.fromEither,\n    TE.chain(validateMfa(ctx)),\n    TE.chain(exchangeToken),\n    TE.chain(createSession),\n    TE.map(logSuccess),\n  );\n",
+        "file_path": "src/auth/pipeline.ts"
+      },
+      "toolStatus": "completed",
+      "turnId": "turn-2"
+    },
+    {
+      "id": "msg-6",
+      "type": "assistant",
+      "content": "Now let me update the main auth entry point to use the new pipeline:",
+      "timestamp": 1720000050000,
+      "turnId": "turn-3",
+      "isIntermediate": true
+    },
+    {
+      "id": "msg-7",
+      "type": "tool",
+      "content": "Edited src/auth/index.ts (replaced authenticate function with pipeline wrapper)",
+      "timestamp": 1720000060000,
+      "toolName": "Edit",
+      "toolUseId": "tool-3",
+      "toolInput": {
+        "file_path": "src/auth/index.ts",
+        "old_string": "export async function authenticate(username: string, password: string): Promise<Session> {\n  const user = await db.users.findByCredentials(username, password);\n  if (!user) throw new AuthError('Invalid credentials');\n  const token = await jwt.sign({ userId: user.id, role: user.role });\n  const session = await sessions.create(user.id, token);\n  return session;\n}",
+        "new_string": "export function authenticate(username: string, password: string): TaskEither<AuthError, Session> {\n  return pipe(\n    validateCredentials({ username, password }),\n    TE.fromEither,\n    TE.chain((user) => exchangeToken(user)),\n    TE.chain((token) => createSession(token)),\n    TE.map(logSuccess),\n  );\n}"
+      },
+      "toolStatus": "error",
+      "toolResult": "Error: The old_string did not match the file content. The file may have been modified.",
+      "isError": true,
+      "turnId": "turn-3"
+    },
+    {
+      "id": "msg-8",
+      "type": "assistant",
+      "content": "It looks like the file was already modified. Let me re-read the current state of `index.ts`:",
+      "timestamp": 1720000070000,
+      "turnId": "turn-4",
+      "isIntermediate": true
+    },
+    {
+      "id": "msg-9",
+      "type": "tool",
+      "content": "Read 1 file — src/auth/index.ts",
+      "timestamp": 1720000080000,
+      "toolName": "Read",
+      "toolUseId": "tool-4",
+      "toolInput": {
+        "file_path": "src/auth/index.ts"
+      },
+      "toolStatus": "completed",
+      "turnId": "turn-4"
+    },
+    {
+      "id": "msg-10",
+      "type": "assistant",
+      "content": "I see — the file was partially edited. Let me apply the correct diff now:",
+      "timestamp": 1720000090000,
+      "turnId": "turn-5",
+      "isIntermediate": true
+    },
+    {
+      "id": "msg-11",
+      "type": "tool",
+      "content": "Bash session: `cat src/auth/index.ts` + `grep -n 'authenticate' src/auth/index.ts`",
+      "timestamp": 1720000100000,
+      "toolName": "Bash",
+      "toolUseId": "tool-5",
+      "toolInput": {
+        "command": "cat src/auth/index.ts"
+      },
+      "toolStatus": "completed",
+      "turnId": "turn-5",
+      "toolResult": "The current file reads:\n\n```\nimport { AuthError } from './types';\nimport type { Session } from './types';\nimport { db } from '../lib/db';\nimport { jwt } from '../lib/jwt';\nimport { sessions } from '../lib/sessions';\n\nexport async function authenticate(username: string, password: string): Promise<Session> {\n  const user = await db.users.findByCredentials(username, password);\n  if (!user) throw new AuthError('Invalid credentials');\n  const token = await jwt.sign({ userId: user.id, role: user.role });\n  const session = await sessions.create(user.id, token);\n  return session;\n}\n```"
+    },
+    {
+      "id": "msg-12",
+      "type": "assistant",
+      "content": "Got it — the old_string was slightly off. Let me match it exactly this time:",
+      "timestamp": 1720000110000,
+      "turnId": "turn-6",
+      "isIntermediate": true
+    },
+    {
+      "id": "msg-13",
+      "type": "tool",
+      "content": "Edited src/auth/index.ts (successfully applied the functional pipeline refactor)",
+      "timestamp": 1720000120000,
+      "toolName": "Edit",
+      "toolUseId": "tool-6",
+      "toolInput": {
+        "file_path": "src/auth/index.ts",
+        "old_string": "import { AuthError } from './types';\nimport type { Session } from './types';\nimport { db } from '../lib/db';\nimport { jwt } from '../lib/jwt';\nimport { sessions } from '../lib/sessions';\n\nexport async function authenticate(username: string, password: string): Promise<Session> {\n  const user = await db.users.findByCredentials(username, password);\n  if (!user) throw new AuthError('Invalid credentials');\n  const token = await jwt.sign({ userId: user.id, role: user.role });\n  const session = await sessions.create(user.id, token);\n  return session;\n}",
+        "new_string": "import { pipe } from 'fp-ts/function';\nimport { taskEither as TE } from 'fp-ts';\nimport type { AuthContext, AuthError, Session } from './types';\nimport { validateCredentials, exchangeToken, createSession, logSuccess } from './pipeline';\n\nexport const authenticate = (ctx: AuthContext): TE.TaskEither<AuthError, Session> =>\n  pipe(\n    validateCredentials(ctx),\n    TE.fromEither,\n    TE.chain(exchangeToken),\n    TE.chain(createSession),\n    TE.map(logSuccess),\n  );"
+      },
+      "toolStatus": "completed",
+      "turnId": "turn-6"
+    },
+    {
+      "id": "msg-14",
+      "type": "user",
+      "content": "Great, that looks good! Can you also add unit tests for the pipeline functions? Focus on the error cases — invalid credentials, expired tokens, and MFA failures.",
+      "timestamp": 1720000130000
+    },
+    {
+      "id": "msg-15",
+      "type": "assistant",
+      "content": "Absolutely. I'll write a comprehensive test suite covering all the error paths. The key insight is that with `Either`, we can test each pipeline stage in isolation and verify the error type propagation.",
+      "timestamp": 1720000140000,
+      "turnId": "turn-7"
+    },
+    {
+      "id": "msg-16",
+      "type": "tool",
+      "content": "Wrote 85 lines to src/auth/__tests__/pipeline.test.ts",
+      "timestamp": 1720000150000,
+      "toolName": "Write",
+      "toolUseId": "tool-7",
+      "toolInput": {
+        "file_path": "src/auth/__tests__/pipeline.test.ts",
+        "content": "import { describe, it, expect } from 'vitest';\nimport * as E from 'fp-ts/Either';\nimport { authenticate } from '../pipeline';\n\ndescribe('Auth Pipeline', () => {\n  it('returns Left for invalid credentials', async () => {\n    const result = await authenticate({ username: 'bad', password: 'creds' })();\n    expect(E.isLeft(result)).toBe(true);\n    if (E.isLeft(result)) {\n      expect(result.left.code).toBe('INVALID_CREDENTIALS');\n    }\n  });\n\n  it('returns Left for expired tokens', async () => {\n    const result = await authenticate({ username: 'expired', password: 'token' })();\n    expect(E.isLeft(result)).toBe(true);\n    if (E.isLeft(result)) {\n      expect(result.left.code).toBe('TOKEN_EXPIRED');\n    }\n  });\n\n  it('returns Right with session on success', async () => {\n    const result = await authenticate({ username: 'valid', password: 'user' })();\n    expect(E.isRight(result)).toBe(true);\n    if (E.isRight(result)) {\n      expect(result.right).toHaveProperty('token');\n      expect(result.right).toHaveProperty('userId');\n    }\n  });\n\n  it('handles MFA validation failure', async () => {\n    const result = await authenticate({ username: 'mfa', password: 'pending' })();\n    expect(E.isLeft(result)).toBe(true);\n    if (E.isLeft(result)) {\n      expect(result.left.code).toBe('MFA_REQUIRED');\n    }\n  });\n\n  it('pipeline logs success metrics on completion', async () => {\n    const result = await authenticate({ username: 'valid', password: 'user' })();\n    expect(E.isRight(result)).toBe(true);\n  });\n});\n",
+        "file_path": "src/auth/__tests__/pipeline.test.ts"
+      },
+      "toolStatus": "completed",
+      "turnId": "turn-7"
+    },
+    {
+      "id": "msg-17",
+      "type": "assistant",
+      "content": "Here's a summary of what was done:\n\n## Authentication Module Refactor ✅\n\n**Created `pipeline.ts`** — Composable authentication pipeline using fp-ts `pipe()` and `TaskEither`:\n- `validateCredentials` — checks username/password → `Either<AuthError, User>`\n- `exchangeToken` — JWT token exchange → `TaskEither<AuthError, Token>`\n- `createSession` — creates user session → `TaskEither<AuthError, Session>`\n\n**Updated `index.ts`** — Replaced imperative `async/await` with declarative pipeline. Same public API, typed error handling throughout.\n\n**Added tests** — 5 test cases covering: invalid credentials, expired tokens, MFA failures, and the happy path. All error types are surfaced through `Either.left` discriminators.",
+      "timestamp": 1720000160000,
+      "turnId": "turn-7"
+    }
+  ],
+  "tokenUsage": {
+    "inputTokens": 4500,
+    "outputTokens": 3200,
+    "totalTokens": 7700,
+    "contextTokens": 92000,
+    "costUsd": 0.15
+  }
+}

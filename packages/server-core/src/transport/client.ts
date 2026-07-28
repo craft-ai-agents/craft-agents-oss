@@ -28,6 +28,25 @@ interface PendingRequest {
   resolve: (value: any) => void
   reject: (error: Error) => void
   timeout: ReturnType<typeof setTimeout>
+  /** Abort listener cleanup function, registered when invoke() received an AbortSignal. */
+  signalOff: (() => void) | null
+}
+
+// ---------------------------------------------------------------------------
+// AbortSignal detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Detect whether a value is an `AbortSignal` (or close enough) without
+ * depending on the global. Works in both browser and Node contexts where
+ * AbortSignal may be a polyfill or a structurally-similar object.
+ */
+function isAbortSignal(value: unknown): value is { aborted: boolean; addEventListener(type: 'abort', cb: () => void): unknown; removeEventListener?(type: 'abort', cb: () => void): unknown; reason?: unknown } {
+  if (value === null || typeof value !== 'object') return false
+  const s = value as { aborted?: unknown; addEventListener?: unknown }
+  if (typeof s.aborted !== 'boolean') return false
+  if (typeof s.addEventListener !== 'function') return false
+  return true
 }
 
 // ---------------------------------------------------------------------------
@@ -183,27 +202,101 @@ export class WsRpcClient implements RpcClient {
         return
       }
 
+      // Optional last-arg AbortSignal: kept client-side only — never serialized
+      // into the request envelope. On abort, we send a 'cancel' envelope
+      // (carrying the request id) so the server can interrupt the handler,
+      // and reject the local promise immediately so the caller is unblocked.
+      //
+      // Channels whose last arg is *not* a signal pass through unchanged.
+      let signal: { aborted: boolean; addEventListener(type: 'abort', cb: () => void): unknown; removeEventListener?(type: 'abort', cb: () => void): unknown; reason?: unknown } | null = null
+      let wireArgs = args
+      if (args.length > 0 && isAbortSignal(args[args.length - 1])) {
+        signal = args[args.length - 1] as any
+        wireArgs = args.slice(0, -1)
+      }
+
       const id = crypto.randomUUID()
       const timeout = setTimeout(() => {
+        const req = this.pending.get(id)
         this.pending.delete(id)
+        if (req?.signalOff) {
+          try { req.signalOff() } catch { /* best effort */ }
+        }
         reject(new Error(`Request timeout: ${channel} (${this.requestTimeout}ms)`))
       }, this.requestTimeout)
 
-      this.pending.set(id, { resolve, reject, timeout })
+      const signalOff = signal
+        ? this.attachAbortHandler(id, channel, signal)
+        : null
+
+      this.pending.set(id, { resolve, reject, timeout, signalOff })
 
       const envelope: MessageEnvelope = {
         id,
         type: 'request',
         channel,
-        args,
+        args: wireArgs,
       }
 
       if (!this.trySendEnvelope(this.ws, envelope)) {
         this.pending.delete(id)
         clearTimeout(timeout)
+        const req = this.pending.get(id)
+        if (req?.signalOff) {
+          try { req.signalOff() } catch { /* best effort */ }
+        }
         reject(new Error(`Not connected (channel: ${channel})`))
       }
     })
+  }
+
+  /**
+   * Subscribe to `signal` so that an abort fires a 'cancel' envelope (targeting
+   * the in-flight server handler) and rejects the local promise. Returns a
+   * cleanup function that detaches the listener — callers (and the response /
+   * disconnect / timeout paths) MUST call this to avoid leaks.
+   */
+  private attachAbortHandler(
+    requestId: string,
+    channel: string,
+    signal: { aborted: boolean; addEventListener(type: 'abort', cb: () => void): unknown; removeEventListener?(type: 'abort', cb: () => void): unknown; reason?: unknown },
+  ): () => void {
+    const onAbort = () => {
+      // Cancel server-side work first (best-effort — no-op if socket is gone).
+      try {
+        const cancelEnvelope: MessageEnvelope = { id: requestId, type: 'cancel' }
+        this.trySendEnvelope(this.ws, cancelEnvelope)
+      } catch {
+        // best effort
+      }
+      // Then reject the pending local promise and tear down bookkeeping.
+      const req = this.pending.get(requestId)
+      if (req) {
+        this.pending.delete(requestId)
+        clearTimeout(req.timeout)
+        if (req.signalOff) {
+          try { req.signalOff() } catch { /* best effort */ }
+          req.signalOff = null
+        }
+        const err = (signal as any).reason instanceof Error
+          ? (signal as any).reason
+          : new Error(`Request aborted: ${channel}`)
+        ;(err as any).name = 'AbortError'
+        ;(err as any).code = 'ABORTED'
+        req.reject(err)
+      }
+    }
+    // If the signal already fired (e.g., abort() called before invoke attached),
+    // fire onAbort synchronously and return a no-op cleanup.
+    if (signal.aborted) {
+      onAbort()
+      return () => { /* no-op */ }
+    }
+    signal.addEventListener('abort', onAbort)
+    const cleanup = () => {
+      try { signal.removeEventListener?.('abort', onAbort as any) } catch { /* older envs */ }
+    }
+    return cleanup
   }
 
   on(channel: string, callback: (...args: any[]) => void): () => void {
@@ -470,14 +563,15 @@ export class WsRpcClient implements RpcClient {
     this.manualReconnectRequested = false
     this.currentHandshakeWasReconnect = false
     this.pendingReconnect = null
-    this.failReady(new Error('Client destroyed'))
-
-    // Reject all pending requests
-    for (const [id, req] of this.pending) {
-      clearTimeout(req.timeout)
-      req.reject(new Error('Client destroyed'))
-    }
-    this.pending.clear()
+    this.failReady(new Error('Client destroyed'))      // Reject all pending requests
+      for (const [id, req] of this.pending) {
+        clearTimeout(req.timeout)
+        if (req.signalOff) {
+          try { req.signalOff() } catch { /* best effort */ }
+        }
+        req.reject(new Error('Client destroyed'))
+      }
+      this.pending.clear()
     this.anyEventListeners.clear()
 
     this.ws?.close()
@@ -572,6 +666,9 @@ export class WsRpcClient implements RpcClient {
         if (req) {
           this.pending.delete(envelope.id)
           clearTimeout(req.timeout)
+          if (req.signalOff) {
+            try { req.signalOff() } catch { /* best effort */ }
+          }
           if (envelope.error) {
             const err = new Error(envelope.error.message)
             ;(err as any).code = envelope.error.code
@@ -748,6 +845,9 @@ export class WsRpcClient implements RpcClient {
     if (wasConnected) {
       for (const [id, req] of this.pending) {
         clearTimeout(req.timeout)
+        if (req.signalOff) {
+          try { req.signalOff() } catch { /* best effort */ }
+        }
         req.reject(new Error('Connection lost'))
       }
       this.pending.clear()

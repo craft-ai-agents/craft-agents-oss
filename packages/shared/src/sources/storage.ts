@@ -34,17 +34,13 @@ import {
   needsIconDownload,
   isIconUrl,
 } from '../utils/icon.ts';
+import { getSourcePath } from './paths.ts';
 
 // ============================================================
 // Directory Utilities
 // ============================================================
 
-/**
- * Get path to a source folder within a workspace
- */
-export function getSourcePath(workspaceRootPath: string, sourceSlug: string): string {
-  return join(getWorkspaceSourcesPath(workspaceRootPath), sourceSlug);
-}
+export { getSourcePath };
 
 /**
  * Ensure sources directory exists for a workspace

@@ -147,6 +147,10 @@ export type {
 // Re-export skill plugin constant (used by renderer for mention qualification)
 export { AGENTS_PLUGIN_NAME } from '../../skills/types.ts';
 
+// Inference store (per-connection LLM request history for ProvidersPanel)
+export { inferenceStore } from './inference-store.ts';
+export type { InferenceEvent, InferenceHistoryResult, InferenceEventType } from './inference-store.ts';
+
 // RTK detector
 export { getRtkPath, getRtkStatus, getRtkGain, resetRtkPathCache } from './rtk-detector.ts';
 export type { RtkStatus, RtkGainStats } from './rtk-detector.ts';

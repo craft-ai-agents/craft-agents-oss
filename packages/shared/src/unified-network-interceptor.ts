@@ -2094,7 +2094,7 @@ function synthesizeMalformedBodyResponse(
     error: {
       type: 'invalid_request_error',
       code: err.code,
-      message: `Craft Agents blocked an outgoing request that the API would reject: ${err.detail}. ` +
+      message: `ARCHstudio blocked an outgoing request that the API would reject: ${err.detail}. ` +
         `This typically indicates a streaming-reassembly bug in the upstream endpoint or a stale ` +
         `tool history. Try starting a new session or switching to a different model/endpoint.`,
       param: 'tool_calls',
@@ -2105,7 +2105,7 @@ function synthesizeMalformedBodyResponse(
 
   setStoredError({
     status: 400,
-    statusText: 'Bad Request (blocked by Craft Agents)',
+    statusText: 'Bad Request (blocked by ARCHstudio)',
     message: err.detail,
     timestamp: Date.now(),
   });

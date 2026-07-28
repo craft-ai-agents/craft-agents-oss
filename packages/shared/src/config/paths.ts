@@ -11,9 +11,23 @@
  * Instance 2 (-2 suffix): ~/.archstudio-2/
  */
 
-import { homedir } from 'os';
+// Namespace import (not `{ homedir }`): a named import destructures the
+// property at module top-level before any try/catch can run. This module is
+// transitively reachable from the Electron renderer bundle (via the config
+// barrel), where Vite externalizes `os` behind a proxy that throws on
+// property access — the renderer has no use for CONFIG_DIR, but importing
+// this file must not crash the whole app.
+import * as os from 'os';
 import { join } from 'path';
 
 // Allow override via environment variable for multi-instance dev
 // Falls back to default ~/.archstudio/ for production and non-numbered dev folders
-export const CONFIG_DIR = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.archstudio');
+function resolveConfigDir(): string {
+  try {
+    return process.env.CRAFT_CONFIG_DIR || join(os.homedir(), '.archstudio');
+  } catch {
+    return '';
+  }
+}
+
+export const CONFIG_DIR = resolveConfigDir();

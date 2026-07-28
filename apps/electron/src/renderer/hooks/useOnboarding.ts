@@ -9,10 +9,11 @@
  * 4. Credentials (API Key or Claude OAuth)
  * 5. Complete
  */
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import type {
   OnboardingState,
   OnboardingStep,
+  ProviderDetail,
   ApiSetupMethod,
 } from '@/components/onboarding'
 import type { ProviderChoice } from '@/components/onboarding/ProviderSelectStep'
@@ -132,6 +133,70 @@ function isLoopbackEndpoint(baseUrl?: string): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * Build a list of validated provider details for the completion scene.
+ * Called right before transitioning to the 'complete' step.
+ */
+function buildConnectionDetails(
+  method: ApiSetupMethod | null,
+  isLocalModel: boolean | undefined,
+  options: {
+    baseUrl?: string
+    model?: string
+    hasApiKey?: boolean
+    connectionTested?: boolean
+    oauthAuth?: boolean
+    bedrockAuth?: string
+    bedrockRegion?: string
+  },
+): ProviderDetail[] {
+  function deriveLabel(): string {
+    if (isLocalModel) return 'Ollama'
+    switch (method) {
+      case 'claude_oauth': return 'Claude'
+      case 'anthropic_api_key': return 'Anthropic API'
+      case 'pi_chatgpt_oauth': return 'ChatGPT'
+      case 'pi_copilot_oauth': return 'GitHub Copilot'
+      case 'pi_api_key': return 'API Key'
+      default: return 'Unknown'
+    }
+  }
+
+  const details: ProviderDetail[] = [
+    { label: 'Provider', value: deriveLabel(), passed: true },
+  ]
+
+  if (options.baseUrl) {
+    details.push({ label: 'Endpoint', value: options.baseUrl, passed: true })
+  }
+
+  if (options.model) {
+    details.push({ label: 'Default model', value: options.model, passed: true })
+  }
+
+  if (options.hasApiKey) {
+    details.push({ label: 'API key', value: 'Validated', passed: true })
+  }
+
+  if (options.oauthAuth) {
+    details.push({ label: 'Authentication', value: 'OAuth token obtained', passed: true })
+  }
+
+  if (options.bedrockAuth) {
+    details.push({ label: 'Authentication', value: options.bedrockAuth, passed: true })
+  }
+
+  if (options.bedrockRegion) {
+    details.push({ label: 'Region', value: options.bedrockRegion, passed: true })
+  }
+
+  if (options.connectionTested) {
+    details.push({ label: 'Connection test', value: 'Passed', passed: true })
+  }
+
+  return details
 }
 
 export function apiSetupMethodToConnectionSetup(
@@ -282,6 +347,13 @@ export function useOnboarding({
         bedrockAuthMethod: options?.bedrockAuthMethod,
         oauthIdentity: options?.oauthIdentity,
       }, connectionSlugOverride ?? editingSlug, existingSlugs)
+
+      // Stamp the local-model flag so the connection metadata preserves
+      // whether this was an Ollama/local entry vs a regular Anthropic API key.
+      if (state.isLocalModel) {
+        setup.isLocalModel = true
+      }
+
       // Use new unified API
       const result = await window.electronAPI.setupLlmConnection(
         updateOnly ? { ...setup, updateOnly: true } : setup
@@ -369,7 +441,7 @@ export function useOnboarding({
         setState(s => ({ ...s, step: 'provider-select', credentialStatus: 'idle', errorMessage: undefined }))
         break
       case 'local-model':
-        setState(s => ({ ...s, step: 'provider-select', credentialStatus: 'idle', errorMessage: undefined }))
+        setState(s => ({ ...s, step: 'provider-select', isLocalModel: false, credentialStatus: 'idle', errorMessage: undefined }))
         break
     }
   }, [state.step, state.gitBashStatus, initialStep, onDismiss])
@@ -400,7 +472,16 @@ export function useOnboarding({
           bedrockAuthMethod: data.bedrockAuthMethod,
         })
         if (saved) {
-          setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
+          setState(s => ({
+            ...s,
+            credentialStatus: 'success',
+            step: 'complete',
+            connectionDetails: buildConnectionDetails(s.apiSetupMethod, s.isLocalModel, {
+              baseUrl: data.baseUrl,
+              bedrockAuth: data.bedrockAuthMethod === 'iam_credentials' ? 'IAM Credentials' : 'Environment',
+              bedrockRegion: data.awsRegion,
+            }),
+          }))
         } else {
           setState(s => ({ ...s, credentialStatus: 'error' }))
         }
@@ -418,7 +499,14 @@ export function useOnboarding({
           customEndpoint: data.customEndpoint,
         })
         if (saved) {
-          setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
+          setState(s => ({
+            ...s,
+            credentialStatus: 'success',
+            step: 'complete',
+            connectionDetails: buildConnectionDetails(s.apiSetupMethod, s.isLocalModel, {
+              baseUrl: data.baseUrl,
+            }),
+          }))
         } else {
           setState(s => ({ ...s, credentialStatus: 'error' }))
         }
@@ -484,6 +572,11 @@ export function useOnboarding({
           ...s,
           credentialStatus: 'success',
           step: 'complete',
+          connectionDetails: buildConnectionDetails(s.apiSetupMethod, s.isLocalModel, {
+            baseUrl: data.baseUrl,
+            hasApiKey: true,
+            connectionTested: true,
+          }),
         }))
       } else {
         // Save failed — error is already set by handleSaveConfig, stay on credentials step
@@ -511,7 +604,15 @@ export function useOnboarding({
     }
     const testResult = await window.electronAPI.testLlmConnection(connectionSlug)
     if (testResult.success) {
-      setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
+      setState(s => ({
+        ...s,
+        credentialStatus: 'success',
+        step: 'complete',
+        connectionDetails: buildConnectionDetails(method, false, {
+          oauthAuth: true,
+          connectionTested: true,
+        }),
+      }))
       return true
     } else {
       setState(s => ({ ...s, credentialStatus: 'error', errorMessage: testResult.error || 'Connection test failed' }))
@@ -644,7 +745,7 @@ export function useOnboarding({
 
     if (choice === 'local') {
       // Local uses anthropic_api_key with custom endpoint (Ollama doesn't need an API key)
-      setState(s => ({ ...s, step: 'local-model', apiSetupMethod: 'anthropic_api_key', credentialStatus: 'idle', errorMessage: undefined }))
+      setState(s => ({ ...s, step: 'local-model', apiSetupMethod: 'anthropic_api_key', isLocalModel: true, credentialStatus: 'idle', errorMessage: undefined }))
       return
     }
 
@@ -652,6 +753,7 @@ export function useOnboarding({
     setState(s => ({
       ...s,
       apiSetupMethod: method,
+      isLocalModel: false,
       step: 'credentials',
       credentialStatus: 'idle',
       errorMessage: undefined,
@@ -714,7 +816,15 @@ export function useOnboarding({
       })
 
       if (saved) {
-        setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
+        setState(s => ({
+          ...s,
+          credentialStatus: 'success',
+          step: 'complete',
+          connectionDetails: buildConnectionDetails(s.apiSetupMethod, s.isLocalModel, {
+            baseUrl: data.baseUrl,
+            model: data.model,
+          }),
+        }))
       } else {
         setState(s => ({ ...s, credentialStatus: 'error' }))
       }
@@ -809,14 +919,39 @@ export function useOnboarding({
     }))
   }, [])
 
+  // ── Persist the last connected provider name when onboarding completes ──────
+  const savedProviderRef = useRef(false)
+  useEffect(() => {
+    if (state.step !== 'complete' || savedProviderRef.current) return
+
+    // Derive the display name from the same logic as buildConnectionDetails
+    function deriveLabel(): string {
+      if (state.isLocalModel) return 'Ollama'
+      switch (state.apiSetupMethod) {
+        case 'claude_oauth': return 'Claude'
+        case 'anthropic_api_key': return 'Anthropic API'
+        case 'pi_chatgpt_oauth': return 'ChatGPT'
+        case 'pi_copilot_oauth': return 'GitHub Copilot'
+        case 'pi_api_key': return 'API Key'
+        default: return 'Unknown'
+      }
+    }
+
+    const label = deriveLabel()
+    window.electronAPI.setLastConnectedProvider(label).catch(() => {})
+    savedProviderRef.current = true
+  }, [state.step, state.apiSetupMethod, state.isLocalModel])
+
   // Reset onboarding to initial state (used after logout or modal close)
   const reset = useCallback(() => {
+    savedProviderRef.current = false
     setState({
       step: initialStep,
       loginStatus: 'idle',
       credentialStatus: 'idle',
       completionStatus: 'saving',
       apiSetupMethod: initialApiSetupMethod ?? null,
+      isLocalModel: false,
       isExistingUser: false,
       errorMessage: undefined,
     })

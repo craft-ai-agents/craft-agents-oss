@@ -1,26 +1,18 @@
 import { motion } from 'motion/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatedARCHstudioSymbol } from './icons/AnimatedARCHstudioSymbol'
-import { QuickStartOverlay } from './QuickStartOverlay'
-import type { QuickStartOverlayProps } from './QuickStartOverlay'
-import type { SessionMeta } from '@/atoms/sessions'
-import type { LlmConnectionWithStatus } from '@craft-agent/shared/config'
 
+/**
+ * Brand splash animation.
+ *
+ * NOTE: this is no longer part of the app boot path — the app renders its
+ * workspace shell (or provider setup, when nothing is configured) directly.
+ * The only remaining consumer is the dev playground's on-demand splash tester
+ * (`src/renderer/playground.tsx`), which mounts it to review the animation.
+ */
 interface SplashScreenProps {
   isExiting: boolean
   onExitComplete?: () => void
-  /** When true, the quick-start overlay replaces the loading dots */
-  showQuickStart?: boolean
-  /** Recent sessions for the quick-start overlay */
-  sessions?: SessionMeta[]
-  /** LLM connections for the quick-start overlay */
-  connections?: LlmConnectionWithStatus[]
-  /** The name of the provider connected during the most recent onboarding */
-  lastConnectedProvider?: string
-  /** Called when the user dismisses the quick-start overlay */
-  onDismissQuickStart?: () => void
-  /** Called when the user selects a session from the quick-start overlay */
-  onNavigateToSession?: (sessionId: string) => void
 }
 
 // ─── Ambient particle — a single dot that drifts slowly upward ─────────
@@ -58,12 +50,6 @@ function useParticles(count: number): Particle[] {
 export function SplashScreen({
   isExiting,
   onExitComplete,
-  showQuickStart,
-  sessions,
-  connections,
-  lastConnectedProvider,
-  onDismissQuickStart,
-  onNavigateToSession,
 }: SplashScreenProps) {
   const [showContent, setShowContent] = useState(false)
   const particles = useParticles(32)
@@ -247,48 +233,35 @@ export function SplashScreen({
           />
         </div>
 
-        {/* Loading pulse dots — hidden when quick-start is shown */}
-        {!showQuickStart && (
-          <div className="mt-1 flex gap-2.5">
-            {[0, 1, 2].map((i) => (
-              <motion.div
-                key={i}
-                className="rounded-full"
-                style={{
-                  width: 6,
-                  height: 6,
-                  background: 'color-mix(in oklch, var(--brand-purple) 60%, transparent)',
-                }}
-                animate={
-                  isExiting
-                    ? { opacity: 0 }
-                    : {
-                        opacity: [0.25, 0.9, 0.25],
-                        scale: [1, 1.25, 1],
-                      }
-                }
-                transition={{
-                  duration: 1.2,
-                  repeat: Infinity,
-                  delay: i * 0.2,
-                  ease: 'easeInOut',
-                }}
-              />
-            ))}
-          </div>
-        )}
+        {/* Loading pulse dots */}
+        <div className="mt-1 flex gap-2.5">
+          {[0, 1, 2].map((i) => (
+            <motion.div
+              key={i}
+              className="rounded-full"
+              style={{
+                width: 6,
+                height: 6,
+                background: 'color-mix(in oklch, var(--brand-purple) 60%, transparent)',
+              }}
+              animate={
+                isExiting
+                  ? { opacity: 0 }
+                  : {
+                      opacity: [0.25, 0.9, 0.25],
+                      scale: [1, 1.25, 1],
+                    }
+              }
+              transition={{
+                duration: 1.2,
+                repeat: Infinity,
+                delay: i * 0.2,
+                ease: 'easeInOut',
+              }}
+            />
+          ))}
+        </div>
       </motion.div>
-
-      {/* ── Quick-start overlay — drops down when data is ready ── */}
-      {showQuickStart && !isExiting && (
-        <QuickStartOverlay
-          sessions={sessions ?? []}
-          connections={connections ?? []}
-          lastConnectedProvider={lastConnectedProvider}
-          onDismiss={onDismissQuickStart ?? (() => {})}
-          onNavigateToSession={onNavigateToSession ?? (() => {})}
-        />
-      )}
 
       {/* ── Exit overlay: washes the scene to the app background ──── */}
       <motion.div

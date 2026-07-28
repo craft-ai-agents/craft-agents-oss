@@ -15,7 +15,6 @@ import type { AppShellContextType } from '@/context/AppShellContext'
 import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
 import { WorkspacePicker } from '@/components/workspace'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
-import { SplashScreen } from '@/components/SplashScreen'
 import { TooltipProvider } from '@craft-agent/ui'
 import { FocusProvider } from '@/context/FocusContext'
 import { ModalProvider } from '@/context/ModalContext'
@@ -376,11 +375,10 @@ export default function App() {
   // Auto-update state
   const updateChecker = useUpdateChecker()
 
-  // Splash screen state - tracks when app is fully ready (all data loaded)
+  // Session readiness — gates route restoration in NavigationProvider so the
+  // shell never navigates against a half-loaded session list.
   const [sessionsLoaded, setSessionsLoaded] = useState(false)
   const [sessionLoadError, setSessionLoadError] = useState<string | null>(null)
-  const [splashExiting, setSplashExiting] = useState(false)
-  const [splashHidden, setSplashHidden] = useState(false)
 
   // Notifications enabled state (from app settings)
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
@@ -388,21 +386,6 @@ export default function App() {
   // Sources and skills for badge extraction
   const sources = useAtomValue(sourcesAtom)
   const skills = useAtomValue(skillsAtom)
-
-  // Compute if app is fully ready (all data loaded)
-  const isFullyReady = appState === 'ready' && sessionsLoaded
-
-  // Trigger splash exit animation when fully ready
-  useEffect(() => {
-    if (isFullyReady && !splashExiting) {
-      setSplashExiting(true)
-    }
-  }, [isFullyReady, splashExiting])
-
-  // Handler for when splash exit animation completes
-  const handleSplashExitComplete = useCallback(() => {
-    setSplashHidden(true)
-  }, [])
 
   // Apply theme via hook (injects CSS variables)
   // shikiTheme is passed to ShikiThemeProvider to ensure correct syntax highlighting
@@ -1958,9 +1941,12 @@ export default function App() {
     },
   }), [handleOpenFile, handleOpenUrl, linkInterceptor.openFileExternal])
 
-  // Loading state - show splash screen
+  // Boot state — the very first paint, before `getSetupNeeds()` resolves and we
+  // know whether to show provider setup or the workspace. Deliberately an empty
+  // themed surface: no branding, no overlay, nothing to dismiss. It is replaced
+  // as soon as the two startup IPC calls settle (single digit ms in practice).
   if (appState === 'loading') {
-    return <SplashScreen isExiting={false} />
+    return <div className="h-full w-full bg-background" />
   }
 
   // Reauth state - session expired, need to re-login
@@ -2035,10 +2021,10 @@ export default function App() {
     )
   }
 
-  // Show splash until exit animation completes
-  const showSplash = !splashHidden
-
-  // Ready state - main app with splash overlay during data loading
+  // Ready state — the workspace shell, rendered directly with no interstitial.
+  // Data that arrives asynchronously (sessions, connections, drafts) is gated
+  // per-consumer; `isSessionsReady` below holds route restoration until the
+  // session list has landed.
   return (
     <PlatformProvider actions={platformActions}>
     <ShikiThemeProvider shikiTheme={shikiTheme}>
@@ -2062,15 +2048,7 @@ export default function App() {
           {/* Handle window close requests (X button, Cmd+W) - close modal first if open */}
           <WindowCloseHandler />
 
-          {/* Splash screen overlay - fades out when fully ready */}
-          {showSplash && (
-            <SplashScreen
-              isExiting={splashExiting}
-              onExitComplete={handleSplashExitComplete}
-            />
-          )}
-
-          {/* Main UI - always rendered, splash fades away to reveal it */}
+          {/* Main UI */}
           <div
             className="h-full flex flex-col text-foreground"
             style={{ paddingTop: 'var(--topbar-height)' }}
@@ -2092,7 +2070,7 @@ export default function App() {
                   contextValue={appShellContextValue}
                   defaultLayout={[20, 32, 48]}
                   menuNewChatTrigger={menuNewChatTrigger}
-                  isFocusedMode={isFocusedMode}
+                  isFocusedMode
                 />
               )}
             </div>

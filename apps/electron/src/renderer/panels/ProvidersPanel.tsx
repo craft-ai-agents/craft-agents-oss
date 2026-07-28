@@ -25,27 +25,172 @@ import {
   Server,
   X,
   ArrowUpDown,
+  Key,
+  Monitor,
+  Github,
+  Building2,
+  Sparkles,
+  ListPlus,
 } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import type { LlmConnectionWithStatus, LlmProviderType } from '@craft-agent/shared/config'
 // Import the direct subpath, not the '@craft-agent/shared/config' barrel: the
 // barrel re-exports config/storage.ts, which pulls sessions/jsonl.ts and `fs`
 // into the renderer bundle and blanks the window at module init.
 import { providerLabel } from '@craft-agent/shared/config/provider-labels'
+// Type-only — erased at build time, so no Node code reaches the renderer bundle.
+import type { InferenceHistoryResult } from '@craft-agent/shared/agent/core/index'
+import type { CustomEndpointApi } from '@config/llm-connections'
+import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
+// `useOnboarding` itself only imports types from the onboarding barrel, so it
+// stays a cheap static import.
+import { useOnboarding } from '@/hooks/useOnboarding'
+import type { ApiSetupMethod, ProviderChoice } from '@/components/onboarding'
 import './ProvidersPanel.css'
 
+/**
+ * The wizard is loaded on demand. A static import would drag the whole
+ * onboarding tree — and through it the `@craft-agent/ui` barrel — into every
+ * module graph that reaches this panel, which is both dead weight for a panel
+ * that usually never opens it and enough to break non-Vite consumers (the UI
+ * barrel has a `?url` worker import).
+ */
+const OnboardingWizard = React.lazy(() =>
+  import('@/components/onboarding').then(m => ({ default: m.OnboardingWizard })),
+)
+
 export type ProvidersPanelProps = {
+  /**
+   * Optional host override for "add a connection". When omitted the panel
+   * mounts its own OnboardingWizard, which is the normal path — nothing in the
+   * app passes these today.
+   */
   onAddProvider?: () => void
+  /** Optional host override for "edit a connection" (see {@link onAddProvider}). */
   onEditProvider?: (slug: string) => void
 }
 
-/** Semantic grouping for the provider card header icon color */
-function providerCategory(type: LlmProviderType): 'cloud' | 'local' | 'datacenter' | 'other' {
-  if (type === 'pi_compat' || type === 'openai-compat') return 'local'
-  if (type === 'anthropic' || type === 'openai' || type === 'pi') return 'cloud'
-  if (type === 'vertex' || type === 'bedrock') return 'datacenter'
+type ProviderCategoryName = 'cloud' | 'local' | 'datacenter' | 'other'
+
+/**
+ * Pi auth providers that front a self-hosted / cloud-vendor data plane rather
+ * than a first-party model API. These get the "Data Center" badge.
+ */
+const DATACENTER_AUTH_PROVIDERS: ReadonlySet<string> = new Set([
+  'amazon-bedrock',
+  'google-vertex',
+  'azure-openai-responses',
+])
+
+/**
+ * Semantic grouping used for the card accent, the badge, and the category
+ * filter chips.
+ *
+ * Takes the connection (not just `providerType`) because `LlmProviderType` is
+ * only `anthropic | pi | pi_compat` — the local/data-center distinction lives
+ * in `isLocalModel` and `piAuthProvider`. The previous `(type)` signature made
+ * the "Local" badge filter to a category its own card was not in (an Ollama
+ * connection is `providerType: 'anthropic'` + `isLocalModel: true`), and left
+ * the "Data Center" category permanently empty.
+ */
+function providerCategory(conn: {
+  providerType: LlmProviderType
+  piAuthProvider?: string
+  isLocalModel?: boolean
+}): ProviderCategoryName {
+  if (conn.isLocalModel) return 'local'
+  if (conn.piAuthProvider && DATACENTER_AUTH_PROVIDERS.has(conn.piAuthProvider)) return 'datacenter'
+  if (conn.providerType === 'pi_compat') return 'local'
+  if (conn.providerType === 'anthropic' || conn.providerType === 'pi') return 'cloud'
   return 'other'
 }
+
+// ---------------------------------------------------------------------------
+// Quick-add presets — each carries its own provider choice into the wizard
+// ---------------------------------------------------------------------------
+
+/** Pre-fill payload accepted by `OnboardingWizard.editInitialValues`. */
+type WizardInitialValues = {
+  apiKey?: string
+  baseUrl?: string
+  connectionDefaultModel?: string
+  activePreset?: string
+  models?: string[]
+  customApi?: CustomEndpointApi
+}
+
+interface QuickAddPreset {
+  label: string
+  hint: string
+  /** The wizard step this preset jumps to. */
+  choice: ProviderChoice
+  icon: React.ReactNode
+  /**
+   * Only meaningful for `choice: 'api_key'` — preselects the provider inside
+   * the key form so "OpenAI" does not land on the Anthropic preset.
+   */
+  initialValues?: WizardInitialValues
+}
+
+const QUICK_ADD_PRESETS: QuickAddPreset[] = [
+  {
+    label: 'Claude',
+    hint: 'Pro / Max subscription — browser sign-in',
+    choice: 'claude',
+    icon: <Sparkles size={16} />,
+  },
+  {
+    label: 'ChatGPT (Codex)',
+    hint: 'ChatGPT Plus / Pro — browser sign-in',
+    choice: 'chatgpt',
+    icon: <Globe size={16} />,
+  },
+  {
+    label: 'GitHub Copilot',
+    hint: 'Copilot subscription — device code',
+    choice: 'copilot',
+    icon: <Github size={16} />,
+  },
+  {
+    label: 'Anthropic (API key)',
+    hint: 'Paste an sk-ant-… key',
+    choice: 'api_key',
+    icon: <Key size={16} />,
+    initialValues: { activePreset: 'anthropic', baseUrl: 'https://api.anthropic.com' },
+  },
+  {
+    label: 'OpenAI (API key)',
+    hint: 'Paste an sk-… key',
+    choice: 'api_key',
+    icon: <Key size={16} />,
+    initialValues: { activePreset: 'openai', baseUrl: 'https://api.openai.com/v1' },
+  },
+  {
+    label: 'Amazon Bedrock',
+    hint: 'IAM credentials or the ambient AWS environment',
+    choice: 'api_key',
+    icon: <Building2 size={16} />,
+    initialValues: {
+      activePreset: 'amazon-bedrock',
+      baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+    },
+  },
+  {
+    label: 'Ollama (local)',
+    hint: 'Models already running on this machine',
+    choice: 'local',
+    icon: <Monitor size={16} />,
+  },
+  {
+    label: 'Custom endpoint',
+    hint: 'Any OpenAI-compatible base URL',
+    choice: 'api_key',
+    icon: <Server size={16} />,
+    initialValues: { activePreset: 'custom', baseUrl: '' },
+  },
+]
 
 /** Format a list of model IDs into a compact display string */
 function formatModels(models?: Array<string | { id: string }>): string {
@@ -172,12 +317,42 @@ function TestTimeline({ entries }: { entries: TestHistoryEntry[] | undefined }) 
 // Test history log — expanded readable view from the footer icon
 // ---------------------------------------------------------------------------
 
+/** Rolling latency average kept per connection slug. */
+interface AvgLatencyEntry {
+  sum: number
+  count: number
+  avg: number
+}
+
+/**
+ * Read the persisted rolling-latency map, validating its shape so a corrupted
+ * entry can't poison the panel. Returns `{}` on any problem.
+ */
+function loadPersistedAvgLatency(storageKey: string): Record<string, AvgLatencyEntry> {
+  try {
+    const raw = localStorage.getItem(storageKey)
+    if (!raw) return {}
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null) return {}
+    for (const val of Object.values(parsed as Record<string, unknown>)) {
+      const v = val as Record<string, unknown> | null
+      if (!v || typeof v.sum !== 'number' || typeof v.count !== 'number') {
+        return {} // corrupted — start fresh
+      }
+    }
+    return parsed as Record<string, AvgLatencyEntry>
+  } catch {
+    // localStorage read error (quota, corrupted JSON) — start fresh
+    return {}
+  }
+}
+
 /**
  * Derive a per-provider slow-latency threshold from the rolling average.
  * Returns avg * 1.5 with a 500ms floor, falling back to 2000ms when there
  * isn't enough history to compute a meaningful baseline.
  */
-function calcSlowThreshold(avgData: { sum: number; count: number; avg: number } | undefined): number {
+function calcSlowThreshold(avgData: AvgLatencyEntry | undefined): number {
   if (avgData && avgData.count >= 2) {
     return Math.max(500, Math.round(avgData.avg * 1.5))
   }
@@ -226,19 +401,31 @@ interface Bucket {
 function UptimeHeatmap({ buckets }: { buckets: Bucket[] }) {
   if (buckets.length === 0) return null
 
-  // Group by day: last 7 days, each up to 24 hour cells
-  const now = new Date()
-  const days: { label: string; buckets: Bucket[] }[] = []
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(now)
-    d.setDate(d.getDate() - i)
-    const dayLabel = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
-    const dayBuckets = buckets.filter(b => {
-      // hour key is ISO like "2026-07-20T14" — match on date prefix
-      return b.hour.startsWith(d.toISOString().slice(0, 10))
-    })
-    days.push({ label: dayLabel, buckets: dayBuckets })
+  // Group by day. The backend keys every bucket by its UTC hour
+  // ("2026-07-20T14"), so the day key MUST be derived in UTC too — deriving
+  // the label from a local-time Date while matching on its UTC date string
+  // shifted the label by a day for anyone west of UTC.
+  const byDay = new Map<string, Bucket[]>()
+  for (const b of buckets) {
+    const dayKey = b.hour.slice(0, 10)
+    const existing = byDay.get(dayKey)
+    if (existing) existing.push(b)
+    else byDay.set(dayKey, [b])
   }
+
+  const days = [...byDay.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-7)
+    .map(([dayKey, dayBuckets]) => ({
+      // Midday UTC keeps the rendered weekday/day aligned with the key in
+      // every timezone offset the app supports.
+      label: new Date(`${dayKey}T12:00:00Z`).toLocaleDateString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      }),
+      buckets: dayBuckets,
+    }))
 
   return (
     <div className="providers-panel__heatmap">
@@ -403,13 +590,16 @@ function Sparkline({
           return (
             <rect
               key={i}
+              className={`providers-panel__sparkline-bar ${
+                b.success
+                  ? 'providers-panel__sparkline-bar--ok'
+                  : 'providers-panel__sparkline-bar--err'
+              }`}
               x={i * (barW + gap)}
               y={h - barH}
               width={barW}
               height={barH}
               rx={1}
-              fill={b.success ? '#22c55e' : '#ef4444'}
-              opacity={b.success ? 0.65 : 0.85}
             />
           )
         })}
@@ -509,9 +699,9 @@ export function ProvidersPanel({
   /** Count providers per category for the filter chips */
   const categoryCounts = React.useMemo(() => {
     return {
-      local: providers.filter(p => providerCategory(p.providerType) === 'local').length,
-      cloud: providers.filter(p => providerCategory(p.providerType) === 'cloud').length,
-      datacenter: providers.filter(p => providerCategory(p.providerType) === 'datacenter').length,
+      local: providers.filter(p => providerCategory(p) === 'local').length,
+      cloud: providers.filter(p => providerCategory(p) === 'cloud').length,
+      datacenter: providers.filter(p => providerCategory(p) === 'datacenter').length,
     }
   }, [providers])
 
@@ -521,7 +711,7 @@ export function ProvidersPanel({
 
     // Apply category filter first (faster than text search)
     if (categoryFilter !== null) {
-      result = result.filter(p => providerCategory(p.providerType) === categoryFilter)
+      result = result.filter(p => providerCategory(p) === categoryFilter)
     }
 
     // Apply text search
@@ -763,46 +953,36 @@ export function ProvidersPanel({
     }
   }, [])
 
-  // Rolling health-check history for the sparkline (ref-based — no re-render on push)
+  // Rolling health-check history for the sparkline (ref-based — no re-render on push).
+  // Entries carry the measured latency so the sparkline and the latency
+  // histogram have something to plot for providers with no inference traffic.
   const HEALTH_HISTORY_MAX = 60 // ~30 min at ~2 checks/min
-  const healthHistoryRef = useRef<Record<string, Array<{ success: boolean; timestamp: number }>>>({})
+  const healthHistoryRef = useRef<Record<string, Array<{ success: boolean; timestamp: number; latencyMs?: number }>>>({})
 
   // Rolling average latency per slug (ref-based, computed on push).
   // Persisted to localStorage so the rolling average survives panel close/reopen
   // and accumulates across sessions instead of resetting to zero every mount.
-  const AVG_LATENCY_KEY = 'archstudio:avgLatency';
-  const avgLatencyRef = useRef<Record<string, { sum: number; count: number; avg: number }>>(
-    () => {
-      try {
-        const raw = localStorage.getItem(AVG_LATENCY_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          // Validate shape: object with slug → { sum, count, avg } entries
-          if (typeof parsed === 'object' && parsed !== null) {
-            for (const val of Object.values(parsed)) {
-              const v = val as Record<string, unknown>;
-              if (typeof v.sum !== 'number' || typeof v.count !== 'number') {
-                return {}; // corrupted — start fresh
-              }
-            }
-            return parsed as Record<string, { sum: number; count: number; avg: number }>;
-          }
-        }
-      } catch {
-        // localStorage read error (quota, corrupted JSON) — start fresh
-      }
-      return {};
-    }
-  )
+  const AVG_LATENCY_KEY = 'archstudio:avgLatency'
+  // useRef takes a VALUE, not a lazy initializer (that is useState's contract).
+  // Passing the loader function stored the *function itself* as `.current`, so
+  // every `avgLatencyRef.current[slug]` read was undefined and the persisted
+  // averages never came back. Seed it once behind a hydration flag instead —
+  // that keeps the ref's type non-nullable and still reads localStorage once.
+  const avgLatencyRef = useRef<Record<string, AvgLatencyEntry>>({})
+  const avgLatencyHydratedRef = useRef(false)
+  if (!avgLatencyHydratedRef.current) {
+    avgLatencyHydratedRef.current = true
+    avgLatencyRef.current = loadPersistedAvgLatency(AVG_LATENCY_KEY)
+  }
 
   /**
    * Push a health-check result into the rolling buffer. Prunes entries
    * older than 1 hour and caps at HEALTH_HISTORY_MAX.
    */
-  function pushHealthHistory(slug: string, success: boolean): void {
+  function pushHealthHistory(slug: string, success: boolean, latencyMs?: number): void {
     const cutoff = Date.now() - 60 * 60 * 1000
     const h = healthHistoryRef.current[slug] ?? []
-    h.push({ success, timestamp: Date.now() })
+    h.push({ success, timestamp: Date.now(), latencyMs })
     healthHistoryRef.current[slug] = h
       .filter(e => e.timestamp >= cutoff)
       .slice(-HEALTH_HISTORY_MAX)
@@ -840,7 +1020,7 @@ export function ProvidersPanel({
         const completedAt = Date.now()
         const latencyMs = Math.round(performance.now() - t0)
         const ok = result.success
-        pushHealthHistory(provider.slug, ok)
+        pushHealthHistory(provider.slug, ok, latencyMs)
         setHealthStatuses(prev => ({
           ...prev,
           [provider.slug]: {
@@ -854,7 +1034,7 @@ export function ProvidersPanel({
       } catch (e) {
         const completedAt = Date.now()
         const latencyMs = Math.round(performance.now() - t0)
-        pushHealthHistory(provider.slug, false)
+        pushHealthHistory(provider.slug, false, latencyMs)
         setHealthStatuses(prev => ({
           ...prev,
           [provider.slug]: {
@@ -868,6 +1048,15 @@ export function ProvidersPanel({
       }
     }
   }, [])
+
+  // `detectChanges` closes over `healthStatuses`, but `fetchProviders` must stay
+  // referentially stable or the 5s poll interval would be torn down and rebuilt
+  // on every health tick. Route the call through a ref that is re-pointed at the
+  // latest callback each render — otherwise the interval keeps calling the very
+  // first `detectChanges`, whose `healthStatuses` is forever `{}` and which
+  // therefore never fires a single health-transition notification.
+  const detectChangesRef = useRef(detectChanges)
+  detectChangesRef.current = detectChanges
 
   const fetchProviders = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) {
@@ -885,7 +1074,7 @@ export function ProvidersPanel({
       // previous poll cycle (runHealthChecks updates it asynchronously).
       // This means "healthy → unhealthy" notifications fire ~5-35s after
       // the actual health check result — acceptable for a 30s cooldown.
-      detectChanges(conns)
+      detectChangesRef.current(conns)
       // Kick off health checks in the background (fire-and-forget — doesn't block the UI)
       runHealthChecks(conns)
     } catch (e) {
@@ -899,15 +1088,17 @@ export function ProvidersPanel({
     }
   }, [fetchHealthHeatmap, fetchInferenceHistory])
 
+  // Initial load. Runs regardless of the Live toggle so pausing auto-refresh
+  // still shows data.
   useEffect(() => {
     fetchProviders()
   }, [fetchProviders])
 
-  // Poll-based auto-refresh (5-second interval)
+  // Poll-based auto-refresh (5-second interval). Previously this effect ALSO
+  // fired an immediate fetch, duplicating the mount fetch above on every mount
+  // and on every Live re-enable.
   useEffect(() => {
     if (!autoRefresh) return
-    // Immediate fetch on mount, then poll
-    fetchProviders({ silent: true })
     pollRef.current = setInterval(() => {
       fetchProviders({ silent: true })
     }, 5000)
@@ -1185,10 +1376,45 @@ export function ProvidersPanel({
     }, 4000)
   }, [fetchProviders])
 
+  // Delete is destructive and used to fire on a single click with no
+  // confirmation and no error surfacing. The trash button now arms itself for
+  // 5s and only the second click deletes.
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null)
+  const pendingDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (pendingDeleteTimerRef.current) clearTimeout(pendingDeleteTimerRef.current)
+    }
+  }, [])
+
   const handleDelete = useCallback(async (slug: string) => {
-    await window.electronAPI.deleteLlmConnection(slug)
+    if (pendingDeleteTimerRef.current) {
+      clearTimeout(pendingDeleteTimerRef.current)
+      pendingDeleteTimerRef.current = null
+    }
+    if (pendingDelete !== slug) {
+      setPendingDelete(slug)
+      pendingDeleteTimerRef.current = setTimeout(() => {
+        setPendingDelete(null)
+        pendingDeleteTimerRef.current = null
+      }, 5000)
+      return
+    }
+    setPendingDelete(null)
+    try {
+      const result = await window.electronAPI.deleteLlmConnection(slug)
+      if (result?.success === false) {
+        toast.error(result.error ?? `Could not remove ${slug}`)
+        return
+      }
+      toast.success(`Removed ${slug}`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+      return
+    }
     await fetchProviders()
-  }, [fetchProviders])
+  }, [fetchProviders, pendingDelete])
 
   /**
    * Clear ALL saved filter state — resets search query, category filter,
@@ -1198,13 +1424,17 @@ export function ProvidersPanel({
    * survives panel close/reopen.
    */
   const handleClearAllSavedFilters = useCallback(() => {
-    // Clear UI state
+    // Clear UI state. Sort is reset too — the localStorage keys for it are
+    // removed below, so leaving the in-memory value would silently diverge
+    // from what a reload would restore.
     setSearchQuery('')
     setCategoryFilter(null)
     setHealthStatuses({})
     setTestResults({})
     setInferenceHistory({})
     setHealthHeatmap({})
+    setSortOrder('default')
+    setSortDir('asc')
 
     // Clear ref-based history buffers
     healthHistoryRef.current = {}
@@ -1354,9 +1584,76 @@ export function ProvidersPanel({
   }, [sortDir])
 
   const handleSetDefault = useCallback(async (slug: string) => {
-    await window.electronAPI.setDefaultLlmConnection(slug)
+    try {
+      const result = await window.electronAPI.setDefaultLlmConnection(slug)
+      if (result?.success === false) {
+        toast.error(result.error ?? 'Could not set the default connection')
+        return
+      }
+      toast.success(`${slug} is now the app default`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+      return
+    }
     await fetchProviders()
   }, [fetchProviders])
+
+  // ── Workspace default ────────────────────────────────────────────────────
+  // `LlmConnectionWithStatus` only carries the *app* default (`isDefault`), so
+  // the per-workspace override is read from the workspace settings directly.
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null)
+  const [workspaceDefaultSlug, setWorkspaceDefaultSlug] = useState<string | undefined>(undefined)
+
+  const refreshWorkspaceDefault = useCallback(async (id: string | null) => {
+    if (!id) {
+      setWorkspaceDefaultSlug(undefined)
+      return
+    }
+    try {
+      const settings = await window.electronAPI.getWorkspaceSettings(id)
+      setWorkspaceDefaultSlug(settings?.defaultLlmConnection)
+    } catch {
+      // Workspace settings are unavailable on some remote transports — the
+      // workspace-default control simply stays unset.
+      setWorkspaceDefaultSlug(undefined)
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    window.electronAPI.getWindowWorkspace()
+      .then(id => {
+        if (cancelled) return
+        setWorkspaceId(id)
+        return refreshWorkspaceDefault(id)
+      })
+      .catch(() => {
+        if (!cancelled) setWorkspaceId(null)
+      })
+    return () => { cancelled = true }
+  }, [refreshWorkspaceDefault])
+
+  /** Toggle this connection as the workspace default (clicking the active one clears it). */
+  const handleSetWorkspaceDefault = useCallback(async (slug: string) => {
+    if (!workspaceId) {
+      toast.error('No active workspace')
+      return
+    }
+    const next = workspaceDefaultSlug === slug ? null : slug
+    try {
+      const result = await window.electronAPI.setWorkspaceDefaultLlmConnection(workspaceId, next)
+      if (result?.success === false) {
+        toast.error(result.error ?? 'Could not set the workspace default')
+        return
+      }
+      toast.success(next ? `${slug} is now this workspace's default` : 'Workspace default cleared')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+      return
+    }
+    await refreshWorkspaceDefault(workspaceId)
+    await fetchProviders({ silent: true })
+  }, [workspaceId, workspaceDefaultSlug, refreshWorkspaceDefault, fetchProviders])
 
   /**
    * Test all providers in parallel, show aggregated results as a toast,
@@ -1451,13 +1748,146 @@ export function ProvidersPanel({
     }
   }, [providers])
 
+  // ── Add / edit connection — the real onboarding wizard, mounted here ──────
+  // Same hook + component pair AiSettingsPage uses, so every credential type
+  // (API key, Claude/ChatGPT/Copilot OAuth, Bedrock, Ollama, custom endpoint)
+  // goes through the single `useOnboarding.handleSubmitCredential` save path.
+
+  const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const [editingSlug, setEditingSlug] = useState<string | null>(null)
+  /** True when the wizard was opened straight into the credentials step. */
+  const [isDirectEdit, setIsDirectEdit] = useState(false)
+  const [editInitialValues, setEditInitialValues] = useState<WizardInitialValues | undefined>(undefined)
+
+  const existingSlugs = React.useMemo(
+    () => new Set(providers.map(p => p.slug)),
+    [providers],
+  )
+
+  const closeWizard = useCallback(() => {
+    setWizardOpen(false)
+    setFullscreenOverlayOpen(false)
+    setEditingSlug(null)
+    setIsDirectEdit(false)
+    setEditInitialValues(undefined)
+  }, [setFullscreenOverlayOpen])
+
+  const wizard = useOnboarding({
+    initialStep: 'provider-select',
+    // Fires the moment the connection lands on disk, before the completion
+    // scene is dismissed — the new card shows up behind the overlay.
+    onConfigSaved: () => { fetchProviders({ silent: true }) },
+    onComplete: () => {
+      closeWizard()
+      wizard.reset()
+      fetchProviders()
+    },
+    onDismiss: () => {
+      closeWizard()
+      wizard.reset()
+    },
+    editingSlug,
+    existingSlugs,
+  })
+
+  const handleCloseWizard = useCallback(() => {
+    closeWizard()
+    wizard.reset()
+  }, [closeWizard, wizard])
+
+  const handleWizardFinish = useCallback(() => {
+    closeWizard()
+    wizard.reset()
+    fetchProviders()
+  }, [closeWizard, wizard, fetchProviders])
+
+  /**
+   * Open the wizard. With no preset it lands on the provider list; with one it
+   * jumps straight into that provider's own flow (OAuth starts immediately for
+   * Claude/ChatGPT/Copilot, Ollama opens the local-model form, and the API-key
+   * presets land on the key form with their provider preselected).
+   */
+  const openWizard = useCallback((preset?: QuickAddPreset) => {
+    setShowAddForm(false)
+    setEditingSlug(null)
+    setIsDirectEdit(false)
+    setEditInitialValues(preset?.initialValues)
+    setWizardOpen(true)
+    setFullscreenOverlayOpen(true)
+    wizard.reset()
+    if (preset) {
+      wizard.handleSelectProvider(preset.choice)
+    }
+  }, [wizard, setFullscreenOverlayOpen])
+
+  /** Open the wizard on an existing connection, pre-filled from its config. */
+  const openEditWizard = useCallback(async (conn: LlmConnectionWithStatus) => {
+    // Reset first: without it a previous session could still be parked on the
+    // 'complete' step, and `handleStartOAuth` only forces the credentials step
+    // when the method actually changes — reopening the same connection twice
+    // would land back on the completion scene.
+    wizard.reset()
+
+    // Best-effort — a missing/blocked key just means an empty field, and the
+    // wizard treats an empty key on an edit as "keep the stored credential".
+    let apiKey: string | undefined
+    try {
+      apiKey = (await window.electronAPI.getLlmConnectionApiKey(conn.slug)) ?? undefined
+    } catch {
+      // Credential store unavailable — fall through with no pre-fill.
+    }
+
+    const modelIds = conn.models
+      ?.map(m => (typeof m === 'string' ? m : m.id))
+      .filter(Boolean)
+    const isCustomEndpointConnection = !!conn.customEndpoint && !!conn.baseUrl?.trim()
+
+    setEditInitialValues({
+      apiKey,
+      baseUrl: conn.baseUrl,
+      connectionDefaultModel: modelIds?.join(', ') || conn.defaultModel || '',
+      activePreset: isCustomEndpointConnection ? 'custom' : (conn.piAuthProvider || undefined),
+      models: modelIds,
+      customApi: conn.customEndpoint?.api,
+    })
+    setEditingSlug(conn.slug)
+    setIsDirectEdit(true)
+    setWizardOpen(true)
+    setFullscreenOverlayOpen(true)
+
+    if (conn.authType === 'oauth') {
+      // OAuth connections have no form to edit — re-run the browser flow.
+      // The slug is passed explicitly because `editingSlug` state has not
+      // reached the hook's closures yet.
+      const method: ApiSetupMethod = conn.providerType === 'pi'
+        ? (conn.piAuthProvider === 'github-copilot' ? 'pi_copilot_oauth' : 'pi_chatgpt_oauth')
+        : 'claude_oauth'
+      wizard.handleStartOAuth(method, conn.slug)
+    } else {
+      wizard.jumpToCredentials(
+        conn.providerType === 'anthropic' ? 'anthropic_api_key' : 'pi_api_key',
+      )
+    }
+  }, [wizard, setFullscreenOverlayOpen])
+
   const handleAdd = useCallback(() => {
+    // A host that supplied `onAddProvider` owns the flow; otherwise toggle the
+    // quick-add tray, whose buttons open the wizard with their own type.
     if (onAddProvider) {
       onAddProvider()
-    } else {
-      setShowAddForm(!showAddForm)
+      return
     }
-  }, [onAddProvider, showAddForm])
+    setShowAddForm(v => !v)
+  }, [onAddProvider])
+
+  const handleEdit = useCallback((conn: LlmConnectionWithStatus) => {
+    if (onEditProvider) {
+      onEditProvider(conn.slug)
+      return
+    }
+    openEditWizard(conn)
+  }, [onEditProvider, openEditWizard])
 
   return (
     <div className="providers-panel">
@@ -1634,30 +2064,35 @@ export function ProvidersPanel({
       {/* Connection type quick-add */}
       {showAddForm && (
         <div className="providers-panel__quick-add">
-          <h3>Quick-add a connection type</h3>
+          <h3>Quick-add a connection</h3>
           <div className="providers-panel__quick-add-grid">
-            {([
-              { label: 'Claude (API Key)', type: 'anthropic' },
-              { label: 'OpenAI (API Key)', type: 'openai' },
-              { label: 'Ollama (Local)', type: 'pi_compat' },
-              { label: 'ChatGPT (Codex)', type: 'pi' },
-              { label: 'Custom Endpoint', type: 'pi_compat' },
-            ] as const).map((preset) => (
+            {QUICK_ADD_PRESETS.map((preset) => (
               <button
                 key={preset.label}
                 type="button"
                 className="providers-panel__preset-btn"
-                onClick={() => {
-                  setShowAddForm(false)
-                  onAddProvider?.()
-                }}
+                onClick={() => openWizard(preset)}
+                title={preset.hint}
               >
-                <span className="providers-panel__preset-icon">
-                  <Plug size={16} />
+                <span className="providers-panel__preset-icon">{preset.icon}</span>
+                <span className="providers-panel__preset-text">
+                  <span className="providers-panel__preset-label">{preset.label}</span>
+                  <span className="providers-panel__preset-hint">{preset.hint}</span>
                 </span>
-                <span className="providers-panel__preset-label">{preset.label}</span>
               </button>
             ))}
+            <button
+              type="button"
+              className="providers-panel__preset-btn providers-panel__preset-btn--browse"
+              onClick={() => openWizard()}
+              title="Open the full provider list"
+            >
+              <span className="providers-panel__preset-icon"><ListPlus size={16} /></span>
+              <span className="providers-panel__preset-text">
+                <span className="providers-panel__preset-label">All providers…</span>
+                <span className="providers-panel__preset-hint">Pick from the full list</span>
+              </span>
+            </button>
           </div>
         </div>
       )}
@@ -1816,14 +2251,14 @@ export function ProvidersPanel({
             sortedProviders.map((provider) => (
               <div
                 key={provider.slug}
-                className={`providers-panel__card providers-panel__card--${providerCategory(provider.providerType)} ${provider.isDefault ? 'providers-panel__card--default' : ''}`}
+                className={`providers-panel__card providers-panel__card--${providerCategory(provider)} ${provider.isDefault ? 'providers-panel__card--default' : ''}`}
               >
                 {/* Card header */}
                 <div className="providers-panel__card-header">
                   <div className="providers-panel__card-info">
                     <div className="providers-panel__card-name">
                       <span
-                        className={`providers-panel__status-dot providers-panel__status-dot--${providerCategory(provider.providerType)} ${provider.isAuthenticated ? 'providers-panel__status-dot--ok' : 'providers-panel__status-dot--err'}`}
+                        className={`providers-panel__status-dot providers-panel__status-dot--${providerCategory(provider)} ${provider.isAuthenticated ? 'providers-panel__status-dot--ok' : 'providers-panel__status-dot--err'}`}
                       />
                       <span
                         className={`providers-panel__health-dot providers-panel__health-dot--${healthStatuses[provider.slug]?.status ?? 'unknown'}`}
@@ -1853,7 +2288,7 @@ export function ProvidersPanel({
                           Local
                         </button>
                       )}
-                      {providerCategory(provider.providerType) === 'cloud' && !provider.isLocalModel && (
+                      {providerCategory(provider) === 'cloud' && !provider.isLocalModel && (
                         <button
                           type="button"
                           className={`providers-panel__filter-badge providers-panel__cloud-badge ${categoryFilter === 'cloud' ? 'providers-panel__filter-badge--active' : ''}`}
@@ -1864,7 +2299,7 @@ export function ProvidersPanel({
                           Cloud
                         </button>
                       )}
-                      {providerCategory(provider.providerType) === 'datacenter' && !provider.isLocalModel && (
+                      {providerCategory(provider) === 'datacenter' && !provider.isLocalModel && (
                         <button
                           type="button"
                           className={`providers-panel__filter-badge providers-panel__datacenter-badge ${categoryFilter === 'datacenter' ? 'providers-panel__filter-badge--active' : ''}`}
@@ -1884,6 +2319,15 @@ export function ProvidersPanel({
                           Default
                         </span>
                       )}
+                      {workspaceDefaultSlug === provider.slug && (
+                        <span
+                          className="providers-panel__workspace-badge"
+                          title="Workspace default — overrides the app default in this workspace"
+                        >
+                          <Building2 size={12} />
+                          Workspace
+                        </span>
+                      )}
                     </div>
                     <span className="providers-panel__card-type">
                       {providerLabel(provider.providerType, provider.isLocalModel)}
@@ -1896,26 +2340,42 @@ export function ProvidersPanel({
                         type="button"
                         className="providers-panel__icon-btn"
                         onClick={() => handleSetDefault(provider.slug)}
-                        title="Set as default"
+                        title="Set as the app default"
                       >
                         <Star size={14} />
+                      </button>
+                    )}
+                    {workspaceId && (
+                      <button
+                        type="button"
+                        className={`providers-panel__icon-btn ${workspaceDefaultSlug === provider.slug ? 'providers-panel__icon-btn--active' : ''}`}
+                        onClick={() => handleSetWorkspaceDefault(provider.slug)}
+                        aria-pressed={workspaceDefaultSlug === provider.slug}
+                        title={workspaceDefaultSlug === provider.slug
+                          ? 'Clear the workspace default'
+                          : 'Set as the default for this workspace'}
+                      >
+                        <Building2 size={14} />
                       </button>
                     )}
                     <button
                       type="button"
                       className="providers-panel__icon-btn"
-                      onClick={() => onEditProvider?.(provider.slug)}
+                      onClick={() => handleEdit(provider)}
                       title="Edit connection"
                     >
                       <Settings size={14} />
                     </button>
                     <button
                       type="button"
-                      className="providers-panel__icon-btn"
+                      className={`providers-panel__icon-btn providers-panel__icon-btn--danger ${pendingDelete === provider.slug ? 'providers-panel__icon-btn--confirming' : ''}`}
                       onClick={() => handleDelete(provider.slug)}
-                      title="Remove connection"
+                      title={pendingDelete === provider.slug
+                        ? 'Click again to remove this connection'
+                        : 'Remove connection'}
                     >
                       <Trash2 size={14} />
+                      {pendingDelete === provider.slug && <span>Confirm?</span>}
                     </button>
                   </div>
                 </div>
@@ -2078,39 +2538,41 @@ export function ProvidersPanel({
                       </>
                     )}
                   </button>
-                  {/* Inline test result — with latency badge */}
-                  {testResults[provider.slug] && (
-                    <span
-                      className={`providers-panel__test-result ${
-                        testResults[provider.slug]!.success
-                          ? 'providers-panel__test-result--ok'
-                          : 'providers-panel__test-result--err'
-                      }`}
-                    >
-                      {testResults[provider.slug]!.success ? (
-                        <CheckCircle2 size={12} />
-                      ) : (
-                        <XCircle size={12} />
-                      )}
-                      <span>
-                        {testResults[provider.slug]!.success
-                          ? 'Connected'
-                          : testResults[provider.slug]!.error ?? 'Failed'}
+                  {/* Inline test result — with latency badge.
+                      Bound to a local so the `latencyMs != null` guard actually
+                      narrows the value used in the comparison below it. */}
+                  {(() => {
+                    const result = testResults[provider.slug]
+                    if (!result) return null
+                    const { latencyMs } = result
+                    const isSlow =
+                      latencyMs != null &&
+                      latencyMs > calcSlowThreshold(avgLatencyRef.current[provider.slug])
+                    return (
+                      <span
+                        className={`providers-panel__test-result ${
+                          result.success
+                            ? 'providers-panel__test-result--ok'
+                            : 'providers-panel__test-result--err'
+                        }`}
+                      >
+                        {result.success ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+                        <span>{result.success ? 'Connected' : result.error ?? 'Failed'}</span>
+                        {latencyMs != null && (
+                          <span className={`providers-panel__test-latency ${isSlow ? 'providers-panel__test-latency--slow' : ''}`}>
+                            {latencyMs}ms
+                          </span>
+                        )}
                       </span>
-                      {testResults[provider.slug]!.latencyMs != null && (
-                        <span className={`providers-panel__test-latency ${testResults[provider.slug]!.latencyMs > calcSlowThreshold(avgLatencyRef.current[provider.slug]) ? 'providers-panel__test-latency--slow' : ''}`}>
-                          {testResults[provider.slug]!.latencyMs}ms
-                        </span>
-                      )}
-                    </span>
-                  )}
+                    )
+                  })()}
                   {provider.lastUsedAt && !testResults[provider.slug] && (
                     <span className="providers-panel__last-used">
                       Last used {new Date(provider.lastUsedAt).toLocaleDateString()}
                     </span>
                   )}
                   {/* Test history log icon button */}
-                  {testHistoryRef.current[provider.slug]?.length > 0 && (
+                  {(testHistoryRef.current[provider.slug]?.length ?? 0) > 0 && (
                     <button
                       type="button"
                       className={`providers-panel__footer-icon-btn ${expandedTestLog[provider.slug] ? 'providers-panel__footer-icon-btn--active' : ''}`}
@@ -2126,7 +2588,7 @@ export function ProvidersPanel({
                 <TestTimeline entries={testHistoryRef.current[provider.slug]} />
 
                 {/* Expanded test history log */}
-                {expandedTestLog[provider.slug] && testHistoryRef.current[provider.slug]?.length > 0 && (
+                {expandedTestLog[provider.slug] && (testHistoryRef.current[provider.slug]?.length ?? 0) > 0 && (
                   <TestHistoryLog entries={testHistoryRef.current[provider.slug]} slowThreshold={calcSlowThreshold(avgLatencyRef.current[provider.slug])} />
                 )}
 
@@ -2157,6 +2619,45 @@ export function ProvidersPanel({
           )}
         </div>
       )}
+
+      {/* Add / edit connection wizard — portalled, so it renders above the shell */}
+      <FullscreenOverlayBase
+        isOpen={wizardOpen}
+        onClose={handleCloseWizard}
+        accessibleTitle="Add a provider connection"
+        className="z-splash flex flex-col bg-foreground-2"
+      >
+        <OnboardingWizard
+          state={wizard.state}
+          onContinue={wizard.handleContinue}
+          // A direct edit has no earlier step to go back to — Back closes.
+          onBack={isDirectEdit ? handleCloseWizard : wizard.handleBack}
+          onSelectProvider={wizard.handleSelectProvider}
+          onSelectApiSetupMethod={wizard.handleSelectApiSetupMethod}
+          onSubmitCredential={wizard.handleSubmitCredential}
+          onSubmitLocalModel={wizard.handleSubmitLocalModel}
+          onStartOAuth={wizard.handleStartOAuth}
+          onBrowseGitBash={wizard.handleBrowseGitBash}
+          onUseGitBashPath={wizard.handleUseGitBashPath}
+          onRecheckGitBash={wizard.handleRecheckGitBash}
+          onClearError={wizard.handleClearError}
+          onFinish={handleWizardFinish}
+          isWaitingForCode={wizard.isWaitingForCode}
+          onSubmitAuthCode={wizard.handleSubmitAuthCode}
+          onCancelOAuth={wizard.handleCancelOAuth}
+          copilotDeviceCode={wizard.copilotDeviceCode}
+          editInitialValues={editInitialValues}
+          className="h-full"
+        />
+        <button
+          type="button"
+          className="providers-panel__wizard-close"
+          onClick={handleCloseWizard}
+          title="Close (Esc)"
+        >
+          <X size={14} />
+        </button>
+      </FullscreenOverlayBase>
     </div>
   )
 }

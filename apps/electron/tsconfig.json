@@ -23,6 +23,7 @@
     "paths": {
       "@/*": ["src/renderer/*"],
       "@config/*": ["../../packages/shared/src/config/*"],
+      "@resources/*": ["resources/*"],
       "@craft-agent/shared": ["../../packages/shared/src/index.ts"],
       "@craft-agent/shared/*": ["../../packages/shared/src/*"]
     }

@@ -25,6 +25,7 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src/**/*"],
+  "//": "Base-only config. The repo root has no sources; packages extend this. `files: []` keeps `tsc -p .` from failing with TS18003.",
+  "files": [],
   "exclude": ["node_modules"]
 }

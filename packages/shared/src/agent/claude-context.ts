@@ -63,6 +63,8 @@ import { isGoogleOAuthConfigured as isGoogleOAuthConfiguredImpl } from '../auth/
 import { debug } from '../utils/debug.ts';
 import { getSessionPlansPath, getSessionPath, getSessionDataPath } from '../sessions/storage.ts';
 import { updatePreferences as updatePreferencesImpl } from '../config/preferences.ts';
+import { openMemoryDatabase, bootstrapStorage } from '../memory/database.ts';
+import { MemoryRepository } from '../memory/repository.ts';
 
 // Re-export types that may be needed by consumers
 export type { SessionToolContext, SessionToolCallbacks } from '@craft-agent/session-tools-core';
@@ -76,6 +78,13 @@ export interface ClaudeContextOptions {
   workspaceId: string;
   onPlanSubmitted: (planPath: string) => void;
   onAuthRequest: (request: unknown) => void;
+  /**
+   * Optional pre-built MemoryRepository to use for memory_search / memory_recall.
+   * When absent (default), the context lazily opens `{workspacePath}/memory/memory.db`.
+   * Pass a pre-built instance when you need to share the same connection across
+   * multiple callers (e.g. MemoryPanel + agent tools on the same workspace).
+   */
+  memoryRepository?: MemoryRepository;
 }
 
 /**
@@ -112,6 +121,22 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
   const callbacks: SessionToolCallbacks = {
     onPlanSubmitted,
     onAuthRequest: (request) => onAuthRequest(request),
+    getMemoryRepository: options.memoryRepository
+      ? async () => options.memoryRepository!
+      : (() => {
+          // Lazy singleton: open the workspace memory DB once and cache per path.
+          let repo: MemoryRepository | null = null;
+          return async () => {
+            if (!repo) {
+              const memoryDbDir = join(workspacePath, 'memory');
+              mkdirSync(memoryDbDir, { recursive: true });
+              const db = openMemoryDatabase(memoryDbDir);
+              bootstrapStorage(db);
+              repo = MemoryRepository.createMemoryRepository(db);
+            }
+            return repo!;
+          };
+        })(),
   };
 
   // Validators implementation

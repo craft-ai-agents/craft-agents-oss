@@ -10,7 +10,11 @@
  * - URL: Auto-downloaded to statuses/icons/{id}.{ext}
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+// Namespace import (not `{ existsSync, ... }`): a named import destructures
+// the property at module top-level. This module is transitively reachable
+// from the Electron renderer bundle, where Vite externalizes `fs` behind a
+// proxy that throws on property access.
+import * as fs from 'fs';
 import { join } from 'path';
 import type { WorkspaceStatusConfig, StatusConfig, StatusCategory } from './types.ts';
 import { readJsonFileSync } from '../utils/files.ts';
@@ -98,17 +102,17 @@ export function ensureDefaultIconFiles(workspaceRootPath: string): void {
   const iconsDir = join(workspaceRootPath, STATUS_ICONS_DIR);
 
   // Create icons directory if missing
-  if (!existsSync(iconsDir)) {
-    mkdirSync(iconsDir, { recursive: true });
+  if (!fs.existsSync(iconsDir)) {
+    fs.mkdirSync(iconsDir, { recursive: true });
   }
 
   // Write each default icon file if missing
   for (const [statusId, svgContent] of Object.entries(DEFAULT_ICON_SVGS)) {
     const iconPath = join(iconsDir, `${statusId}.svg`);
 
-    if (!existsSync(iconPath)) {
+    if (!fs.existsSync(iconPath)) {
       try {
-        writeFileSync(iconPath, svgContent, 'utf-8');
+        fs.writeFileSync(iconPath, svgContent, 'utf-8');
       } catch (error) {
         console.error(`[ensureDefaultIconFiles] Failed to write ${statusId}.svg:`, error);
       }
@@ -140,7 +144,7 @@ export function loadStatusConfig(workspaceRootPath: string): WorkspaceStatusConf
   const configPath = join(workspaceRootPath, STATUS_CONFIG_FILE);
 
   // Return defaults if config doesn't exist
-  if (!existsSync(configPath)) {
+  if (!fs.existsSync(configPath)) {
     return getDefaultStatusConfig();
   }
 
@@ -179,13 +183,13 @@ export function saveStatusConfig(
   const configPath = join(workspaceRootPath, STATUS_CONFIG_FILE);
 
   // Create status directory if missing
-  if (!existsSync(statusDir)) {
-    mkdirSync(statusDir, { recursive: true });
+  if (!fs.existsSync(statusDir)) {
+    fs.mkdirSync(statusDir, { recursive: true });
   }
 
   // Write config to disk
   try {
-    writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
   } catch (error) {
     console.error('[saveStatusConfig] Failed to save config:', error);
     throw error;
@@ -252,7 +256,7 @@ export function findStatusIcon(
 
   for (const ext of ICON_EXTENSIONS) {
     const iconPath = join(iconsDir, `${statusId}${ext}`);
-    if (existsSync(iconPath)) {
+    if (fs.existsSync(iconPath)) {
       return iconPath;
     }
   }
@@ -272,8 +276,8 @@ export async function downloadStatusIcon(
   const iconsDir = join(workspaceRootPath, STATUS_ICONS_DIR);
 
   // Ensure icons directory exists
-  if (!existsSync(iconsDir)) {
-    mkdirSync(iconsDir, { recursive: true });
+  if (!fs.existsSync(iconsDir)) {
+    fs.mkdirSync(iconsDir, { recursive: true });
   }
 
   // Download to a temp file first, then rename to {statusId}.{ext}
@@ -289,7 +293,7 @@ export async function downloadStatusIcon(
     // Remove any existing icon with different extension
     for (const existingExt of ICON_EXTENSIONS) {
       const existingPath = join(iconsDir, `${statusId}${existingExt}`);
-      if (existsSync(existingPath) && existingPath !== finalPath) {
+      if (fs.existsSync(existingPath) && existingPath !== finalPath) {
         unlinkSync(existingPath);
       }
     }

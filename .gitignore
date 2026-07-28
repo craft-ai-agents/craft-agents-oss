@@ -16,8 +16,8 @@ coverage
 
 # logs
 logs
-_.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+*.log
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # dotenv environment variable files
 .env
@@ -72,3 +72,12 @@ credentials.enc
 # act (local GitHub Actions runner)
 .secrets
 .actrc
+
+# Local agent/tooling scratch state (databases, logs, downloaded binaries).
+# Nothing here is reproducible or reviewable — it must not be committed.
+.freebuff/
+.tmp-tools/
+
+# Stray driver/tooling logs that land in the repo root on Windows
+NVIDIA Corporation/
+

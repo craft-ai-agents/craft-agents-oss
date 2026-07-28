@@ -36,6 +36,7 @@ import { isDeveloperFeedbackEnabled } from '@craft-agent/shared/feature-flags';
 // Import from session-tools-core
 import {
   type SessionToolContext,
+  type SessionToolCallbacks,
   type CallbackMessage,
   type AuthRequest,
   type SourceConfig,
@@ -173,7 +174,7 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
   };
 
   // Callback implementation using stderr
-  const callbacks = {
+  const callbacks: SessionToolCallbacks = {
     onPlanSubmitted: (planPath: string) => {
       sendCallback({
         __callback__: 'plan_submitted',
@@ -187,6 +188,21 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
         ...request,
       });
     },
+    getMemoryRepository: (() => {
+      let repo: import('@craft-agent/shared/memory/repository').MemoryRepository | null = null;
+      return async () => {
+        if (!repo) {
+          const { openMemoryDatabase, bootstrapStorage } = await import('@craft-agent/shared/memory/database');
+          const { MemoryRepository } = await import('@craft-agent/shared/memory/repository');
+          const memoryDbDir = join(workspaceRootPath, 'memory');
+          mkdirSync(memoryDbDir, { recursive: true });
+          const db = openMemoryDatabase(memoryDbDir);
+          bootstrapStorage(db);
+          repo = MemoryRepository.createMemoryRepository(db);
+        }
+        return repo!;
+      };
+    })(),
   };
 
   // Create credential manager that reads from cache files
@@ -269,7 +285,7 @@ function createSessionTools(includeDeveloperFeedback: boolean): Tool[] {
 }
 
 // ============================================================
-// Craft Agents Docs Upstream Proxy
+// ARCHstudio Docs Upstream Proxy
 // ============================================================
 
 const DOCS_MCP_URL = 'https://agents.craft.do/docs/mcp';
@@ -296,9 +312,9 @@ async function connectDocsUpstream(): Promise<void> {
     docsTools = (result.tools || []) as Tool[];
     docsClient = client;
 
-    console.error(`Craft Agents Docs proxy connected: ${docsTools.length} tools`);
+    console.error(`ARCHstudio Docs proxy connected: ${docsTools.length} tools`);
   } catch (err) {
-    console.error(`Craft Agents Docs proxy connection failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`ARCHstudio Docs proxy connection failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
     docsClient = null;
     docsTools = [];
   }
@@ -312,7 +328,7 @@ async function callDocsUpstream(
   args: Record<string, unknown>
 ): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
   if (!docsClient) {
-    return errorResponse(`Craft Agents Docs server is not connected. Tool '${name}' unavailable.`);
+    return errorResponse(`ARCHstudio Docs server is not connected. Tool '${name}' unavailable.`);
   }
 
   try {

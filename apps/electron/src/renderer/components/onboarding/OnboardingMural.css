@@ -13,6 +13,9 @@
   background: var(--background);
   display: flex;
   flex-direction: column;
+  /* Isolate from parent layout recalculations — the mural is a self-contained
+     fullscreen layer that should never trigger layout in ancestors. */
+  contain: layout style paint;
 }
 
 /* ── Brand glow ────────────────────────────────────────────────────────── */
@@ -69,7 +72,10 @@
   position: absolute;
   border-radius: 50%;
   background: var(--brand-purple);
+  /* Promote each particle to its own compositor layer so the infinite drift
+     animation never triggers paint or layout — runs entirely on GPU. */
   will-change: transform, opacity;
+  transform: translateZ(0);
 }
 
 /* ── Journey indicator bar ─────────────────────────────────────────────── */

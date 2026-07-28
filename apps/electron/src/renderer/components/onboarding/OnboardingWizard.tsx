@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { cn } from "@/lib/utils"
 import { OnboardingMural, type MuralScene } from "./OnboardingMural"
 import { WelcomeScene } from "./WelcomeScene"
@@ -5,7 +6,7 @@ import type { ApiSetupMethod } from "./APISetupStep"
 import { ProviderSelectStep, type ProviderChoice } from "./ProviderSelectStep"
 import { CredentialsStep, type CredentialStatus } from "./CredentialsStep"
 import { LocalModelStep, type LocalModelSubmitData } from "./LocalModelStep"
-import { CompletionStep } from "./CompletionStep"
+import { CompletionScene } from "./CompletionScene"
 import { GitBashWarning, type GitBashStatus } from "./GitBashWarning"
 import type { ApiKeySubmitData } from "../apisetup"
 import type { CustomEndpointApi } from '@config/llm-connections'
@@ -14,12 +15,24 @@ export type OnboardingStep = MuralScene
 
 export type LoginStatus = 'idle' | 'waiting' | 'success' | 'error'
 
+/** A single validated detail shown on the completion scene */
+export interface ProviderDetail {
+  /** Human-readable label, e.g. "Provider" */
+  label: string
+  /** The value that passed validation, e.g. "Ollama" */
+  value: string
+  /** Whether this detail was validated successfully */
+  passed: boolean
+}
+
 export interface OnboardingState {
   step: OnboardingStep
   loginStatus: LoginStatus
   credentialStatus: CredentialStatus
   completionStatus: 'saving' | 'complete'
   apiSetupMethod: ApiSetupMethod | null
+  isLocalModel?: boolean
+  connectionDetails?: ProviderDetail[]
   isExistingUser: boolean
   errorMessage?: string
   gitBashStatus?: GitBashStatus
@@ -111,6 +124,23 @@ export function OnboardingWizard({
   editInitialValues,
   className
 }: OnboardingWizardProps) {
+  // Derive a human-readable provider name from the API setup method.
+  // Used by CompletionScene to show "Connected to Claude" instead of a generic message.
+  const providerName = useMemo(() => {
+    // Local-model (Ollama) path uses anthropic_api_key internally — check the flag first
+    if (state.isLocalModel) return 'Ollama'
+
+    const method = state.apiSetupMethod
+    if (!method) return undefined
+    switch (method) {
+      case 'claude_oauth': return 'Claude'
+      case 'anthropic_api_key': return 'Anthropic API'
+      case 'pi_chatgpt_oauth': return 'ChatGPT'
+      case 'pi_copilot_oauth': return 'GitHub Copilot'
+      case 'pi_api_key': return 'API Key'
+    }
+  }, [state.apiSetupMethod, state.isLocalModel])
+
   const renderStep = () => {
     switch (state.step) {
       case 'welcome':
@@ -173,8 +203,10 @@ export function OnboardingWizard({
 
       case 'complete':
         return (
-          <CompletionStep
+          <CompletionScene
             status={state.completionStatus}
+            providerName={providerName}
+            connectionDetails={state.connectionDetails}
             onFinish={onFinish}
           />
         )

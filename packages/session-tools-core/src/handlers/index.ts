@@ -76,3 +76,17 @@ export { handleListBackgroundTasks } from './list-background-tasks.ts';
 export type { ListBackgroundTasksArgs } from './list-background-tasks.ts';
 export { handleCreateTask } from './create-task.ts';
 export type { CreateTaskArgs } from './create-task.ts';
+
+// Memory (FTS5-backed retrieval for the agent's ReAct loop)
+export { handleMemorySearch } from './memory-search.ts';
+export type { MemorySearchArgs } from './memory-search.ts';
+export { handleMemoryRecall } from './memory-recall.ts';
+export type { MemoryRecallArgs } from './memory-recall.ts';
+
+// Memory write-back (create/update/archive for agent-initiated memory mutations)
+export { handleMemoryCreate } from './memory-create.ts';
+export type { MemoryCreateArgs } from './memory-create.ts';
+export { handleMemoryUpdate } from './memory-update.ts';
+export type { MemoryUpdateArgs } from './memory-update.ts';
+export { handleMemoryArchive } from './memory-archive.ts';
+export type { MemoryArchiveArgs } from './memory-archive.ts';

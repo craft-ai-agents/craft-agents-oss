@@ -61,6 +61,17 @@ interface PendingInvoke {
   timeout: ReturnType<typeof setTimeout>
 }
 
+/**
+ * Per-client in-flight handlers. Keys are correlation ids; values carry the
+ * per-request AbortController so we can flip it on receiving a 'cancel'
+ * envelope or on client disconnect.
+ */
+type ClientPendingHandlers = Map<string, AbortController>
+
+function isAbortSignal(value: unknown): value is { aborted: boolean } {
+  return typeof value === 'object' && value !== null && typeof (value as { aborted?: unknown }).aborted === 'boolean'
+}
+
 // ---------------------------------------------------------------------------
 // Server options
 // ---------------------------------------------------------------------------
@@ -126,6 +137,12 @@ export class WsRpcServer implements RpcServer {
   private clients = new Map<string, ClientConnection>()
   private handlers = new Map<string, HandlerFn>()
   private pendingInvokes = new Map<string, PendingInvoke>()
+  /**
+   * Per-client in-flight handler map: clientId → requestId → AbortController.
+   * Used to honor 'cancel' envelopes and to abort all handlers when a client
+   * disconnects (so we don't leak async scans / network ops on dead clients).
+   */
+  private pendingHandlers = new Map<string, ClientPendingHandlers>()
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private _port = 0
   private _protocol: 'ws' | 'wss' = 'ws'
@@ -346,6 +363,11 @@ export class WsRpcServer implements RpcServer {
       ;(err as any).code = 'CLIENT_DISCONNECTED'
       pending.reject(err)
       this.pendingInvokes.delete(id)
+    }
+    // Abort all in-flight handlers so async ops stop on the source. The
+    // handlers' finally blocks will clear their entries on their own.
+    for (const [clientId] of this.pendingHandlers) {
+      this.abortAllHandlersForClient(clientId)
     }
     for (const client of this.clients.values()) {
       client.ws.terminate()
@@ -610,6 +632,12 @@ export class WsRpcServer implements RpcServer {
         await this.onRequest(client, envelope)
       } else if (envelope.type === 'response') {
         this.onClientResponse(envelope)
+      } else if (envelope.type === 'cancel') {
+        // Client→server abort: flip the AbortController for the targeted
+        // request, if it's still in flight for this client. Stale cancel
+        // envelopes (request already completed) are ignored — the handler
+        // will have already replied and been cleaned up.
+        this.handleCancel(client, envelope)
       } else if (envelope.type === 'sequence_ack') {
         const ackSeq = envelope.lastSeq
         if (typeof ackSeq === 'number' && ackSeq > client.lastAckedSeq) {
@@ -653,10 +681,16 @@ export class WsRpcServer implements RpcServer {
       return
     }
 
+    // Per-request AbortController: tracked by request id so we can flip it
+    // when a 'cancel' envelope arrives or when the client disconnects.
+    const controller = new AbortController()
+    this.registerHandler(client, id, controller)
+
     const ctx: RequestContext = {
       clientId: client.id,
       workspaceId: client.workspaceId,
       webContentsId: client.webContentsId,
+      signal: controller.signal,
     }
 
     try {
@@ -667,6 +701,13 @@ export class WsRpcServer implements RpcServer {
             WsRpcServer.HANDLER_TIMEOUT_MS),
         ),
       ])
+      // If the controller was flipped while the handler was awaiting, drop
+      // the result silently: the client's abort listener has already
+      // rejected its local promise, and a stale `response` racing that
+      // rejection would error on a now-defunct `pending` entry. The
+      // handler side-effect (idempotent: a directory scan) is acceptable
+      // to have completed without delivering.
+      if (controller.signal.aborted) return
       const response: MessageEnvelope = {
         id,
         type: 'response',
@@ -679,6 +720,61 @@ export class WsRpcServer implements RpcServer {
       const rawCode = (err as { code?: unknown } | null)?.code
       const code: ErrorCode = isErrorCode(rawCode) ? rawCode : 'HANDLER_ERROR'
       this.sendResponseError(client.ws, id, channel, code, message)
+    } finally {
+      this.unregisterHandler(client, id)
+    }
+  }
+
+  /**
+   * Handle a 'cancel' envelope from a client. Looks up the in-flight AbortController
+   * for the target request and flips it; the handler will reject (or return early)
+   * on its next signal-aborted check.
+   *
+   * Stale cancels (request not found / already completed) are silently ignored.
+   * The client's local promise has already been rejected by its `attachAbortHandler`,
+   * so the cancel envelope arriving on the wire is purely a server-side hint.
+   */
+  private handleCancel(client: ClientConnection, envelope: MessageEnvelope): void {
+    const targetRequestId = envelope.id
+    if (!targetRequestId) return
+    const clientHandlers = this.pendingHandlers.get(client.id)
+    const controller = clientHandlers?.get(targetRequestId)
+    if (!controller) return
+    controller.abort()
+  }
+
+  /**
+   * Register an in-flight handler's AbortController under (clientId, requestId).
+   * Callers MUST call `unregisterHandler` in a `finally` block to avoid leaks.
+   */
+  private registerHandler(client: ClientConnection, requestId: string, controller: AbortController): void {
+    let map = this.pendingHandlers.get(client.id)
+    if (!map) {
+      map = new Map()
+      this.pendingHandlers.set(client.id, map)
+    }
+    map.set(requestId, controller)
+  }
+
+  /** Remove the handler's controller from tracking. Idempotent. */
+  private unregisterHandler(client: ClientConnection, requestId: string): void {
+    const map = this.pendingHandlers.get(client.id)
+    if (!map) return
+    map.delete(requestId)
+    if (map.size === 0) this.pendingHandlers.delete(client.id)
+  }
+
+  /**
+   * Abort every in-flight handler for a given client. Called from the close
+   * handler so we don't leak async ops (scanners, network reads) on dead
+   * connections. Each handler's finally block calls unregisterHandler which
+   * will leave the per-client map empty.
+   */
+  private abortAllHandlersForClient(clientId: string): void {
+    const map = this.pendingHandlers.get(clientId)
+    if (!map) return
+    for (const controller of map.values()) {
+      try { controller.abort() } catch { /* best effort */ }
     }
   }
 
@@ -716,6 +812,11 @@ export class WsRpcServer implements RpcServer {
     ws.on('close', () => {
       transportLog.info('Client disconnected', { clientId: client.id })
       this.clients.delete(client.id)
+
+      // Abort all in-flight handlers for this client. Their finally blocks
+      // clean up the per-client pending map on their own; we just need to
+      // flip the controllers so scanner/recurse loops actually stop.
+      this.abortAllHandlersForClient(client.id)
 
       // Retain buffer for potential reconnect
       const timer = setTimeout(() => {

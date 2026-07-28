@@ -6,10 +6,46 @@
  * These tests pin the two properties that matter:
  *   1. the rail reflects the session it is given, and
  *   2. with no session it says so, rather than showing a plausible default.
+ *
+ * Test infrastructure
+ * --------------------
+ * Only `bun:test` is imported statically at the top. Everything else (the
+ * LayoutShell module + `react-dom/server`) is dynamically imported inside
+ * `beforeAll` AFTER the `mock.module` calls register. This is the same
+ * pattern `mention-menu.test.ts` uses to defeat `pdfjs-dist`'s Vite-style
+ * `?url` worker import under bun's test loader
+ * ("Missing 'default' export in module '...pdf.worker.min.mjs?url'").
  */
-import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'bun:test'
-import LayoutShell, { type ShellSessionContext } from '../LayoutShell'
+// Vite-only imports (?url, .css, import.meta.glob) are stubbed by the
+// `scripts/test-setup.ts` preload configured in bunfig.toml. We only need
+// to dynamic-import LayoutShell itself here.
+//
+// IMPORTANT: this file holds NO static reference to LayoutShell or
+// `react-dom/server`. bun's fast transpiler does not fully erase
+// `import type` or `typeof import(...)` in TSX files, which would
+// otherwise force a real module load before the mocks register.
+// Instead we declare a local interface + use `any` for the bindings
+// and resolve them inside `beforeAll`.
+import { describe, expect, it, beforeAll } from 'bun:test'
+
+interface ShellSessionContext {
+  sessionName: string
+  connectionLabel: string
+  permissionModeLabel: string
+  thinkingLabel: string
+  sourceNames: string[]
+  workingDirectory?: string
+  isProcessing?: boolean
+}
+
+let renderToStaticMarkup: any
+let LayoutShell: any
+
+beforeAll(async () => {
+  const renderer = await import('react-dom/server')
+  renderToStaticMarkup = renderer.renderToStaticMarkup
+  LayoutShell = (await import('../LayoutShell')).default
+})
 
 const SESSION: ShellSessionContext = {
   sessionName: 'Add MCP Server',

@@ -76,7 +76,7 @@ import {
 import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
 import { listTaskSlugs, parseTaskSpec, uniqueTaskSlug } from '@craft-agent/shared/tasks'
 import { createTaskFromSpec, resolveCreateTaskProjectId } from '../tasks'
-import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
+import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config/watcher'
 import { getValidClaudeOAuthToken } from '@craft-agent/shared/auth'
 import { resolveAuthEnvVars } from '@craft-agent/shared/config'
 import { toolMetadataStore, getLastApiError } from '@craft-agent/shared/interceptor'
@@ -1312,9 +1312,19 @@ export class SessionManager implements ISessionManager {
   /** Pinned desktop client per session for `client:browser:invoke` routing. */
   private browserHostByCanvas = new Map<string, string>()
   private eventSink: EventSink | null = null
+  /**
+   * Shared MemoryRepository instance for memory_search / memory_recall tools.
+   * Set once at startup so agent tools and MemoryPanel share the same
+   * SQLite connection and FTS5 index.
+   */
+  private memoryRepository: import('@craft-agent/shared/memory/repository').MemoryRepository | null = null
 
   setEventSink(sink: EventSink): void {
     this.eventSink = sink
+  }
+
+  setMemoryRepository(repo: import('@craft-agent/shared/memory/repository').MemoryRepository): void {
+    this.memoryRepository = repo
   }
 
   setBrowserPaneManager(bpm: IBrowserPaneManager): void {
@@ -3548,6 +3558,7 @@ export class SessionManager implements ISessionManager {
         coreConfig: {
         workspace: managed.workspace,
         miniModel,
+        ...(this.memoryRepository ? { memoryRepository: this.memoryRepository } : {}),
         thinkingLevel: managed.thinkingLevel,
         session: sessionConfig,
         onSdkSessionIdUpdate,

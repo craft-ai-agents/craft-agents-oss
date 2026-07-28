@@ -86,7 +86,7 @@ describe('includeCoAuthoredBy handling', () => {
       '/tmp/workspace',
       '/tmp/workspace',
       undefined,
-      'Craft Agents Backend'
+      'ARCHstudio Backend'
       // 7th arg omitted — must not regress to `true` default
     )
 

@@ -2,7 +2,7 @@
 
 ## Legal boundary
 
-The code is Apache-2.0 licensed, but the upstream `TRADEMARK.md` explicitly reserves “Craft” and “Craft Agents” names, logos and branding. The fork must preserve `LICENSE`, `NOTICE`, attribution and upstream history while removing upstream trademarks from product-facing identity.
+The code is Apache-2.0 licensed, but the upstream `TRADEMARK.md` explicitly reserves “Craft” and “ARCHstudio” names, logos and branding. The fork must preserve `LICENSE`, `NOTICE`, attribution and upstream history while removing upstream trademarks from product-facing identity.
 
 ## Product-facing removals required
 
@@ -29,7 +29,7 @@ The code is Apache-2.0 licensed, but the upstream `TRADEMARK.md` explicitly rese
 - desktop and mobile app menus
 - onboarding welcome/completion/reauth/provider selection
 - playground header
-- provider display names currently labelled “Craft Agents Backend”
+- provider display names currently labelled “ARCHstudio Backend”
 - command-composer placeholder text
 - help/documentation links
 - browser and messaging preview labels
@@ -50,7 +50,7 @@ The old symbols may remain only in upstream history or explicit third-party attr
 - `LICENSE`
 - `NOTICE`, updated with the new product notice while preserving upstream notice
 - `TRADEMARK.md`
-- third-party attribution such as “Based on the Craft Agents open-source project”
+- third-party attribution such as “Based on the ARCHstudio open-source project”
 - migration/release-history documents that clearly describe the upstream historical product
 - tests where `craft.do` is deliberately a sample external URL rather than product branding
 
@@ -71,7 +71,7 @@ Before producing an installable fork:
 
 1. disable upstream auto-update endpoints;
 2. assign a distinct app ID/product name;
-3. ensure the new binary cannot overwrite or impersonate an upstream Craft Agents installation;
+3. ensure the new binary cannot overwrite or impersonate an upstream ARCHstudio installation;
 4. pick a separate data directory or ship a deliberate import/migration flow;
 5. sign packages under the owner’s eventual distribution identity.
 

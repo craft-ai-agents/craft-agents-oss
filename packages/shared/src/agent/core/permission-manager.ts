@@ -26,7 +26,7 @@ import {
 import { createLogger } from '../../utils/debug.ts';
 import { permissionsConfigCache, type PermissionsContext } from '../permissions-config.ts';
 import type { PermissionMode } from '../mode-types.ts';
-import type { PermissionManagerConfig, ToolPermissionResult } from './types.ts';
+import type { PermissionManagerConfig, ToolPermissionResult, RetryHint } from './types.ts';
 
 const log = createLogger('permissions');
 
@@ -73,6 +73,12 @@ export class PermissionManager {
   private alwaysAllowedCommands: Set<string> = new Set();
   private alwaysAllowedDomains: Set<string> = new Set();
 
+  /** Default retry config when not specified in PermissionManagerConfig */
+  static readonly DEFAULT_RETRY_CONFIG = {
+    maxRetries: 3,
+    backoffMs: 1000,
+  };
+
   constructor(config: PermissionManagerConfig) {
     this.config = config;
     // Build permissions context for loading custom permissions
@@ -80,6 +86,49 @@ export class PermissionManager {
     this.permissionsContext = {
       workspaceRootPath: config.workingDirectory ?? '',
     };
+  }
+
+  /**
+   * Build a RetryHint based on the permission result and configured defaults.
+   *
+   * - Allowed tools (including permission-required): retryable=true, so the
+   *   runtime can retry on transient execution failures (network blips, server
+   *   503s, etc.) without asking the user each time.
+   * - Permission-required tools: maxRetries=1 — a single retry is safe (user
+   *   may have changed their mind), but more than that is user-hostile.
+   * - Blocked tools: retryable=false — retrying a permission block is pointless
+   *   and would confuse the user.
+   */
+  private buildRetryHint(result: {
+    allowed: boolean;
+    requiresPermission?: boolean;
+    reason?: string;
+  }): RetryHint {
+    if (!result.allowed) {
+      return {
+        retryable: false,
+        maxRetries: 0,
+        backoffMs: 0,
+        reason: result.reason ?? 'Tool blocked by permission policy',
+      }
+    }
+
+    if (result.requiresPermission) {
+      return {
+        retryable: true,
+        maxRetries: 1,
+        backoffMs: this.config.retryDefaults?.backoffMs ?? PermissionManager.DEFAULT_RETRY_CONFIG.backoffMs,
+        reason: 'Tool requires user permission — retry once if user approves',
+      }
+    }
+
+    const defaults = this.config.retryDefaults ?? PermissionManager.DEFAULT_RETRY_CONFIG
+    return {
+      retryable: true,
+      maxRetries: defaults.maxRetries,
+      backoffMs: defaults.backoffMs,
+      reason: 'Transient failure eligible for retry with exponential backoff',
+    }
   }
 
   // ============================================================
@@ -151,6 +200,7 @@ export class PermissionManager {
           allowed: true,
           requiresPermission: true,
           description: result.description,
+          retryHint: this.buildRetryHint({ allowed: true, requiresPermission: true }),
         };
       }
       log.debug('Tool allowed', {
@@ -158,7 +208,10 @@ export class PermissionManager {
         mode,
         toolName,
       });
-      return { allowed: true };
+      return {
+        allowed: true,
+        retryHint: this.buildRetryHint({ allowed: true }),
+      };
     }
 
     log.warn('Tool blocked', {
@@ -172,6 +225,7 @@ export class PermissionManager {
     return {
       allowed: false,
       reason: result.reason,
+      retryHint: this.buildRetryHint({ allowed: false, reason: result.reason }),
     };
   }
 

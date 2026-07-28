@@ -42,6 +42,11 @@ import { handleListBackgroundTasks } from './handlers/list-background-tasks.ts';
 import { handleCreateTask } from './handlers/create-task.ts';
 import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
 import { handleListMessagingChannels, handleUnbindMessagingChannel } from './handlers/messaging.ts';
+import { handleMemorySearch } from './handlers/memory-search.ts';
+import { handleMemoryRecall } from './handlers/memory-recall.ts';
+import { handleMemoryCreate } from './handlers/memory-create.ts';
+import { handleMemoryUpdate } from './handlers/memory-update.ts';
+import { handleMemoryArchive } from './handlers/memory-archive.ts';
 
 // ============================================================
 // Canonical Zod Schemas
@@ -237,6 +242,27 @@ export const ListMessagingChannelsSchema = z.object({
 export const UnbindMessagingChannelSchema = z.object({
   platform: z.enum(['telegram', 'whatsapp']).optional().describe('Platform to unbind. If omitted, unbinds all.'),
 });
+
+// ============================================================
+// Memory tool schemas (consumed by `memory_search` + `memory_recall`)
+// ============================================================
+// Direct import for use in SESSION_TOOL_DEFS (re-exports alone don't create
+// local bindings under TypeScript's isolatedModules / certain moduleResolution
+// strategies, causing TS2304: Cannot find name 'MemorySearchSchema' when the
+// SESSION_TOOL_DEFS array references the identifier).
+import {
+  MemorySearchSchema,
+  MemoryRecallSchema,
+  MemoryCreateSchema,
+  MemoryUpdateSchema,
+  MemoryArchiveSchema,
+} from './handlers/memory-schemas.ts';
+
+export { MemorySearchSchema } from './handlers/memory-schemas.ts';
+export { MemoryRecallSchema } from './handlers/memory-schemas.ts';
+export { MemoryCreateSchema } from './handlers/memory-schemas.ts';
+export { MemoryUpdateSchema } from './handlers/memory-schemas.ts';
+export { MemoryArchiveSchema } from './handlers/memory-schemas.ts';
 
 // ============================================================
 // Canonical Tool Descriptions (base — no DOC_REFS)
@@ -480,7 +506,7 @@ Omit sessionId to target the current session.
 
 IMPORTANT: never move a task into a closed status (such as "done" or "cancelled") yourself — closing a task is the user's decision, made on the board. You may prepare and hand off work by setting an open status like "needs-review"; the user reviews and closes it. Closed-status calls are rejected.`,
 
-  create_task: `Create a Craft Agents Task on the kanban board — writes tasks/<slug>/task.yaml and creates its orchestrator session. CREATION ONLY: the task lands in "todo" and is NOT run; starting it is the user's (or an automation's) decision.
+  create_task: `Create a ARCHstudio Task on the kanban board — writes tasks/<slug>/task.yaml and creates its orchestrator session. CREATION ONLY: the task lands in "todo" and is NOT run; starting it is the user's (or an automation's) decision.
 
 Provide title + description (the description becomes the task goal and the initial node prompt). Optional: acceptanceCriteria (verification rubric), sources / skills (workspace slugs), llmConnection + model, workingDirectory, projectId. When projectId is omitted, the task inherits the invoking session's project.
 
@@ -521,6 +547,52 @@ Shows which external chat apps are connected and can send/receive messages.`,
 
   unbind_messaging_channel: `Disconnect a messaging channel from the current session.
 Messages will no longer be forwarded between the chat app and this session.`,
+
+  // Memory operations: FTS5-backed search + structured recall for ReAct-style loops.
+  memory_search: `Search the user's long-term memory store (FTS5) for memories
+matching a free-text query. Pair returned hits with \`memory_recall\` to hydrate
+a chosen memory into the agent's context. Use \`class\` (profile/semantic/
+episodic/procedural) and \`scopeId\` to narrow before scoring; \`limit\` is clamped
+to [1, 50] (default 10). Queries with fewer than 2 characters are rejected
+because FTS5 BM25 ranking is meaningless below that threshold.`,
+
+  memory_recall: `Hydrate a memory by id and return its full \`AnyMemory\` JSON
+so the agent can inspect content, tags, provenance, and class-specific fields.
+Use after \`memory_search\` returns candidate ids. Memories past 4 KB are
+truncated with a marker comment so a single hydration cannot blow the agent's
+context budget; a structured summary (id/class/title/snippet/confidence/tags)
+is always returned alongside the truncated text.`,
+
+  memory_create: `Create a new memory in the user's long-term store.
+
+Supply title, content, and class (profile/semantic/episodic/procedural).
+Optional: scope and scopeId (defaults to agent scope), tags, confidence,
+sensitivity. Class-specific fields (key, category, canonicalQuestion,
+sessionId, outcome, triggers, successCount) are passed through when the
+class demands them.
+
+The memory is indexed in FTS5 immediately, so it shows up in subsequent
+\`memory_search\` calls. The returned id can be passed to \`memory_recall\`
+or \`memory_update\`.
+
+Use this to persist facts, decisions, or workflows the agent learns during
+a conversation so they survive beyond the current session.`,
+
+  memory_update: `Update an existing memory by id. Only the supplied fields
+are changed — everything else is preserved. Use after \`memory_search\` +
+\`memory_recall\` to correct or enrich a memory's content, title, tags,
+confidence, or sensitivity.
+
+Returns the updated memory metadata (id, class, title) and the list of
+fields that were changed. Errors if the id doesn't exist.`,
+
+  memory_archive: `Archive (soft-delete) a memory by id so it no longer
+appears in normal \`memory_search\` results. The data is not deleted — the
+MemoryPanel UI or a future restore tool can un-archive it. Use when a
+memory is stale, incorrect, or superseded by newer information.
+
+Returns the archived memory's metadata (id, class, title). Errors if the
+id doesn't exist.`,
 } as const;
 
 // ============================================================
@@ -598,6 +670,13 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   // Messaging gateway tools
   { name: 'list_messaging_channels', description: TOOL_DESCRIPTIONS.list_messaging_channels, inputSchema: ListMessagingChannelsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListMessagingChannels },
   { name: 'unbind_messaging_channel', description: TOOL_DESCRIPTIONS.unbind_messaging_channel, inputSchema: UnbindMessagingChannelSchema, executionMode: 'registry', safeMode: 'block', handler: handleUnbindMessagingChannel },
+  // Memory operations (FTS5-backed; pair memory_search -> memory_recall)
+  { name: 'memory_search', description: TOOL_DESCRIPTIONS.memory_search, inputSchema: MemorySearchSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleMemorySearch },
+  { name: 'memory_recall', description: TOOL_DESCRIPTIONS.memory_recall, inputSchema: MemoryRecallSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleMemoryRecall },
+  // Memory write-back (agent-initiated create/update/archive)
+  { name: 'memory_create', description: TOOL_DESCRIPTIONS.memory_create, inputSchema: MemoryCreateSchema, executionMode: 'registry', safeMode: 'block', handler: handleMemoryCreate },
+  { name: 'memory_update', description: TOOL_DESCRIPTIONS.memory_update, inputSchema: MemoryUpdateSchema, executionMode: 'registry', safeMode: 'block', handler: handleMemoryUpdate },
+  { name: 'memory_archive', description: TOOL_DESCRIPTIONS.memory_archive, inputSchema: MemoryArchiveSchema, executionMode: 'registry', safeMode: 'block', handler: handleMemoryArchive },
 ];
 
 export interface SessionToolFilterOptions {

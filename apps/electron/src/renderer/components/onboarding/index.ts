@@ -20,7 +20,7 @@ export { ReauthScreen } from './ReauthScreen'
 export { GitBashWarning, type GitBashStatus } from './GitBashWarning'
 
 // Main wizard container
-export { OnboardingWizard, type OnboardingState, type OnboardingStep, type LoginStatus } from './OnboardingWizard'
+export { OnboardingWizard, type OnboardingState, type ProviderDetail, type OnboardingStep, type LoginStatus } from './OnboardingWizard'
 
 // Re-export all types for convenient import
 export type {

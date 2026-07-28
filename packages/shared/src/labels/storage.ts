@@ -9,7 +9,11 @@
  * Labels are visual by color only (colored circles in the UI).
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+// Namespace import (not `{ existsSync, ... }`): a named import destructures
+// the property at module top-level. This module is transitively reachable
+// from the Electron renderer bundle, where Vite externalizes `fs` behind a
+// proxy that throws on property access.
+import * as fs from 'fs';
 import { join } from 'path';
 import type { WorkspaceLabelConfig, LabelConfig } from './types.ts';
 import { flattenLabels, findLabelById } from './tree.ts';
@@ -103,7 +107,7 @@ export function loadLabelConfig(workspaceRootPath: string): WorkspaceLabelConfig
 
   // If no config file exists, seed with defaults and persist to disk.
   // This ensures existing workspaces (created before default labels existed) get populated.
-  if (!existsSync(configPath)) {
+  if (!fs.existsSync(configPath)) {
     const defaults = getDefaultLabelConfig();
     debug('[loadLabelConfig] No config found, seeding with default labels');
     saveLabelConfig(workspaceRootPath, defaults);
@@ -139,12 +143,12 @@ export function saveLabelConfig(
   const labelDir = join(workspaceRootPath, LABEL_CONFIG_DIR);
   const configPath = join(workspaceRootPath, LABEL_CONFIG_FILE);
 
-  if (!existsSync(labelDir)) {
-    mkdirSync(labelDir, { recursive: true });
+  if (!fs.existsSync(labelDir)) {
+    fs.mkdirSync(labelDir, { recursive: true });
   }
 
   try {
-    writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
   } catch (error) {
     debug('[saveLabelConfig] Failed to save config:', error);
     throw error;

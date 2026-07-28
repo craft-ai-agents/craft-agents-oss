@@ -9,6 +9,16 @@ type OpenOptions = {
   inMemory?: boolean;
 };
 
+/**
+ * Tokenizer note: `unicode61` is the default FTS5 tokenizer and lowercases
+ * ASCII so we get case-insensitive exact-substring matches out of the box.
+ * We stopped short of `porter` because Porter stemming breaks intended
+ * matches on proper-noun / technical terms (e.g. "TypeScript" → "typ").
+ * Memory panels search multi-word natural-language content where exact
+ * terms (project names, env vars, file paths) matter as much as stems.
+ */
+const FTS_TOKENIZE = 'unicode61';
+
 export function openMemoryDatabase(dataDir?: string, options: OpenOptions = {}): Database {
   const dbPath = options.inMemory
     ? ':memory:'
@@ -33,6 +43,18 @@ export function openMemoryDatabase(dataDir?: string, options: OpenOptions = {}):
   return db;
 }
 
+/**
+ * Check whether a table of the given name exists in sqlite_master.
+ * Used to detect the legacy plain-table `memory_index_fts` from older
+ * installs so we can migrate it to a real FTS5 virtual table.
+ */
+function tableExists(db: Database, name: string): boolean {
+  const row = db
+    .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`)
+    .get(name) as { name: string } | undefined;
+  return !!row;
+}
+
 export function bootstrapStorage(db: Database) {
   db.run(`
     CREATE TABLE IF NOT EXISTS memories (
@@ -48,7 +70,7 @@ export function bootstrapStorage(db: Database) {
       source_message_id TEXT,
       source_tool_call TEXT,
       source_import_origin TEXT,
-      canconical_question text,
+      canonical_question TEXT,
       session_id TEXT,
       outcome TEXT,
       category text,
@@ -74,36 +96,54 @@ export function bootstrapStorage(db: Database) {
     )
   `);
 
+  // Migration: legacy plain-table `memory_index_fts` (rows never written to,
+  // never read from) is replaced by a real FTS5 virtual table. Drop any plain
+  // table sitting under the same name and recreate it as a virtual table.
+  // The migration is idempotent: a first-time install skips the DROP, a
+  // re-bootstrap after the migration skips the entire block.
+  if (tableExists(db, 'memory_index_fts')) {
+    const row = db
+      .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`)
+      .get('memory_index_fts') as { sql: string | null } | undefined;
+    const wasPlain = !row?.sql?.toUpperCase().includes('VIRTUAL');
+    if (wasPlain) {
+      db.run('DROP TABLE memory_index_fts');
+    }
+  }
+
   db.run(`
-    CREATE TABLE IF NOT EXISTS memory_index (
-      memory_id TEXT PRIMARY KEY,
-      fts_rowid INTEGER,
-      class TEXT NOT NULL,
-      scope TEXT NOT NULL,
-      scope_id TEXT,
-      sensitivity TEXT NOT NULL DEFAULT 'internal',
-      confidence REAL NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      archived INTEGER DEFAULT 0,
-      FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+    CREATE VIRTUAL TABLE IF NOT EXISTS memory_index_fts USING fts5(
+      memory_id UNINDEXED,
+      title,
+      content,
+      canonical_question,
+      triggers,
+      key,
+      category,
+      tags,
+      tokenize='${FTS_TOKENIZE}'
     )
   `);
 
-  db.run(`
-    CREATE TABLE IF NOT EXISTS memory_index_fts (
-      rowid INTEGER PRIMARY KEY,
-      memory_id TEXT NOT NULL,
-      title TEXT,
-      content TEXT,
-      canonical_question TEXT,
-      triggers TEXT,
-      key TEXT,
-      category TEXT,
-      tags TEXT,
-      FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
-    )
-  `);
+  // Backfill: if any memories exist but the FTS index is empty, populate
+  // it from the memories table. FTS5 assigns unique rowids per inserted row
+  // automatically (no ON CONFLICT support in FTS5 — standard SQL syntax like
+  // ON CONFLICT DO NOTHING throws a syntax error, so we use a plain INSERT).
+  // memory_id collisions produce duplicate FTS rows that the search JOIN
+  // back to memories.id resolves correctly.
+  try {
+    const ftsCount = (db.prepare('SELECT COUNT(*) AS n FROM memory_index_fts').get() as { n: number })?.n ?? 0;
+    const memCount = (db.prepare('SELECT COUNT(*) AS n FROM memories').get() as { n: number })?.n ?? 0;
+    if (ftsCount === 0 && memCount > 0) {
+      db.run(`
+        INSERT INTO memory_index_fts (memory_id, title, content, canonical_question, triggers, key, category, tags)
+        SELECT id, title, content, canonical_question, triggers, key, category, tags FROM memories
+      `);
+    }
+  } catch {
+    // swallow — first-time installs may not yet have the FTS table; the
+    // repository populates rows as memories are created.
+  }
 
   db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_id ON memories(id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_memories_class ON memories(class)');
@@ -111,10 +151,6 @@ export function bootstrapStorage(db: Database) {
   db.run('CREATE INDEX IF NOT EXISTS idx_memories_updated ON memories(updated_at)');
   db.run('CREATE INDEX IF NOT EXISTS idx_memories_archived ON memories(archived)');
   db.run('CREATE INDEX IF NOT EXISTS idx_memories_superseded ON memories(superseded_by_id)');
-
-  db.run('CREATE INDEX IF NOT EXISTS idx_memory_index_class ON memory_index(class)');
-  db.run('CREATE INDEX IF NOT EXISTS idx_memory_index_scope ON memory_index(scope, scope_id)');
-  db.run('CREATE INDEX IF NOT EXISTS idx_memory_index_archived ON memory_index(archived)');
 
   db.run(`
     CREATE TABLE IF NOT EXISTS memory_audit (
@@ -163,4 +199,4 @@ export function createAuditEntry(db: Database, entry: AuditEntry) {
   return result;
 }
 
-export { type AnyMemory, type MemoryQuery };
+export { type AnyMemory, type MemoryQuery } from './types';

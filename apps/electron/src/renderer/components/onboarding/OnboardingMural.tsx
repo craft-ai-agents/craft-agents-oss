@@ -1,5 +1,5 @@
-import { useMemo, useEffect, useState } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
+import { useMemo, useEffect, useState, useRef, useCallback } from 'react'
+import { motion, AnimatePresence, useMotionValue, useSpring } from 'motion/react'
 import { AnimatedARCHstudioSymbol } from '@/components/icons/AnimatedARCHstudioSymbol'
 import './OnboardingMural.css'
 
@@ -35,6 +35,8 @@ interface Particle {
   duration: number
   delay: number
   opacity: number
+  /** Horizontal drift direction: -1 (left) or +1 (right) */
+  driftDir: number
 }
 
 function useMuralParticles(count: number): Particle[] {
@@ -49,10 +51,53 @@ function useMuralParticles(count: number): Particle[] {
         duration: 14 + Math.random() * 18,
         delay: Math.random() * 16,
         opacity: 0.06 + Math.random() * 0.12,
+        // Compute once in factory, not in JSX on every render
+        driftDir: Math.random() > 0.5 ? 1 : -1,
       })
     }
     return p
   }, [count])
+}
+
+// ─── Mouse parallax ─────────────────────────────────────────────────────
+
+const PARALLAX_RANGE = 10 // max px shift at full deflection
+
+/**
+ * Tracks mouse position and exposes smooth spring-animated motion values
+ * for x/y offset. Updates are decoupled from React render — the spring
+ * interpolates smoothly on the compositor thread.
+ */
+function useParallaxSpring() {
+  const rawX = useMotionValue(0)
+  const rawY = useMotionValue(0)
+  // Soft spring — gentle follow, no bounce
+  const springX = useSpring(rawX, { stiffness: 120, damping: 22 })
+  const springY = useSpring(rawY, { stiffness: 120, damping: 22 })
+  const rafRef = useRef<number>(0)
+
+  const handleMouse = useCallback((e: MouseEvent) => {
+    if (!rafRef.current) {
+      rafRef.current = requestAnimationFrame(() => {
+        const w = window.innerWidth
+        const h = window.innerHeight
+        // Normalize to [-1, 1] — centered origin, scaled by range
+        rawX.set(((e.clientX / w) - 0.5) * 2 * PARALLAX_RANGE)
+        rawY.set(((e.clientY / h) - 0.5) * 2 * PARALLAX_RANGE)
+        rafRef.current = 0
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener('mousemove', handleMouse, { passive: true })
+    return () => {
+      window.removeEventListener('mousemove', handleMouse)
+      cancelAnimationFrame(rafRef.current)
+    }
+  }, [handleMouse])
+
+  return { x: springX, y: springY }
 }
 
 const sceneOrder: MuralScene[] = [
@@ -101,7 +146,11 @@ export function OnboardingMural({
   className,
 }: OnboardingMuralProps) {
   const isWelcomeScene = scene === 'welcome'
-  const particles = useMuralParticles(16)
+  // Use fewer particles on constrained hardware; 12 is indistinguishable from 16
+  // at the mural's scale and reduces DOM nodes + compositor layer count by 25%.
+  const particleCount = 12
+  const particles = useMuralParticles(particleCount)
+  const parallax = useParallaxSpring()
   const [showStage, setShowStage] = useState(false)
 
   // Stagger the stage reveal so the gradient breathes first
@@ -120,29 +169,37 @@ export function OnboardingMural({
 
       {/* ── Ambient particles ─────────────────────────────────────── */}
       <div className="onboarding-mural__particles">
-        {particles.map(p => (
-          <motion.div
-            key={p.id}
-            className="onboarding-mural__particle"
-            style={{
-              left: `${p.x}%`,
-              top: `${p.y}%`,
-              width: p.size,
-              height: p.size,
-              opacity: p.opacity,
-            }}
-            animate={{
-              y: [0, -30, 0],
-              x: [0, Math.random() > 0.5 ? 4 : -4, 0],
-            }}
-            transition={{
-              duration: p.duration,
-              repeat: Infinity,
-              delay: p.delay,
-              ease: 'easeInOut',
-            }}
-          />
-        ))}
+        {/* Parallax wrapper — shifts the entire particle group via
+            spring-animated motion values. The drift animation below
+            stays independent and never restarts on mouse move. */}
+        <motion.div
+          style={{ x: parallax.x, y: parallax.y }}
+          className="will-change-transform"
+        >
+          {particles.map(p => (
+            <motion.div
+              key={p.id}
+              className="onboarding-mural__particle"
+              style={{
+                left: `${p.x}%`,
+                top: `${p.y}%`,
+                width: p.size,
+                height: p.size,
+                opacity: p.opacity,
+              }}
+              animate={{
+                y: [0, -30, 0],
+                x: [0, p.driftDir * 4, 0],
+              }}
+              transition={{
+                duration: p.duration,
+                repeat: Infinity,
+                delay: p.delay,
+                ease: 'easeInOut',
+              }}
+            />
+          ))}
+        </motion.div>
       </div>
 
       {/* ── Journey indicator bar ─────────────────────────────────── */}

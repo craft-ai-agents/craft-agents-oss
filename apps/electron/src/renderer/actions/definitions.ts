@@ -176,6 +176,17 @@ export const actions = {
   },
 
   // ═══════════════════════════════════════════
+  // Providers
+  // ═══════════════════════════════════════════
+  'providers.refresh': {
+    id: 'providers.refresh',
+    label: 'Refresh Providers',
+    description: 'Force-refresh all LLM provider connections and health status',
+    defaultHotkey: 'mod+shift+r',
+    category: 'General',
+  },
+
+  // ═══════════════════════════════════════════
   // Chat
   // ═══════════════════════════════════════════
   'chat.stopProcessing': {

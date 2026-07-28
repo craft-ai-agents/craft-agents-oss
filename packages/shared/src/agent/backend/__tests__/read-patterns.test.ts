@@ -7,9 +7,26 @@
  * - PowerShell gating: looksLikePowerShell triggers PS path
  * - Non-read commands return null
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, beforeAll } from 'bun:test';
+import { join } from 'node:path';
 import { parseReadCommand } from '../read-patterns.ts';
-import { looksLikePowerShell, isPowerShellAvailable } from '../../powershell-validator.ts';
+import {
+  looksLikePowerShell,
+  isPowerShellAvailable,
+  setPowerShellValidatorRoot,
+} from '../../powershell-validator.ts';
+
+/**
+ * The PowerShell AST validator shells out to `powershell-parser.ps1`, whose
+ * location is injected at startup (the Electron main process calls
+ * `setPowerShellValidatorRoot(join(__dirname, 'resources'))` — see
+ * `apps/electron/src/main/index.ts`). In the monorepo the script lives next to
+ * the validator itself, at `packages/shared/src/agent/powershell-parser.ps1`.
+ *
+ * Without this the validator throws instead of parsing, so the PS tests below
+ * would never exercise the real AST parser.
+ */
+const POWERSHELL_VALIDATOR_ROOT = join(import.meta.dir, '..', '..');
 
 // ============================================================
 // Bash Read Commands
@@ -99,6 +116,10 @@ describe('parseReadCommand - bash', () => {
 // ============================================================
 
 describe('parseReadCommand - PowerShell gating', () => {
+  beforeAll(() => {
+    setPowerShellValidatorRoot(POWERSHELL_VALIDATOR_ROOT);
+  });
+
   it('looksLikePowerShell detects Get-Content', () => {
     expect(looksLikePowerShell('Get-Content guide.md')).toBe(true);
   });

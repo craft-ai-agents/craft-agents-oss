@@ -1,13 +1,48 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src",
     "module": "ESNext",
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "moduleDetection": "force",
+    "target": "ESNext",
+    "lib": [
+      "ESNext"
+    ],
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": {
+      "@craft-agent/shared": [
+        "../shared/src/index.ts"
+      ],
+      "@craft-agent/shared/*": [
+        "../shared/src/*"
+      ],
+      "@craft-agent/server-core": [
+        "../server-core/src/index.ts"
+      ],
+      "@craft-agent/server-core/*": [
+        "../server-core/src/*"
+      ],
+      "@craft-agent/core": [
+        "../core/src/index.ts"
+      ],
+      "@craft-agent/core/*": [
+        "../core/src/*"
+      ]
+    }
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src/**/*.ts",
+    "../shared/src/agent/bash-parser.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

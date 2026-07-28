@@ -137,10 +137,10 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       // Skip when custom endpoint protocol is driving routing.
       if (setup.piAuthProvider && !isCustomEndpointCompat) {
         updates.piAuthProvider = setup.piAuthProvider
-        // Update connection name to show the actual provider (e.g. "Craft Agents Backend (Google AI Studio)")
+        // Update connection name to show the actual provider (e.g. "ARCHstudio Backend (Google AI Studio)")
         const providerName = piAuthProviderDisplayName(setup.piAuthProvider)
         if (providerName) {
-          updates.name = `Craft Agents Backend (${providerName})`
+          updates.name = `ARCHstudio Backend (${providerName})`
         }
         // Only set default models when using standard Pi provider AND user didn't pick explicit models
         if (!hasConfiguredBaseUrl && !setup.models?.length) {
@@ -154,6 +154,10 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       // providerType stays 'pi' (Bedrock routes through Pi SDK).
       if (setup.bedrockAuthMethod) {
         updates.authType = setup.bedrockAuthMethod
+      }
+
+      if (setup.isLocalModel !== undefined) {
+        updates.isLocalModel = setup.isLocalModel
       }
 
       // Resolved Anthropic OAuth identity (issue #838). Threaded through SETUP so

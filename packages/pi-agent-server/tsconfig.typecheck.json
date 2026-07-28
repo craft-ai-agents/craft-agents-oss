@@ -11,7 +11,18 @@
     "lib": ["ES2022", "DOM"],
     "types": ["bun", "node"],
     "skipLibCheck": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@craft-agent/core": ["../core/src/index.ts"],
+      "@craft-agent/core/*": ["../core/src/*"],
+      "@craft-agent/shared": ["../shared/src/index.ts"],
+      "@craft-agent/shared/*": ["../shared/src/*"],
+      "@craft-agent/server-core": ["../server-core/src/index.ts"],
+      "@craft-agent/server-core/*": ["../server-core/src/*"],
+      "@craft-agent/session-tools-core": ["../session-tools-core/src/index.ts"],
+      "@craft-agent/session-tools-core/*": ["../session-tools-core/src/*"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]

@@ -22,6 +22,22 @@ const clientSessionWatches = new Map<string, ClientSessionWatchState>()
 
 const SESSION_GET_LOG_ID_LIMIT = 25
 
+/**
+ * Build an Error that matches the standard `DOMException('AbortError')`
+ * shape without depending on the DOMException global (which is host-defined
+ * and not available in plain Node before v17). The handler checks
+ * `error.name === 'AbortError'` so this matches the same contract without
+ * coupling to the DOM.
+ *
+ * Exported so sibling handlers (./media.ts uses it via the shared recursive
+ * scanner) can produce the same shape on cancel paths.
+ */
+export function makeAbortError(): Error {
+  const err = new Error('Aborted')
+  err.name = 'AbortError'
+  return err
+}
+
 function summarizeIds(ids: Iterable<string>, limit = SESSION_GET_LOG_ID_LIMIT) {
   const all = Array.from(ids)
   return {
@@ -60,12 +76,30 @@ export function cleanupSessionFileWatchForClient(clientId: string): void {
 // Recursive directory scanner for session files
 // Filters out internal files (session.jsonl) and hidden files (. prefix)
 // Returns only non-empty directories
-async function scanSessionDirectory(dirPath: string): Promise<import('@craft-agent/shared/protocol').SessionFile[]> {
+//
+// `signal` (optional): AbortSignal from the originating RPC. Checked between
+// directory entries so a cancelled request can bail out of deep recursions
+// before they finish walking the whole tree. Throws an Error with name
+// 'AbortError' when signalled — the RPC layer will translate that into a
+// HANDLER_ERROR reply (the renderer's pending promise was already rejected
+// locally by its AbortSignal listener).
+//
+// `kindFilter` (optional): when provided, only files whose extension matches
+// the requested media kind are emitted. Used by `media:list` (see ./media.ts)
+// to short-circuit before the per-session tree walker marshals into the
+// renderer's `walk()` + `classify()` flow.
+export async function scanSessionDirectory(
+  dirPath: string,
+  signal?: AbortSignal,
+  kindFilter?: import('@craft-agent/shared/protocol').MediaKind,
+): Promise<import('@craft-agent/shared/protocol').SessionFile[]> {
   const { readdir, stat } = await import('fs/promises')
+  if (signal?.aborted) throw makeAbortError()
   const entries = await readdir(dirPath, { withFileTypes: true })
   const files: import('@craft-agent/shared/protocol').SessionFile[] = []
 
   for (const entry of entries) {
+    if (signal?.aborted) throw makeAbortError()
     // Skip internal and hidden files
     if (entry.name === 'session.jsonl' || entry.name.startsWith('.')) continue
 
@@ -73,8 +107,10 @@ async function scanSessionDirectory(dirPath: string): Promise<import('@craft-age
 
     if (entry.isDirectory()) {
       // Recursively scan subdirectory
-      const children = await scanSessionDirectory(fullPath)
-      // Only include non-empty directories
+      const children = await scanSessionDirectory(fullPath, signal, kindFilter)
+      // Only include non-empty directories (empty after the kind filter is
+      // also empty for our purposes — prune so the renderer's tree view
+      // doesn't show ghost parent directories)
       if (children.length > 0) {
         files.push({
           name: entry.name,
@@ -84,12 +120,15 @@ async function scanSessionDirectory(dirPath: string): Promise<import('@craft-age
         })
       }
     } else {
+      // Cheap pre-classify when a filter is requested; skip without stat.
+      if (kindFilter && !matchesMediaKind(entry.name, kindFilter)) continue
       const stats = await stat(fullPath)
       files.push({
         name: entry.name,
         path: fullPath,
         type: 'file',
         size: stats.size,
+        mtime: stats.mtimeMs,
       })
     }
   }
@@ -99,6 +138,42 @@ async function scanSessionDirectory(dirPath: string): Promise<import('@craft-age
     if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
     return a.name.localeCompare(b.name)
   })
+}
+
+/**
+ * Cheap extension check used by `scanSessionDirectory` to short-circuit when
+ * the renderer has asked for a single kind. Centralizing the EXT map server-
+ * side also keeps the renderer's `classify()` and the server's classification
+ * in sync (single source of truth).
+ */
+export const MEDIA_KIND_EXTENSIONS: Record<import('@craft-agent/shared/protocol').MediaKind, readonly string[]> = {
+  image: ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.avif'],
+  video: ['.mp4', '.mov', '.webm', '.mkv', '.avi'],
+  audio: ['.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac'],
+  doc: ['.pdf', '.docx', '.pptx', '.xlsx', '.csv', '.md'],
+}
+
+export function matchesMediaKind(
+  fileName: string,
+  kind: import('@craft-agent/shared/protocol').MediaKind,
+): boolean {
+  const lower = fileName.toLowerCase()
+  return MEDIA_KIND_EXTENSIONS[kind].some((ext) => lower.endsWith(ext))
+}
+
+/**
+ * Classify a basename into a media kind, or null when the file isn't a known
+ * media extension. Mirror of the renderer's old `classify()` — kept here so
+ * the `media:list` handler can tag every emitted `MediaItem` with its kind
+ * in a single pass, without shipping the EXT map to the renderer.
+ */
+export function classifyMedia(
+  fileName: string,
+): import('@craft-agent/shared/protocol').MediaKind | null {
+  for (const kind of Object.keys(MEDIA_KIND_EXTENSIONS) as import('@craft-agent/shared/protocol').MediaKind[]) {
+    if (matchesMediaKind(fileName, kind)) return kind
+  }
+  return null
 }
 
 export const HANDLED_CHANNELS = [
@@ -446,13 +521,16 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   // ============================================================
 
   // Get files in session directory (recursive tree structure)
-  server.handle(RPC_CHANNELS.sessions.GET_FILES, async (_ctx, sessionId: string) => {
+  server.handle(RPC_CHANNELS.sessions.GET_FILES, async (ctx, sessionId: string) => {
     const sessionPath = sessionManager.getSessionPath(sessionId)
     if (!sessionPath) return []
 
     try {
-      return await scanSessionDirectory(sessionPath)
+      return await scanSessionDirectory(sessionPath, ctx.signal)
     } catch (error) {
+      // Re-throw aborts so the RPC layer can surface them as HANDLER_ERROR;
+      // swallow everything else as an empty tree (preserves prior behavior).
+      if ((error as { name?: string } | null)?.name === 'AbortError') throw error
       log.error('Failed to get session files:', error)
       return []
     }

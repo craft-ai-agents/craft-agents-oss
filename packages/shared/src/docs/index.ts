@@ -9,12 +9,26 @@
  */
 
 import { join } from 'path';
-import { homedir } from 'os';
-import { existsSync, mkdirSync, writeFileSync, readdirSync, readFileSync } from 'fs';
+// Namespace imports (not `{ homedir }` / `{ existsSync, ... }`): a named
+// import destructures the property at module top-level, before any
+// try/catch can run. This module is transitively reachable from the
+// Electron renderer bundle, where Vite externalizes `os`/`fs` behind a proxy
+// that throws on property access. The renderer never calls the doc-writing
+// functions below, but merely importing this file must not crash the app.
+import * as os from 'os';
+import * as fs from 'fs';
 import { getBundledAssetsDir } from '../utils/paths.ts';
 import { debug } from '../utils/debug.ts';
 
-const CONFIG_DIR = join(homedir(), '.craft-agent');
+function resolveConfigDir(): string {
+  try {
+    return join(os.homedir(), '.craft-agent');
+  } catch {
+    return '';
+  }
+}
+
+const CONFIG_DIR = resolveConfigDir();
 const DOCS_DIR = join(CONFIG_DIR, 'docs');
 
 // Track if docs have been initialized this session (prevents re-init on hot reload)
@@ -42,7 +56,7 @@ function loadBundledDocs(): Record<string, string> {
   // No hardcoded list — any file dropped into resources/docs/ is synced automatically.
   let files: string[];
   try {
-    files = existsSync(assetsDir) ? readdirSync(assetsDir) : [];
+    files = fs.existsSync(assetsDir) ? fs.readdirSync(assetsDir) : [];
   } catch {
     console.warn(`[docs] Could not read assets dir: ${assetsDir}`);
     return docs;
@@ -51,7 +65,7 @@ function loadBundledDocs(): Record<string, string> {
   for (const filename of files) {
     const filePath = join(assetsDir, filename);
     try {
-      docs[filename] = readFileSync(filePath, 'utf-8');
+      docs[filename] = fs.readFileSync(filePath, 'utf-8');
     } catch (error) {
       console.error(`[docs] Failed to load ${filename}:`, error);
     }
@@ -128,15 +142,15 @@ export const DOC_REFS = {
  * Check if docs directory exists
  */
 export function docsExist(): boolean {
-  return existsSync(DOCS_DIR);
+  return fs.existsSync(DOCS_DIR);
 }
 
 /**
  * List available doc files
  */
 export function listDocs(): string[] {
-  if (!existsSync(DOCS_DIR)) return [];
-  return readdirSync(DOCS_DIR).filter(f => f.endsWith('.md'));
+  if (!fs.existsSync(DOCS_DIR)) return [];
+  return fs.readdirSync(DOCS_DIR).filter(f => f.endsWith('.md'));
 }
 
 /**
@@ -150,8 +164,8 @@ export function initializeDocs(): void {
   }
   docsInitialized = true;
 
-  if (!existsSync(DOCS_DIR)) {
-    mkdirSync(DOCS_DIR, { recursive: true });
+  if (!fs.existsSync(DOCS_DIR)) {
+    fs.mkdirSync(DOCS_DIR, { recursive: true });
   }
 
   // Load bundled docs lazily (after setBundledAssetsRoot has been called)
@@ -162,7 +176,7 @@ export function initializeDocs(): void {
   // docs are always up-to-date with the running version.
   for (const [filename, content] of Object.entries(bundledDocs)) {
     const docPath = join(DOCS_DIR, filename);
-    writeFileSync(docPath, content, 'utf-8');
+    fs.writeFileSync(docPath, content, 'utf-8');
   }
 
   debug(`[docs] Synced ${Object.keys(bundledDocs).length} docs`);
