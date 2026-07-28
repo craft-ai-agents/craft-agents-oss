@@ -42,6 +42,9 @@ function ctx(clientId: string): RequestContext {
     clientId,
     workspaceId: 'ws-1',
     webContentsId: 1,
+    // Never-aborted signal: tests don't exercise cancellation, but every
+    // RequestContext must carry an AbortSignal now that handlers can subscribe.
+    signal: new AbortController().signal,
   }
 }
 
