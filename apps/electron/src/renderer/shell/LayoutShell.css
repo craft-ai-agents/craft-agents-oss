@@ -662,6 +662,121 @@
   text-align: center;
 }
 
+.arch-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.arch-file-list__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  padding: 0 5px;
+  min-width: 16px;
+  height: 14px;
+  border-radius: 7px;
+  background: color-mix(in oklch, var(--brand-purple) 22%, transparent);
+  color: var(--foreground);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.arch-file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 120ms var(--ds-ease-standard, ease),
+    border-color 120ms var(--ds-ease-standard, ease);
+}
+
+.arch-file-item:hover {
+  background: var(--shell-fill-strong);
+  border-color: var(--shell-border-soft);
+}
+
+.arch-file-item:active {
+  background: var(--shell-surface-hover);
+}
+
+.arch-file-item__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--shell-fill);
+}
+
+.arch-file-item__info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 1px;
+}
+
+.arch-file-item__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--foreground);
+}
+
+.arch-file-item__meta {
+  color: var(--shell-text-dim);
+  font-size: 9px;
+}
+
+.arch-file-item__thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--shell-fill);
+  border: 1px solid var(--shell-border-soft);
+}
+
+.arch-file-item__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.arch-file-item__open {
+  flex-shrink: 0;
+  color: var(--shell-text-dim);
+  opacity: 0;
+  transition: opacity 120ms var(--ds-ease-standard, ease);
+}
+
+.arch-file-item:hover .arch-file-item__open {
+  opacity: 1;
+}
+
 .arch-context-rail__meter > div {
   display: flex;
   justify-content: space-between;
@@ -722,4 +837,492 @@
   flex: 1 1 54%;
   border: 1px solid var(--color-border);
   border-radius: 12px;
+}
+
+/* ── Files rail summary bar ───────────────────────────────────── */
+
+.wd-files-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--shell-border-soft);
+  color: var(--shell-text-dim);
+  font-size: 9px;
+  flex-wrap: wrap;
+}
+
+.wd-files-summary__stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* ── Working-directory file browser ────────────────────────────── */
+
+.wd-files-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px;
+  color: var(--shell-text-muted);
+  font-size: 11px;
+}
+
+.wd-files-empty {
+  padding: 12px 8px;
+  color: var(--shell-text-dim);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.wd-files-tree {
+  /* Extra-left-padding reserved so deep indentation still fits */
+  min-width: 0;
+}
+
+/* Expand/collapse chevron for directory items. The arrow rotates 90° when
+   the directory is open, giving a clear expand/close affordance. */
+.wd-files-tree__arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-left: -4px; /* offset so the arrow sits left of the folder icon */
+  color: var(--shell-text-dim);
+  transition: transform 140ms var(--ds-ease-standard, ease);
+}
+
+.wd-files-tree__arrow--open {
+  transform: rotate(90deg);
+  color: var(--shell-text-muted);
+}
+
+.wd-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wd-files-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 100ms var(--ds-ease-standard, ease),
+    border-color 100ms var(--ds-ease-standard, ease);
+}
+
+.wd-files-item:hover {
+  background: var(--shell-fill-strong);
+  border-color: var(--shell-border-soft);
+}
+
+.wd-files-item:active {
+  background: var(--shell-surface-hover);
+}
+
+.wd-files-item__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--shell-fill);
+}
+
+.wd-files-item__icon[data-type="directory"] {
+  color: var(--accent);
+}
+
+.wd-files-item__icon[data-type="file"] {
+  color: var(--shell-text-dim);
+}
+
+.wd-files-item__info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 1px;
+}
+
+.wd-files-item__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.wd-files-item--dir .wd-files-item__name {
+  font-weight: 600;
+}
+
+.wd-files-item__meta {
+  color: var(--shell-text-dim);
+  font-size: 9px;
+}
+
+.wd-files-item__change {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  margin-right: 4px;
+}
+
+.wd-files-item__change--added {
+  color: var(--success);
+  background: color-mix(in oklch, var(--success) 14%, transparent);
+}
+
+.wd-files-item__change--modified {
+  color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 14%, transparent);
+}
+
+.wd-files-item__change--deleted {
+  color: var(--destructive);
+  background: color-mix(in oklch, var(--destructive) 14%, transparent);
+}
+
+.wd-files-item__thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--shell-fill);
+  border: 1px solid var(--shell-border-soft);
+}
+
+.wd-files-item__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ── Changes rail (git status) ──────────────────────────────────── */
+
+.arch-changes-spinner {
+  animation: layout-status-pulse 1s ease-in-out infinite;
+}
+
+.arch-changes-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px;
+  color: var(--shell-text-muted);
+  font-size: 11px;
+}
+
+.arch-changes-branch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--shell-fill);
+  font-size: 10px;
+  color: var(--shell-text-muted);
+}
+
+.arch-changes-branch__label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--foreground);
+  font-weight: 550;
+}
+
+.arch-changes-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 4px 6px;
+  font-size: 9px;
+  color: var(--shell-text-dim);
+}
+
+.arch-changes-summary__stat--added { color: var(--success); }
+.arch-changes-summary__stat--modified { color: var(--accent); }
+.arch-changes-summary__stat--staged { color: var(--info); }
+.arch-changes-summary__stat--removed { color: var(--destructive); }
+
+/* ── Bucket-grouped sections (staged / unstaged / untracked) ─────────
+   The Recent Changes rail splits porcelain-XY into a "Staged" section
+   (X non-empty), an "Unstaged" section (Y non-empty), and an "Untracked"
+   section (??). Sections collapse to nothing when their bucket is empty.
+   ─────────────────────────────────────────────────────────────────── */
+
+.arch-changes-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.arch-changes-section + .arch-changes-section {
+  border-top: 1px solid var(--shell-border-soft);
+  margin-top: 6px;
+  padding-top: 6px;
+}
+
+.arch-changes-section__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.arch-changes-section__label { flex: 1; }
+
+.arch-changes-section__count {
+  font-weight: 500;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: var(--shell-fill);
+}
+
+.arch-changes-section--staged .arch-changes-section__header { color: var(--info); }
+.arch-changes-section--staged .arch-changes-section__count { color: var(--info); }
+
+.arch-changes-section--unstaged .arch-changes-section__header { color: var(--accent); }
+.arch-changes-section--unstaged .arch-changes-section__count { color: var(--accent); }
+
+.arch-changes-section--untracked .arch-changes-section__header { color: var(--success); }
+.arch-changes-section--untracked .arch-changes-section__count { color: var(--success); }
+
+.arch-changes-section__items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.arch-changes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.arch-changes-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 120ms var(--ds-ease-standard, ease),
+    border-color 120ms var(--ds-ease-standard, ease);
+}
+
+.arch-changes-item:hover {
+  background: var(--shell-fill-strong);
+  border-color: var(--shell-border-soft);
+}
+
+.arch-changes-item:active {
+  background: var(--shell-surface-hover);
+}
+
+.arch-changes-item__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+}
+
+.arch-changes-item__icon[data-status="added"],
+.arch-changes-item__icon[data-status="untracked"] {
+  color: var(--success);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+}
+
+.arch-changes-item__icon[data-status="modified"],
+.arch-changes-item__icon[data-status="renamed"],
+.arch-changes-item__icon[data-status="copied"] {
+  color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 12%, transparent);
+}
+
+.arch-changes-item__icon[data-status="deleted"] {
+  color: var(--destructive);
+  background: color-mix(in oklch, var(--destructive) 12%, transparent);
+}
+
+.arch-changes-item__path {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+  color: var(--shell-text-muted);
+}
+
+.arch-changes-item__diffs {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.arch-changes-diff--add {
+  color: var(--success);
+  font-size: 8px;
+}
+
+.arch-changes-diff--del {
+  color: var(--destructive);
+  font-size: 8px;
+}
+
+/* ── Inline diff viewer ──────────────────────────────────────── */
+
+.arch-changes-item-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.arch-changes-item--expanded {
+  border-color: var(--shell-border-soft);
+  background: var(--shell-fill-strong);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.arch-changes-item__open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  color: var(--shell-text-dim);
+  opacity: 0.5;
+  transition: opacity 100ms var(--ds-ease-standard, ease);
+}
+
+.arch-changes-item:hover .arch-changes-item__open {
+  opacity: 1;
+}
+
+.arch-changes-diff-view {
+  border: 1px solid var(--shell-border-soft);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  overflow: hidden;
+  background: var(--shell-surface);
+}
+
+.arch-changes-diff-view__loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  color: var(--shell-text-muted);
+  font-size: 10px;
+}
+
+.arch-changes-diff-view__binary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  color: var(--shell-text-muted);
+  font-size: 10px;
+  font-style: italic;
+}
+
+.arch-changes-diff-view__empty {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  color: var(--shell-text-dim);
+  font-size: 10px;
+  font-style: italic;
+  background: var(--shell-fill);
+}
+
+.arch-changes-diff-view__content {
+  max-height: 240px;
+  overflow-y: auto;
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Monaco, monospace);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.arch-changes-diff-view__line {
+  display: flex;
+  align-items: stretch;
+  min-height: 14px;
+}
+
+.arch-changes-diff-view__line:hover {
+  background: var(--shell-fill);
+}
+
+.arch-changes-diff-view__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  width: 28px;
+  padding: 0 6px;
+  color: var(--shell-text-dim);
+  font-size: 8px;
+  user-select: none;
+  border-right: 1px solid var(--shell-border-soft);
+  background: var(--shell-surface-muted);
+}
+
+.arch-changes-diff-view__text {
+  flex: 1;
+  padding: 0 8px;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--foreground);
 }
