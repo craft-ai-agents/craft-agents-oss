@@ -79,6 +79,7 @@ Sentry.init({
 // the system prompt's "Preferred language" line, and the native menu.
 import { setupI18n, i18n, SUPPORTED_LANGUAGE_CODES, type LanguageCode } from '@craft-agent/shared/i18n'
 import { getPersistedUiLanguage, setPersistedUiLanguage } from '@craft-agent/shared/config'
+import type { UserPreferences } from '@craft-agent/shared/config'
 setupI18n()
 const persistedUiLanguage = getPersistedUiLanguage()
 if (persistedUiLanguage) {
@@ -972,23 +973,22 @@ app.whenReady().then(async () => {
       // Confirm before exit preference (stored in preferences.json)
       ipcMain.handle('app:getConfirmBeforeExit', async () => {
         try {
-          const { readPreferences } = await import('@craft-agent/shared/config')
-          const { content } = await readPreferences()
-          const prefs = JSON.parse(content)
-          return prefs.confirmBeforeExit ?? true
-        } catch {
+          const { loadPreferences } = await import('@craft-agent/shared/config')
+          return loadPreferences().confirmBeforeExit ?? true
+        } catch (err) {
+          // loadPreferences already swallows a missing/unreadable file and
+          // returns {}, so reaching here means something unexpected broke.
+          // Log it rather than silently defaulting forever.
+          mainLog.error('[settings] Failed to read confirmBeforeExit:', err)
           return true // default to confirmed exit
         }
       })
       ipcMain.handle('app:setConfirmBeforeExit', async (_event, value: boolean) => {
         try {
-          const { readPreferences, writePreferences } = await import('@craft-agent/shared/config')
-          const { content } = await readPreferences()
-          const prefs = JSON.parse(content)
-          prefs.confirmBeforeExit = value
-          await writePreferences(JSON.stringify(prefs, null, 2))
-        } catch {
-          // preferences file may not exist — silently degrade
+          const { updatePreferences } = await import('@craft-agent/shared/config')
+          updatePreferences({ confirmBeforeExit: value })
+        } catch (err) {
+          mainLog.error('[settings] Failed to persist confirmBeforeExit:', err)
         }
       })
 
@@ -1001,15 +1001,16 @@ app.whenReady().then(async () => {
             exportedAt: Date.now(),
             config,
           }
-          // Include preferences if they exist
+          // Include preferences if they exist. loadPreferences() returns {} for
+          // a missing file, so an empty object means "nothing to export".
           try {
-            const { readPreferences } = await import('@craft-agent/shared/config')
-            const { content, exists } = await readPreferences()
-            if (exists) {
-              exportBundle.preferences = JSON.parse(content)
+            const { loadPreferences } = await import('@craft-agent/shared/config')
+            const prefs = loadPreferences()
+            if (Object.keys(prefs).length > 0) {
+              exportBundle.preferences = prefs
             }
-          } catch {
-            // preferences file may not exist — that's fine
+          } catch (err) {
+            mainLog.warn('[settings] Could not include preferences in export:', err)
           }
           // Include custom themes (list files in themes directory)
           try {
@@ -1081,11 +1082,13 @@ app.whenReady().then(async () => {
           // Restore preferences if present
           if (bundle.preferences && typeof bundle.preferences === 'object') {
             try {
-              const { writePreferences } = await import('@craft-agent/shared/config')
-              await writePreferences(JSON.stringify(bundle.preferences, null, 2))
+              const { savePreferences } = await import('@craft-agent/shared/config')
+              savePreferences(bundle.preferences as UserPreferences)
               mainLog.info('[settings] Preferences restored from import')
-            } catch {
-              // non-critical
+            } catch (err) {
+              // Non-fatal for the rest of the import, but the user must not be
+              // told their preferences were restored when they were not.
+              mainLog.error('[settings] Failed to restore preferences from import:', err)
             }
           }
           // Restore themes if present
