@@ -1,4 +1,4 @@
-# Craft Agents OSS — Milestone A Baseline
+# ARCHstudio OSS — Milestone A Baseline
 
 **Captured:** 2026-07-24 04:36:46 NZST  
 **Repository:** `D:\craft-agents-oss`  

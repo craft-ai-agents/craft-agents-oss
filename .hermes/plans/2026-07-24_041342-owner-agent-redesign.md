@@ -2,7 +2,7 @@
 
 > **For Hermes:** Use subagent-driven-development to implement this plan task-by-task. Keep each phase runnable; do not begin the next phase until its acceptance gate passes.
 
-**Goal:** Turn the Craft Agents OSS fork into a private, single-owner desktop agent that is visually original, action-first, provider-agnostic, durable across sessions, and deeply integrated with ChatGPT Codex, Hermes Agent, ComfyUI, Ollama Local, and Ollama Cloud.
+**Goal:** Turn the ARCHstudio OSS fork into a private, single-owner desktop agent that is visually original, action-first, provider-agnostic, durable across sessions, and deeply integrated with ChatGPT Codex, Hermes Agent, ComfyUI, Ollama Local, and Ollama Cloud.
 
 **Architecture:** Keep Craft's proven Electron/Bun/React session shell and backend abstraction, then replace the product identity and renderer experience while adding an app-owned memory/prompt layer and explicit integration adapters. LLM inference stays in the provider plane; external actions and specialist systems stay in the tool/service plane. All new capabilities must work through typed interfaces so the UI does not care whether a job is handled by Codex, Ollama, Hermes, or ComfyUI.
 
