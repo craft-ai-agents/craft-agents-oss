@@ -106,6 +106,7 @@ export const RPC_CHANNELS = {
   fs: {
     SEARCH: 'fs:search',
     LIST_DIRECTORY: 'fs:listDirectory',
+    READ_DIRECTORY: 'fs:readDirectory',
   },
   debug: {
     LOG: 'debug:log',
@@ -126,6 +127,17 @@ export const RPC_CHANNELS = {
     GET_ALL_WORKSPACE_THEMES: 'theme:getAllWorkspaceThemes',
     BROADCAST_WORKSPACE_THEME: 'theme:broadcastWorkspaceTheme',
     WORKSPACE_THEME_CHANGED: 'theme:workspaceThemeChanged',
+  },
+  llmInference: {
+    HISTORY: 'llmInference:history',
+    HISTORY_ALL: 'llmInference:historyAll',
+    /** Push channel: broadcast when a new inference event is recorded. */
+    UPDATED: 'llmInference:updated',
+  },
+  health: {
+    RECORD: 'health:record',
+    HEATMAP: 'health:heatmap',
+    HEATMAP_ALL: 'health:heatmapAll',
   },
   system: {
     VERSIONS: 'system:versions',
@@ -186,6 +198,8 @@ export const RPC_CHANNELS = {
     EXCHANGE_CLAUDE_CODE: 'onboarding:exchangeClaudeCode',
     HAS_CLAUDE_OAUTH_STATE: 'onboarding:hasClaudeOAuthState',
     CLEAR_CLAUDE_OAUTH_STATE: 'onboarding:clearClaudeOAuthState',
+    GET_CONNECTED_PROVIDER: 'onboarding:getConnectedProvider',
+    SET_CONNECTED_PROVIDER: 'onboarding:setConnectedProvider',
     DEFER_SETUP: 'onboarding:deferSetup',
   },
   llmConnections: {
@@ -350,6 +364,8 @@ export const RPC_CHANNELS = {
   },
   git: {
     GET_BRANCH: 'git:getBranch',
+    STATUS: 'git:status',
+    FILE_DIFF: 'git:fileDiff',
   },
   gitbash: {
     CHECK: 'gitbash:check',
@@ -369,6 +385,57 @@ export const RPC_CHANNELS = {
     RESTORE: 'memory:restore',
     DELETE: 'memory:delete',
     SEARCH: 'memory:search',
+    /** Return aggregate stats: class distribution, FTS health, vault sync status. */
+    STATS: 'memory:stats',
+    /** Bulk-import memories from the Obsidian vault on disk.
+     * Wire request: none (server reads the default vault root from
+     * `DEFAULT_VAULT_ROOT`). Wire response: `{ read, imported, skipped,
+     * errors: Array<{ message, filePath? }> }`. Synchronous — small vaults
+     * (< few thousand files) finish in well under a second. */
+    IMPORT: 'memory:import',
+  },
+  prompts: {
+    /**
+     * Compile a prompt from the given options using the PromptCompiler.
+     * Accepts a `CompileOptions` object, returns a `CompileResult`.
+     * Uses the process-wide MemoryRepository singleton for the memory layer.
+     */
+    COMPILE: 'prompt:compile',
+    /**
+     * Invalidate the PromptCompiler's internal layer cache so the next call
+     * to `compile()` re-reads workspace context files (AGENTS.md/CLAUDE.md)
+     * and re-renders all stable layers from scratch.
+     */
+    INVALIDATE: 'prompt:invalidate',
+    /**
+     * Resolve the workspace root directory and scan for AGENTS.md / CLAUDE.md.
+     * Returns `{ workingDirectory, contextFiles }` or `null` if the workspace
+     * cannot be resolved. Used by the Prompt Studio's Project Context pane.
+     */
+    RESOLVE_CONTEXT: 'prompt:resolveContext',
+    /**
+     * Push channel: fired by the main process when a watched AGENTS.md or
+     * CLAUDE.md file changes on disk. The renderer subscribes via the
+     * `onContextFilesChanged` ElectronAPI listener and re-compiles the
+     * prompt automatically.
+     */
+    CONTEXT_FILES_CHANGED: 'prompt:contextFilesChanged',
+  },
+  media: {
+    /**
+     * Server-side cursor-paginated media list. Iterates the workspace's
+     * session tree server-side (replaces the previous N x getSessionFiles
+     * fan-out), applies an optional kind filter, and returns one page of
+     * items plus a `nextCursor` to fetch the next page.
+     *
+     * Wire shape (request): `{ kind?: MediaKind, cursor?: string, limit?: number }`
+     * Wire shape (response): `{ items: MediaItem[], hasMore: boolean, nextCursor: string | null }`
+     *
+     * Client should mirror the existing `AbortSignal` pattern (the signal is
+     * never serialized; the transport attaches a 'cancel' envelope when it
+     * fires, and the server's per-request AbortController flips).
+     */
+    LIST: 'media:list',
   },
   browserPane: {
     CREATE: 'browser-pane:create',

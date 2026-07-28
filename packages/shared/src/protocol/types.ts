@@ -16,6 +16,7 @@ export type MessageType =
   | 'event'
   | 'error'
   | 'sequence_ack'
+  | 'cancel'
 
 export interface MessageEnvelope {
   /** Correlation ID. UUIDv4 for requests; echoed in responses. */
@@ -60,6 +61,12 @@ export interface MessageEnvelope {
   stale?: boolean
   /** Server app version, sent in handshake_ack. Clients can use this for compatibility checks. */
   serverVersion?: string
+
+  // -- Cancellation --
+  //
+  // For 'cancel' envelopes, `id` carries the correlationId of the request to
+  // abort (server-side: look up the active AbortController and call .abort()).
+  // `channel`, `args`, `result`, `error`, `seq` are not used on 'cancel'.
 }
 
 export interface WireError {

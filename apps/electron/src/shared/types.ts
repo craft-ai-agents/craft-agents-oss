@@ -206,9 +206,13 @@ import type {
   TestLlmConnectionResult,
   SkillFile,
   SessionFile,
+  MediaItem,
+  MediaListPage,
+  MediaListRequest,
   OAuthResult,
   McpToolsResult,
   GitBashStatus,
+  GitStatusResult,
   ClaudeOAuthResult,
   UpdateInfo,
   WorkspaceSettings,
@@ -219,6 +223,7 @@ import type {
   TestAutomationResult,
   WindowCloseRequest,
   DirectoryListingResult,
+  ReadDirectoryResult,
   RemoteSessionTransferPayload,
   ImportRemoteSessionTransferResult,
 } from '@craft-agent/shared/protocol'
@@ -266,6 +271,14 @@ export interface ElectronAPI {
 
   // App lifecycle
   relaunchApp(): Promise<void>
+  getLaunchAtLogin(): Promise<boolean>
+  setLaunchAtLogin(openAtLogin: boolean): Promise<void>
+  getConfirmBeforeExit(): Promise<boolean>
+  setConfirmBeforeExit(value: boolean): Promise<void>
+  /** Export all settings (config, preferences, themes) to a user-chosen JSON file. */
+  exportSettings(): Promise<{ success: boolean; path?: string; error?: string; canceled?: boolean }>
+  /** Import settings from a user-chosen JSON file and restore them. */
+  importSettings(): Promise<{ success: boolean; error?: string; canceled?: boolean }>
   removeWorkspace(workspaceId: string): Promise<boolean>
   invokeOnServer(url: string, token: string, channel: string, ...args: any[]): Promise<any>
 
@@ -346,6 +359,8 @@ export interface ElectronAPI {
 
   // Server filesystem browsing (remote mode)
   listServerDirectory(dirPath: string): Promise<DirectoryListingResult>
+  // Working-directory file browser (lists files + dirs with metadata)
+  listDirectoryFiles(dirPath: string): Promise<ReadDirectoryResult>
   // Debug: send renderer logs to main process log file
   debugLog(...args: unknown[]): void
 
@@ -422,6 +437,11 @@ export interface ElectronAPI {
   /** Defer onboarding setup — user chose "Setup later" */
   deferSetup(): Promise<{ success: boolean }>
 
+  /** Get the last connected provider name from onboarding (for QuickStart overlay) */
+  getLastConnectedProvider(): Promise<string | null>
+  /** Persist the connected provider name (set from onboarding completion) */
+  setLastConnectedProvider(name: string): Promise<{ success: boolean }>
+
   // ChatGPT OAuth (for Codex chatgptAuthTokens mode)
   startChatGptOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>
   cancelChatGptOAuth(): Promise<{ success: boolean }>
@@ -466,7 +486,25 @@ export interface ElectronAPI {
   getAllDrafts(): Promise<Record<string, import('@craft-agent/shared/config').SessionDraft>>
 
   // Session Info Panel
-  getSessionFiles(sessionId: string): Promise<SessionFile[]>
+  /**
+   * Recursively list files in a session's working directory.
+   *
+   * Pass an `AbortSignal` as the second arg to cancel an in-flight scan (e.g.,
+   * when the consumer unmounts or the active session changes). The signal is
+   * consumed locally — it never crosses the wire — and triggers a `cancel`
+   * envelope on the transport, which the server uses to flip its per-request
+   * AbortController so deep readdir/ststat loops exit promptly.
+   */
+  getSessionFiles(sessionId: string, signal?: AbortSignal): Promise<SessionFile[]>
+  /**
+   * Server-side cursor-paginated media list. Replaces the previous
+   * N x getSessionFiles fan-out with a single typed request that does
+   * the scan + classify + filter + cursor-paginate server-side.
+   *
+   * `signal` is duck-typed and stripped before serialization by the
+   * transport; it never crosses the wire.
+   */
+  mediaList(request: MediaListRequest, signal?: AbortSignal): Promise<MediaListPage>
   getSessionNotes(sessionId: string): Promise<string>
   setSessionNotes(sessionId: string, content: string): Promise<void>
   watchSessionFiles(sessionId: string): Promise<void>
@@ -607,6 +645,8 @@ export interface ElectronAPI {
 
   // Git operations
   getGitBranch(dirPath: string): Promise<string | null>
+  getGitStatus(dirPath: string): Promise<GitStatusResult>
+  getFileGitDiff(dirPath: string, relPath: string): Promise<GitFileDiffResult>
 
   // Git Bash (Windows)
   checkGitBash(): Promise<GitBashStatus>
@@ -629,7 +669,70 @@ export interface ElectronAPI {
   archiveMemory(id: string): Promise<import('@craft-agent/shared/memory/types').AnyMemory>
   restoreMemory(id: string): Promise<import('@craft-agent/shared/memory/types').AnyMemory>
   deleteMemory(id: string): Promise<{ success: boolean }>
-  searchMemories(query: import('@craft-agent/shared/memory/types').MemoryQuery): Promise<import('@craft-agent/shared/memory/types').AnyMemory[]>
+  /**
+   * FTS5 + bm25 search. Empty `query.query` lets the server fall back to a
+   * filtered memory list (no FTS overhead). Results are ranked snippets —
+   * the panel renders `<mark>` tags from the FTS5 `snippet(...)` call.
+   */
+  searchMemories(query: import('@craft-agent/shared/memory/types').MemoryQuery): Promise<import('@craft-agent/shared/memory/types').MemorySearchResult[]>
+  /**
+   * Return aggregate statistics about the memory store: class distribution,
+   * FTS health (memoriesTable vs ftsIndex row count parity), vault status.
+   */
+  getMemoryStats(): Promise<{
+    classDistribution: Record<string, number>
+    totalActive: number
+    totalArchived: number
+    ftsHealth: { memoriesRows: number; ftsRows: number; healthy: boolean }
+    vault: { root: string; filesOnDisk: number; lastImportAt: string | null }
+  }>
+  /**
+   * Bulk-import memories from the Obsidian vault on disk. Reads every
+   * `.md` file in the four class folders and `INSERT`s each into the
+   * SQLite memory store with skip-dedupe by `memory_id`. Audit rows are
+   * stamped `action: 'import'` with `actor: 'obsidian-vault-sync'`.
+   *
+   * Stats response surfaces both vault-read failures (malformed frontmatter)
+   * and import-time failures (parse / DB errors) so the renderer can render
+   * a single stats card.
+   */
+  importMemoriesFromVault(): Promise<{
+    read: number
+    imported: number
+    skipped: number
+    errors: Array<{ message: string; filePath?: string }>
+  }>
+
+  // Prompt Compiler
+  /**
+   * Compile a prompt from the given options using the real PromptCompiler.
+   * Fetches memories from the shared MemoryRepository automatically if the
+   * memory layer is included and no memories were explicitly supplied.
+   */
+  compilePrompt(options: import('@craft-agent/shared/prompts/owner/types').CompileOptions): Promise<import('@craft-agent/shared/prompts/owner/types').CompileResult>
+  /**
+   * Invalidate the PromptCompiler's internal layer cache. The next
+   * `compilePrompt()` call will re-read workspace context files
+   * (AGENTS.md/CLAUDE.md) from disk and rebuild all stable layers
+   * from scratch.
+   */
+  invalidatePromptCache(): Promise<{ success: boolean }>
+  /**
+   * Resolve the workspace root directory and scan for AGENTS.md / CLAUDE.md.
+   * Returns the working directory and any context files found, or `null` if
+   * the workspace cannot be resolved.
+   */
+  resolveWorkspaceContext(): Promise<{
+    workingDirectory?: string
+    contextFiles?: { filename: string; content: string }[]
+  } | null>
+  /**
+   * Fired when AGENTS.md or CLAUDE.md changes on disk. The main process
+   * watches the workspace root directory via fs.watch and pushes this
+   * event so the Prompt Studio automatically invalidates its cache and
+   * re-compiles the prompt with fresh context file content.
+   */
+  onContextFilesChanged(callback: () => void): () => void
 
   // Menu actions (from renderer to main)
   menuQuit(): Promise<void>
@@ -676,6 +779,17 @@ export interface ElectronAPI {
   getDefaultThinkingLevel(): Promise<ThinkingLevel>
   setDefaultThinkingLevel(level: ThinkingLevel): Promise<{ success: boolean; error?: string }>
   setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>
+
+  // LLM Inference history — real request success/failure for ProvidersPanel sparkline
+  getLlmInferenceHistory(slug: string): Promise<import('@craft-agent/shared/agent/core/index').InferenceHistoryResult>
+  getLlmInferenceHistoryAll(): Promise<Record<string, import('@craft-agent/shared/agent/core/index').InferenceHistoryResult>>
+  /** Push channel: fired when a new inference event is recorded (turn or tool call). */
+  onLlmInferenceChanged: (listener: (payload: { slug: string }) => void) => () => void
+
+  // Health check persistence + heatmap — SQLite-backed uptime tracking
+  recordHealthCheck(slug: string, success: boolean, latencyMs?: number): Promise<{ success: boolean }>
+  getHealthHeatmap(slug: string, days?: number): Promise<Array<{ hour: string; checks: number; successRate: number }>>
+  getHealthHeatmapAll(days?: number): Promise<Record<string, Array<{ hour: string; checks: number; successRate: number }>>>
 
   // Projects (workspace-scoped)
   getProjects(workspaceId: string): Promise<unknown>

@@ -547,7 +547,74 @@ export interface SessionFile {
   path: string
   type: 'file' | 'directory'
   size?: number
+  /** File modification timestamp (ms since epoch), populated when stat succeeded */
+  mtime?: number
   children?: SessionFile[]
+}
+
+// ---------------------------------------------------------------------------
+// Media list (Media Lab) — server-side cursor pagination over classified files
+// ---------------------------------------------------------------------------
+
+/**
+ * Kinds of media the server classifies in `media:list`. Mirrors the EXT map
+ * the renderer used to own; the server now classifies so a single RPC can
+ * return a page of items instead of N fan-out calls.
+ *
+ * `'all'` is a renderer-side pseudo-filter (sent as undefined to the server)
+ * so consumers don't need a sentinel value.
+ */
+export type MediaKind = 'image' | 'video' | 'audio' | 'doc'
+
+/**
+ * A single media item as returned by `media:list`. The renderer uses
+ * `sessionId` + `path` as a stable key for dedupe across pages.
+ */
+export interface MediaItem {
+  /** 'image' | 'video' | 'audio' | 'doc' — server-classified */
+  kind: MediaKind
+  /** File basename */
+  name: string
+  /** Absolute filesystem path (renderer's `file://` source for previews) */
+  path: string
+  /** File size in bytes, when stat succeeded */
+  size?: number
+  /** File modification timestamp (ms since epoch), when stat succeeded */
+  mtime?: number
+  /** Owning session id — reuses the renderer-side dedupe key */
+  sessionId: string
+  /** Human-readable session title (for the card subtitle) */
+  sessionTitle: string
+  /** Owning session's lastMessageAt, for ordering + empty-state debug */
+  lastMessageAt: number
+}
+
+/**
+ * Cursor + filter args for `media:list`. All fields optional — a request
+ * with `{}` returns the first page of every kind for the calling workspace.
+ *
+ * `cursor` is opaque to the client; the server encodes the most recent
+ * `lastMessageAt` + `sessionId` it finished scanning. Pass it back to fetch
+ * the next page; the server returns `nextCursor: null` when no more pages
+ * remain in the workspace.
+ */
+export interface MediaListRequest {
+  kind?: MediaKind
+  cursor?: string
+  /** Soft cap on returned items. Server may emit slightly fewer when
+   *  crossing a session boundary. Defaults to 200 server-side. */
+  limit?: number
+}
+
+/**
+ * One page of `media:list`. `items` is ordered by session-recency desc
+ * (matches the existing Media Lab UX). `nextCursor` is null when the
+ * server exhausted its scan.
+ */
+export interface MediaListPage {
+  items: MediaItem[]
+  hasMore: boolean
+  nextCursor: string | null
 }
 
 export interface FileSearchResult {
@@ -594,6 +661,12 @@ export interface LlmConnectionSetup {
   awsRegion?: string
   /** Bedrock authentication method — determines auth type for Pi+Bedrock connections */
   bedrockAuthMethod?: 'iam_credentials' | 'environment'
+  /**
+   * When true, this connection was set up through the local-model (Ollama) onboarding path.
+   * Used by the UI to show a more specific display name (e.g. "Ollama" vs "Anthropic API").
+   */
+  isLocalModel?: boolean
+
   /**
    * Resolved Anthropic OAuth identity (issue #838), threaded through setup so it
    * persists for both new and re-auth connections. Optional and fail-soft.
@@ -714,6 +787,60 @@ export interface Plan {
 // System types
 // ---------------------------------------------------------------------------
 
+/**
+ * Result of a git status check in a working directory.
+ */
+export interface GitStatusResult {
+  /** Current branch name, or null if not a git repository. */
+  branch: string | null
+  /** Working directory the status was fetched for. */
+  dirPath: string
+  /** Parsed entries from `git diff --stat` + `git status --porcelain`. */
+  files: GitStatusFileEntry[]
+}
+
+/**
+ * A single file entry in a git status result.
+ */
+export interface GitStatusFileEntry {
+  /** File path relative to the repository root. */
+  path: string
+  /** Status classification. */
+  status: 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'copied'
+  /** Which side of `git status --porcelain` produced this entry. A single
+   *  path may appear in both staged and unstaged when its XY code has
+   *  non-space on both sides (e.g. `AM` = staged-add + working-tree-modify). */
+  bucket: 'staged' | 'unstaged' | 'untracked'
+  /** Lines inserted (0 for non-tracked or non-diff entries). */
+  insertions: number
+  /** Lines deleted (0 for non-tracked or non-diff entries). */
+  deletions: number
+  /** Previous path when status is 'renamed'. */
+  previousPath?: string
+}
+
+/**
+ * Per-file diff payload returned by `git:fileDiff`.
+ *
+ * For a `modified/renamed/copied` file both `original` and `modified` are
+ * typically non-null and Shiki-diff-renderable. For an untracked/`added` file
+ * `original` is null. For a `deleted` file `modified` is null. For binary
+ * files both may populate but `isBinary` is true and the renderer should
+ * skip ShikiDiffViewer and just show the +/- counts.
+ */
+export interface GitFileDiffResult {
+  /** HEAD version of the file (full content). null for untracked/added. */
+  original: string | null
+  /** Working-tree version of the file (full content). null for deleted. */
+  modified: string | null
+  /** Total insertions from `git diff --numstat`. 0 for binary/untracked. */
+  additions: number
+  /** Total deletions from `git diff --numstat`. 0 for binary/untracked. */
+  deletions: number
+  /** True when first ~8KB contains NUL bytes — ShikiDiffViewer can't render these. */
+  isBinary: boolean
+}
+
 export interface GitBashStatus {
   found: boolean
   path: string | null
@@ -796,6 +923,37 @@ export type WindowCloseRequestSource = 'keyboard-shortcut' | 'window-button' | '
 
 export interface WindowCloseRequest {
   source: WindowCloseRequestSource
+}
+
+// ---------------------------------------------------------------------------
+// Read directory types (working directory file browser)
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of reading a directory with file metadata.
+ * Used by the working-directory file browser in the LayoutShell rail.
+ */
+export interface ReadDirectoryResult {
+  /** Normalized absolute path of the listed directory. */
+  currentPath: string
+  /** Parent directory path, or null if at root. */
+  parentPath: string | null
+  /** Child entries (files and directories) with metadata. */
+  entries: ReadDirectoryEntry[]
+}
+
+/**
+ * A single entry in a directory listing.
+ */
+export interface ReadDirectoryEntry {
+  name: string
+  path: string
+  type: 'file' | 'directory'
+  /** File size in bytes (0 for directories). */
+  size?: number
+  /** File modification timestamp (ms since epoch). */
+  mtime?: number
+  isSymlink: boolean
 }
 
 // ---------------------------------------------------------------------------

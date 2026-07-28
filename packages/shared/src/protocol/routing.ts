@@ -162,6 +162,11 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.rtk.GET_STATUS,
   RPC_CHANNELS.rtk.GET_GAIN,
 
+  // llmInference — local in-memory inference event store (not workspace content)
+  RPC_CHANNELS.llmInference.HISTORY,
+  RPC_CHANNELS.llmInference.HISTORY_ALL,
+  RPC_CHANNELS.llmInference.UPDATED,
+
   // tools — local tool settings
   RPC_CHANNELS.tools.GET_BROWSER_TOOL_ENABLED,
   RPC_CHANNELS.tools.SET_BROWSER_TOOL_ENABLED,
@@ -196,10 +201,23 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   // debug — local debug logging
   RPC_CHANNELS.debug.LOG,
 
+  // prompts — compiler cache is a local singleton (the PromptCompiler instance)
+  RPC_CHANNELS.prompts.COMPILE,
+  RPC_CHANNELS.prompts.INVALIDATE,
+  RPC_CHANNELS.prompts.RESOLVE_CONTEXT,
+  RPC_CHANNELS.prompts.CONTEXT_FILES_CHANGED,
+
+  // health — local health-check SQLite store
+  RPC_CHANNELS.health.RECORD,
+  RPC_CHANNELS.health.HEATMAP,
+  RPC_CHANNELS.health.HEATMAP_ALL,
+
   // onboarding — local auth setup flow
   RPC_CHANNELS.onboarding.GET_AUTH_STATE,
   RPC_CHANNELS.onboarding.VALIDATE_MCP,
   RPC_CHANNELS.onboarding.START_MCP_OAUTH,
+  RPC_CHANNELS.onboarding.GET_CONNECTED_PROVIDER,
+  RPC_CHANNELS.onboarding.SET_CONNECTED_PROVIDER,
   RPC_CHANNELS.onboarding.DEFER_SETUP,
   RPC_CHANNELS.settings.GET_NETWORK_PROXY,
   RPC_CHANNELS.settings.SET_NETWORK_PROXY,
@@ -288,6 +306,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // fs — workspace filesystem
   RPC_CHANNELS.fs.SEARCH,
   RPC_CHANNELS.fs.LIST_DIRECTORY,
+  RPC_CHANNELS.fs.READ_DIRECTORY,
 
   // credentials — remote server's credential state
   RPC_CHANNELS.credentials.HEALTH_CHECK,
@@ -426,6 +445,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
 
   // git — workspace filesystem
   RPC_CHANNELS.git.GET_BRANCH,
+  RPC_CHANNELS.git.STATUS,
+  RPC_CHANNELS.git.FILE_DIFF,
 
   // resources — workspace resource export/import
   RPC_CHANNELS.resources.EXPORT,

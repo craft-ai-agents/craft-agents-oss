@@ -74,4 +74,7 @@ export interface BroadcastEventMap {
   // Messaging gateway broadcasts
   [RPC_CHANNELS.messaging.BINDING_CHANGED]: [workspaceId: string]
   [RPC_CHANNELS.messaging.PLATFORM_STATUS]: [workspaceId: string, platform: string, connected: boolean]
+
+  // Prompt context files changed (AGENTS.md / CLAUDE.md on disk)
+  [RPC_CHANNELS.prompts.CONTEXT_FILES_CHANGED]: []
 }
