@@ -100,7 +100,31 @@ type LayoutShellProps = {
    * chat otherwise leaves no way back into a conversation.
    */
   onNewChat?: () => void
+  /**
+   * Real state for the "Session context" rail. Computed by the caller, which is
+   * where the selected session, its options and the connection list all live.
+   * Omitted (playground, no selection) renders an explicit "No session selected"
+   * state — the rail must never invent plausible-looking values.
+   */
+  sessionContext?: ShellSessionContext
   children?: React.ReactNode
+}
+
+/** What the context rail can honestly report about the active session. */
+export type ShellSessionContext = {
+  sessionName?: string
+  /** Display name of the LLM connection backing this session. */
+  connectionLabel?: string
+  /** Human-readable permission mode ('Safe', 'Ask', 'Allow all'). */
+  permissionModeLabel: string
+  /** Display name of the resolved model, if the session pins one. */
+  modelLabel?: string
+  /** Human-readable thinking level. */
+  thinkingLabel: string
+  /** Names of sources enabled for this session. */
+  sourceNames: string[]
+  workingDirectory?: string
+  isProcessing?: boolean
 }
 
 function LayoutShell({
@@ -111,6 +135,7 @@ function LayoutShell({
   topBar,
   breadcrumbs,
   onNewChat,
+  sessionContext,
   children,
 }: LayoutShellProps) {
   const [activeView, setActiveView] = useState<ShellView>(initialView)
@@ -350,43 +375,86 @@ function LayoutShell({
                     ))}
                   </div>
                     {activeRailTab === 'context' ? (
-                    <>
+                    /* Every row here reflects the real selected session. Rows whose
+                       data is genuinely unavailable render an explicit unknown
+                       state rather than a plausible-looking default — this rail
+                       previously hardcoded "ARCH Builder / Owner Auto / Auto
+                       select" regardless of the actual session. */
+                    sessionContext ? (
+                      <>
+                        <section>
+                          <label>Connection</label>
+                          <div className="arch-agent-card">
+                            <span className="arch-agent-card__mark">
+                              {(sessionContext.connectionLabel ?? '?').charAt(0).toUpperCase()}
+                            </span>
+                            <div>
+                              <strong>{sessionContext.connectionLabel ?? 'Not connected'}</strong>
+                              <small>{sessionContext.sessionName ?? 'Untitled session'}</small>
+                            </div>
+                            <i data-live={sessionContext.isProcessing ? 'true' : undefined} />
+                          </div>
+                        </section>
+                        <section>
+                          <label>Permission mode</label>
+                          <div className="arch-context-row">
+                            <strong>{sessionContext.permissionModeLabel}</strong>
+                            <span>{sessionContext.isProcessing ? 'Running' : 'Idle'}</span>
+                          </div>
+                        </section>
+                        <section>
+                          <label>Model</label>
+                          <div className="arch-context-row">
+                            <strong>{sessionContext.modelLabel ?? 'Workspace default'}</strong>
+                            <span>{sessionContext.thinkingLabel}</span>
+                          </div>
+                        </section>
+                        <section>
+                          <label>Sources</label>
+                          {sessionContext.sourceNames.length > 0 ? (
+                            <div className="arch-capability-grid">
+                              {sessionContext.sourceNames.map((name) => (
+                                <span key={name}>{name}</span>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="arch-context-row arch-context-row--empty">
+                              <span>No sources enabled</span>
+                            </div>
+                          )}
+                        </section>
+                        {sessionContext.workingDirectory && (
+                          <section>
+                            <label>Working directory</label>
+                            <div
+                              className="arch-context-row arch-context-row--path"
+                              title={sessionContext.workingDirectory}
+                            >
+                              <strong>{sessionContext.workingDirectory}</strong>
+                            </div>
+                          </section>
+                        )}
+                      </>
+                    ) : (
                       <section>
-                        <label>Active agent</label>
-                        <div className="arch-agent-card">
-                          <span className="arch-agent-card__mark">A</span>
-                          <div><strong>ARCH Builder</strong><small>Owner agent</small></div>
-                          <i />
+                        <label>Session</label>
+                        <div className="layout-placeholder" style={{ minHeight: 120 }}>
+                          <p style={{ fontSize: 11 }}>No session selected.</p>
                         </div>
                       </section>
-                      <section>
-                        <label>Session mode</label>
-                        <div className="arch-context-row"><strong>Owner Auto</strong><span>Active</span></div>
-                      </section>
-                      <section>
-                        <label>Model</label>
-                        <div className="arch-context-row"><strong>Auto select</strong><span>Ready</span></div>
-                      </section>
-                      <section>
-                        <label>Capabilities</label>
-                        <div className="arch-capability-grid">
-                          <span>Code</span><span>Files</span><span>Web</span><span>Tools</span>
-                        </div>
-                      </section>
-                      <section className="arch-context-rail__meter">
-                        <div><label>Memory</label><span>Local</span></div>
-                        <b><i /></b>
-                      </section>
-                    </>
+                    )
                   ) : (
                     <section>
                       <label>{activeRailTab === 'files' ? 'Session Files' : 'Recent Changes'}</label>
                       <div className="layout-placeholder" style={{ minHeight: 120 }}>
                         <FileText size={24} />
                         <p style={{ fontSize: 11, marginTop: 8 }}>
+                          {/* Honest state: this rail has no wiring to session files or
+                              a diff source yet, so it must not imply "we looked and
+                              found nothing". */}
                           {activeRailTab === 'files'
-                            ? 'No files attached to this session yet.'
-                            : 'No changes recorded yet.'}
+                            ? 'Session files are not wired up to this rail yet.'
+                            : 'Change tracking is not wired up to this rail yet.'}
                         </p>
                       </div>
                     </section>

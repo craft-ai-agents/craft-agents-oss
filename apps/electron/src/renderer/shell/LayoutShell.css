@@ -606,6 +606,32 @@
   font-weight: 600;
 }
 
+/* Rows whose value is genuinely unavailable — read as absent, not as data. */
+.arch-context-row--empty span {
+  color: var(--shell-text-dim);
+  font-size: 11px;
+  font-style: italic;
+}
+
+/* Working directory: a long path must truncate rather than widen the rail. */
+.arch-context-row--path strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* keep the tail (the actual folder) visible when clipped */
+  text-align: left;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 500;
+}
+
+/* Live dot on the connection card: lit only while the session is processing. */
+.arch-agent-card i[data-live='true'] {
+  background: var(--brand-lime);
+  box-shadow: 0 0 10px color-mix(in oklch, var(--brand-lime) 70%, transparent);
+  animation: ds-pulse 1.6s var(--ds-ease-standard) infinite;
+}
+
 .arch-agent-card small,
 .arch-context-row span {
   color: var(--shell-text-dim);

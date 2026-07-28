@@ -83,7 +83,12 @@ import { LeftSidebar } from "./LeftSidebar"
 import { useSession } from "@/hooks/useSession"
 import { ensureSessionMessagesLoadedAtom } from "@/atoms/sessions"
 import { AppShellProvider, type AppShellContextType } from "@/context/AppShellContext"
-import { LayoutShell } from "@/shell"
+import { LayoutShell, type ShellSessionContext } from "@/shell"
+import { PERMISSION_MODE_CONFIG } from "@craft-agent/shared/agent/modes"
+import { getThinkingLevelNameKey } from "@craft-agent/shared/agent/thinking-levels"
+import { getModelShortName } from "@config/models"
+import { getConnectionDisplayName } from "@config/provider-labels"
+import { defaultSessionOptions } from "@/hooks/useSessionOptions"
 import { EscapeInterruptProvider, useEscapeInterrupt } from "@/context/EscapeInterruptContext"
 import { useTheme } from "@/context/ThemeContext"
 import { getResizeGradientStyle } from "@/hooks/useResizeGradient"
@@ -1708,6 +1713,41 @@ function AppShellContent({
     return onDeleteSession(sessionId, skipConfirmation)
   }, [session.selected, setSession, onDeleteSession])
 
+  // Real state for the shell's "Session context" rail. That rail used to render
+  // hardcoded values ("ARCH Builder" / "Owner Auto" / "Auto select") no matter
+  // which session was open. Everything here is derived from the selected session;
+  // anything genuinely unknown is left undefined so the rail can say so rather
+  // than show a plausible default.
+  const shellSessionContext = React.useMemo<ShellSessionContext | undefined>(() => {
+    if (!session.selected) return undefined
+    const meta = sessionMetaMap.get(session.selected)
+    if (!meta) return undefined
+
+    const options = sessionOptions.get(session.selected)
+    const mode = options?.permissionMode ?? defaultSessionOptions.permissionMode
+    const thinking = options?.thinkingLevel ?? defaultSessionOptions.thinkingLevel
+
+    const connection = meta.llmConnection
+      ? contextValue.llmConnections.find(c => c.slug === meta.llmConnection)
+      : undefined
+
+    const sourceNames = (meta.enabledSourceSlugs ?? [])
+      .map(slug => sources.find(s => s.config.slug === slug)?.config.name ?? slug)
+
+    return {
+      sessionName: meta.name,
+      connectionLabel: connection ? getConnectionDisplayName(connection) : undefined,
+      // `mode.<id>` is the translated name; the config's displayName is the
+      // untranslated fallback if a locale is missing the key.
+      permissionModeLabel: t(`mode.${mode}`, PERMISSION_MODE_CONFIG[mode].displayName),
+      modelLabel: meta.model ? getModelShortName(meta.model) : undefined,
+      thinkingLabel: t(getThinkingLevelNameKey(thinking)),
+      sourceNames,
+      workingDirectory: meta.workingDirectory,
+      isProcessing: meta.isProcessing,
+    }
+  }, [session.selected, sessionMetaMap, sessionOptions, contextValue.llmConnections, sources, t])
+
   // Extend context value with local overrides (wrapped onDeleteSession, sources, skills, labels, enabledModes, rightSidebarOpenButton, effectiveSessionStatuses)
   const appShellContextValue = React.useMemo<AppShellContextType>(() => ({
     ...contextValue,
@@ -2392,7 +2432,11 @@ function AppShellContent({
 
   return (
     <AppShellProvider value={appShellContextValue}>
-      <LayoutShell initialView="command" onNewChat={openNewChat ? () => { void openNewChat() } : undefined}>
+      <LayoutShell
+        initialView="command"
+        onNewChat={openNewChat ? () => { void openNewChat() } : undefined}
+        sessionContext={shellSessionContext}
+      >
         {/* === TOP BAR === */}
         {!isFocusedMode && <TopBar
           workspaces={workspaces}
