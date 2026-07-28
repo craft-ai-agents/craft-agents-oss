@@ -1,15 +1,34 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
-import type { AnyMemory, MemoryQuery } from '@craft-agent/shared/memory/types'
+import type { AnyMemory, MemoryQuery, MemorySearchResult } from '@craft-agent/shared/memory/types'
 import { app } from 'electron'
 
-let repoPromise: Promise<import('@craft-agent/shared/memory/repository').MemoryRepository> | null = null
+import type { MemoryRepository } from '@craft-agent/shared/memory/repository'
+import { join } from 'path'
+
+let repoPromise: Promise<MemoryRepository> | null = null
 let vaultPromise: Promise<import('@craft-agent/shared/memory/obsidian-sync').ObsidianVaultSync> | null = null
 
-const DEFAULT_VAULT_ROOT = 'D:\\OwnerAgent\\vault'
+/**
+ * Resolve the Obsidian vault root directory.
+ *
+ * Derived from `app.getPath('userData')`, which on macOS is
+ * `~/Library/Application Support/ARCHstudio/` and on Windows is
+ * `%APPDATA%/ARCHstudio/`. This matches the `getMemoryRepository()`
+ * database path so the vault is a sibling of the memory DB.
+ */
+function getVaultRoot(): string {
+  return join(app.getPath('userData'), 'vault')
+}
 
-async function getMemoryRepository() {
+/**
+ * Get (or lazily create) the process-wide singleton MemoryRepository.
+ * Shared between the IPC handlers (MemoryPanel) and the agent tools
+ * (memory_search / memory_recall) so both paths hit the same SQLite
+ * connection and the same FTS5 index.
+ */
+export async function getMemoryRepository(): Promise<MemoryRepository> {
   if (!repoPromise) {
     repoPromise = (async () => {
       const { openMemoryDatabase, bootstrapStorage } = await import('@craft-agent/shared/memory/database')
@@ -23,11 +42,27 @@ async function getMemoryRepository() {
   return repoPromise
 }
 
-async function getVaultSync() {
+/**
+ * Close the shared MemoryRepository connection. Writes a WAL checkpoint
+ * and releases the file lock. Safe to call before the singleton has been
+ * created (no-op). Intended for use in the Electron `before-quit` handler.
+ */
+export async function closeMemoryRepository(): Promise<void> {
+  if (!repoPromise) return
+  try {
+    const repo = await repoPromise
+    repo.close()
+    repoPromise = null
+  } catch (err) {
+    console.error('Failed to close memory repository:', err)
+  }
+}
+
+export async function getVaultSync() {
   if (!vaultPromise) {
     vaultPromise = (async () => {
       const { ObsidianVaultSync } = await import('@craft-agent/shared/memory/obsidian-sync')
-      return ObsidianVaultSync.createSync(DEFAULT_VAULT_ROOT)
+      return ObsidianVaultSync.createSync(getVaultRoot())
     })()
   }
   return vaultPromise
@@ -42,6 +77,8 @@ export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.memory.RESTORE,
   RPC_CHANNELS.memory.DELETE,
   RPC_CHANNELS.memory.SEARCH,
+  RPC_CHANNELS.memory.STATS,
+  RPC_CHANNELS.memory.IMPORT,
 ] as const
 
 export function registerMemoryHandlers(server: RpcServer, _deps: HandlerDeps): void {
@@ -98,19 +135,54 @@ export function registerMemoryHandlers(server: RpcServer, _deps: HandlerDeps): v
     return { success: true }
   })
 
-  server.handle(RPC_CHANNELS.memory.SEARCH, async (_ctx, query: MemoryQuery) => {
+  // Aggregate stats: class distribution, FTS health, vault sync status
+  server.handle(RPC_CHANNELS.memory.STATS, async () => {
     const r = await getMemoryRepository()
-    const all = r.listMemories()
-    const q = query.query?.toLowerCase() ?? ''
-    return all.filter((m) => {
-      if (query.class && m.class !== query.class) return false
-      if (query.scope && m.scope !== query.scope) return false
-      if (query.scopeId && m.scopeId !== query.scopeId) return false
-      if (query.minConfidence && m.confidence < query.minConfidence) return false
-      if (query.includeArchived !== true && m.archived) return false
-      if (query.tags && !query.tags.every((t) => m.tags.includes(t))) return false
-      if (q && !m.title.toLowerCase().includes(q) && !m.content.toLowerCase().includes(q)) return false
-      return true
-    })
+    return r.getMemoryStats(getVaultRoot())
+  })
+
+  // Full-text search: bm25 ranked hits with snippet highlighting. Empty
+  // `query.query` degenerates to a filtered list (no FTS overhead). The
+  // FILTER columns (class/scope/tags/category/confidence) are applied in
+  // SQL with parameter binding — escapes any injection risk from the
+  // user-supplied `MemoryQuery`.
+  server.handle(RPC_CHANNELS.memory.SEARCH, async (_ctx, query: MemoryQuery): Promise<MemorySearchResult[]> => {
+    const r = await getMemoryRepository()
+    return r.searchMemories(query)
+  })
+
+  /**
+   * Bulk-import memories from the Obsidian vault on disk. Reads every
+   * `.md` file in the four class folders, parses them into typed
+   * `AnyMemory`s, and writes them back through the repository's bulk
+   * importer (with skip-dedupe + per-row audit 'import' entries).
+   *
+   * Returns counts so the renderer can show a stats toast. Reads are
+   * synchronous; the database transaction wraps the import batch so a
+   * crash midway leaves zero partial rows behind.
+   */
+  server.handle(RPC_CHANNELS.memory.IMPORT, async (): Promise<{
+    read: number
+    imported: number
+    skipped: number
+    errors: Array<{ message: string; filePath?: string }>
+  }> => {
+    const r = await getMemoryRepository()
+    const v = await getVaultSync()
+    const { records, errors: readErrors } = v.readVault()
+    const stats = r.importMemories(records, 'obsidian-vault-sync')
+    // Combine vault-read failures (malformed frontmatter, missing
+    // delimiters) with import-time failures (parse / DB errors) into a
+    // single shape so the renderer doesn't have to merge them.
+    const combinedErrors = [
+      ...readErrors.map((e) => ({ message: e.message, filePath: e.filePath })),
+      ...stats.errors,
+    ]
+    return {
+      read: records.length + readErrors.length,
+      imported: stats.imported,
+      skipped: stats.skipped,
+      errors: combinedErrors,
+    }
   })
 }

@@ -10,6 +10,8 @@ import { registerBrowserHandlers } from './browser'
 import { registerSettingsGuiHandlers } from './settings'
 
 import { registerMemoryHandlers } from './memory'
+import { registerPromptHandlers } from './prompts'
+import { registerHealthHandlers } from './health'
 
 export function registerGuiRpcHandlers(server: RpcServer, deps: HandlerDeps): void {
   registerSystemGuiHandlers(server, deps)
@@ -17,6 +19,8 @@ export function registerGuiRpcHandlers(server: RpcServer, deps: HandlerDeps): vo
   registerBrowserHandlers(server, deps)
   registerSettingsGuiHandlers(server, deps)
   registerMemoryHandlers(server, deps)
+  registerPromptHandlers(server, deps)
+  registerHealthHandlers(server, deps)
 }
 
 export function registerAllRpcHandlers(server: RpcServer, deps: HandlerDeps, serverCtx?: ServerHandlerContext): void {

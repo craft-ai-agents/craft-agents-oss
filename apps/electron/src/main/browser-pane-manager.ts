@@ -2103,9 +2103,9 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     }
 
     this.destroyingIds.delete(instance.id)
-    this.closePopupsForParent(instance.id, 'parent_destroy')
-    this.applyAgentControlLock(instance, false)
-    this.updateNativeOverlayState(instance)
+    try { this.closePopupsForParent(instance.id, 'parent_destroy') } catch (error) { mainLog.warn(`[browser-pane] finalize cleanup closePopupsForParent failed id=${instance.id}: ${error instanceof Error ? error.message : String(error)}`) }
+    try { this.applyAgentControlLock(instance, false) } catch (error) { mainLog.warn(`[browser-pane] finalize cleanup applyAgentControlLock failed id=${instance.id}: ${error instanceof Error ? error.message : String(error)}`) }
+    try { this.updateNativeOverlayState(instance) } catch (error) { mainLog.warn(`[browser-pane] finalize cleanup updateNativeOverlayState failed id=${instance.id}: ${error instanceof Error ? error.message : String(error)}`) }
     instance.cdp.detach()
     this.instances.delete(instance.id)
     this.removedCallback?.(instance.id)

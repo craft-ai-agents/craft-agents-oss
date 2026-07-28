@@ -412,6 +412,12 @@ client.onConnectionStateChanged((state) => {
 
 // App lifecycle — direct IPC (not WS RPC) since it restarts the server itself
 ;(api as ElectronAPI).relaunchApp = () => ipcRenderer.invoke('app:relaunch')
+;(api as ElectronAPI).getLaunchAtLogin = () => ipcRenderer.invoke('app:getLaunchAtLogin')
+;(api as ElectronAPI).setLaunchAtLogin = (openAtLogin: boolean) => ipcRenderer.invoke('app:setLaunchAtLogin', openAtLogin)
+;(api as ElectronAPI).getConfirmBeforeExit = () => ipcRenderer.invoke('app:getConfirmBeforeExit')
+;(api as ElectronAPI).setConfirmBeforeExit = (value: boolean) => ipcRenderer.invoke('app:setConfirmBeforeExit', value)
+;(api as ElectronAPI).exportSettings = () => ipcRenderer.invoke('app:exportSettings')
+;(api as ElectronAPI).importSettings = () => ipcRenderer.invoke('app:importSettings')
 ;(api as ElectronAPI).removeWorkspace = (workspaceId: string) => ipcRenderer.invoke('workspace:remove', workspaceId)
 ;(api as ElectronAPI).invokeOnServer = (url: string, token: string, channel: string, ...args: any[]) =>
   ipcRenderer.invoke('server:invokeOnServer', url, token, channel, ...args)

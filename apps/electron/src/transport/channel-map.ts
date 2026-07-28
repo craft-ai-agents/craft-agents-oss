@@ -143,6 +143,8 @@ export const CHANNEL_MAP = {
   exchangeClaudeCode: invoke(RPC_CHANNELS.onboarding.EXCHANGE_CLAUDE_CODE),
   hasClaudeOAuthState: invoke(RPC_CHANNELS.onboarding.HAS_CLAUDE_OAUTH_STATE),
   clearClaudeOAuthState: invoke(RPC_CHANNELS.onboarding.CLEAR_CLAUDE_OAUTH_STATE),
+  getLastConnectedProvider: invoke(RPC_CHANNELS.onboarding.GET_CONNECTED_PROVIDER),
+  setLastConnectedProvider: invoke(RPC_CHANNELS.onboarding.SET_CONNECTED_PROVIDER),
   deferSetup: invoke(RPC_CHANNELS.onboarding.DEFER_SETUP),
 
   // ChatGPT OAuth
@@ -195,6 +197,8 @@ export const CHANNEL_MAP = {
 
   // Server filesystem browsing (remote mode)
   listServerDirectory: invoke(RPC_CHANNELS.fs.LIST_DIRECTORY),
+  // Working-directory file browser (lists files + dirs with metadata)
+  listDirectoryFiles: invoke(RPC_CHANNELS.fs.READ_DIRECTORY),
 
   // Debug logging
   debugLog: invoke(RPC_CHANNELS.debug.LOG),
@@ -216,6 +220,12 @@ export const CHANNEL_MAP = {
   watchSessionFiles: invoke(RPC_CHANNELS.sessions.WATCH_FILES),
   unwatchSessionFiles: invoke(RPC_CHANNELS.sessions.UNWATCH_FILES),
   onSessionFilesChanged: listener(RPC_CHANNELS.sessions.FILES_CHANGED),
+
+  // Media Lab — server-side cursor-paginated list (replaces the per-session
+  // getSessionFiles fan-out with one typed request). The AbortSignal is
+  // duck-typed and stripped before serialization by the transport; the
+  // typed request only carries {kind, cursor, limit}.
+  mediaList: invoke(RPC_CHANNELS.media.LIST),
 
   // Sources
   getSources: invoke(RPC_CHANNELS.sources.GET),
@@ -337,6 +347,8 @@ export const CHANNEL_MAP = {
 
   // Git
   getGitBranch: invoke(RPC_CHANNELS.git.GET_BRANCH),
+  getGitStatus: invoke(RPC_CHANNELS.git.STATUS),
+  getFileGitDiff: invoke(RPC_CHANNELS.git.FILE_DIFF),
   checkGitBash: invoke(RPC_CHANNELS.gitbash.CHECK),
   browseForGitBash: invoke(RPC_CHANNELS.gitbash.BROWSE),
   setGitBashPath: invoke(RPC_CHANNELS.gitbash.SET_PATH),
@@ -352,6 +364,17 @@ export const CHANNEL_MAP = {
   restoreMemory: invoke(RPC_CHANNELS.memory.RESTORE),
   deleteMemory: invoke(RPC_CHANNELS.memory.DELETE),
   searchMemories: invoke(RPC_CHANNELS.memory.SEARCH),
+  getMemoryStats: invoke(RPC_CHANNELS.memory.STATS),
+  importMemoriesFromVault: invoke(RPC_CHANNELS.memory.IMPORT),
+  // Health check persistence + heatmap
+  recordHealthCheck: invoke(RPC_CHANNELS.health.RECORD),
+  getHealthHeatmap: invoke(RPC_CHANNELS.health.HEATMAP),
+  getHealthHeatmapAll: invoke(RPC_CHANNELS.health.HEATMAP_ALL),
+
+  compilePrompt: invoke(RPC_CHANNELS.prompts.COMPILE),
+  invalidatePromptCache: invoke(RPC_CHANNELS.prompts.INVALIDATE),
+  resolveWorkspaceContext: invoke(RPC_CHANNELS.prompts.RESOLVE_CONTEXT),
+  onContextFilesChanged: listener(RPC_CHANNELS.prompts.CONTEXT_FILES_CHANGED),
 
   // Browser pane
   menuQuit: invoke(RPC_CHANNELS.menu.QUIT),
@@ -394,6 +417,11 @@ export const CHANNEL_MAP = {
   testLlmConnection: invoke(RPC_CHANNELS.llmConnections.TEST),
   setDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_DEFAULT),
   setWorkspaceDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT),
+
+  // LLM Inference history (real request data for ProvidersPanel sparkline)
+  getLlmInferenceHistory: invoke(RPC_CHANNELS.llmInference.HISTORY),
+  getLlmInferenceHistoryAll: invoke(RPC_CHANNELS.llmInference.HISTORY_ALL),
+  onLlmInferenceChanged: listener(RPC_CHANNELS.llmInference.UPDATED),
 
   // Projects
   getProjects: invoke(RPC_CHANNELS.projects.GET),

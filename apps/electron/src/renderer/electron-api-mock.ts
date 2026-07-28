@@ -47,6 +47,22 @@ function okResult<T = { success: true }>(): Promise<T> {
   return Promise.resolve({ success: true } as T)
 }
 
+/**
+ * Best-effort platform detection for the browser playground.
+ *
+ * Several APIs (`checkGitBash`, `listServerDirectory`) report the *server*
+ * platform. Standalone there is no server, so we report the platform the
+ * browser is running on — the honest answer for the machine at hand, and it
+ * keeps platform-conditional UI (e.g. the Windows-only Git Bash warning)
+ * exercising the same branch a real user on this OS would hit.
+ */
+function mockPlatform(): 'win32' | 'darwin' | 'linux' {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+  if (/Windows/i.test(ua)) return 'win32'
+  if (/Mac OS X|Macintosh/i.test(ua)) return 'darwin'
+  return 'linux'
+}
+
 // ---------------------------------------------------------------------------
 // Mock implementation
 // ---------------------------------------------------------------------------
@@ -161,6 +177,14 @@ const mock: ElectronAPI = {
   // ── Filesystem search ─────────────────────────────────────────────────
   searchFiles: () => Promise.resolve([]),
   listServerDirectory: () => Promise.resolve({ entries: [], error: undefined }),
+  listDirectoryFiles: () => Promise.resolve({
+    currentPath: '/mock',
+    parentPath: null,
+    entries: [
+      { name: 'file1.ts', path: '/mock/file1.ts', type: 'file' as const, size: 1024, mtime: Date.now(), isSymlink: false },
+      { name: 'src', path: '/mock/src', type: 'directory' as const, isSymlink: false },
+    ],
+  }),
   debugLog: noop,
 
   // ── Theme ─────────────────────────────────────────────────────────────
@@ -429,6 +453,18 @@ const mock: ElectronAPI = {
 
   // ── Git ───────────────────────────────────────────────────────────────
   getGitBranch: () => Promise.resolve(null),
+  getGitStatus: () => Promise.resolve({
+    branch: null,
+    dirPath: '',
+    files: [],
+  }),
+  getFileGitDiff: () => Promise.resolve({
+    original: null,
+    modified: null,
+    additions: 0,
+    deletions: 0,
+    isBinary: false,
+  }),
   checkGitBash: () => Promise.resolve({ available: false, path: null }),
   browseForGitBash: () => Promise.resolve(null),
   setGitBashPath: () => Promise.resolve({ success: true }),

@@ -4,7 +4,7 @@
  * Handles workspace setup and configuration persistence.
  */
 import { getAuthState, getSetupNeeds } from '@craft-agent/shared/auth'
-import { isSetupDeferred, setSetupDeferred } from '@craft-agent/shared/config/storage'
+import { isSetupDeferred, setSetupDeferred, getLastConnectedProvider, setLastConnectedProvider } from '@craft-agent/shared/config/storage'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { prepareClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState, prepareMcpOAuth } from '@craft-agent/shared/auth'
 import { validateMcpConnection } from '@craft-agent/shared/mcp'
@@ -24,6 +24,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.onboarding.EXCHANGE_CLAUDE_CODE,
   RPC_CHANNELS.onboarding.HAS_CLAUDE_OAUTH_STATE,
   RPC_CHANNELS.onboarding.CLEAR_CLAUDE_OAUTH_STATE,
+  RPC_CHANNELS.onboarding.GET_CONNECTED_PROVIDER,
+  RPC_CHANNELS.onboarding.SET_CONNECTED_PROVIDER,
   RPC_CHANNELS.onboarding.DEFER_SETUP,
 ] as const
 
@@ -158,6 +160,16 @@ export function registerOnboardingHandlers(server: RpcServer, deps: HandlerDeps)
   // Clear OAuth state (for cancel/reset)
   server.handle(RPC_CHANNELS.onboarding.CLEAR_CLAUDE_OAUTH_STATE, async () => {
     clearOAuthState()
+    return { success: true }
+  })
+
+  // Persist the last connected provider name for the QuickStart overlay.
+  server.handle(RPC_CHANNELS.onboarding.GET_CONNECTED_PROVIDER, async () => {
+    return getLastConnectedProvider()
+  })
+
+  server.handle(RPC_CHANNELS.onboarding.SET_CONNECTED_PROVIDER, async (_ctx, name: string) => {
+    setLastConnectedProvider(name)
     return { success: true }
   })
 

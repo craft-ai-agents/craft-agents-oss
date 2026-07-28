@@ -15,6 +15,21 @@ import type { RpcClient } from '@craft-agent/server-core/transport'
 import type { RemoteServerConfig } from '@craft-agent/core/types'
 import { isLocalOnly, RPC_CHANNELS } from '@craft-agent/shared/protocol'
 
+/**
+ * Duck-typed AbortSignal detection for the routed-client's argument-extraction
+ * step. Mirrors the helper inside `server-core/transport/client.ts` — kept
+ * inline here so the routed-client doesn't reach back into server-core just
+ * for one type guard.
+ */
+function isAbortSignal(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') return false
+  const s = value as { aborted?: unknown; addEventListener?: unknown; removeEventListener?: unknown }
+  if (typeof s.aborted !== 'boolean') return false
+  if (typeof s.addEventListener !== 'function') return false
+  if (typeof s.removeEventListener !== 'function') return false
+  return true
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -102,17 +117,30 @@ export class RoutedClient implements RpcClient {
     // with the server's workspace ID so the handler can resolve the workspace.
     // Handles both top-level string args (e.g., getSkills(workspaceId)) and
     // object args with a workspaceId property (e.g., testAutomation({ workspaceId, ... })).
+    //
+    // NB: An optional last-arg AbortSignal must NOT be touched here — it's a
+    // control-plane token, not data-plane, and re-mapping it could break the
+    // control semantics. The downstream client (WsRpcClient) detects and
+    // strips it before sending wire args; here we only translate data args.
+    let signal: unknown = null
+    let dataArgs = args
+    if (args.length > 0 && isAbortSignal(args[args.length - 1])) {
+      signal = args[args.length - 1]
+      dataArgs = args.slice(0, -1)
+    }
+    void signal;
     const translatedArgs = (!isLocal && this.workspaceIdMapping)
-      ? args.map(arg => {
+      ? dataArgs.map(arg => {
           if (arg === this.workspaceIdMapping!.localId) return this.workspaceIdMapping!.remoteId
           if (arg && typeof arg === 'object' && 'workspaceId' in arg && arg.workspaceId === this.workspaceIdMapping!.localId) {
             return { ...arg, workspaceId: this.workspaceIdMapping!.remoteId }
           }
           return arg
         })
-      : args
+      : dataArgs
+    const forwardArgs = signal !== null ? [...translatedArgs, signal] : translatedArgs
 
-    const result = await target.invoke(channel, ...translatedArgs)
+    const result = await target.invoke(channel, ...forwardArgs)
 
     // Intercept SWITCH_WORKSPACE response to swap workspace client
     if (channel === RPC_CHANNELS.window.SWITCH_WORKSPACE) {

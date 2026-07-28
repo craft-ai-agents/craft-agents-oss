@@ -1,8 +1,8 @@
 import { BrowserWindow, shell, nativeTheme, Menu, app } from 'electron'
 import { windowLog } from './logger'
 import { join, resolve, sep } from 'path'
-import { existsSync } from 'fs'
-import { release } from 'os'
+import { existsSync, readFileSync } from 'fs'
+import { homedir, release } from 'os'
 import { fileURLToPath } from 'url'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { classifyExternalUrl, formatBlockedUrlError } from '@craft-agent/shared/utils/url-safety'
@@ -161,7 +161,7 @@ export class WindowManager {
 
   /**
    * Apply the window-title policy across all managed windows:
-   *   1 window  → app name ("Craft Agents") on the lone window
+   *   1 window  → app name ("ARCHstudio") on the lone window
    *   ≥2 windows → workspace name on each window, app-name fallback when the
    *                workspace can't be resolved (e.g. onboarding window).
    *
@@ -299,7 +299,7 @@ export class WindowManager {
       })
     }
 
-    // The renderer's index.html ships with `<title>Craft Agents</title>`, so
+    // The renderer's index.html ships with `<title>ARCHstudio</title>`, so
     // without this Electron auto-syncs every window's title back to that on
     // load — clobbering the workspace-name policy applied below. Suppress the
     // default sync so setTitle() calls from refreshWindowTitles() stick.
@@ -387,6 +387,16 @@ export class WindowManager {
       }
     })
 
+    window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      windowLog.info(`[renderer-console] level=${level} ${sourceId}:${line} ${message}`)
+    })
+    window.webContents.on('render-process-gone', (_event, details) => {
+      windowLog.error('[renderer-console] render-process-gone', details)
+    })
+    window.webContents.on('unresponsive', () => {
+      windowLog.error('[renderer-console] unresponsive')
+    })
+
     // If an initial deep link was provided, navigate to it after the window is ready
     if (initialDeepLink) {
       window.once('ready-to-show', () => {
@@ -452,6 +462,22 @@ export class WindowManager {
       // This preserves expected Cmd+Q semantics (quit app instead of closing overlays/panels first).
       if (this.isAppQuitting) {
         return
+      }
+
+      // Check the confirm-before-exit preference. If false, close directly
+      // without querying the renderer for confirmation.
+      try {
+        const prefsPath = join(homedir(), '.craft-agent', 'config', 'preferences.json')
+        if (existsSync(prefsPath)) {
+          const raw = readFileSync(prefsPath, 'utf-8')
+          const prefs = JSON.parse(raw)
+          if (prefs.confirmBeforeExit === false) {
+            // User opted out of confirmation — allow default close behavior
+            return
+          }
+        }
+      } catch {
+        // preferences file may not exist — proceed with confirmation flow
       }
 
       // Check if renderer is ready (mainFrame exists) - if not, allow close directly

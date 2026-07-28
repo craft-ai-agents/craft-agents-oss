@@ -89,7 +89,9 @@ function createTestHarness(sessionPaths: Map<string, string>) {
 }
 
 function makeCtx(clientId: string, workspaceId = 'ws-1'): RequestContext {
-  return { clientId, workspaceId, webContentsId: null }
+  // Never-aborted signal: tests don't exercise cancellation, but every
+  // RequestContext must carry an AbortSignal now that handlers can subscribe.
+  return { clientId, workspaceId, webContentsId: null, signal: new AbortController().signal }
 }
 
 // ---------------------------------------------------------------------------
