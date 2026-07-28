@@ -6,6 +6,8 @@
  */
 
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
+import { assertMockCoverage } from './_mock-coverage'
+import { REQUIRED_ELECTRON_MEMBERS } from '../../../../../scripts/__generated__/required-electron-members'
 
 const createdWindows: any[] = []
 let toolbarLoadFailuresRemaining = 0
@@ -19,10 +21,24 @@ function createMockWebContents() {
     userAgent: 'Mock Chrome Electron/99.0.0',
     session: {},
     isDestroyed: mock(() => false),
+    id: 1,
     on: (event: string, cb: Function) => {
       if (!listeners[event]) listeners[event] = []
       listeners[event].push(cb)
     },
+    once: (event: string, cb: Function) => {
+      const wrapped = (...args: any[]) => {
+        listeners[event] = (listeners[event] || []).filter(fn => fn !== wrapped)
+        cb(...args)
+      }
+      if (!listeners[event]) listeners[event] = []
+      listeners[event].push(wrapped)
+    },
+    removeListener: (event: string, cb: Function) => {
+      if (!listeners[event]) return
+      listeners[event] = listeners[event].filter(fn => fn !== cb)
+    },
+    sendInputEvent: mock((_event: any) => {}),
     loadURL: mock(async (url: string) => {
       currentUrl = url
       const isToolbarUrl = typeof url === 'string' && url.includes('browser-toolbar.html')
@@ -122,6 +138,8 @@ function createMockWindow(opts?: { width?: number; height?: number; minWidth?: n
     show: mock(() => {}),
     showInactive: mock(() => {}),
     setWindowButtonVisibility: mock((_visible: boolean) => {}),
+    setResizable: mock((_v: boolean) => {}),
+    isResizable: mock(() => true),
     hide: mock(() => {
       win._emit('hide')
     }),
@@ -245,6 +263,29 @@ mock.module('../browser-cdp', () => ({
 }))
 
 const { BrowserPaneManager } = await import('../browser-pane-manager')
+
+// Mock coverage — fail-fast at module load if a future refactor needs a new
+// BrowserWindow / BrowserView / WebContents member that the mocks above don't
+// provide. Top-level throws on missing members produce a single clear error
+// and prevent a noisy `(fail)` cascade across the BrowserPaneManager cases
+// that depend on the missing members. Run `bun scripts/check-electron-mock-coverage.ts`
+// to refresh REQUIRED_ELECTRON_MEMBERS after consumer code changes its call
+// surface; the .husky/pre-commit hook runs the same script automatically.
+assertMockCoverage(
+  createMockWindow(),
+  REQUIRED_ELECTRON_MEMBERS.BrowserWindow,
+  'BrowserWindow',
+)
+assertMockCoverage(
+  createMockBrowserView(),
+  REQUIRED_ELECTRON_MEMBERS.BrowserView,
+  'BrowserView',
+)
+assertMockCoverage(
+  createMockBrowserView().webContents,
+  REQUIRED_ELECTRON_MEMBERS.WebContents,
+  'WebContents',
+)
 
 describe('BrowserPaneManager', () => {
   let manager: InstanceType<typeof BrowserPaneManager>

@@ -4,6 +4,15 @@ preload = ["./packages/shared/src/unified-network-interceptor.ts"]
 # import.meta.glob inside ThemeContext.tsx — see scripts/test-setup.ts.
 [test]
 preload = ["./scripts/test-setup.ts"]
+# electron-builder writes staged source trees to apps/electron/release/**
+# (win-unpacked, mac, linux-unpacked). Without this ignore bun's test
+# loader walks into the unpacked bundle and picks up stale *.test.ts
+# copies that reference test-setup relative-path imports which no longer
+# resolve from the release/ tree — producing phantom failures every time
+# dist:win / dist:mac has been run. The release/ root is already gitignored.
+pathIgnorePatterns = [
+  "**/release/**",
+]
 
 # Use the hoisted linker so transitive deps resolve at top-level node_modules.
 # Vite + esbuild bundling expects this layout; bun's default isolated linker
