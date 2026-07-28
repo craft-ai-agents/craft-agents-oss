@@ -66,6 +66,14 @@
   --ds-neutral-bg: color-mix(in oklch, var(--foreground) 6%, transparent);
   --ds-neutral-border: var(--ds-panel-border);
 
+  /* Deeper warning step — for the far end of a warning ramp (amber -> orange),
+     where a single --ds-warning would collapse two distinct states into one. */
+  --ds-warning-deep: color-mix(in oklch, var(--info) 70%, var(--destructive));
+
+  /* Hover wash for rows and tiles. Sits between --ds-neutral-bg and a full
+     raised panel, and inverts correctly because it mixes the foreground. */
+  --ds-hover-bg: color-mix(in oklch, var(--foreground) 7%, transparent);
+
   /* --- Tool / run states ------------------------------------------------ */
   --ds-state-running: var(--brand-lime);
   --ds-state-running-bg: color-mix(in oklch, var(--brand-lime) 14%, transparent);

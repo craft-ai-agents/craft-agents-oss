@@ -221,6 +221,102 @@
   color: var(--accent);
 }
 
+.providers-panel__btn--clear-active {
+  color: var(--ds-error);
+  border-color: color-mix(in oklch, var(--ds-error) 25%, transparent);
+}
+
+.providers-panel__btn--expand-active {
+  color: var(--ds-info);
+  border-color: color-mix(in oklch, var(--ds-info) 25%, transparent);
+}
+
+.providers-panel__btn--sort-active {
+  color: var(--ds-info);
+  border-color: color-mix(in oklch, var(--ds-info) 25%, transparent);
+}
+
+/* Clear / reset dropdown — positioned relative wrapper */
+.providers-panel__clear-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.providers-panel__clear-chevron {
+  transition: transform var(--ds-duration-fast, 0.15s) var(--ds-ease-standard, ease);
+  margin-left: 2px;
+}
+
+.providers-panel__clear-chevron--open {
+  transform: rotate(180deg);
+}
+
+.providers-panel__clear-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 220px;
+  z-index: 100;
+  background: var(--ds-panel);
+  border: 1px solid var(--ds-panel-border);
+  border-radius: var(--ds-radius-md, 8px);
+  box-shadow: var(--ds-shadow-lg, 08px24pxcolor-mix(in oklch, var(--ds-shadow-color) 40%, transparent));
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.providers-panel__clear-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--ds-radius-sm, 6px);
+  background: transparent;
+  color: var(--ds-text);
+  font-size: var(--ds-text-sm, 13px);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--ds-duration-fast, 0.12s) var(--ds-ease-standard, ease);
+}
+
+.providers-panel__clear-dropdown-item:hover:not(:disabled) {
+  background: var(--ds-hover-bg);
+}
+
+.providers-panel__clear-dropdown-item:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.providers-panel__clear-dropdown-item:first-child {
+  color: var(--ds-error);
+}
+
+.providers-panel__clear-dropdown-item:first-child:hover:not(:disabled) {
+  background: var(--ds-error-bg);
+}
+
+.providers-panel__clear-dropdown-divider {
+  height: 1px;
+  background: var(--ds-panel-border);
+  margin: 2px 8px;
+}
+
+.providers-panel__clear-kbd {
+  margin-left: auto;
+  font-size: var(--ds-text-xs, 11px);
+  color: var(--ds-text-muted);
+  font-family: inherit;
+  padding: 1px 5px;
+  border: 1px solid var(--ds-panel-border);
+  border-radius: var(--ds-radius-sm, 4px);
+  background: var(--ds-panel-raised);
+}
+
 /* ---- Quick-add form --------------------------------------------------- */
 
 .providers-panel__quick-add {
@@ -267,6 +363,87 @@
 }
 
 /* ---- Error banner ----------------------------------------------------- */
+
+.providers-panel__filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 16px 4px;
+  flex-shrink: 0;
+}
+
+.providers-panel__filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 10px;
+  border-radius: var(--ds-radius-pill);
+  border: 1px solid transparent;
+  font-size: var(--ds-text-2xs);
+  font-weight: var(--ds-weight-semibold);
+  cursor: pointer;
+  transition:
+    background var(--ds-duration-fast) var(--ds-ease-standard),
+    border-color var(--ds-duration-fast) var(--ds-ease-standard),
+    box-shadow var(--ds-duration-fast) var(--ds-ease-standard);
+}
+
+.providers-panel__filter-chip:hover {
+  box-shadow: 0 1px 4px color-mix(in oklch, var(--foreground) 10%, transparent);
+}
+
+.providers-panel__filter-chip:focus-visible {
+  outline: 2px solid var(--ds-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Local chip — green tint */
+.providers-panel__filter-chip--local {
+  background: color-mix(in oklch, var(--ds-success) 10%, transparent);
+  color: var(--ds-success);
+  border-color: color-mix(in oklch, var(--ds-success) 18%, transparent);
+}
+
+.providers-panel__filter-chip--local:hover {
+  background: color-mix(in oklch, var(--ds-success) 18%, transparent);
+  border-color: color-mix(in oklch, var(--ds-success) 35%, transparent);
+}
+
+/* Cloud chip — blue/info tint */
+.providers-panel__filter-chip--cloud {
+  background: color-mix(in oklch, var(--ds-info) 10%, transparent);
+  color: var(--ds-info);
+  border-color: color-mix(in oklch, var(--ds-info) 18%, transparent);
+}
+
+.providers-panel__filter-chip--cloud:hover {
+  background: color-mix(in oklch, var(--ds-info) 18%, transparent);
+  border-color: color-mix(in oklch, var(--ds-info) 35%, transparent);
+}
+
+/* Data Center chip — amber/warning tint */
+.providers-panel__filter-chip--datacenter {
+  background: color-mix(in oklch, var(--ds-warning) 10%, transparent);
+  color: var(--ds-warning);
+  border-color: color-mix(in oklch, var(--ds-warning) 18%, transparent);
+}
+
+.providers-panel__filter-chip--datacenter:hover {
+  background: color-mix(in oklch, var(--ds-warning) 18%, transparent);
+  border-color: color-mix(in oklch, var(--ds-warning) 35%, transparent);
+}
+
+/* Search chip — neutral tint */
+.providers-panel__filter-chip--search {
+  background: color-mix(in oklch, var(--foreground) 6%, var(--background));
+  color: var(--ds-text-secondary);
+  border-color: color-mix(in oklch, var(--foreground) 10%, transparent);
+}
+
+.providers-panel__filter-chip--search:hover {
+  background: color-mix(in oklch, var(--foreground) 12%, var(--background));
+  border-color: color-mix(in oklch, var(--foreground) 18%, transparent);
+}
 
 .providers-panel__error {
   display: flex;
@@ -409,13 +586,13 @@
 }
 
 .providers-panel__test-dot--ok {
-  background: #22c55e;
-  box-shadow: 0 0 3px color-mix(in srgb, #22c55e 40%, transparent);
+  background: var(--ds-success);
+  box-shadow: 0 0 3px color-mix(in srgb, var(--ds-success) 40%, transparent);
 }
 
 .providers-panel__test-dot--err {
-  background: #ef4444;
-  box-shadow: 0 0 3px color-mix(in srgb, #ef4444 40%, transparent);
+  background: var(--ds-error);
+  box-shadow: 0 0 3px color-mix(in srgb, var(--ds-error) 40%, transparent);
 }
 
 /* ---- Expanded test history log (from footer icon) -------------------- */
@@ -456,11 +633,11 @@
 }
 
 .providers-panel__test-log-entry--ok .providers-panel__test-log-icon {
-  color: #22c55e;
+  color: var(--ds-success);
 }
 
 .providers-panel__test-log-entry--err .providers-panel__test-log-icon {
-  color: #ef4444;
+  color: var(--ds-error);
 }
 
 .providers-panel__test-log-source {
@@ -501,8 +678,8 @@
 }
 
 .providers-panel__test-log-latency--slow {
-  color: #ef4444;
-  background: color-mix(in srgb, #ef4444 10%, transparent);
+  color: var(--ds-error);
+  background: color-mix(in srgb, var(--ds-error) 10%, transparent);
 }
 
 .providers-panel__footer-icon-btn {
@@ -600,17 +777,17 @@
 }
 
 .providers-panel__heatmap-cell--bad {
-  background: #ef4444;
+  background: var(--ds-error);
   opacity: 0.7;
 }
 
 .providers-panel__heatmap-cell--mixed {
-  background: #f59e0b;
+  background: var(--ds-warning);
   opacity: 0.75;
 }
 
 .providers-panel__heatmap-cell--good {
-  background: #22c55e;
+  background: var(--ds-success);
   opacity: 0.7;
 }
 
@@ -688,15 +865,15 @@
 }
 
 .providers-panel__latency-bucket--fast {
-  background: linear-gradient(to top, #22c55e, #4ade80);
+  background: linear-gradient(to top, var(--ds-success), color-mix(in oklch, var(--ds-success) 78%, var(--ds-text)));
 }
 
 .providers-panel__latency-bucket--mid {
-  background: linear-gradient(to top, #eab308, #facc15);
+  background: linear-gradient(to top, var(--ds-warning), var(--ds-warning));
 }
 
 .providers-panel__latency-bucket--slow {
-  background: linear-gradient(to top, #ef4444, #f87171);
+  background: linear-gradient(to top, var(--ds-error), color-mix(in oklch, var(--ds-error) 80%, var(--ds-text)));
 }
 
 .providers-panel__latency-bucket-count {
@@ -707,7 +884,7 @@
   line-height: 1;
   margin-top: 3px;
   pointer-events: none;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  text-shadow: 0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 15%, transparent);
 }
 
 .providers-panel__latency-histogram-labels {
@@ -733,7 +910,7 @@
   margin: 0 16px 8px;
   padding: 6px 10px;
   border-radius: var(--ds-radius-md, 6px);
-  background: var(--ds-surface-raised, color-mix(in oklch, var(--foreground) 5%, transparent));
+  background: var(--ds-surface-raised, color-mix(inoklch,var(--foreground) 5%, transparent));
   border: 1px solid color-mix(in oklch, var(--foreground) 8%, transparent);
   transition: border-color 0.15s ease;
 }
@@ -774,6 +951,18 @@
   flex-shrink: 0;
   line-height: 1.4;
   cursor: help;
+  transition:
+    opacity var(--ds-duration-fast) var(--ds-ease-standard),
+    background var(--ds-duration-fast) var(--ds-ease-standard),
+    color var(--ds-duration-fast) var(--ds-ease-standard);
+}
+
+/* Idle (no filter) — muted, smaller to de-emphasize */
+.providers-panel__search-count--idle {
+  opacity: 0.45;
+  font-weight: 400;
+  background: color-mix(in oklch, var(--foreground) 6%, transparent);
+  color: var(--ds-text-muted);
 }
 
 .providers-panel__search-clear {
@@ -796,6 +985,38 @@
 .providers-panel__search-clear:hover {
   opacity: 0.8;
   background: color-mix(in oklch, var(--foreground) 18%, transparent);
+}
+
+.providers-panel__search-clear--shaking {
+  animation: providers-shake 0.35s ease-in-out;
+}
+
+@keyframes providers-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-2px); }
+  40% { transform: translateX(2px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(1px); }
+}
+
+/* ---- Ctrl+F shortcut hint (fades in after 3s delay) ----------------- */
+
+.providers-panel__shortcut-hint {
+  font-size: var(--ds-text-2xs);
+  color: var(--ds-text-muted);
+  opacity: 0;
+  transform: translateY(-2px);
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: opacity var(--ds-duration-slow, 0.6s) var(--ds-ease-decelerate, ease-out),
+              transform var(--ds-duration-slow, 0.6s) var(--ds-ease-decelerate, ease-out);
+  pointer-events: none;
+  user-select: none;
+}
+
+.providers-panel__shortcut-hint--visible {
+  opacity: 0.5;
+  transform: translateY(0);
 }
 
 /* ---- Empty state ------------------------------------------------------ */
@@ -872,7 +1093,7 @@
 }
 
 .providers-panel__card--datacenter::before {
-  background: linear-gradient(to bottom, var(--ds-warning), var(--ds-warning-deep, #d97706));
+  background: linear-gradient(to bottom, var(--ds-warning), var(--ds-warning-deep));
 }
 
 .providers-panel__card--other::before {
@@ -1145,7 +1366,7 @@
 
 .providers-panel__filter-badge--active.providers-panel__local-badge {
   background: var(--ds-success);
-  color: var(--ds-text-on-brand, #fff);
+  color: var(--ds-text-on-brand);
   border-color: var(--ds-success);
   box-shadow: 0 0 8px color-mix(in oklch, var(--ds-success) 35%, transparent);
 }
@@ -1169,7 +1390,7 @@
 
 .providers-panel__filter-badge--active.providers-panel__cloud-badge {
   background: var(--ds-info);
-  color: var(--ds-text-on-brand, #fff);
+  color: var(--ds-text-on-brand);
   border-color: var(--ds-info);
   box-shadow: 0 0 8px color-mix(in oklch, var(--ds-info) 35%, transparent);
 }
@@ -1193,7 +1414,7 @@
 
 .providers-panel__filter-badge--active.providers-panel__datacenter-badge {
   background: var(--ds-warning);
-  color: var(--ds-text-on-brand, #fff);
+  color: var(--ds-text-on-brand);
   border-color: var(--ds-warning);
   box-shadow: 0 0 8px color-mix(in oklch, var(--ds-warning) 35%, transparent);
 }

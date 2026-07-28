@@ -7,7 +7,7 @@
 
 .search-panel__header {
   padding: 16px 20px;
-  border-bottom: 1px solid var(--panel-border, #293044);
+  border-bottom: 1px solid var(--ds-panel-border);
 }
 
 .search-panel__field {
@@ -16,14 +16,14 @@
   gap: 10px;
   padding: 10px 14px;
   border-radius: 10px;
-  border: 1px solid var(--panel-border, #293044);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text-secondary, #a7afc0);
+  border: 1px solid var(--ds-panel-border);
+  background: color-mix(in oklch, var(--foreground) 3%, transparent);
+  color: var(--ds-text-secondary);
 }
 
 .search-panel__field:focus-within {
-  border-color: #8c42ff;
-  background: rgba(140, 66, 255, 0.06);
+  border-color: var(--brand-purple);
+  background: color-mix(in oklch, var(--brand-purple) 6%, transparent);
 }
 
 .search-panel__field input {
@@ -31,13 +31,13 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--text-primary, #f4f5f7);
+  color: var(--ds-text);
   font-size: 14px;
 }
 
 .search-panel__spinner {
   animation: search-spin 1s linear infinite;
-  color: #73f04a;
+  color: var(--brand-lime);
 }
 
 @keyframes search-spin {
@@ -49,7 +49,7 @@
 .search-panel__summary {
   margin-top: 10px;
   font-size: 12px;
-  color: var(--text-muted, #6b7085);
+  color: var(--ds-text-muted);
 }
 
 .search-panel__results {
@@ -65,14 +65,14 @@
   align-items: center;
   gap: 10px;
   padding: 64px 16px;
-  color: var(--text-muted, #6b7085);
+  color: var(--ds-text-muted);
   text-align: center;
 }
 
 .search-panel__empty p {
   margin: 0;
   font-size: 14px;
-  color: var(--text-secondary, #a7afc0);
+  color: var(--ds-text-secondary);
 }
 
 .search-panel__empty span {
@@ -83,11 +83,11 @@
 .search-panel__error {
   padding: 24px 4px;
   font-size: 13px;
-  color: var(--text-muted, #6b7085);
+  color: var(--ds-text-muted);
 }
 
 .search-panel__error {
-  color: #ff5c70;
+  color: var(--ds-error);
 }
 
 .search-group {
@@ -102,8 +102,8 @@
   padding: 8px 10px;
   border: 0;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text-primary, #f4f5f7);
+  background: color-mix(in oklch, var(--foreground) 3%, transparent);
+  color: var(--ds-text);
   font-size: 13px;
   font-weight: 600;
   text-align: left;
@@ -111,7 +111,7 @@
 }
 
 .search-group__header:hover {
-  background: rgba(140, 66, 255, 0.12);
+  background: color-mix(in oklch, var(--brand-purple) 12%, transparent);
 }
 
 .search-group__title {
@@ -126,8 +126,8 @@
   border-radius: 999px;
   font-size: 11px;
   font-weight: 500;
-  color: #73f04a;
-  background: rgba(115, 240, 74, 0.12);
+  color: var(--brand-lime);
+  background: color-mix(in oklch, var(--brand-lime) 12%, transparent);
 }
 
 .search-hit {
@@ -137,26 +137,26 @@
   width: 100%;
   padding: 7px 10px 7px 22px;
   border: 0;
-  border-left: 2px solid var(--panel-border, #293044);
+  border-left: 2px solid var(--ds-panel-border);
   margin-left: 14px;
   background: transparent;
-  color: var(--text-secondary, #a7afc0);
+  color: var(--ds-text-secondary);
   font-size: 12px;
   text-align: left;
   cursor: pointer;
 }
 
 .search-hit:hover {
-  border-left-color: #73f04a;
-  background: rgba(255, 255, 255, 0.02);
+  border-left-color: var(--brand-lime);
+  background: color-mix(in oklch, var(--foreground) 2%, transparent);
 }
 
 .search-hit__line {
   flex-shrink: 0;
   min-width: 34px;
-  font-family: var(--mono-font, 'JetBrains Mono', monospace);
+  font-family: var(--mono-font, 'JetBrainsMono',monospace);
   font-size: 11px;
-  color: var(--text-muted, #6b7085);
+  color: var(--ds-text-muted);
   text-align: right;
 }
 
@@ -164,12 +164,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--mono-font, 'JetBrains Mono', monospace);
+  font-family: var(--mono-font, 'JetBrainsMono',monospace);
 }
 
 .search-panel__mark {
-  background: rgba(115, 240, 74, 0.25);
-  color: #b6ff8f;
+  background: color-mix(in oklch, var(--brand-lime) 25%, transparent);
+  color: color-mix(in oklch, var(--brand-lime) 60%, var(--ds-text));
   border-radius: 2px;
   padding: 0 1px;
 }
@@ -180,7 +180,7 @@
   padding: 4px 0;
   border: 0;
   background: transparent;
-  color: #8c42ff;
+  color: var(--brand-purple);
   font-size: 11px;
   cursor: pointer;
 }

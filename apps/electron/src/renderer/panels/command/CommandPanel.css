@@ -110,11 +110,11 @@
 }
 
 .command-panel__success {
-  color: #22c55e;
+  color: var(--ds-success);
 }
 
 .command-panel__error {
-  color: #ef4444;
+  color: var(--ds-error);
 }
 
 .command-panel__entry-command {

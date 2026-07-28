@@ -11,7 +11,7 @@
   justify-content: space-between;
   gap: 16px;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--panel-border, #293044);
+  border-bottom: 1px solid var(--ds-panel-border);
 }
 
 .projects-panel__title {
@@ -30,8 +30,8 @@
   padding: 1px 8px;
   border-radius: 999px;
   font-size: 11px;
-  color: var(--text-secondary, #a7afc0);
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--ds-text-secondary);
+  background: color-mix(in oklch, var(--foreground) 6%, transparent);
 }
 
 .projects-panel__controls {
@@ -46,9 +46,9 @@
   gap: 6px;
   padding: 6px 10px;
   border-radius: 8px;
-  border: 1px solid var(--panel-border, #293044);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text-secondary, #a7afc0);
+  border: 1px solid var(--ds-panel-border);
+  background: color-mix(in oklch, var(--foreground) 3%, transparent);
+  color: var(--ds-text-secondary);
 }
 
 .projects-panel__search input {
@@ -66,17 +66,17 @@
   gap: 6px;
   padding: 6px 10px;
   border-radius: 8px;
-  border: 1px solid var(--panel-border, #293044);
+  border: 1px solid var(--ds-panel-border);
   background: transparent;
-  color: var(--text-secondary, #a7afc0);
+  color: var(--ds-text-secondary);
   font-size: 12px;
   cursor: pointer;
 }
 
 .projects-panel__toggle.is-active {
-  color: #8c42ff;
-  border-color: rgba(140, 66, 255, 0.5);
-  background: rgba(140, 66, 255, 0.12);
+  color: var(--brand-purple);
+  border-color: color-mix(in oklch, var(--brand-purple) 50%, transparent);
+  background: color-mix(in oklch, var(--brand-purple) 12%, transparent);
 }
 
 .projects-panel__grid {
@@ -97,7 +97,7 @@
   align-items: center;
   gap: 12px;
   padding: 64px 16px;
-  color: var(--text-muted, #6b7085);
+  color: var(--ds-text-muted);
 }
 
 .projects-panel__empty p {
@@ -112,8 +112,8 @@
   gap: 8px;
   padding: 16px 16px 14px;
   border-radius: 12px;
-  border: 1px solid var(--panel-border, #293044);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--ds-panel-border);
+  background: color-mix(in oklch, var(--foreground) 2%, transparent);
   text-align: left;
   cursor: pointer;
   overflow: hidden;
@@ -121,13 +121,13 @@
 }
 
 .projects-card:hover {
-  border-color: rgba(115, 240, 74, 0.4);
+  border-color: color-mix(in oklch, var(--brand-lime) 40%, transparent);
   transform: translateY(-1px);
 }
 
 .projects-card.is-selected {
-  border-color: #8c42ff;
-  background: rgba(140, 66, 255, 0.08);
+  border-color: var(--brand-purple);
+  background: color-mix(in oklch, var(--brand-purple) 8%, transparent);
 }
 
 .projects-card.is-archived {
@@ -138,7 +138,7 @@
   position: absolute;
   inset: 0 auto 0 0;
   width: 3px;
-  background: linear-gradient(180deg, #73f04a 0%, var(--project-accent, #8c42ff) 100%);
+  background: linear-gradient(180deg, var(--brand-lime) 0%, var(--brand-purple) 100%);
 }
 
 .projects-card__header {
@@ -159,9 +159,9 @@
   border-radius: 999px;
   font-size: 10px;
   font-weight: 600;
-  color: #73f04a;
-  background: rgba(115, 240, 74, 0.12);
-  border: 1px solid rgba(115, 240, 74, 0.35);
+  color: var(--brand-lime);
+  background: color-mix(in oklch, var(--brand-lime) 12%, transparent);
+  border: 1px solid color-mix(in oklch, var(--brand-lime) 35%, transparent);
   white-space: nowrap;
 }
 
@@ -169,7 +169,7 @@
   margin: 0;
   font-size: 12px;
   line-height: 1.45;
-  color: var(--text-secondary, #a7afc0);
+  color: var(--ds-text-secondary);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -181,7 +181,7 @@
   align-items: center;
   gap: 14px;
   font-size: 11px;
-  color: var(--text-muted, #6b7085);
+  color: var(--ds-text-muted);
 }
 
 .projects-card__meta span {
@@ -195,8 +195,8 @@
   align-items: center;
   gap: 5px;
   font-size: 11px;
-  color: var(--text-muted, #6b7085);
-  font-family: var(--mono-font, 'JetBrains Mono', monospace);
+  color: var(--ds-text-muted);
+  font-family: var(--mono-font, 'JetBrainsMono',monospace);
 }
 
 .projects-card__path span {

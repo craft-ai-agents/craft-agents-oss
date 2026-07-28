@@ -14,8 +14,8 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at top left, rgba(140, 66, 255, 0.12), transparent 40%),
-    radial-gradient(circle at bottom right, rgba(200, 255, 100, 0.08), transparent 40%);
+    radial-gradient(circle at top left, color-mix(in oklch, var(--brand-purple) 12%, transparent), transparent 40%),
+    radial-gradient(circle at bottom right, color-mix(in oklch, var(--brand-lime) 8%, transparent), transparent 40%);
   pointer-events: none;
 }
 
@@ -56,7 +56,7 @@
 
 .home-hero__title-arch {
   font-weight: 700;
-  background: linear-gradient(135deg, #c8ff64, #8C42FF);
+  background: linear-gradient(135deg, color-mix(in oklch, var(--brand-lime) 72%, var(--ds-text)), var(--brand-purple));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;

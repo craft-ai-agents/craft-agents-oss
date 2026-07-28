@@ -1,4 +1,84 @@
+/* ================================================================
+   Media Lab panel
+
+   This file used to carry ~70 hardcoded colour literals (a navy/neon
+   palette: var(--ds-panel-border), var(--ds-text-secondary), var(--brand-lime), var(--brand-purple), color-mix(in oklch, var(--foreground) 6%, transparent),
+   color-mix(in oklch, var(--ds-shadow-color) 25%, transparent), …) plus fallbacks for --panel-border / --text-secondary
+   / --text-muted, none of which are ever defined by the theme pipeline —
+   so the fallbacks always won and the panel ignored the active theme
+   completely. In light mode that meant near-black text wells and
+   invisible hairlines.
+
+   Everything below now derives from the theme's --background /
+   --foreground (plus the brand ramp and the semantic --ds-* tokens), so
+   the panel follows light, dark, scenic, and user themes.
+
+   Mix direction convention (same as shell/LayoutShell.css): mixing
+   background TOWARD foreground lifts a surface off a dark canvas and
+   recesses it on a light one. "More foreground mix" therefore always
+   means "more prominent", in both polarities.
+
+   Chromatic values are mixed with `transparent` (premultiplied alpha —
+   no hue drift) rather than with --foreground, which would drag the hue
+   toward the near-neutral text colour.
+   ================================================================ */
+
 .media-panel {
+  /* --- Surfaces ------------------------------------------------------ */
+  --media-surface: color-mix(in oklch, var(--background) 94%, var(--foreground));
+  --media-surface-hover: color-mix(in oklch, var(--background) 90%, var(--foreground));
+  /* Preview plate sits AT canvas level, i.e. recessed relative to the card. */
+  --media-well: var(--ds-canvas);
+  /* Floating bars/menus overlay the virtualized grid, so they must be opaque. */
+  --media-bar: color-mix(in oklch, var(--background) 92%, var(--foreground));
+  --media-menu: color-mix(in oklch, var(--popover-solid, var(--background)) 92%, var(--foreground));
+
+  /* --- Hairlines & fills --------------------------------------------- */
+  --media-border: var(--ds-panel-border);
+  --media-border-strong: var(--ds-panel-border-strong);
+  --media-fill: color-mix(in oklch, var(--foreground) 6%, transparent);
+  --media-fill-soft: color-mix(in oklch, var(--foreground) 4%, transparent);
+  --media-fill-strong: color-mix(in oklch, var(--foreground) 12%, transparent);
+
+  /* --- Text ----------------------------------------------------------- */
+  --media-text: var(--ds-text);
+  --media-text-secondary: var(--ds-text-secondary);
+  --media-text-muted: var(--ds-text-muted);
+
+  /* --- Selection (brand purple) --------------------------------------- */
+  --media-select: var(--brand-purple);
+  --media-select-soft: color-mix(in oklch, var(--brand-purple) 15%, transparent);
+  --media-select-fill: color-mix(in oklch, var(--brand-purple) 18%, transparent);
+  --media-select-border: color-mix(in oklch, var(--brand-purple) 40%, transparent);
+  --media-select-glow: color-mix(in oklch, var(--brand-purple) 22%, transparent);
+  /* Readable purple label: pale lilac on dark, deep violet on light. */
+  --media-select-text: color-mix(in oklch, var(--brand-purple) 55%, var(--foreground));
+
+  /* --- Live / "fresh" accent -----------------------------------------
+     --success flips with the theme (brand lime in dark, brand-lime-deep
+     in light), which is exactly the contrast behaviour a spinner and a
+     "recently generated" badge need. --brand-lime alone would vanish on
+     a white canvas. ---------------------------------------------------- */
+  --media-live: var(--ds-success);
+  --media-live-bg: color-mix(in oklch, var(--ds-success) 12%, transparent);
+  --media-live-border: color-mix(in oklch, var(--ds-success) 28%, transparent);
+  --media-live-hover: color-mix(in oklch, var(--ds-success) 45%, transparent);
+
+  /* --- Danger --------------------------------------------------------- */
+  --media-danger: var(--ds-error);
+  --media-danger-bg: var(--ds-error-bg);
+  --media-danger-border: color-mix(in oklch, var(--destructive) 50%, transparent);
+
+  /* --- Scrim over arbitrary artwork ----------------------------------
+     The checkbox chip floats on user imagery, not on a panel surface, so
+     it uses the canvas colour at partial alpha with a foreground-tinted
+     ring: dark chip + light ring in dark mode, light chip + dark ring in
+     light mode. Legible over any thumbnail either way. ----------------- */
+  --media-scrim: color-mix(in oklch, var(--background) 70%, transparent);
+  --media-scrim-strong: color-mix(in oklch, var(--background) 88%, transparent);
+  --media-scrim-ring: color-mix(in oklch, var(--foreground) 70%, transparent);
+  --media-on-artwork: var(--ds-text-on-brand);
+
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -9,8 +89,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--panel-border, #293044);
+  padding: var(--ds-space-4) var(--ds-space-5);
+  border-bottom: 1px solid var(--media-border);
 }
 
 .media-panel__title {
@@ -27,15 +107,22 @@
 
 .media-panel__count {
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   font-size: 11px;
-  color: var(--text-secondary, #a7afc0);
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--media-text-secondary);
+  background: var(--media-fill);
+  font-variant-numeric: tabular-nums;
+}
+
+.media-panel__count-detail {
+  opacity: 0.6;
+  font-size: 10px;
+  margin-left: 2px;
 }
 
 .media-panel__spinner {
   animation: media-spin 1s linear infinite;
-  color: #73f04a;
+  color: var(--media-live);
 }
 
 @keyframes media-spin {
@@ -47,9 +134,9 @@
 .media-panel__filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--panel-border, #293044);
+  gap: var(--ds-space-2);
+  padding: var(--ds-space-3) var(--ds-space-5);
+  border-bottom: 1px solid var(--media-border);
 }
 
 .media-chip {
@@ -57,10 +144,10 @@
   align-items: center;
   gap: 6px;
   padding: 5px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--panel-border, #293044);
+  border-radius: var(--ds-radius-pill);
+  border: 1px solid var(--media-border);
   background: transparent;
-  color: var(--text-secondary, #a7afc0);
+  color: var(--media-text-secondary);
   font-size: 12px;
   text-transform: capitalize;
   cursor: pointer;
@@ -72,38 +159,56 @@
 }
 
 .media-chip.is-active {
-  color: #fff;
-  border-color: #8c42ff;
-  background: rgba(140, 66, 255, 0.15);
+  color: var(--media-text);
+  border-color: var(--media-select);
+  background: var(--media-select-soft);
 }
 
-.media-panel__grid {
+/*
+ * Library viewport. VariableSizeGrid takes over the visible scrollbar when
+ * items exist; the loading/error/empty states each fill the viewport as a
+ * single centered block. min-height: 0 is required so the flex item can
+ * shrink below its content's intrinsic height.
+ */
+.media-panel__viewport {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 14px;
-  padding: 20px;
-  align-content: start;
-}
-
-.media-panel__empty,
-.media-panel__error {
-  grid-column: 1 / -1;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+.media-panel__viewport > .media-panel__loading,
+.media-panel__viewport > .media-panel__error,
+.media-panel__viewport > .media-panel__empty {
+  flex: 1;
+  display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 64px 16px;
+  justify-content: center;
+  padding: 24px var(--ds-space-4);
   text-align: center;
-  color: var(--text-muted, #6b7085);
+  color: var(--media-text-muted);
+}
+
+.media-panel__loading {
+  flex-direction: column;
+  gap: var(--ds-space-3);
+}
+
+.media-panel__loading .media-panel__spinner {
+  color: var(--media-live);
+}
+
+.media-panel__empty {
+  flex-direction: column;
+  gap: 10px;
 }
 
 .media-panel__empty p {
   margin: 0;
   font-size: 14px;
-  color: var(--text-secondary, #a7afc0);
+  color: var(--media-text-secondary);
 }
 
 .media-panel__empty span {
@@ -112,7 +217,40 @@
 }
 
 .media-panel__error {
-  color: #ff5c70;
+  flex-direction: column;
+  gap: var(--ds-space-2);
+  color: var(--media-danger);
+  font-size: 13px;
+}
+
+/*
+ * Pager + end-of-list rows live INSIDE the virtualized grid's own scroll
+ * element (rendered via VariableSizeGrid's innerElementType). They render
+ * in normal block flow after the absolutely-positioned cells, so the grid's
+ * scroll height naturally reflects cards + pager + end-cap.
+ */
+.media-panel__pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ds-space-2);
+  padding: 18px 0;
+  font-size: 12px;
+  color: var(--media-text-secondary);
+}
+
+.media-panel__pager-spin {
+  animation: media-spin 1s linear infinite;
+  color: var(--media-live);
+}
+
+.media-panel__end {
+  padding: 24px 0 var(--ds-space-5);
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--media-text-muted);
 }
 
 .media-card {
@@ -120,17 +258,26 @@
   display: flex;
   flex-direction: column;
   border-radius: 11px;
-  border: 1px solid var(--panel-border, #293044);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--media-border);
+  background: var(--media-surface);
   overflow: hidden;
   text-align: left;
   cursor: pointer;
   padding: 0;
-  transition: border-color 0.15s ease, transform 0.15s ease;
+  transition:
+    border-color var(--ds-duration-fast) var(--ds-ease-standard),
+    transform var(--ds-duration-fast) var(--ds-ease-standard),
+    box-shadow var(--ds-duration-fast) var(--ds-ease-standard);
 }
 
 .media-card:hover {
-  border-color: rgba(115, 240, 74, 0.45);
+  border-color: var(--media-live-hover);
+  transform: translateY(-1px);
+}
+
+.media-card--selected {
+  border-color: var(--media-select) !important;
+  box-shadow: 0 0 0 1px var(--media-select), 0 0 12px var(--media-select-glow);
   transform: translateY(-1px);
 }
 
@@ -138,9 +285,10 @@
   display: grid;
   place-items: center;
   height: 110px;
-  background: rgba(0, 0, 0, 0.25);
-  color: var(--text-muted, #6b7085);
+  background: var(--media-well);
+  color: var(--media-text-muted);
   overflow: hidden;
+  position: relative;
 }
 
 .media-card__preview img {
@@ -149,14 +297,71 @@
   object-fit: cover;
 }
 
+.media-card--selected .media-card__preview img {
+  filter: brightness(0.6);
+}
+
 .media-card__preview.is-video {
-  color: #8c42ff;
-  background: linear-gradient(135deg, rgba(140, 66, 255, 0.15), rgba(0, 0, 0, 0.3));
+  color: var(--ds-media-video);
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--ds-media-video) 16%, transparent), transparent),
+    var(--media-well);
 }
 
 .media-card__preview.is-audio {
-  color: #73f04a;
-  background: linear-gradient(135deg, rgba(115, 240, 74, 0.13), rgba(0, 0, 0, 0.3));
+  color: var(--ds-media-audio);
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--ds-media-audio) 14%, transparent), transparent),
+    var(--media-well);
+}
+
+/* Selection checkbox overlay on preview */
+.media-card__select-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: var(--ds-space-2);
+  pointer-events: none;
+}
+
+.media-card__checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--ds-radius-sm);
+  background: var(--media-scrim);
+  backdrop-filter: blur(2px);
+  transition:
+    background var(--ds-duration-instant) var(--ds-ease-standard),
+    transform var(--ds-duration-instant) var(--ds-ease-standard);
+}
+
+.media-card:hover .media-card__checkbox {
+  background: var(--media-scrim-strong);
+  transform: scale(1.08);
+}
+
+.media-card--selected .media-card__checkbox {
+  background: var(--media-select);
+}
+
+.media-card__checkbox-ring {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 2px solid var(--media-scrim-ring);
+}
+
+.media-card__checkbox-checked {
+  color: var(--ds-text-on-brand);
+  filter: drop-shadow(0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 60%, transparent));
 }
 
 .media-card__body {
@@ -173,25 +378,339 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.media-card--selected .media-card__name {
+  color: var(--media-select-text);
+}
+
+.media-card__badge-recent {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--ds-radius-pill);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--media-live);
+  background: var(--media-live-bg);
+  border: 1px solid var(--media-live-border);
+  white-space: nowrap;
+  animation: media-badge-pop var(--ds-duration-medium) var(--ds-ease-decelerate);
+}
+
+@keyframes media-badge-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .media-card__meta {
   font-size: 10px;
-  color: var(--text-muted, #6b7085);
+  color: var(--media-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Floats over the thumbnail, so it uses the on-artwork colour plus a
+   shadow rather than a theme text colour. */
 .media-card__open {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: var(--ds-space-2);
+  right: var(--ds-space-2);
   opacity: 0;
-  color: #fff;
-  transition: opacity 0.15s ease;
+  color: var(--media-on-artwork);
+  filter: drop-shadow(0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 70%, transparent));
+  transition: opacity var(--ds-duration-fast) var(--ds-ease-standard);
 }
 
 .media-card:hover .media-card__open {
   opacity: 0.8;
+}
+
+.media-card--selected .media-card__open {
+  opacity: 0.6;
+}
+
+/* Floating action bar */
+.media-panel__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
+  padding: 10px var(--ds-space-4);
+  background: var(--media-bar);
+  border-bottom: 1px solid color-mix(in oklch, var(--brand-purple) 35%, transparent);
+  backdrop-filter: blur(8px);
+  flex-shrink: 0;
+  z-index: var(--ds-z-raised);
+  animation: media-actions-slide var(--ds-duration-medium) var(--ds-ease-decelerate);
+}
+
+@keyframes media-actions-slide {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.media-panel__actions-info {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  color: var(--media-select-text);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.media-panel__actions-count {
+  background: var(--media-select-fill);
+  padding: 2px 9px;
+  border-radius: var(--ds-radius-pill);
+  font-variant-numeric: tabular-nums;
+  color: var(--media-select-text);
+}
+
+.media-panel__actions-buttons {
+  display: flex;
+  gap: var(--ds-space-2);
+}
+
+.media-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px var(--ds-space-3);
+  border-radius: 7px;
+  border: 1px solid var(--media-fill-strong);
+  background: var(--media-fill);
+  color: var(--media-text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: var(--ds-transition-color);
+}
+
+.media-action-btn:hover {
+  background: var(--media-fill-strong);
+  border-color: var(--media-border-strong);
+  color: var(--media-text);
+}
+
+.media-action-btn--danger:hover {
+  border-color: var(--media-danger-border);
+  background: var(--media-danger-bg);
+  color: var(--media-danger);
+}
+
+.media-action-btn--clear {
+  border-color: transparent;
+  background: transparent;
+}
+
+.media-action-btn--clear:hover {
+  background: var(--media-fill);
+  border-color: var(--media-fill-strong);
+}
+
+.media-panel__tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.media-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px var(--ds-space-3);
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--media-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: var(--ds-transition-color);
+}
+
+.media-tab:hover {
+  background: var(--media-fill-soft);
+  color: var(--media-text);
+}
+
+.media-tab.is-active {
+  background: color-mix(in oklch, var(--brand-purple) 12%, transparent);
+  border-color: var(--media-select-border);
+  color: var(--media-text);
+}
+
+.media-create {
+  /* Per-tool accents for the Create cards. Declared here (not inline in the
+     TSX as literals) so they stay theme-derived; the TSX only names them.
+     Music blends the two brand poles, which lands on a blue in oklch. */
+  --media-tool-image: var(--ds-media-image);
+  --media-tool-video: var(--ds-media-video);
+  --media-tool-music: color-mix(in oklch, var(--brand-purple) 58%, var(--brand-lime));
+
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--ds-space-6) 32px;
+}
+
+.media-create__hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 36px var(--ds-space-5);
+  text-align: center;
+  color: var(--brand-purple);
+}
+
+.media-create__hero h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--media-text);
+}
+
+.media-create__hero p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--media-text-secondary);
+  max-width: 420px;
+}
+
+.media-create__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: var(--ds-space-5);
+}
+
+.media-create__card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 18px;
+  border-radius: var(--ds-radius-lg);
+  border: 1px solid var(--media-border);
+  background: var(--media-surface);
+  color: var(--media-text-secondary);
+  text-align: left;
+  cursor: not-allowed;
+  transition:
+    border-color var(--ds-duration-fast) var(--ds-ease-standard),
+    transform var(--ds-duration-fast) var(--ds-ease-standard);
+}
+
+/* --media-tool-accent is set per card from the TSX; it deliberately does NOT
+   reuse the global --accent theme variable, which setting inline would
+   override for everything nested inside the card. */
+.media-create__card:hover {
+  border-color: var(--media-tool-accent, var(--media-border));
+}
+
+.media-create__card strong {
+  color: var(--media-text);
+  font-size: 14px;
+}
+
+.media-create__prompt {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* "Coming soon" marker — feature itself is untouched, just themed. */
+.media-create__soon {
+  margin-top: auto;
+  padding: 3px 9px;
+  border-radius: var(--ds-radius-pill);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--media-text-muted);
+  background: var(--media-fill-soft);
+  border: 1px solid var(--media-border);
+}
+
+.media-context-menu {
+  position: fixed;
+  z-index: var(--ds-z-popover);
+  min-width: 170px;
+  padding: 4px;
+  border-radius: var(--ds-radius-md);
+  border: 1px solid var(--media-border);
+  background: var(--media-menu);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--ds-elevation-3);
+  animation: media-context-fade var(--ds-duration-instant) var(--ds-ease-decelerate);
+}
+
+@keyframes media-context-fade {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.media-context-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--ds-radius-sm);
+  background: transparent;
+  color: var(--media-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: var(--ds-transition-color);
+  white-space: nowrap;
+}
+
+.media-context-menu__item:hover {
+  background: var(--media-live-bg);
+  color: var(--media-live);
+}
+
+.media-context-menu__item svg {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.media-context-menu__item:hover svg {
+  opacity: 1;
+}
+
+.media-create__note {
+  text-align: center;
+  font-size: 12px;
+  color: var(--media-text-muted);
+  max-width: 520px;
+  margin: 0 auto;
+  line-height: 1.5;
 }

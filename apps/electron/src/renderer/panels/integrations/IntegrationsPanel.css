@@ -139,7 +139,7 @@
 }
 
 .int-platform-card--connected {
-  border-color: color-mix(in srgb, #22c55e 30%, transparent);
+  border-color: color-mix(in srgb, var(--ds-success) 30%, transparent);
 }
 
 .int-platform-card__header {
@@ -185,12 +185,12 @@
 }
 
 .int-platform-card__status-dot.is-connected {
-  background: #22c55e;
-  box-shadow: 0 0 6px #22c55e;
+  background: var(--ds-success);
+  box-shadow: 0 0 6px var(--ds-success);
 }
 
 .int-platform-card__status-dot.is-connecting {
-  background: #fbbf24;
+  background: color-mix(in oklch, var(--ds-warning) 80%, var(--ds-text));
   animation: int-pulse 1s ease-in-out infinite;
 }
 
@@ -199,7 +199,7 @@
 }
 
 .int-platform-card__status-dot.is-reconnect {
-  background: #f97316;
+  background: var(--ds-warning-deep);
 }
 
 .int-platform-card__status-dot.is-error {
@@ -240,15 +240,15 @@
 }
 
 .int-platform-card__status-badge.is-connected {
-  color: #22c55e;
-  background: color-mix(in srgb, #22c55e 12%, transparent);
-  border-color: color-mix(in srgb, #22c55e 25%, transparent);
+  color: var(--ds-success);
+  background: color-mix(in srgb, var(--ds-success) 12%, transparent);
+  border-color: color-mix(in srgb, var(--ds-success) 25%, transparent);
 }
 
 .int-platform-card__status-badge.is-connecting {
-  color: #fbbf24;
-  background: color-mix(in srgb, #fbbf24 12%, transparent);
-  border-color: color-mix(in srgb, #fbbf24 25%, transparent);
+  color: color-mix(in oklch, var(--ds-warning) 80%, var(--ds-text));
+  background: color-mix(in srgb, color-mix(in oklch, var(--ds-warning) 80%, var(--ds-text)) 12%, transparent);
+  border-color: color-mix(in srgb, color-mix(in oklch, var(--ds-warning) 80%, var(--ds-text)) 25%, transparent);
 }
 
 .int-platform-card__status-badge.is-disconnected {
@@ -257,9 +257,9 @@
 }
 
 .int-platform-card__status-badge.is-reconnect {
-  color: #f97316;
-  background: color-mix(in srgb, #f97316 12%, transparent);
-  border-color: color-mix(in srgb, #f97316 25%, transparent);
+  color: var(--ds-warning-deep);
+  background: color-mix(in srgb, var(--ds-warning-deep) 12%, transparent);
+  border-color: color-mix(in srgb, var(--ds-warning-deep) 25%, transparent);
 }
 
 .int-platform-card__status-badge.is-error {
@@ -388,15 +388,15 @@
 }
 
 .integrations-chip.is-active {
-  color: #fff;
+  color: var(--ds-text-on-brand);
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .integrations-chip.is-connected.is-active {
-  color: #22c55e;
-  border-color: #22c55e;
-  background: color-mix(in srgb, #22c55e 15%, transparent);
+  color: var(--ds-success);
+  border-color: var(--ds-success);
+  background: color-mix(in srgb, var(--ds-success) 15%, transparent);
 }
 
 .integrations-panel__grid {
@@ -466,8 +466,10 @@
   border-radius: 9px;
   font-size: 16px;
   font-weight: 600;
-  color: #fff;
-  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000));
+  color: var(--ds-text-on-brand);
+  /* Darkened end of the accent gradient. Mixing toward --background rather than
+     literal black keeps the ramp correct when the theme is light. */
+  background: linear-gradient(135deg, var(--accent), color-mix(in oklch, var(--accent) 70%, var(--background)));
 }
 
 .integrations-card__id {
@@ -519,15 +521,15 @@
 }
 
 .integrations-status.is-connected {
-  color: #22c55e;
-  background: color-mix(in srgb, #22c55e 12%, transparent);
-  border-color: color-mix(in srgb, #22c55e 25%, transparent);
+  color: var(--ds-success);
+  background: color-mix(in srgb, var(--ds-success) 12%, transparent);
+  border-color: color-mix(in srgb, var(--ds-success) 25%, transparent);
 }
 
 .integrations-status.is-needs-auth {
-  color: #fbbf24;
-  background: color-mix(in srgb, #fbbf24 12%, transparent);
-  border-color: color-mix(in srgb, #fbbf24 25%, transparent);
+  color: color-mix(in oklch, var(--ds-warning) 80%, var(--ds-text));
+  background: color-mix(in srgb, color-mix(in oklch, var(--ds-warning) 80%, var(--ds-text)) 12%, transparent);
+  border-color: color-mix(in srgb, color-mix(in oklch, var(--ds-warning) 80%, var(--ds-text)) 25%, transparent);
 }
 
 .integrations-status.is-failed {
@@ -565,7 +567,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.5);
+  background: color-mix(in oklch, var(--ds-shadow-color) 50%, transparent);
   backdrop-filter: blur(4px);
   animation: int-fade-in 0.15s ease-out;
 }
@@ -577,7 +579,7 @@
   border-radius: 14px;
   border: 1px solid var(--border);
   background: var(--background);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 20px 60px color-mix(in oklch, var(--ds-shadow-color) 35%, transparent);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -695,9 +697,9 @@
 }
 
 .int-wizard__result--ok {
-  background: color-mix(in srgb, #22c55e 10%, transparent);
-  color: #22c55e;
-  border: 1px solid color-mix(in srgb, #22c55e 25%, transparent);
+  background: color-mix(in srgb, var(--ds-success) 10%, transparent);
+  color: var(--ds-success);
+  border: 1px solid color-mix(in srgb, var(--ds-success) 25%, transparent);
 }
 
 .int-wizard__result--error {

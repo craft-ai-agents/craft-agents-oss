@@ -10,7 +10,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--panel-border, #293044);
+  border-bottom: 1px solid var(--ds-panel-border);
 }
 
 .settings-panel__title {
@@ -30,11 +30,11 @@
   align-items: center;
   gap: 5px;
   font-size: 11px;
-  color: var(--text-muted, #6b7085);
+  color: var(--ds-text-muted);
 }
 
 .settings-panel__saved.is-done {
-  color: #73f04a;
+  color: var(--brand-lime);
 }
 
 .settings-panel__body {
@@ -52,9 +52,9 @@
   padding: 10px 12px;
   border-radius: 9px;
   font-size: 12px;
-  color: #ff5c70;
-  background: rgba(255, 92, 112, 0.08);
-  border: 1px solid rgba(255, 92, 112, 0.25);
+  color: var(--ds-error);
+  background: color-mix(in oklch, var(--ds-error) 8%, transparent);
+  border: 1px solid color-mix(in oklch, var(--ds-error) 25%, transparent);
 }
 
 .settings-section__head {
@@ -62,7 +62,7 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
-  color: var(--text-secondary, #a7afc0);
+  color: var(--ds-text-secondary);
 }
 
 .settings-section__head h3 {
@@ -76,7 +76,7 @@
 .settings-section__lead {
   margin: 0 0 12px;
   font-size: 12px;
-  color: var(--text-muted, #6b7085);
+  color: var(--ds-text-muted);
 }
 
 .settings-levels {
@@ -88,22 +88,22 @@
 .settings-level {
   padding: 6px 14px;
   border-radius: 999px;
-  border: 1px solid var(--panel-border, #293044);
+  border: 1px solid var(--ds-panel-border);
   background: transparent;
-  color: var(--text-secondary, #a7afc0);
+  color: var(--ds-text-secondary);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .settings-level:hover:not(:disabled) {
-  border-color: rgba(115, 240, 74, 0.4);
+  border-color: color-mix(in oklch, var(--brand-lime) 40%, transparent);
 }
 
 .settings-level.is-active {
-  color: #fff;
+  color: var(--ds-text-on-brand);
   border-color: transparent;
-  background: linear-gradient(135deg, #73f04a, #8c42ff);
+  background: linear-gradient(135deg, var(--brand-lime), var(--brand-purple));
 }
 
 .settings-level:disabled {
@@ -118,9 +118,13 @@
   gap: 16px;
   padding: 12px 14px;
   border-radius: 10px;
-  border: 1px solid var(--panel-border, #293044);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--ds-panel-border);
+  background: color-mix(in oklch, var(--foreground) 2%, transparent);
   cursor: pointer;
+}
+
+.settings-row:has(input:disabled, select:disabled, button:disabled) {
+  cursor: default;
 }
 
 .settings-row__label {
@@ -133,7 +137,7 @@
   display: block;
   margin-top: 2px;
   font-size: 11px;
-  color: var(--text-muted, #6b7085);
+  color: var(--ds-text-muted);
 }
 
 .settings-switch {
@@ -143,7 +147,7 @@
   height: 21px;
   flex-shrink: 0;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in oklch, var(--foreground) 12%, transparent);
   cursor: pointer;
   transition: background 0.15s ease;
 }
@@ -156,12 +160,12 @@
   width: 15px;
   height: 15px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--ds-text-on-brand);
   transition: transform 0.15s ease;
 }
 
 .settings-switch:checked {
-  background: linear-gradient(135deg, #73f04a, #8c42ff);
+  background: linear-gradient(135deg, var(--brand-lime), var(--brand-purple));
 }
 
 .settings-switch:checked::after {
@@ -179,7 +183,7 @@
   gap: 12px;
   margin-top: 12px;
   padding-left: 14px;
-  border-left: 2px solid var(--panel-border, #293044);
+  border-left: 2px solid var(--ds-panel-border);
 }
 
 .settings-field {
@@ -190,22 +194,60 @@
 
 .settings-field span {
   font-size: 11px;
-  color: var(--text-muted, #6b7085);
+  color: var(--ds-text-muted);
 }
 
 .settings-field input {
   padding: 8px 11px;
   border-radius: 8px;
-  border: 1px solid var(--panel-border, #293044);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text-primary, #f4f5f7);
+  border: 1px solid var(--ds-panel-border);
+  background: color-mix(in oklch, var(--foreground) 3%, transparent);
+  color: var(--ds-text);
   font-size: 12px;
-  font-family: var(--mono-font, 'JetBrains Mono', monospace);
+  font-family: var(--mono-font, 'JetBrainsMono',monospace);
   outline: none;
 }
 
 .settings-field input:focus {
-  border-color: #8c42ff;
+  border-color: var(--brand-purple);
+}
+
+.settings-select {
+  padding: 8px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--ds-panel-border);
+  background: color-mix(in oklch, var(--foreground) 3%, transparent);
+  color: var(--ds-text);
+  font-size: 12px;
+  outline: none;
+  min-width: 160px;
+  cursor: pointer;
+}
+
+.settings-select:focus {
+  border-color: var(--brand-purple);
+}
+
+.settings-button {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--ds-panel-border);
+  background: color-mix(in oklch, var(--foreground) 4%, transparent);
+  color: var(--ds-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.settings-button:hover:not(:disabled) {
+  border-color: color-mix(in oklch, var(--brand-purple) 50%, transparent);
+  color: var(--ds-text-on-brand);
+  background: color-mix(in oklch, var(--brand-purple) 10%, transparent);
+}
+
+.settings-button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .settings-status {
@@ -213,27 +255,27 @@
   align-items: center;
   gap: 10px;
   font-size: 12px;
-  color: var(--text-secondary, #a7afc0);
+  color: var(--ds-text-secondary);
 }
 
 .settings-status code {
   font-size: 11px;
   padding: 2px 7px;
   border-radius: 5px;
-  background: rgba(255, 255, 255, 0.05);
-  font-family: var(--mono-font, 'JetBrains Mono', monospace);
+  background: color-mix(in oklch, var(--foreground) 5%, transparent);
+  font-family: var(--mono-font, 'JetBrainsMono',monospace);
 }
 
 .settings-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--text-muted, #6b7085);
+  background: var(--ds-text-muted);
 }
 
 .settings-dot.is-on {
-  background: #73f04a;
-  box-shadow: 0 0 0 3px rgba(115, 240, 74, 0.2);
+  background: var(--brand-lime);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand-lime) 20%, transparent);
 }
 
 .settings-tag {
@@ -241,9 +283,9 @@
   border-radius: 999px;
   font-size: 10px;
   font-weight: 600;
-  color: #73f04a;
-  background: rgba(115, 240, 74, 0.12);
-  border: 1px solid rgba(115, 240, 74, 0.3);
+  color: var(--brand-lime);
+  background: color-mix(in oklch, var(--brand-lime) 12%, transparent);
+  border: 1px solid color-mix(in oklch, var(--brand-lime) 30%, transparent);
 }
 
 .settings-warn {
@@ -254,7 +296,133 @@
   padding: 9px 12px;
   border-radius: 9px;
   font-size: 12px;
-  color: #ffb547;
-  background: rgba(255, 181, 71, 0.08);
-  border: 1px solid rgba(255, 181, 71, 0.25);
+  color: color-mix(in oklch, var(--ds-warning) 80%, var(--ds-text));
+  background: color-mix(in oklch, var(--ds-warning) 8%, transparent);
+  border: 1px solid color-mix(in oklch, var(--ds-warning) 25%, transparent);
+}
+
+.settings-soon {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: color-mix(in oklch, var(--brand-purple) 68%, var(--ds-text));
+  background: color-mix(in oklch, var(--brand-purple) 8%, transparent);
+  border: 1px solid color-mix(in oklch, var(--brand-purple) 25%, transparent);
+  white-space: nowrap;
+}
+
+.settings-row .settings-soon {
+  margin-left: 8px;
+}
+
+/* ---- Export / Import --------------------------------------------------- */
+
+.settings-export-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-export-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.settings-button--primary {
+  background: linear-gradient(135deg, var(--brand-lime), var(--brand-purple));
+  border-color: transparent;
+  color: var(--ds-text-on-brand);
+  font-weight: 600;
+}
+
+.settings-button--primary:hover:not(:disabled) {
+  opacity: 0.9;
+  border-color: transparent;
+  color: var(--ds-text-on-brand);
+  background: linear-gradient(135deg, var(--brand-lime), var(--brand-purple));
+}
+
+.settings-export-msg {
+  font-size: 11px;
+  color: var(--ds-text-muted);
+  padding: 0 2px;
+}
+
+.settings-export-msg--import {
+  color: var(--brand-lime);
+}
+
+/* ---- Keyboard Shortcuts ------------------------------------------------- */
+
+.settings-shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-shortcuts__group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-shortcuts__category {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ds-text-muted);
+  margin-bottom: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--ds-panel-border);
+}
+
+.settings-shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 0;
+}
+
+.settings-shortcut-row__label {
+  font-size: 13px;
+  color: var(--ds-text);
+}
+
+.settings-shortcut-row__desc {
+  font-size: 11px;
+  color: var(--ds-text-muted);
+  margin-top: 1px;
+}
+
+.settings-shortcut-row__keys {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+.settings-shortcut-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--ds-text-secondary);
+  background: var(--bg-muted, var(--ds-panel));
+  border: 1px solid var(--ds-panel-border);
+  border-radius: 4px;
+  box-shadow: 0 1px 1px color-mix(in oklch, var(--ds-shadow-color) 25%, transparent);
 }

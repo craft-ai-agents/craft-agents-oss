@@ -90,23 +90,23 @@
 }
 
 .runs-badge--running {
-  color: #f59e0b;
-  border-color: #f59e0b;
+  color: var(--ds-warning);
+  border-color: var(--ds-warning);
 }
 
 .runs-badge--completed {
-  color: #22c55e;
-  border-color: #22c55e;
+  color: var(--ds-success);
+  border-color: var(--ds-success);
 }
 
 .runs-badge--failed {
-  color: #ef4444;
-  border-color: #ef4444;
+  color: var(--ds-error);
+  border-color: var(--ds-error);
 }
 
 .runs-badge--cancelled {
-  color: #94a3b8;
-  border-color: #94a3b8;
+  color: var(--ds-text-secondary);
+  border-color: var(--ds-text-secondary);
 }
 
 .runs-panel__live {
@@ -115,15 +115,15 @@
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
-  color: #73f04a;
-  background: rgba(115, 240, 74, 0.12);
-  border: 1px solid rgba(115, 240, 74, 0.35);
+  color: var(--brand-lime);
+  background: color-mix(in oklch, var(--brand-lime) 12%, transparent);
+  border: 1px solid color-mix(in oklch, var(--brand-lime) 35%, transparent);
 }
 
 .runs-panel__empty {
   padding: 32px 16px;
   text-align: center;
-  color: var(--text-muted, #6b7085);
+  color: var(--ds-text-muted);
   font-size: 13px;
 }
 
