@@ -87,7 +87,7 @@ function detectInstance(): void {
     const instanceNum = match[1];
     process.env.CRAFT_INSTANCE_NUMBER = instanceNum;
     process.env.CRAFT_VITE_PORT = `${instanceNum}173`;
-    process.env.CRAFT_APP_NAME = `Craft Agents [${instanceNum}]`;
+    process.env.CRAFT_APP_NAME = `ARCHstudio [${instanceNum}]`;
     process.env.CRAFT_CONFIG_DIR = join(process.env.HOME || "", `.craft-agent-${instanceNum}`);
     process.env.CRAFT_DEEPLINK_SCHEME = `craftagents${instanceNum}`;
     console.log(`🔢 Instance ${instanceNum} detected: port=${process.env.CRAFT_VITE_PORT}, config=${process.env.CRAFT_CONFIG_DIR}`);
@@ -285,7 +285,7 @@ function getElectronEnv(): Record<string, string> {
     ...process.env as Record<string, string>,
     VITE_DEV_SERVER_URL: `http://localhost:${vitePort}`,
     CRAFT_CONFIG_DIR: process.env.CRAFT_CONFIG_DIR || "",
-    CRAFT_APP_NAME: process.env.CRAFT_APP_NAME || "Craft Agents",
+    CRAFT_APP_NAME: process.env.CRAFT_APP_NAME || "ARCHstudio",
     CRAFT_DEEPLINK_SCHEME: process.env.CRAFT_DEEPLINK_SCHEME || "craftagents",
     CRAFT_INSTANCE_NUMBER: process.env.CRAFT_INSTANCE_NUMBER || "",
   };
@@ -301,7 +301,7 @@ function getElectronEnv(): Record<string, string> {
 //   TLA-free ESM, so the runtime `require('@anthropic-ai/claude-agent-sdk')`
 //   resolves correctly. Mirror of the same flag in `scripts/electron-build-main.ts`
 //   and `apps/electron/package.json` build:main.
-const MAIN_BUNDLE_EXTERNALS = ["electron", "@anthropic-ai/claude-agent-sdk", "bun:sqlite"];
+const MAIN_BUNDLE_EXTERNALS = ["electron", "@anthropic-ai/claude-agent-sdk", "better-sqlite3"];
 
 // Run a one-shot esbuild using the JavaScript API
 async function runEsbuild(

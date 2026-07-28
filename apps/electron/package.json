@@ -29,6 +29,9 @@
     "start:win": "bun run build:win && electron .",
     "dev": "vite dev",
     "typecheck": "tsc --noEmit",
+    "generate-icons": "node resources/generate-icon-set.mjs",
+    "generate-icons:win": "node resources/generate-icon-set.mjs",
+    "generate-icons:full": "node resources/generate-icon-set.mjs",
     "dist:mac": "bash scripts/build-dmg.sh arm64",
     "dist:mac:x64": "bash scripts/build-dmg.sh x64",
     "dist:win": "powershell -ExecutionPolicy Bypass -File scripts/build-win.ps1",
@@ -69,6 +72,7 @@
     "react-i18next": "^17.0.2",
     "react-pdf": "^10.3.0",
     "react-simple-code-editor": "^0.14.1",
+    "react-window": "^1.8.10",
     "remark": "^15.0.1",
     "sharp": "0.34.5",
     "sonner": "^2.0.7",
@@ -79,6 +83,8 @@
     "ws": "^8.19.0"
   },
   "devDependencies": {
-    "@types/ws": "^8.18.1"
+    "@types/react-window": "^1.8.0",
+    "@types/ws": "^8.18.1",
+    "happy-dom": "^20.11.1"
   }
 }

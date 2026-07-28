@@ -63,7 +63,7 @@ export async function packageDarwin(config: BuildConfig): Promise<string> {
 
   // Verify SDK is bundled in the .app before checking artifacts
   const macDir = arch === 'arm64' ? 'mac-arm64' : 'mac';
-  const appPath = join(electronDir, 'release', macDir, 'Craft Agents.app');
+  const appPath = join(electronDir, 'release', macDir, 'ARCHstudio.app');
   console.log('Verifying SDK in packaged app...');
   verifyPackagedSDK(appPath, arch);
 
