@@ -1,0 +1,45 @@
+# Normalize line endings so the working tree doesn't show every file as
+# modified when checked out on Windows.
+#
+# Text files are stored LF in the repo. Git converts to the platform's
+# native ending on checkout when core.autocrlf is set; these rules make the
+# behaviour explicit and independent of each developer's git config.
+* text=auto eol=lf
+
+# Windows-only scripts must keep CRLF or cmd.exe/PowerShell can mis-parse them.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Shell scripts and hooks must keep LF or they fail with "bad interpreter".
+*.sh   text eol=lf
+*.bash text eol=lf
+
+# Binary assets: never convert, never diff as text.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.icns binary
+*.tiff binary
+*.webp binary
+*.woff  binary
+*.woff2 binary
+*.ttf  binary
+*.otf  binary
+*.pdf  binary
+*.zip  binary
+*.gz   binary
+*.node binary
+*.exe  binary
+*.dll  binary
+*.dylib binary
+*.so   binary
+*.wasm binary
+*.mp4  binary
+*.webm binary
+
+# Lockfiles: treat as text but don't clutter PR diffs.
+bun.lock       text eol=lf linguist-generated=true -diff
+package-lock.json text eol=lf linguist-generated=true -diff

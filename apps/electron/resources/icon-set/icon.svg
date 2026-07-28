@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="g-left" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#86EFAC"/>
+      <stop offset="55%" stop-color="#22C55E"/>
+      <stop offset="100%" stop-color="#15803D"/>
+    </linearGradient>
+    <linearGradient id="g-right" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#E9D5FF"/>
+      <stop offset="55%" stop-color="#A855F7"/>
+      <stop offset="100%" stop-color="#6B21A8"/>
+    </linearGradient>
+    <filter id="soft-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>
+
+  <!-- Solid black background -->
+  <rect x="0" y="0" width="512" height="512" fill="#000000"/>
+
+  <!-- Subtle radial glow behind the emblem -->
+  <ellipse cx="256" cy="256" rx="180" ry="180" fill="url(#g-right)" opacity="0.08" filter="url(#soft-glow)"/>
+
+  <!-- Soft drop shadow for the emblem strokes -->
+  <g opacity="0.45" transform="translate(0 6)">
+    <!-- Left ring (shadow) -->
+    <path d="M 274 70 A 192 192 0 1 0 256 458" stroke="#000000" stroke-width="34" stroke-linecap="round" fill="none"/>
+    <!-- Right ring (shadow) -->
+    <path d="M 238 70 A 192 192 0 1 1 256 458" stroke="#000000" stroke-width="34" stroke-linecap="round" fill="none"/>
+    <!-- A left leg (shadow) -->
+    <path d="M 256 56 L 110 412" stroke="#000000" stroke-width="34" stroke-linecap="round"/>
+    <!-- A right leg (shadow) -->
+    <path d="M 256 56 L 402 412" stroke="#000000" stroke-width="34" stroke-linecap="round"/>
+    <!-- A crossbar (shadow) -->
+    <line x1="160" y1="280" x2="352" y2="280" stroke="#000000" stroke-width="34" stroke-linecap="round"/>
+  </g>
+
+  <!-- Emblem -->
+  <g transform="translate(0, 0)">
+    <!-- Left half of the split orbital ring -->
+    <path d="M 274 70 A 192 192 0 1 0 256 458"
+          stroke="url(#g-left)" stroke-width="34" stroke-linecap="round" fill="none"/>
+    <!-- Right half of the split orbital ring -->
+    <path d="M 238 70 A 192 192 0 1 1 256 458"
+          stroke="url(#g-right)" stroke-width="34" stroke-linecap="round" fill="none"/>
+
+    <!-- A: left leg (green) -->
+    <path d="M 256 56 L 110 412"
+          stroke="url(#g-left)" stroke-width="34" stroke-linecap="round"/>
+    <!-- A: right leg (purple) -->
+    <path d="M 256 56 L 402 412"
+          stroke="url(#g-right)" stroke-width="34" stroke-linecap="round"/>
+    <!-- A: crossbar (purple) -->
+    <line x1="160" y1="280" x2="352" y2="280"
+          stroke="url(#g-right)" stroke-width="34" stroke-linecap="round"/>
+
+    <!-- Floating purple diamond accent below the crossbar -->
+    <g transform="translate(256 348) rotate(45)">
+      <rect x="-30" y="-30" width="60" height="60" rx="6" ry="6" fill="url(#g-right)"/>
+    </g>
+  </g>
+</svg>
