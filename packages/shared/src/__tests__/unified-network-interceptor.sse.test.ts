@@ -61,6 +61,20 @@ describe('unified-network-interceptor SSE processors', () => {
     rmSync(sessionDir, { recursive: true, force: true });
   });
 
+  it('OpenAI: passes through chunks with empty tool_calls arrays', async () => {
+    const sse = [
+      'data: {"choices":[{"index":0,"delta":{"content":"ok","tool_calls":[]},"finish_reason":""}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"content":"","tool_calls":[]},"finish_reason":"stop"}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const out = await runThroughProcessor(createOpenAiSseStrippingStream(), sse);
+
+    expect(out).toContain('"content":"ok"');
+    expect(out).toContain('"finish_reason":"stop"');
+    expect(out).toContain('data: [DONE]');
+  });
+
   it('OpenAI: handles multiple tool calls in one delta chunk without dropping calls', async () => {
     const sse = [
       'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"toolA","arguments":"{\\"a\\":1,\\"_intent\\":\\"intent-1\\",\\"_displayName\\":\\"Display 1\\"}"}},{"index":1,"id":"call_2","type":"function","function":{"name":"toolB","arguments":"{\\"b\\":2,\\"_intent\\":\\"intent-2\\",\\"_displayName\\":\\"Display 2\\"}"}}]}}]}\n\n',
