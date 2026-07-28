@@ -1004,7 +1004,7 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
     //     those args to the matching phase-1 entry by walking the open calls
     //     in order rather than allocating a new bucket for them.
     for (const choice of choices) {
-      if (!choice?.delta?.tool_calls) continue;
+      if (!choice?.delta?.tool_calls?.length) continue;
       handledToolCalls = true;
 
       const choiceIndex = choice.index ?? 0;
