@@ -247,6 +247,14 @@ export {
   type DismissibleLayerType,
 } from './lib/dismissible-layer-bridge'
 
+// Tree-depth policy helpers
+export {
+  shouldGateManualExpand,
+  trimExpandedByCount,
+  type GateDecision,
+  type TrimResult,
+} from './lib/treeBfsGate'
+
 // Layout constants and hooks
 export {
   CHAT_LAYOUT,
