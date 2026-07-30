@@ -241,9 +241,45 @@ entries because the `[renderer-console]` bridge has a recursion bug — each log
 re-wraps every prior line, producing a 3.8 MB file of exponentially nested text with no
 usable stack traces.
 
-**Recommended approach:**
-1. Fix the `[renderer-console]` log-wrapper recursion first (it hides all future errors too).
-2. Reproduce live with DevTools attached. A working CDP driver is documented in §5.
+#### The log recursion — narrowed down (do this first)
+
+Evidence gathered, all reproducible without launching anything:
+
+- **Both** log files (`main.log` and `main.old.log`, from two separate launches) show
+  the pattern in **100% of captured lines** — 41/41 and 52/52 respectively. It is
+  deterministic on every boot, not an artifact of the CDP debugging session.
+- Longest single message: **120,719 characters**, reached **within ~200 ms of startup**
+  (`main.old.log` spans only `05:12:04.803Z` → `05:12:05.003Z`).
+- The nesting is *inside the message payload itself*, so the growth happens before
+  `windowLog.info(...)` is ever called — it is **not** a bug in `main/logger.ts`.
+
+**Root-cause candidate (needs one live confirmation, then fix):** two console pipelines
+are active at once.
+
+1. `apps/electron/src/main/window-manager.ts:390` subscribes natively:
+   ```ts
+   window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+     windowLog.info(`[renderer-console] level=${level} ${sourceId}:${line} ${message}`)
+   })
+   ```
+2. `apps/electron/src/renderer/lib/logger.ts` imports `electron-log/renderer`, which
+   patches `console.*` in the renderer and forwards to main over IPC.
+3. `apps/electron/src/renderer/main.tsx:64` additionally installs Sentry's
+   `captureConsoleIntegration({ levels: ['error'] })`.
+
+When electron-log's renderer transport echoes a forwarded message back to the renderer
+console, the native `console-message` listener fires again on the echoed text — which now
+contains the previous payload — and each round trip concatenates. Hence exponential
+growth to 120 KB in 200 ms, and `level=1` (info) on every line rather than real errors.
+
+**Fix direction:** pick ONE pipeline. Either drop the native `console-message` listener
+in `window-manager.ts` and rely on electron-log's renderer transport, or keep the native
+listener and stop importing `electron-log/renderer`. Do not leave both. Whichever
+survives, add a guard that skips any message already containing `[renderer-console]` so a
+future re-introduction can't loop.
+
+**Then** reproduce the OAuth crash live with DevTools attached (CDP driver in §5) —
+with the bridge fixed, the actual stack should finally reach `main.log`.
 
 **(b) Media Lab delete is an illusion**
 
@@ -347,10 +383,13 @@ Ordered by user-visible value and risk. Each phase has an acceptance gate.
 - **Gate:** `bash scripts/check-brand-leaks.sh` exits 0; a normal `git commit` works
   without `--no-verify` — **verified, both commits landed clean**
 
-### Phase 2 — Fix the renderer log bridge, then the OAuth crash
+### Phase 2 — Fix the renderer log bridge, then the OAuth crash ◑ IN PROGRESS
+- **Root-cause analysis is done — see §3.2(a), including the two-pipeline diagnosis and
+  the exact fix direction. Start there; the investigation does not need repeating.**
 - Fix the `[renderer-console]` recursion so errors are actually recorded
 - Reproduce the provider-connect crash with DevTools attached; fix the throw
-- **Gate:** connect a provider via web auth end-to-end without hitting `CrashFallback`
+- **Gate:** `main.log` shows a real stack trace on a renderer error (no nesting), AND
+  connecting a provider via web auth completes without hitting `CrashFallback`
 
 ### Phase 3 — Honest UI (small, high-impact)
 - Media Lab: wire a real `deleteResource` RPC, or disable the Delete button
