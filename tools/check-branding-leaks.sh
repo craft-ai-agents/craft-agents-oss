@@ -96,7 +96,13 @@ ALLOW=(
 ALLOW_RE=$(IFS='|'; echo "${ALLOW[*]}")
 
 # ── File-level exclusions (historical docs, rebranding tools, tooling scripts)
-FILE_EXCLUDE='release-notes/|docs/brand/|docs/git/|scripts/rebrand\.ts|scripts/check-brand-leaks\.sh|scripts/split-commits\.sh|scripts/branch-stack\.sh|tools/check-branding-leaks\.sh|bun\.lock|\.gitignore|\.gitattributes|TRADEMARK\.md'
+#
+# `.hermes/` is deliberately included here even though it's already skipped by
+# directory in the untracked-file scan loop below — that loop only applies to
+# untracked files. Session handoff plans under .hermes/plans/ get committed
+# (tracked) and legitimately describe past brand-string bugs in prose, so the
+# TRACKED_HITS git-grep pass needs its own exclusion for the same directory.
+FILE_EXCLUDE='release-notes/|docs/brand/|docs/git/|\.hermes/|scripts/rebrand\.ts|scripts/check-brand-leaks\.sh|scripts/split-commits\.sh|scripts/branch-stack\.sh|tools/check-branding-leaks\.sh|bun\.lock|\.gitignore|\.gitattributes|TRADEMARK\.md'
 
 # ── Scan tracked files (via git grep — fast) ──────────────────────────────
 

@@ -69,7 +69,17 @@ ALLOW_PATTERNS=(
 # ── File-level exclusions: docs and tooling that contain old brand ─────────
 # These files are historical records or rebranding tools that legitimately
 # contain the old brand string. Checked per-file after the initial scan.
-FILE_EXCLUSIONS='release-notes/|docs/brand/|scripts/rebrand\.ts'
+#
+#   docs/git/rebrand-2026-commit-strategy.md — describes the rebrand itself
+#     ("Craft Agents -> ARCHstudio"); rewriting it would misrepresent history.
+#   scripts/split-commits\.sh — a fixed manifest of files staged during the
+#     8-branch split, captured at the time it ran; some listed paths (e.g.
+#     the old CraftAgentsLogo/Symbol icon files) were renamed by that same
+#     migration, so the manifest is a historical record, not live code.
+#   scripts/check-brand-leaks\.sh / tools/check-branding-leaks\.sh — these
+#     files ARE the gate; they must contain the old-brand pattern string and
+#     allowlist comments to work at all.
+FILE_EXCLUSIONS='release-notes/|docs/brand/|docs/git/|scripts/rebrand\.ts|scripts/split-commits\.sh|scripts/check-brand-leaks\.sh|tools/check-branding-leaks\.sh'
 
 # Build a single grep -E pattern from the allow list
 ALLOW_RE=$(IFS='|'; echo "${ALLOW_PATTERNS[*]}")
