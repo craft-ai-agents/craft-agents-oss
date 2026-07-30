@@ -16,9 +16,9 @@
 
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { useState, useEffect, useCallback, useRef, memo } from 'react'
+import { useState, useEffect, useCallback, useRef, memo, useId } from 'react'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
-import { File, Folder, FolderOpen, FileText, Image, FileCode, ChevronRight, ExternalLink } from 'lucide-react'
+import { File, Folder, FolderOpen, FileText, Image, FileCode, ChevronRight, ExternalLink, AlertTriangle, ListCollapse } from 'lucide-react'
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -31,6 +31,9 @@ import * as storage from '@/lib/local-storage'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { getFileManagerName } from '@/lib/platform'
 import { restoreSessionFileWatch } from './session-files-watch'
+import { ThumbnailHoverPreview } from './ThumbnailHoverPreview'
+import { shouldGateManualExpand, trimExpandedByCount, Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
+import { toast } from 'sonner'
 
 /**
  * Stagger animation variants for child items - matches LeftSidebar pattern
@@ -87,20 +90,21 @@ function formatFileSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-/** Collect all directory paths recursively so the tree can start fully expanded. */
-function collectDirectoryPaths(entries: SessionFile[]): string[] {
+/** Collect all directory paths up to a given depth so the tree respects the depth cap on first load. */
+function collectDirectoryPathsUpToDepth(entries: SessionFile[], maxDepth: number): string[] {
   const directories: string[] = []
-  const visit = (items: SessionFile[]) => {
+  const visit = (items: SessionFile[], depth: number) => {
+    if (depth >= maxDepth) return
     for (const item of items) {
       if (item.type === 'directory') {
         directories.push(item.path)
         if (item.children && item.children.length > 0) {
-          visit(item.children)
+          visit(item.children, depth + 1)
         }
       }
     }
   }
-  visit(entries)
+  visit(entries, 0)
   return directories
 }
 
@@ -245,6 +249,22 @@ interface FileTreeItemProps {
   onRevealInFileManager: (path: string) => void
   /** Whether this item is inside an expanded folder (for stagger animation) */
   isNested?: boolean
+  /** Depth cap value from the parent selector (undefined = no cap). */
+  expandDepth?: number
+  /** Root path for depth computation (same as sessionFolderPath). */
+  rootPath?: string
+  /**
+   * Paths the user has drilled past the depth cap.  Surfaced on the
+   * row as a `data-drilled` attribute so:
+   *   1. tests can verify drill entry/exit without coupling to internal
+   *      React state,
+   *   2. future CSS can dim/accent drilled rows without re-deriving the
+   *      decision from props.
+   */
+  drilledPaths?: never // removed in the gate-enforcement revision; kept
+  // as `never` so older prop-passes that include this name fail at
+  // typecheck instead of silently no-op'ing.  Safe to delete once
+  // the call-site prop has been cleaned up in the same revision.
 }
 
 /**
@@ -263,11 +283,35 @@ function FileTreeItem({
   onFileDoubleClick,
   onRevealInFileManager,
   isNested,
+  expandDepth,
+  rootPath,
+  drilledPaths,
 }: FileTreeItemProps) {
   const { t } = useTranslation()
   const isDirectory = file.type === 'directory'
   const isExpanded = expandedPaths.has(file.path)
   const hasChildren = isDirectory && file.children && file.children.length > 0
+
+  // ── useId() for collision-free banner id ──────────────────────────
+  // Mirrors the Working Directory tree's TreeRow pattern.  React
+  // guarantees useId() is unique across the tree.
+  const gateBannerId = useId()
+
+  // Compute whether this directory's forward-expansion would be gated
+  // by the shared depth-cap contract.  Uses the same helper as the
+  // Working Directory tree (shouldGateManualExpand from @craft-agent/ui).
+  const isGated = isDirectory
+    && hasChildren
+    && !isExpanded
+    && rootPath != null
+    && expandDepth != null
+    && shouldGateManualExpand(rootPath, file.path, expandDepth, false).kind === 'gate-forward'
+
+  // Only wrap with hover preview for image-previewable files; non-image
+  // files (code, text, JSON, etc.) fall through to the plain icon.
+  const fileExt = file.name.split('.').pop()?.toLowerCase() || ''
+  const previewableSet = isWebMode ? WEB_PREVIEWABLE_EXTENSIONS : PREVIEWABLE_EXTENSIONS
+  const isPreviewableImage = !isDirectory && previewableSet.has(fileExt)
 
   const handleClick = () => {
     if (isDirectory && hasChildren) {
@@ -289,11 +333,20 @@ function FileTreeItem({
     }
   }
 
-  // The button element for the file/folder item
+  // The bare button — Tooltip and ContextMenu are composed around it
+  // in innerContent below.  Both Radix triggers use asChild forwarding
+  // so the button receives hover (TooltipTrigger) and right-click
+  // (ContextMenuTrigger) events through the same DOM node.
   const buttonElement = (
     <button
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
+      aria-describedby={isGated ? gateBannerId : undefined}
+      // Gate affordance test surface — tests verify the cap enforcement
+      // via this attribute (the chevron dims, the banner tooltip fires,
+      // and `handleToggleExpand` will refuse the click).  See
+      // SessionFilesSection.gate-enforcement.test.tsx.
+      data-gated={isGated ? 'true' : undefined}
       className={cn(
         // Base styles matching LeftSidebar exactly
         // min-w-0 and overflow-hidden required for truncation to work in grid context
@@ -313,22 +366,113 @@ function FileTreeItem({
             <span className="absolute inset-0 flex items-center justify-center group-hover:opacity-0 transition-opacity duration-150">
               {getFileIcon(file, isExpanded)}
             </span>
-            {/* Toggle chevron - shown on hover */}
+            {/* Toggle chevron — shown on hover, dimmed when gated.
+                When gated, the chevron is wrapped in a focusable span
+                that acts as the TooltipTrigger (Radix asChild), so
+                the depth-cap explanation is anchored to the visual
+                sentinel of the gate — the chevron is the primary cue,
+                and the explanation lives with it.
+
+                Two-span structure (outer + nested trigger) is
+                intentional:
+
+                  • Outer span owns the visibility/animation CSS,
+                    the row-button-click stop-propagation (via
+                    onClick={handleChevronClick}), the data-gated
+                    flag for the dim styling, and cursor-pointer.
+
+                  • Inner span is the TooltipTrigger.  Computing
+                    it inline (with tabIndex={0}, aria-label, focus
+                    ring, flex h-full w-full) keeps the chevron's
+                    hover/focus state and the Radix trigger on the
+                    same DOM element — sighted keyboard users
+                    (Tab + Enter) activate the chevron's onClick
+                    via the cloned trigger, and the visible focus
+                    ring matches the row button's pattern.
+
+                Radix details worth knowing:
+
+                  • `forceMount` lives on TooltipContent (not the
+                    Tooltip root) — Radix types the prop on the leaf
+                    primitive.  This keeps the banner div mounted so
+                    the row button's aria-describedby reference is
+                    always resolvable, even when the popover is
+                    closed.  Without it, the aria-describedby would
+                    dangle (silent screen-reader fail).
+
+                  • `side="left"` — SessionFilesSection rows live in
+                    the right sidebar; right-extending tooltips would
+                    push off-screen.  Matches the row-level
+                    tooltip's positioning. */}
             <span
-              className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 cursor-pointer"
+              className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 cursor-pointer motion-reduce:transition-none data-[gated=true]:opacity-45 data-[gated=true]:hover:opacity-75"
               onClick={handleChevronClick}
+              data-gated={isGated ? 'true' : undefined}
             >
-              <ChevronRight
-                className={cn(
-                  "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
-                  isExpanded && "rotate-90"
-                )}
-              />
+              {isGated ? (
+                <Tooltip delayDuration={300}>
+                  <TooltipTrigger asChild>
+                    <span
+                      tabIndex={0}
+                      aria-label={`Expand ${file.name} (capped at ${expandDepth} levels)`}
+                      className="flex h-full w-full items-center justify-center outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-sm"
+                    >
+                      <ChevronRight
+                        className={cn(
+                          "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+                          isExpanded && "rotate-90"
+                        )}
+                      />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    forceMount
+                    side="left"
+                    align="start"
+                    sideOffset={6}
+                    className="arch-tree-tooltip-wrap"
+                  >
+                    {/* Banner id is the anchor for the row button's
+                        aria-describedby — the screen-reader
+                        explanation stays resolvable even when the
+                        popover is closed, thanks to forceMount on
+                        TooltipContent. */}
+                    <div
+                      id={gateBannerId}
+                      className="wd-files-gated-banner"
+                    >
+                      <AlertTriangle
+                        size={12}
+                        aria-hidden="true"
+                        className="wd-files-gated-banner__icon"
+                      />
+                      <span>
+                        Capped at {expandDepth} levels — bump the selector to drill in.
+                      </span>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <ChevronRight
+                  className={cn(
+                    "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+                    isExpanded && "rotate-90"
+                  )}
+                />
+              )}
             </span>
           </>
+        ) : isPreviewableImage ? (
+          /* Image file: small thumbnail (FileThumbnail) wrapped in a
+             hover-preview that shows a larger popover on hover. The popover
+             auto-closes on mouseleave and cancels its hide timer when the
+             cursor crosses onto the popover itself so users can inspect
+             the larger image without flicker. */
+          <ThumbnailHoverPreview file={{ path: file.path, name: file.name }}>
+            <FileThumbnail file={file} />
+          </ThumbnailHoverPreview>
         ) : (
-          /* Non-directory files: show thumbnail preview for previewable types,
-             with cross-fade from icon. Falls back to icon for unsupported types. */
+          /* Non-image files: icon only, no hover preview. */
           <FileThumbnail file={file} />
         )}
       </span>
@@ -340,13 +484,19 @@ function FileTreeItem({
 
   const fileManagerName = getFileManagerName()
 
-  // Inner content: button and expandable children (wrapped in group/section like LeftSidebar)
+  // Inner content: Tooltip wrapping ContextMenu wrapping the button.
+  // Tooltip MUST be outside ContextMenu so both Radix asChild layers
+  // forward to the same DOM button — TooltipTrigger passes hover props
+  // and ContextMenuTrigger passes right-click props.
   const innerContent = (
     <div className="group/section min-w-0">
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          {buttonElement}
-        </ContextMenuTrigger>
+    <Tooltip delayDuration={400}>
+        <ContextMenu>
+          <TooltipTrigger asChild>
+            <ContextMenuTrigger asChild>
+              {buttonElement}
+            </ContextMenuTrigger>
+          </TooltipTrigger>
         <StyledContextMenuContent>
           {/* Open — files only (folders just show "Show in file manager") */}
           {file.type !== 'directory' && (
@@ -363,7 +513,33 @@ function FileTreeItem({
             {t("chat.showInFileManager", { fileManager: fileManagerName })}
           </StyledContextMenuItem>
         </StyledContextMenuContent>
-      </ContextMenu>
+          </ContextMenu>
+      <TooltipContent
+        side="left"
+        align="start"
+        sideOffset={6}
+        className="arch-tree-tooltip-wrap"
+      >
+        {/* Gate affordance moved out: in this revision the gate banner
+            lives on the chevron's own Tooltip (fired only on chevron
+            hover, anchored visually to the chevron) rather than the
+            row-level tooltip.  The aria-describedby on the button
+            below still points to gateBannerId, which the chevron's
+            TooltipContent now hosts — so screen-reader navigation
+            across the row picks up the gate explanation without
+            burying it inside file metadata. */}
+        <div className="text-[11px] leading-relaxed text-muted-foreground">
+          <div className="truncate max-w-[200px]" title={file.path}>{file.path}</div>
+          {file.type === 'file' && file.size != null && (
+            <div>{formatFileSize(file.size)}</div>
+          )}
+          {file.type === 'directory' && <div>Directory</div>}
+          <div className="text-[10px] opacity-60 mt-0.5">
+            {hasChildren ? 'Click to expand, double-click to open' : 'Click to reveal, double-click to open'}
+          </div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
       {/* Expandable children with framer-motion animation - matches LeftSidebar exactly */}
       {hasChildren && (
         <AnimatePresence initial={false}>
@@ -400,6 +576,9 @@ function FileTreeItem({
                         onFileDoubleClick={onFileDoubleClick}
                         onRevealInFileManager={onRevealInFileManager}
                         isNested={true}
+                        expandDepth={expandDepth}
+                        rootPath={rootPath}
+                        drilledPaths={drilledPaths as never}
                       />
                     </motion.div>
                   ))}
@@ -426,10 +605,112 @@ export function SessionFilesSection({ sessionId, className, sessionFolderPath, h
   const [isLoading, setIsLoading] = useState(false)
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const [hasSavedExpandedState, setHasSavedExpandedState] = useState(false)
+
+  // Save expanded paths to storage when they change.
+  // Declared EARLY (before the count-cap useEffect) so the count-cap
+  // effect's dependency-array reference resolves at TS evaluation time.
+  // saveExpandedPaths is stable for the lifetime of the sessionId, so
+  // putting it first doesn't alter the count-cap effect's behavior.
+  const saveExpandedPaths = useCallback((paths: Set<string>) => {
+    if (sessionId) {
+      storage.set(storage.KEYS.sessionFilesExpandedFolders, Array.from(paths), sessionId)
+    }
+  }, [sessionId])
+
+  // ── Cumulative open-directory cap ──────────────────────────────────
+  // Mirrors the Working Directory tree's count-cap contract.
+  // When expandedPaths exceeds MAX_SESSION_DIRS, leaf-most entries
+  // are silently collapsed until back under the limit.
+  // depth=N + count=K compose into a single guardrail.
+  const MAX_SESSION_DIRS = 50
+  useEffect(() => {
+    if (!sessionFolderPath) return
+    if (expandedPaths.size <= MAX_SESSION_DIRS) {
+      // Dropped back under the limit — reset for next crossing.
+      countCapToastedRef.current = false
+      return
+    }
+    const { keep, dropped } = trimExpandedByCount(
+      expandedPaths,
+      sessionFolderPath,
+      MAX_SESSION_DIRS,
+    )
+    if (keep.size !== expandedPaths.size) {
+      setExpandedPaths(keep)
+      saveExpandedPaths(keep)
+      // Only toast on the first crossing, not every subsequent trim.
+      if (!countCapToastedRef.current && dropped.length > 0) {
+        countCapToastedRef.current = true
+        toast.info(
+          `Collapsed ${dropped.length} director${dropped.length !== 1 ? 'ies' : 'y'} to stay within the ${MAX_SESSION_DIRS} open-dir limit`,
+          { duration: 4_000 },
+        )
+      }
+    }
+  }, [expandedPaths.size, sessionFolderPath, saveExpandedPaths])
+
+  // Depth cap for the "depth=N means N levels" contract shared with
+  // the Working Directory tree.  Infinity = no cap ("All").
+  const [expandDepth, setExpandDepth] = useState<number>(2)
+
   const mountedRef = useRef(true)
+  // Tracks whether we've already toasted for the current count-cap
+  // crossing.  Prevents toast spam when rapid expansions fire the
+  // trim multiple times in quick succession.
+  const countCapToastedRef = useRef(false)
+
+  // ── Drill mode ───────────────────────────────────────────────────────
+  // Per-row transient bypass of the depth cap.  When the user clicks
+  // a gated chevron (forward expansion past the cap), drill mode
+  // expands the row by one extra level for that subtree only — it
+  // does NOT change the global expandDepth selector.  Drill markers
+  // auto-revert on:
+  //   • collapse of the drilled row                       (handleToggleExpand)
+  //   • Collapse-all                                       (handleCollapseAll)
+  //   • session switch                                     (useEffect above)
+  //   • count-cap trim removes the expanded row           (prune useEffect)
+  // Drill state is ephemeral (in-memory only) — it does not persist
+  // across app restarts.  The point of drill is "I can see the cap;
+  // let me past it for this one row" without globally lifting the cap.
+  const [drilledPaths, setDrilledPaths] = useState<Set<string>>(new Set())
+
+  // Ref-mirror of drilledPaths.  handleToggleExpand reads from this
+  // ref for the idempotent-check + sync-update sequence so rapid
+  // clicks within the same render cycle correctly observe the prior
+  // click's marker (the captured drilledPaths closure would be stale
+  // until React commits the next render).  Mirrors the count-cap's
+  // countCapToastedRef pattern for the same spam-prevention reason.
+  const drilledPathsRef = useRef<Set<string>>(drilledPaths)
+  useEffect(() => {
+    drilledPathsRef.current = drilledPaths
+  }, [drilledPaths])
+
+  // Prune drilledPaths against expandedPaths.  Without this, a row
+  // that was drilled and then trimmed by the count-cap useEffect would
+  // leave an orphaned drill marker with no UI affordance to clear it
+  // (the Collapse-all button hides when expandedPaths.size === 0).
+  // Runs whenever expandedPaths or drilledPaths changes; the early
+  // return on empty drilledPaths avoids infinite re-runs.
+  useEffect(() => {
+    if (drilledPaths.size === 0) return
+    let changed = false
+    const next = new Set<string>()
+    for (const p of drilledPaths) {
+      if (expandedPaths.has(p)) {
+        next.add(p)
+      } else {
+        changed = true
+      }
+    }
+    if (changed) {
+      setDrilledPaths(next)
+    }
+  }, [expandedPaths, drilledPaths])
 
   // Load expanded paths from storage when session changes.
   // If no value exists yet, we default to "expand all" after files load.
+  // Drilled paths are session-scoped and reset alongside expandedPaths
+  // (drill markers don't survive the session; this is intentional).
   useEffect(() => {
     if (sessionId) {
       const raw = storage.getRaw(storage.KEYS.sessionFilesExpandedFolders, sessionId)
@@ -445,13 +726,8 @@ export function SessionFilesSection({ sessionId, className, sessionFolderPath, h
       setExpandedPaths(new Set())
       setHasSavedExpandedState(false)
     }
-  }, [sessionId])
-
-  // Save expanded paths to storage when they change
-  const saveExpandedPaths = useCallback((paths: Set<string>) => {
-    if (sessionId) {
-      storage.set(storage.KEYS.sessionFilesExpandedFolders, Array.from(paths), sessionId)
-    }
+    // Drill markers reset on every session-switch (drill is ephemeral).
+    setDrilledPaths(new Set())
   }, [sessionId])
 
   // Load files
@@ -467,9 +743,9 @@ export function SessionFilesSection({ sessionId, className, sessionFolderPath, h
       if (mountedRef.current) {
         setFiles(sessionFiles)
 
-        // Default behavior: expand the entire folder tree when there's no saved state yet.
+        // Default behavior: expand the folder tree up to expandDepth.
         if (!hasSavedExpandedState) {
-          const allDirectoryPaths = new Set(collectDirectoryPaths(sessionFiles))
+          const allDirectoryPaths = new Set(collectDirectoryPathsUpToDepth(sessionFiles, expandDepth))
           if (allDirectoryPaths.size > 0) {
             setExpandedPaths(allDirectoryPaths)
             saveExpandedPaths(allDirectoryPaths)
@@ -553,18 +829,86 @@ export function SessionFilesSection({ sessionId, className, sessionFolderPath, h
     }
   }, [onOpenFile])
 
-  // Toggle folder expanded state
+  // Toggle folder expanded state — gated by the depth cap from
+  // the shared shouldGateManualExpand helper (same contract as
+  // the Working Directory tree).
+  //
+  //   forward expansion + within cap → expand (no drill)
+  //   forward expansion + at-or-past cap → DRILL (expand + mark row)
+  //   collapse → always allowed; the drill marker for this row is
+  //              cleared here so each drill entry is per-instance.
   const handleToggleExpand = useCallback((path: string) => {
+    if (!sessionFolderPath) {
+      // No rootPath → no gate possible; simple toggle.
+      setExpandedPaths((prev) => {
+        const next = new Set(prev)
+        if (next.has(path)) next.delete(path)
+        else next.add(path)
+        saveExpandedPaths(next)
+        return next
+      })
+      return
+    }
+
+    const isCurrentlyExpanded = expandedPaths.has(path)
+
+    // Collapse path — always allowed; users must be able to back out of
+    // an accidental expansion regardless of depth cap.
+    if (isCurrentlyExpanded) {
+      setExpandedPaths((prev) => {
+        const next = new Set(prev)
+        next.delete(path)
+        saveExpandedPaths(next)
+        return next
+      })
+      return
+    }
+
+    // Forward expansion — consult the depth gate.
+    const decision = shouldGateManualExpand(
+      sessionFolderPath,
+      path,
+      expandDepth,
+      /* isCurrentlyExpanded */ false,
+    )
+
+    if (decision.kind === 'gate-forward') {
+      // Hard no-op: the gate is enforced.  The visual affordance on
+      // the row (dimmed chevron + banner tooltip via TooltipContent)
+      // already explains how to bypass; the toast here is a one-shot
+      // reinforcement so the user immediately understands the click
+      // was swallowed, even if they didn't hover for the tooltip.
+      // countCapToastedRef's spam-prevention pattern fits this exact
+      // shape — rapid repeat clicks on the same gated row shouldn't
+      // spam toasts.
+      if (!countCapToastedRef.current) {
+        countCapToastedRef.current = true
+        toast.info(
+          `Capped at ${expandDepth} level${expandDepth !== 1 ? 's' : ''} \u2014 bump the depth selector to drill in.`,
+          { duration: 3_000 },
+        )
+      }
+      return
+    }
+
     setExpandedPaths((prev) => {
       const next = new Set(prev)
-      if (next.has(path)) {
-        next.delete(path)
-      } else {
-        next.add(path)
-      }
+      next.add(path)
       saveExpandedPaths(next)
       return next
     })
+  }, [saveExpandedPaths, sessionFolderPath, expandDepth, expandedPaths])
+
+  // Collapse-all — clears expandedPaths.  (The earlier drill-mode
+  // infrastructure that also cleared drilledPaths here has been
+  // removed; see the "Depth-cap enforcement" comment above for the
+  // rationale.)
+  const handleCollapseAll = useCallback(() => {
+    setExpandedPaths(new Set())
+    saveExpandedPaths(new Set())
+    // No open-count cap in this section — that guardrail lives in LayoutShell's
+    // working-directory tree, which owns the `openCountCapped` state.
+    setDrilledPaths(new Set())
   }, [saveExpandedPaths])
 
   if (!sessionId) {
@@ -577,15 +921,51 @@ export function SessionFilesSection({ sessionId, className, sessionFolderPath, h
       {!hideHeader && (
         <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0 select-none">
           <span className="text-xs font-medium text-muted-foreground">{t("chat.sessionFiles")}</span>
-          {sessionFolderPath && (
-            <button
-              type="button"
-              onClick={() => window.electronAPI.showInFolder(sessionFolderPath)}
-              className="text-xs text-foreground/50 hover:text-foreground/80 hover:underline underline-offset-2 transition-colors"
-            >
-              {t("chat.viewInFileManager", { fileManager: fileManagerName })}
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {/* Depth selector — mirrors the Working Directory tree's
+                "depth=N means N levels" contract.  Shared helper:
+                shouldGateManualExpand from @craft-agent/ui. */}
+            {sessionFolderPath && (
+              <span className="inline-flex items-center rounded bg-sidebar-surface px-0.5 py-px text-[10px] text-muted-foreground gap-px">
+                {([1, 2, 3, Infinity] as const).map((d) => (
+                  <button
+                    key={String(d)}
+                    type="button"
+                    className={`px-1 py-px rounded-sm ${expandDepth === d ? 'bg-accent text-accent-foreground' : 'hover:bg-sidebar-hover'}`}
+                    onClick={() => setExpandDepth(d)}
+                    title={Number.isFinite(d) ? `Depth: ${d} level${d !== 1 ? 's' : ''}` : 'Show all'}
+                  >
+                    {Number.isFinite(d) ? d : 'All'}
+                  </button>
+                ))}
+              </span>
+            )}
+            {/* Collapse-all — visible when there's at least one expanded
+                path.  (Earlier revisions also counted drill markers;
+                drill mode has been removed in the gate-enforcement
+                revision so expandedPaths alone is sufficient.) */}
+            {sessionFolderPath && expandedPaths.size > 0 && (
+              <button
+                type="button"
+                onClick={handleCollapseAll}
+                className="text-foreground/50 hover:text-foreground/80 hover:bg-sidebar-hover rounded px-1 py-px transition-colors"
+                title="Collapse all"
+                aria-label="Collapse all"
+                data-testid="session-files-collapse-all"
+              >
+                <ListCollapse className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {sessionFolderPath && (
+              <button
+                type="button"
+                onClick={() => window.electronAPI.showInFolder(sessionFolderPath)}
+                className="text-xs text-foreground/50 hover:text-foreground/80 hover:underline underline-offset-2 transition-colors"
+              >
+                {t("chat.viewInFileManager", { fileManager: fileManagerName })}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -611,6 +991,9 @@ export function SessionFilesSection({ sessionId, className, sessionFolderPath, h
                 onFileClick={handleFileClick}
                 onFileDoubleClick={handleFileDoubleClick}
                 onRevealInFileManager={handleRevealInFileManager}
+                expandDepth={expandDepth}
+                rootPath={sessionFolderPath}
+                drilledPaths={drilledPaths as never}
               />
             ))}
           </nav>

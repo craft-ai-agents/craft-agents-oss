@@ -23,8 +23,18 @@ import { stat } from 'fs/promises'
 import { isAbsolute } from 'path'
 import { mainLog } from './logger'
 
-/** Thumbnail output size in pixels (width and height) */
+/** Default thumbnail output size in pixels (width and height).
+ *  The `?size=N` query parameter overrides this; clamped to 16–1024.
+ *  The hover-preview popover requests `?size=1024` for video frames
+ *  so they don't look pixelated at popover dimensions (~400px). */
 const THUMBNAIL_SIZE = 64
+
+/** Minimum size the `?size=` query parameter can request. */
+const THUMB_SIZE_MIN = 16
+/** Maximum size — arbitrary cap to bound memory per frame-grab. 1024px
+ *  is generous for a popover; larger values add RAM pressure without
+ *  visible benefit on typical screens. */
+const THUMB_SIZE_MAX = 1024
 
 /** Maximum entries in the in-memory LRU cache */
 const MAX_CACHE_ENTRIES = 200
@@ -39,10 +49,19 @@ const OS_THUMBNAIL_EXTENSIONS = new Set([
   'pdf', 'svg', 'psd', 'ai',
 ])
 
-/** All extensions we can potentially thumbnail */
-const ALL_PREVIEWABLE = new Set([...IMAGE_EXTENSIONS, ...OS_THUMBNAIL_EXTENSIONS])
+/** Video extensions — OS thumbnail API on macOS/Windows extracts the first
+ *  frame automatically; Linux has no video support and falls through. */
+const VIDEO_EXTENSIONS = new Set([
+  'mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v',
+])
 
-// In-memory LRU cache: path -> { mtime, data }
+/** All extensions we can potentially thumbnail */
+const ALL_PREVIEWABLE = new Set([...IMAGE_EXTENSIONS, ...OS_THUMBNAIL_EXTENSIONS, ...VIDEO_EXTENSIONS])
+
+// In-memory LRU cache: `path|size` -> { mtime, data }
+// Size is part of the key so requests for the same file at different
+// resolutions (e.g. 64px default in the WD tree, 1024px in the hover
+// popover) don't return the wrong-sized cached data.
 const cache = new Map<string, { mtime: number; data: Buffer }>()
 
 /**
@@ -66,13 +85,13 @@ const supportsOSThumbnails = process.platform === 'darwin' || process.platform =
  * Generate a thumbnail buffer for the given file path.
  * Returns a PNG buffer or null if generation fails/unsupported.
  */
-async function generateThumbnail(filePath: string, ext: string): Promise<Buffer | null> {
+async function generateThumbnail(filePath: string, ext: string, size: number = THUMBNAIL_SIZE): Promise<Buffer | null> {
   // Strategy 1: OS-level thumbnail (macOS/Windows) — handles images + PDFs + more
   if (supportsOSThumbnails) {
     try {
       const thumbnail = await nativeImage.createThumbnailFromPath(filePath, {
-        width: THUMBNAIL_SIZE,
-        height: THUMBNAIL_SIZE,
+        width: size,
+        height: size,
       })
       if (!thumbnail.isEmpty()) {
         return thumbnail.toPNG()
@@ -82,12 +101,14 @@ async function generateThumbnail(filePath: string, ext: string): Promise<Buffer 
     }
   }
 
-  // Strategy 2: Skia-based resize (all platforms) — images only
+  // Strategy 2: Skia-based resize (all platforms) — images only.
+  // Videos are handled by Strategy 1 on macOS/Windows; on Linux they
+  // return null here (Skia can't decode video frames).
   if (IMAGE_EXTENSIONS.has(ext)) {
     try {
       const img = nativeImage.createFromPath(filePath)
       if (img.isEmpty()) return null
-      const resized = img.resize({ width: THUMBNAIL_SIZE, height: THUMBNAIL_SIZE })
+      const resized = img.resize({ width: size, height: size })
       return resized.toPNG()
     } catch {
       return null
@@ -134,11 +155,17 @@ export function registerThumbnailScheme(): void {
 export function registerThumbnailHandler(): void {
   protocol.handle('thumbnail', async (request) => {
     try {
-      // Parse the file path from the URL
-      // Format: thumbnail://thumb/<encoded-path>
+      // Parse the file path + optional size from the URL
+      // Format: thumbnail://thumb/<encoded-path>?size=N
       // URL.pathname includes a leading /, so we strip it before decoding
       const url = new URL(request.url)
       const filePath = decodeURIComponent(url.pathname.slice(1))
+
+      // Resolve requested size from ?size= query param (default: THUMBNAIL_SIZE)
+      const sizeParam = url.searchParams.get('size')
+      const requestedSize = sizeParam
+        ? Math.max(THUMB_SIZE_MIN, Math.min(THUMB_SIZE_MAX, parseInt(sizeParam, 10) || THUMBNAIL_SIZE))
+        : THUMBNAIL_SIZE
 
       // Basic validation: must be an absolute path (works on all platforms)
       if (!filePath || !isAbsolute(filePath)) {
@@ -161,8 +188,13 @@ export function registerThumbnailHandler(): void {
         return new Response(null, { status: 404 })
       }
 
-      // Check cache — hit if path matches AND mtime hasn't changed
-      const cached = cache.get(filePath)
+      // Build the compound cache key before the lookup — same `path|size`
+      // format used by the store below so a lookup never misses because of
+      // a key format mismatch.
+      const cacheKey = filePath + '|' + requestedSize
+
+      // Check cache — hit if (path, size, mtime) all match.
+      const cached = cache.get(cacheKey)
       if (cached && cached.mtime === mtime) {
         return new Response(new Uint8Array(cached.data), {
           headers: {
@@ -172,15 +204,15 @@ export function registerThumbnailHandler(): void {
         })
       }
 
-      // Cache miss — generate thumbnail
-      const data = await generateThumbnail(filePath, ext)
+      // Cache miss — generate thumbnail at requested size
+      const data = await generateThumbnail(filePath, ext, requestedSize)
       if (!data) {
         return new Response(null, { status: 404 })
       }
 
-      // Store in cache (move to end for LRU behavior by delete+set)
-      cache.delete(filePath)
-      cache.set(filePath, { mtime, data })
+      // Store in cache (move to end for LRU behavior via delete+set).
+      cache.delete(cacheKey)
+      cache.set(cacheKey, { mtime, data })
       evictIfNeeded()
 
       return new Response(new Uint8Array(data), {

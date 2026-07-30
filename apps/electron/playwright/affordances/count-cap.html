@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<!--
+  apps/electron/playwright/affordances/count-cap.html
+
+  Captures the open-dir cap badge that fires when expandedPaths.size
+  exceeds openDirCap (= 50 by default).  The badge appears next to the
+  Working Directory header as a destructive-colored pill.
+
+  DOM mirrors LayoutShell.tsx line 2903:
+    {expansionCapped && (
+      <span className="wd-files-capped-badge" title="…">
+        <AlertTriangle size={8} />
+        50 / 50 dirs
+      </span>
+    )}
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Open-dir cap badge</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      /* Page-local: same section-header layout as popover-open.html
+         so the badge's drop-position matches production. */
+      .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 4px 10px;
+      }
+      .section-header__title {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--foreground);
+        letter-spacing: 0.02em;
+      }
+      .section-header__actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="affordance-stage">
+      <span class="affordance-stage__label">Open-dir cap badge (50 open limit)</span>
+
+      <!-- The capture box: just the badge + minimal section header
+           context so the pill's drop-position matches production. -->
+      <div class="cap-badge-affordance">
+        <div class="section-header">
+          <span class="section-header__title">Working directory</span>
+          <div class="section-header__actions">
+            <!-- The captured affordance: a destructive-color pill that
+                 shows up when expandedPaths.size >= openDirCap.  The
+                 icon mirrors an inline AlertTriangle (size=8) + the
+                 '{openCountCapped}/{openDirCap} dirs' copy. -->
+            <span
+              class="wd-files-capped-badge"
+              title="Open dirs capped at 50 — deepest entries were silently collapsed. Use Collapse all to reset."
+              aria-live="polite"
+            >
+              <!-- Text mirrors LayoutShell.tsx:2923 verbatim: `{openDirCap} open limit`.
+                   When the openDirCap default changes (DEFAULT_MAX_OPEN_DIRS at
+                   LayoutShell.tsx:156), bump this.  Currently 50. -->
+              <span>50 open limit</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

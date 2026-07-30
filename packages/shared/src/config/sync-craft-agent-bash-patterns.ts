@@ -2,7 +2,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { getCraftAgentReadOnlyBashPatterns } from './cli-domains.ts'
+import { CLI_BASH_PATTERN_PREFIX, getCraftAgentReadOnlyBashPatterns } from './cli-domains.ts'
 
 interface AllowedBashEntry {
   pattern: string
@@ -16,7 +16,7 @@ interface PermissionsConfig {
 }
 
 function isCraftAgentPattern(entry: AllowedBashEntry): boolean {
-  return typeof entry.pattern === 'string' && entry.pattern.startsWith('^craft-agent\\s')
+  return typeof entry.pattern === 'string' && entry.pattern.startsWith(CLI_BASH_PATTERN_PREFIX)
 }
 
 function syncCraftAgentPatterns(config: PermissionsConfig): PermissionsConfig {

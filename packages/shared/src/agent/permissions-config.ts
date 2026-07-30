@@ -21,6 +21,7 @@ import { getBundledAssetsDir } from '../utils/paths.ts';
 import { getSourcePath } from '../sources/paths.ts';
 import { isValidPermissionsFile } from '../config/validators.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
+import { CLI_BASH_PATTERN_PREFIX } from '../config/cli-domains.ts';
 import {
   SAFE_MODE_CONFIG,
   PermissionsConfigSchema,
@@ -376,7 +377,7 @@ function compileBlockedCommandHint(hint: BlockedCommandHintRule): CompiledBlocke
 }
 
 function shouldCompileBashPattern(pattern: string): boolean {
-  if (!FEATURE_FLAGS.craftAgentsCli && pattern.startsWith('^craft-agent\\s')) {
+  if (!FEATURE_FLAGS.craftAgentsCli && pattern.startsWith(CLI_BASH_PATTERN_PREFIX)) {
     return false;
   }
   return true;

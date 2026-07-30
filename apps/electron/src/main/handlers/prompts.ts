@@ -213,8 +213,8 @@ export function registerPromptHandlers(server: RpcServer, deps: HandlerDeps): vo
         options = {
           ...options,
           memories: results.map((r) => ({
-            title: r.title ?? 'Memory',
-            content: r.content ?? '',
+            title: r.memory.title ?? 'Memory',
+            content: r.memory.content ?? '',
             score: r.score ?? 0,
           })),
         }

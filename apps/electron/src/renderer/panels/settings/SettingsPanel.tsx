@@ -386,7 +386,7 @@ export function SettingsPanel() {
             <input
               type="checkbox"
               className="settings-switch"
-              checked={launchAtLogin}
+              checked={launchAtLogin ?? false}
               disabled={launchAtLogin === null}
               onChange={(e) => void changeLaunchAtLogin(e.target.checked)}
             />
@@ -399,7 +399,7 @@ export function SettingsPanel() {
             <input
               type="checkbox"
               className="settings-switch"
-              checked={confirmBeforeExit}
+              checked={confirmBeforeExit ?? false}
               disabled={confirmBeforeExit === null}
               onChange={(e) => void changeConfirmBeforeExit(e.target.checked)}
             />

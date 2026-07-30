@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { getCraftAgentReadOnlyBashPatterns } from '../src/config/cli-domains.ts'
+import { CLI_BASH_PATTERN_PREFIX, getCraftAgentReadOnlyBashPatterns } from '../src/config/cli-domains.ts'
 
 type AllowedBashEntry = { pattern: string; comment?: string }
 
@@ -13,7 +13,7 @@ describe('permissions craft-agent allowlist sync', () => {
     }
 
     const actual = (permissions.allowedBashPatterns ?? [])
-      .filter(entry => typeof entry.pattern === 'string' && entry.pattern.startsWith('^craft-agent\\s'))
+      .filter(entry => typeof entry.pattern === 'string' && entry.pattern.startsWith(CLI_BASH_PATTERN_PREFIX))
       .map(entry => ({ pattern: entry.pattern, comment: entry.comment ?? '' }))
       .sort((a, b) => a.pattern.localeCompare(b.pattern))
 

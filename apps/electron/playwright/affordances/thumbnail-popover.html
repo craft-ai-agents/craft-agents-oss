@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!--
+  apps/electron/playwright/affordances/thumbnail-popover.html
+
+  Captures the ThumbnailHoverPreview popover surface in its open,
+  pinned state.  Mirrors what apps/electron/src/renderer/components/
+  right-sidebar/ThumbnailHoverPreview.tsx renders as a `motion.div`
+  (we strip motion's inline animation transforms and pin the popover
+  in a fixed position so Playwright can snapshot it deterministically
+  without needing a hover driver).
+
+  Captured elements:
+    .thumbnail-hover-preview__anchor    — the small thumb that triggers
+    .thumbnail-hover-preview__popover  — the float frame
+    .thumbnail-hover-preview__frame    — image container
+    .thumbnail-hover-preview__caption  — filename caption row
+    .thumbnail-hover-preview__pin-close — the X button (pinned state)
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Thumbnail hover preview — popover open, pinned</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      /* Page-local: stage renders the anchor + the popover side by
+         side so the snapshot frames both at once.  In production the
+         popover is positioned via getBoundingClientRect; here we pin
+         it for deterministic capture. */
+      .popover-affordance {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        padding: 12px;
+      }
+      .thumbnail-thumb {
+        display: block;
+        width: 30px;
+        height: 30px;
+        border-radius: 3px;
+        background: var(--shell-fill-strong);
+        border: 1px solid var(--shell-border);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="affordance-stage">
+      <span class="affordance-stage__label">Thumbnail hover preview — pinned</span>
+
+      <div class="popover-affordance">
+        <!-- Anchor: the small workspace file-row thumbnail. -->
+        <span class="thumbnail-hover-preview__anchor">
+          <span class="thumbnail-thumb"></span>
+        </span>
+
+        <!-- Popover.  Position is `fixed` with explicit top/right to
+             simulate the post-mount bounding-rect math that motion's
+             inline style would set in production.  data-pinned="true"
+             is the prop the JSX sets when the user clicked the anchor
+             to pin the preview. -->
+        <div
+          class="thumbnail-hover-preview__popover"
+          data-testid="thumbnail-hover-preview-popover"
+          data-pinned="true"
+          style="position: fixed; top: 18px; right: 16px;"
+        >
+          <button
+            type="button"
+            aria-label="Unpin preview"
+            class="thumbnail-hover-preview__pin-close"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M18 6 6 18"></path>
+              <path d="m6 6 12 12"></path>
+            </svg>
+          </button>
+          <div class="thumbnail-hover-preview__frame">
+            <!-- Mirrors the "loaded image" branch in production; an
+                 alt-shaped box stands in for the actual image so we
+                 aren't shipping ~150 KB of PNGs into a snapshot. -->
+            <div
+              style="width: 220px; height: 140px; background: linear-gradient(135deg, #6366f122, #dc262622); border-radius: 4px;"
+              aria-label="thumbnail mediaLab-preview.png"
+            ></div>
+          </div>
+          <div class="thumbnail-hover-preview__caption">
+            <span class="thumbnail-hover-preview__name">mediaLab-preview.png</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

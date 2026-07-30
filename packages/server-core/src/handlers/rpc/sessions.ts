@@ -1,5 +1,5 @@
 import { readFile, writeFile, stat } from 'fs/promises'
-import { join } from 'path'
+import { join, resolve, sep } from 'path'
 import { RPC_CHANNELS, type FileAttachment, type SendMessageOptions, type SessionEvent } from '@craft-agent/shared/protocol'
 import type { StoredAttachment } from '@craft-agent/core/types'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
@@ -454,6 +454,40 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
         return sessionManager.removeMessageAnnotation(sessionId, command.messageId, command.annotationId)
       case 'updateAnnotation':
         return sessionManager.updateMessageAnnotation(sessionId, command.messageId, command.annotationId, command.patch)
+      case 'removeAttachment':
+        return sessionManager.removeMessageAttachment(sessionId, command.messageId, command.attachmentId)
+      case 'clearAttachments':
+        return sessionManager.clearMessageAttachments(sessionId)
+      case 'gitCheckout': {
+        // Discard working-tree changes for an unstaged modified file. Mirrors
+        // `git checkout -- <path>` semantics: doesn't touch staged or the
+        // index, just reverts the file on disk to HEAD.
+        const session = await sessionManager.getSession(sessionId)
+        if (!session) return { success: false, error: 'Session not found' }
+        const cwd = session.workingDirectory
+        if (!cwd) return { success: false, error: 'No working directory set for this session' }
+        const filePath = command.filePath
+        if (!filePath) {
+          return { success: false, error: 'Invalid file path' }
+        }
+        // Resolve-and-containment check defends against concat-time escape
+        // (e.g. 'goodDir/../badDir') that a string-level filter would miss.
+        // Server runs with full user privileges, so this is a hard guard.
+        const absCwd = resolve(cwd)
+        const absFile = resolve(cwd, filePath)
+        if (absFile !== absCwd && !absFile.startsWith(absCwd + sep)) {
+          return { success: false, error: 'Invalid file path' }
+        }
+        const result = Bun.spawnSync(['git', 'checkout', '--', filePath], {
+          cwd,
+          env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }, // never prompt for credentials
+        })
+        if (result.exitCode !== 0) {
+          const stderr = result.stderr instanceof Buffer ? result.stderr.toString() : String(result.stderr ?? '')
+          return { success: false, error: stderr.trim() || 'git checkout failed' }
+        }
+        return { success: true }
+      }
       default: {
         const _exhaustive: never = command
         throw new Error(`Unknown session command: ${JSON.stringify(command)}`)

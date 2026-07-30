@@ -42,6 +42,7 @@ import type { LlmConnectionWithStatus, LlmProviderType } from '@craft-agent/shar
 import { providerLabel } from '@craft-agent/shared/config/provider-labels'
 // Type-only — erased at build time, so no Node code reaches the renderer bundle.
 import type { InferenceHistoryResult } from '@craft-agent/shared/agent/core/index'
+import { FullscreenOverlayBase } from '@craft-agent/ui'
 import type { CustomEndpointApi } from '@config/llm-connections'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
 // `useOnboarding` itself only imports types from the onboarding barrel, so it

@@ -163,10 +163,17 @@ export {
   getLanguageFromPath,
   formatFilePath,
   truncateFilePath,
+  HighlightedDiffViewer,
+  tokenizeLine,
+  detectCodeLanguage,
+  detectCodeLanguageFromPath,
   type ShikiCodeViewerProps,
   type ShikiDiffViewerProps,
   type UnifiedDiffViewerProps,
   type DiffViewerControlsProps,
+  type HighlightedDiffViewerProps,
+  type DiffViewMode,
+  type TokenSpan,
 } from './components/code-viewer'
 
 // Terminal components
@@ -247,9 +254,16 @@ export {
   type DismissibleLayerType,
 } from './lib/dismissible-layer-bridge'
 
-// Tree-depth policy helpers
+// Tree depth policy — pure decision helper for the "depth=N means N
+// levels, period" rule.  Callers (toggle handlers in any tree view)
+// pass a dirPath + the user's depth-cap value; this returns whether
+// the forward-expansion click should proceed, gate (silent no-op), or
+// is a collapse (always allowed).  No React/DOM/IPC deps so the
+// helper is safe in any consumer (Electron, web viewer, tests).
 export {
   shouldGateManualExpand,
+  computeDepthFromRoot,
+  splitPathSegments,
   trimExpandedByCount,
   type GateDecision,
   type TrimResult,

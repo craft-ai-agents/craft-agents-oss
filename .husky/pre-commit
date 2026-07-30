@@ -1,0 +1,389 @@
+#!/usr/bin/env sh
+# .husky/pre-commit
+#
+# Gate every commit on:
+#   1. `bun run check-test-discovery` — no stale test files in apps/electron/release
+#   2. `bun run check-build-leaks`    — no build artifacts staged in release/
+#   3. `bun run icon-check`           — apps/electron/resources matches the canonical icon-set
+#   4. `bun run mock:audit`           — per-test Electron mock coverage snapshots are in sync
+#   5. `bun run gen:ipc-snapshot:check` — IPC channel inventory matches channels.ts
+#   6. `bun run test:ui:treeBfsGate`  — depth-gate + trim + pinned-paths tests still pass (stage-gated)
+#   7. `bun run check:test-count`    — treeBfsGate test count did not drop (stage-gated)
+#   8. `bash scripts/check-brand-leaks.sh` — no lingering old brand strings
+#   9. `bash tools/check-branding-leaks.sh` — same check + untracked files
+#  10. `bash scripts/check-rebrand-commit.sh` — rebranding + functional not mixed
+#
+# Escape hatches:
+#   SKIP_ICON_CHECK=1|true|yes|on  — skips all pre-commit gates
+#   SKIP_BUILD_LEAKS=1             — skips only the build-leak gate (#2)
+#   SKIP_MOCK_AUDIT=1              — skips only the mock-coverage gate (#4)
+#   SKIP_TREEBFSGATE=1             — skips only the tree-policy regression gate (#6)
+#   SKIP_TEST_COUNT=1              — skips only the test-count regression gate (#7)
+#   SKIP_BRAND_LEAK=1              — skips only the brand-leak gate (#8, #9)
+#   SKIP_REBRAND_CHECK=1           — skips only the rebrand-commit gate (#10)
+
+# Defensive cd: husky generally runs hooks with cwd == repo root, but
+# some git clients and Windows combinations vary. Resolve to repo root
+# explicitly via git rev-parse (available everywhere git is).
+cd "$(git rev-parse --show-toplevel)" 2>/dev/null || {
+  printf '[husky] could not resolve repo root via git rev-parse, aborting.\n'
+  exit 1
+}
+
+# Looser SKIP_ICON_CHECK match — accept 1|true|yes|on, treat
+# 0|false|no|off|"" as "do not skip". Case-insensitive.
+SKIP_NORMALIZED=$(printf '%s' "${SKIP_ICON_CHECK:-0}" | tr '[:upper:]' '[:lower:]')
+case "$SKIP_NORMALIZED" in
+  1|true|yes|on)
+    printf '[husky] SKIP_ICON_CHECK is set, skipping pre-commit checks.\n'
+    exit 0
+    ;;
+  0|false|no|off|"")
+    : # fall through to the checks
+    ;;
+  *)
+    printf '[husky] unrecognized SKIP_ICON_CHECK=%s, treating as "do not skip".\n' "$SKIP_ICON_CHECK"
+    ;;
+esac
+
+if ! command -v bun >/dev/null 2>&1; then
+  printf '[husky] bun not on PATH, skipping pre-commit checks (install bun from https://bun.sh to enable)\n'
+  exit 0
+fi
+
+# ── Mock audit gate helper ─────────────────────────────────────────
+# Hoisted to the top so it has one canonical home. POSIX `sh` hoists
+# function definitions to the script's global scope at parse time, so
+# calling sites below (inside the STAGED_MAIN conditional) can invoke
+# it without an explicit prior definition. `exit 1` inside the function
+# terminates the whole hook (not just the function) — verified across
+# Git-Bash on Windows, POSIX sh on Linux, and bash/zsh on macOS.
+run_mock_audit_gate() {
+  if ! bun run mock:audit; then
+    printf '\n[husky] mock:audit failed — per-test Electron mock coverage drifted.\n'
+    printf '[husky] Resolve by regenerating and re-staging:\n'
+    printf '  bun run mock:audit:write\n'
+    printf '  git add apps/electron/src/main/**/__snapshots__/coverage.ts\n'
+    printf '[husky] Bypass (sparingly): SKIP_MOCK_AUDIT=1 git commit ...\n'
+    exit 1
+  fi
+}
+
+bun run check-test-discovery || {
+  printf '[husky] check-test-discovery failed -- stale test files in release/.\n'
+  printf '[husky] Fix:    rm -rf apps/electron/release && bun run electron:clean\n'
+  printf '[husky] Bypass: SKIP_ICON_CHECK=1 git commit ... (skips all pre-commit checks)\n'
+  exit 1
+}
+
+# ── Build-artifact leak gate ───────────────────────────────────────
+# Detects build artifacts under apps/electron/release/ that are staged
+# in the git index (via `git add -f`).  The directory IS .gitignore'd,
+# so the only way files appear in the index is force-adding.  This
+# prevents accidentally committing 71MB+ of unpacked binaries.
+SKIP_LEAKS_NORMALIZED=$(printf '%s' "${SKIP_BUILD_LEAKS:-0}" | tr '[:upper:]' '[:lower:]')
+case "$SKIP_LEAKS_NORMALIZED" in
+  1|true|yes|on)
+    printf '[husky] SKIP_BUILD_LEAKS is set, skipping build-leak check.\n'
+    ;;
+  0|false|no|off|"")
+    bun run check-build-leaks || {
+      printf '[husky] check-build-leaks failed -- build artifacts staged in release/.\n'
+      printf '[husky] Fix:    git rm --cached -r apps/electron/release/\n'
+      printf '[husky] Bypass: SKIP_BUILD_LEAKS=1 git commit ...\n'
+      exit 1
+    }
+    ;;
+  *)
+    printf '[husky] unrecognized SKIP_BUILD_LEAKS=%s, treating as "do not skip".\n' "$SKIP_BUILD_LEAKS"
+    bun run check-build-leaks || {
+      printf '[husky] check-build-leaks failed -- build artifacts staged in release/.\n'
+      printf '[husky] Fix:    git rm --cached -r apps/electron/release/\n'
+      printf '[husky] Bypass: SKIP_BUILD_LEAKS=1 git commit ...\n'
+      exit 1
+    }
+    ;;
+esac
+
+bun run icon-check || {
+  printf '[husky] icon-check failed -- commit blocked.\n'
+  printf '[husky] Fix:    bun run -C apps/electron generate-icons\n'
+  printf '[husky] Bypass: SKIP_ICON_CHECK=1 git commit ...\n'
+  exit 1
+}
+
+# ── Electron mock coverage gate ─────────────────────────────────────
+# If the commit touches any source file under apps/electron/src/main/,
+# the per-test Electron-mock-coverage snapshots must be in sync with
+# the current consumer call-site surface. `bun run mock:audit` runs in
+# --check mode (no rewrites): it exits non-zero when any
+# __snapshots__/coverage.ts is missing or stale, and prints the drifted
+# paths so the developer knows exactly which files to git-add.
+#
+# Bypass when intentionally shipping without regenerated snapshots:
+#   SKIP_MOCK_AUDIT=1|true|yes|on git commit ...
+STAGED_MAIN=$(git diff --cached --name-only -- 'apps/electron/src/main/' || true)
+if [ -n "$STAGED_MAIN" ]; then
+  # Same broad match as SKIP_ICON_CHECK above: accept 1|true|yes|on,
+  # treat 0|false|no|off|"" or anything unrecognized as "do not skip".
+  # Case-insensitive — keeps muscle memory from one escape hatch useful
+  # for the other.
+  SKIP_MOCK_NORMALIZED=$(printf '%s' "${SKIP_MOCK_AUDIT:-0}" | tr '[:upper:]' '[:lower:]')
+  case "$SKIP_MOCK_NORMALIZED" in
+    1|true|yes|on)
+      printf '[husky] SKIP_MOCK_AUDIT is set, skipping mock:audit gate.\n'
+      ;;
+    0|false|no|off|"")
+      run_mock_audit_gate
+      ;;
+    *)
+      printf '[husky] unrecognized SKIP_MOCK_AUDIT=%s, treating as "do not skip".\n' "$SKIP_MOCK_AUDIT"
+      run_mock_audit_gate
+      ;;
+  esac
+fi
+
+# ── IPC channel inventory gate ───────────────────────────────────────
+# The EXPECTED_CHANNELS array in ipc-channels.test.ts is auto-generated
+# from RPC_CHANNELS.  If someone adds/removes a channel without running
+# `bun run gen:ipc-snapshot`, the pre-commit gate catches the drift.
+#
+# Bypass (sparingly): SKIP_ICON_CHECK=1 git commit ...
+# (skips all pre-commit gates including this one).
+bun run gen:ipc-snapshot:check || {
+  printf '[husky] IPC channel inventory drift detected.\n'
+  printf '[husky] Fix:    bun run gen:ipc-snapshot\n'
+  printf '[husky] Bypass: SKIP_ICON_CHECK=1 git commit ... (skips all pre-commit checks)\n'
+  exit 1
+}
+
+# ── Brand-leak gate ─────────────────────────────────────────────────
+# Ensures no lingering old brand strings (Craft Agents, craft-agents,
+# craft-ai-agents) are introduced. Catches accidental reverts of the
+# ARCHstudio rebrand. Catches any string that would appear in user-
+# facing UI, docs, or public-facing config.
+#
+# Bypass (sparingly): SKIP_BRAND_LEAK=1 git commit ...
+bash scripts/check-brand-leaks.sh || {
+  printf '[husky] Brand-leak detected -- old brand strings found.\n'
+  printf '[husky] Fix:    grep for the old brand string and replace with ARCHstudio.\n'
+  printf '[husky] Bypass: SKIP_BRAND_LEAK=1 git commit ...\n'
+  exit 1
+}
+
+# ── Branding-leak gate (tracked + new files) ────────────────────────
+# Extends the tracked-file check above to also scan untracked (new)
+# files. Catches the case where someone introduces a brand-new file
+# with the old brand by accident (e.g., copying an old template).
+#
+# Bypass (sparingly): SKIP_BRAND_LEAK=1 git commit ...
+bash tools/check-branding-leaks.sh || {
+  printf '[husky] Branding-leak detected -- old brand strings in tracked or new files.\n'
+  printf '[husky] Fix:    grep for the old brand string and replace with ARCHstudio.\n'
+  printf '[husky] Bypass: SKIP_BRAND_LEAK=1 git commit ...\n'
+  exit 1
+}
+
+# ── Tree-policy regression gate ──────────────────────────────────────
+# If the commit touches any of:
+#   - packages/ui/src/lib/treeBfsGate.ts (the helper)
+#   - the three treeBfsGate test files
+#   - apps/electron/src/renderer/shell/LayoutShell.tsx (consumer)
+#   - apps/electron/src/renderer/components/right-sidebar/SessionFilesSection.tsx (consumer)
+# the three treeBfsGate test files must still pass. Locks in:
+#   - depth gate semantics (currentDepth + cap → gate / drill / allow)
+#   - trim-by-count behavior (when expandedPaths.size > MAX)
+#   - pinned-paths support (pinned dirs survive trim)
+#   - adversarial edge-case coverage (UNC, trailing slashes, mixed separators)
+#
+# Stage-gated so unrelated commits don't pay the ~1s test cost. The
+# consumer check means we catch misuse regression in addition to
+# consumer-facing API drift.
+#
+# SELF-MAINTAINING CONSUMER LIST. The trigger set is computed at
+# pre-commit time from `git ls-files`, not hard-coded:
+#
+#   1. Helper file + its three test files -- hard-watched (always a smoke
+#      signal for the helper API).
+#   2. Consumers -- discovered dynamically by grepping git's index for
+#      files importing `shouldGateManualExpand` or
+#      `trimExpandedByCount`. When a new consumer is added in any
+#      future commit, it joins the gate automatically; no
+#      .husky/pre-commit edit needed.
+#
+# The browser-side filter excludes the helper file itself (so we don't
+# double-fire when only the helper changes) and `__tests__/` directories
+# (so tests aren't treated as consumers of their own surface).
+#
+# Bypass (sparingly): SKIP_TREEBFSGATE=1|true|yes|on git commit ...
+#
+# Discover consumers from the index. `git ls-files '*.ts' '*.tsx'`
+# limits the scan to source files; `grep -v __tests__` keeps tests out
+# even though they call the helpers (they're already covered by the
+# test-file watch above); `grep -v 'treeBfsGate\.ts$'` excludes the
+# helper itself (`grep -l` would otherwise match it, since the helper
+# declares the two symbols it exports).
+#
+# Two defensive details worth flagging for future readers:
+#
+#   * `xargs -d '\n'` makes the argument-delimiter explicit.  Without
+#     it, xargs splits on IFS whitespace, which would silently break
+#     if a future consumer lives under a directory whose name contains
+#     a space (we don't have any today).
+#
+#   * The grep pattern uses word boundaries (`\b...\b`).  Without them,
+#     a file that *mentions* the helper name in a comment or docstring
+#     — say, `// consider using trimExpandedByCount here` — would join
+#     the consumer set and force the gate to run on every commit
+#     touching it.  The gate would still pass (the helper tests don't
+#     care about that file) but the noise adds up if the pattern
+#     spreads.
+#
+# Caveat for future-maintainers: pathspec `'*.ts' '*.tsx'` does not
+# match `.mts` / `.cts` (the codebase uses `.tsx` for React, so this
+# isn't a regression today; if the convention shifts, extend the
+# pathspec accordingly).
+TREE_BFS_GATE_CONSUMERS=$(git ls-files '*.ts' '*.tsx' 2>/dev/null \
+  | xargs -d '\n' grep -l --text -E '\b(shouldGateManualExpand|trimExpandedByCount)\b' 2>/dev/null \
+  | grep -v __tests__ \
+  | grep -v 'treeBfsGate\.ts$' \
+  || true)
+
+# Staged helper + test files (always-watched smoke signal).
+STAGED_TREEBFSGATE_HELPER=$(git diff --cached --name-only -- \
+  'packages/ui/src/lib/treeBfsGate.ts' \
+  'packages/ui/src/lib/__tests__/treeBfsGate.test.ts' \
+  'packages/ui/src/lib/__tests__/treeBfsGate.adversarial.test.ts' \
+  'packages/ui/src/lib/__tests__/treeBfsGate.consumer-agnostic.test.ts' \
+  || true)
+
+# Staged consumer files. Iterate rather than grep-anchored regex so
+# paths with metacharacters (none present today, but defensive) work
+# correctly; each iteration is an O(1) `git diff --cached -- <path>`
+# call, so 5-10 consumers cost ~tens of ms total.
+STAGED_TREEBFSGATE_CONSUMERS=""
+if [ -n "$TREE_BFS_GATE_CONSUMERS" ]; then
+  while IFS= read -r c; do
+    [ -z "$c" ] && continue
+    if git diff --cached --name-only -- "$c" 2>/dev/null | grep -q .; then
+      STAGED_TREEBFSGATE_CONSUMERS="yes"
+      break
+    fi
+  done <<EOF
+$TREE_BFS_GATE_CONSUMERS
+EOF
+fi
+
+STAGED_TREEBFSGATE="$STAGED_TREEBFSGATE_HELPER$STAGED_TREEBFSGATE_CONSUMERS"
+if [ -n "$STAGED_TREEBFSGATE" ]; then
+  SKIP_TREEBFSGATE_NORMALIZED=$(printf '%s' "${SKIP_TREEBFSGATE:-0}" | tr '[:upper:]' '[:lower:]')
+  case "$SKIP_TREEBFSGATE_NORMALIZED" in
+    1|true|yes|on)
+      printf '[husky] SKIP_TREEBFSGATE is set, skipping tree-policy regression gate.\n'
+      ;;
+    0|false|no|off|"")
+      bun run test:ui:treeBfsGate || {
+        printf '[husky] treeBfsGate regression detected -- one of the gated helper/consumer tests failed.\n'
+        printf '[husky] Fix:    bun run test:ui:treeBfsGate\n'
+        printf '[husky] Bypass: SKIP_TREEBFSGATE=1 git commit ...\n'
+        exit 1
+      }
+      ;;
+    *)
+      printf '[husky] unrecognized SKIP_TREEBFSGATE=%s, treating as "do not skip".\n' "$SKIP_TREEBFSGATE"
+      bun run test:ui:treeBfsGate || {
+        printf '[husky] treeBfsGate regression detected -- one of the gated helper/consumer tests failed.\n'
+        printf '[husky] Fix:    bun run test:ui:treeBfsGate\n'
+        printf '[husky] Bypass: SKIP_TREEBFSGATE=1 git commit ...\n'
+        exit 1
+      }
+      ;;
+  esac
+fi
+
+# ── Test-count regression gate ─────────────────────────────────────
+# Catches the failure mode the test:ui:treeBfsGate gate (#6) misses:
+# silently removing a `describe`/`it`/`test` block during a refactor.
+# That gate signals "tests fail"; this one signals "tests removed".
+# The two compose because count delta is only meaningful AFTER the
+# existing tests have been verified to pass (gate #6 fires first).
+#
+# Stage-gated on the 3 test files in TARGETS plus the script itself.
+# The helper file `treeBfsGate.ts` is intentionally NOT in the
+# trigger set: it doesn't move counts; touching it is already
+# covered by gate #6 (which watches the helper file plus the
+# three consumer tests).
+#
+# The script compares counts between HEAD and the working tree:
+# adding a test (+Δ) is always allowed, only DROPS refuse the
+# commit.  This pairs naturally with gate #6: that one runs the
+# tests, this one protects the test files themselves from silent
+# shrinkage during a refactor.
+#
+# Bypass (sparingly): SKIP_TEST_COUNT=1|true|yes|on git commit ...
+STAGED_TEST_COUNT=$(git diff --cached --name-only -- \
+  'packages/ui/src/lib/__tests__/treeBfsGate.test.ts' \
+  'packages/ui/src/lib/__tests__/treeBfsGate.adversarial.test.ts' \
+  'packages/ui/src/lib/__tests__/treeBfsGate.consumer-agnostic.test.ts' \
+  'scripts/check-test-count.ts' \
+  || true)
+if [ -n "$STAGED_TEST_COUNT" ]; then
+  SKIP_TEST_COUNT_NORMALIZED=$(printf '%s' "${SKIP_TEST_COUNT:-0}" | tr '[:upper:]' '[:lower:]')
+  case "$SKIP_TEST_COUNT_NORMALIZED" in
+    1|true|yes|on)
+      printf '[husky] SKIP_TEST_COUNT is set, skipping test-count regression gate.\n'
+      ;;
+    0|false|no|off|"")
+      # --staged tells the script to compare HEAD-vs-INDEX (the strict
+      # pre-commit semantic), so refactor shrinkage that's been staged
+      # can't slip through even if the working tree was re-edited
+      # after the stage.
+      bun run check:test-count -- --staged || {
+        printf '[husky] Test-count regression gate failed -- a treeBfsGate test file shrank.\n'
+        printf '[husky] Fix:    bun run check:test-count -- --staged\n'
+        printf '[husky] Bypass: SKIP_TEST_COUNT=1 git commit ...\n'
+        exit 1
+      }
+      ;;
+    *)
+      printf '[husky] unrecognized SKIP_TEST_COUNT=%s, treating as "do not skip".\n' "$SKIP_TEST_COUNT"
+      bun run check:test-count -- --staged || {
+        printf '[husky] Test-count regression gate failed -- a treeBfsGate test file shrank.\n'
+        printf '[husky] Fix:    bun run check:test-count -- --staged\n'
+        printf '[husky] Bypass: SKIP_TEST_COUNT=1 git commit ...\n'
+        exit 1
+      }
+      ;;
+  esac
+fi
+
+# ── Rebrand-commit discipline gate ─────────────────────────────────
+# Enforces the two-commit discipline: rebranding commits and functional
+# commits must never be mixed. If both rebranding files (docs, config,
+# templates) and functional files (source, tests, scripts) are staged,
+# the commit is refused with guidance on how to separate them.
+#
+# Bypass (sparingly): SKIP_REBRAND_CHECK=1 git commit ...
+SKIP_REBRAND_NORMALIZED=$(printf '%s' "${SKIP_REBRAND_CHECK:-0}" | tr '[:upper:]' '[:lower:]')
+case "$SKIP_REBRAND_NORMALIZED" in
+  1|true|yes|on)
+    printf '[husky] SKIP_REBRAND_CHECK is set, skipping rebrand-commit gate.\n'
+    ;;
+  0|false|no|off|"")
+    bash scripts/check-rebrand-commit.sh || {
+      printf '[husky] Rebrand-commit discipline violated — rebranding and functional changes mixed.\n'
+      printf '[husky] Fix:    Separate rebranding from functional changes (see script output).\n'
+      printf '[husky] Bypass: SKIP_REBRAND_CHECK=1 git commit ...\n'
+      exit 1
+    }
+    ;;
+  *)
+    printf '[husky] unrecognized SKIP_REBRAND_CHECK=%s, treating as "do not skip".\n' "$SKIP_REBRAND_CHECK"
+    bash scripts/check-rebrand-commit.sh || {
+      printf '[husky] Rebrand-commit discipline violated — rebranding and functional changes mixed.\n'
+      printf '[husky] Fix:    Separate rebranding from functional changes (see script output).\n'
+      printf '[husky] Bypass: SKIP_REBRAND_CHECK=1 git commit ...\n'
+      exit 1
+    }
+    ;;
+esac

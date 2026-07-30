@@ -962,10 +962,18 @@ function AppShellContent({
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
 
+  // Cumulative open-directory cap for the working-directory tree's right
+  // rail. Loaded from WorkspaceSettings.maxOpenDirs and threaded into
+  // LayoutShell as a prop. Defaults to 50 here so the very first paint
+  // matches the prior hardcoded behavior (LayoutShell also defaults to 50
+  // via DEFAULT_MAX_OPEN_DIRS if no prop is supplied).
+  const [maxOpenDirs, setMaxOpenDirs] = React.useState<number>(50)
+
   // Enabled permission modes for Shift+Tab cycling (min 2 modes)
   const [enabledModes, setEnabledModes] = React.useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
 
-  // Load workspace settings (for localMcpEnabled and cyclablePermissionModes) on workspace change
+  // Load workspace settings (for localMcpEnabled, cyclablePermissionModes,
+  // and maxOpenDirs) on workspace change.
   React.useEffect(() => {
     if (!activeWorkspaceId) return
     window.electronAPI.getWorkspaceSettings(activeWorkspaceId).then((settings) => {
@@ -975,6 +983,8 @@ function AppShellContent({
         if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
           setEnabledModes(settings.cyclablePermissionModes)
         }
+        // Load maxOpenDirs (LayoutShell's working-directory tree count cap)
+        setMaxOpenDirs(settings.maxOpenDirs ?? 50)
       }
     }).catch((err) => {
       console.error('[Chat] Failed to load workspace settings:', err)
@@ -2436,6 +2446,7 @@ function AppShellContent({
         initialView="command"
         onNewChat={openNewChat ? () => { void openNewChat() } : undefined}
         sessionContext={shellSessionContext}
+        maxOpenDirs={maxOpenDirs}
       >
         {/* === TOP BAR === */}
         {!isFocusedMode && <TopBar

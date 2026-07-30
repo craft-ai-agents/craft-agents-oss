@@ -65,7 +65,7 @@ describe('PiAgent pre-tool labels guard', () => {
     const response = sent.at(-1)
     expect(response?.type).toBe('pre_tool_use_response')
     expect(response?.action).toBe('block')
-    expect(String(response?.reason ?? '')).toContain('craft-agent label --help')
+    expect(String(response?.reason ?? '')).toContain('archstudio label --help')
 
     agent.destroy()
   })

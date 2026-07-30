@@ -7,6 +7,11 @@ export * from '@craft-agent/shared/protocol'
 // Package re-exports (convenience for renderer imports)
 // =============================================================================
 
+// `GitFileDiffResult` is a protocol DTO, not a core type. The `export *` above
+// re-exports it publicly but does not bring it into this module's scope, so the
+// local annotation below needs an explicit import.
+import type { GitFileDiffResult } from '@craft-agent/shared/protocol'
+
 // Core types
 import type {
   Message as CoreMessage,

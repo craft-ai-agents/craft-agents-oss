@@ -70,7 +70,11 @@ function mockPlatform(): 'win32' | 'darwin' | 'linux' {
 const mock: ElectronAPI = {
   // ── Session management ────────────────────────────────────────────────
   getSessions: () => Promise.resolve([]),
-  getUnreadSummary: () => Promise.resolve({ total: 0, flagged: 0, workspaceUnreads: {} }),
+  getUnreadSummary: () => Promise.resolve({
+    totalUnreadSessions: 0,
+    byWorkspace: {},
+    hasUnreadByWorkspace: {},
+  }),
   markAllSessionsRead: voidResult,
   getSessionMessages: () => Promise.resolve(null),
   createSession: (workspaceId: string) => Promise.resolve({
@@ -85,7 +89,7 @@ const mock: ElectronAPI = {
   killShell: () => Promise.resolve({ success: true, error: undefined }),
 
   // ── Tasks ─────────────────────────────────────────────────────────────
-  validateTask: () => Promise.resolve({ valid: true, errors: [] }),
+  validateTask: () => Promise.resolve({ valid: true, errors: [], warnings: [] }),
   createTask: () => Promise.resolve({ ok: true } as any),
   generateTask: () => Promise.resolve({ ok: true } as any),
   onTaskGenerated: () => noop,
@@ -93,30 +97,39 @@ const mock: ElectronAPI = {
   pauseTask: voidResult,
   resumeTask: voidResult,
   stopTask: voidResult,
-  getTask: () => Promise.resolve(null),
+  getTask: () => Promise.resolve({
+    slug: '',
+    validation: { valid: true, errors: [], warnings: [] },
+    run: null,
+  }),
   listTasks: () => Promise.resolve([]),
   getTaskResults: () => Promise.resolve({} as any),
+  getTaskOutput: () => Promise.resolve(null),
 
   // ── Permissions & credentials ─────────────────────────────────────────
   respondToPermission: () => Promise.resolve(true),
   respondToCredential: () => Promise.resolve(true),
 
   // ── Session commands ──────────────────────────────────────────────────
-  sessionCommand: () => Promise.resolve({}),
+  sessionCommand: () => Promise.resolve(),
 
   // ── Server info ───────────────────────────────────────────────────────
   getServerHomeDir: () => Promise.resolve('/home/user'),
   getServerConfig: () => Promise.resolve({
-    host: '0.0.0.0',
+    enabled: false,
     port: 3100,
     token: '',
-    autoConnect: false,
   }),
   setServerConfig: voidResult,
   getServerStatus: () => Promise.resolve({
     running: false,
-    uptime: 0,
-    version: '0.0.0',
+    host: '127.0.0.1',
+    port: 3100,
+    tls: false,
+    url: 'ws://127.0.0.1:3100',
+    token: '',
+    needsRestart: false,
+    insecureWarning: false,
   }),
 
   // ── App lifecycle ─────────────────────────────────────────────────────
@@ -176,12 +189,20 @@ const mock: ElectronAPI = {
 
   // ── Filesystem search ─────────────────────────────────────────────────
   searchFiles: () => Promise.resolve([]),
-  listServerDirectory: () => Promise.resolve({ entries: [], error: undefined }),
+  listServerDirectory: () => Promise.resolve({
+    currentPath: '/mock',
+    parentPath: null,
+    breadcrumbs: [],
+    platform: mockPlatform(),
+    truncated: false,
+    totalEntries: 0,
+    entries: [],
+  }),
   listDirectoryFiles: () => Promise.resolve({
     currentPath: '/mock',
     parentPath: null,
     entries: [
-      { name: 'file1.ts', path: '/mock/file1.ts', type: 'file' as const, size: 1024, mtime: Date.now(), isSymlink: false },
+      { name: 'file1.ts', path: '/mock/file1.ts', type: 'file' as const, size: 1024, mtime: Date.now(), ctime: Date.now() - 60_000 /* 1 min older, so the ctime line renders */, isSymlink: false },
       { name: 'src', path: '/mock/src', type: 'directory' as const, isSymlink: false },
     ],
   }),
@@ -248,21 +269,27 @@ const mock: ElectronAPI = {
   showDeleteSessionConfirmation: () => Promise.resolve(false),
   logout: voidResult,
   getCredentialHealth: () => Promise.resolve({
-    overall: 'ok',
-    credentials: [],
+    healthy: true,
     issues: [],
   }),
 
   // ── Onboarding ────────────────────────────────────────────────────────
   getAuthState: () => Promise.resolve({
-    isAuthenticated: false,
-    hasApiKey: false,
-    hasOAuth: false,
+    billing: {
+      type: null,
+      hasCredentials: false,
+      apiKey: null,
+      claudeOAuthToken: null,
+    },
+    workspace: {
+      hasWorkspace: false,
+      active: null,
+    },
   }),
   getSetupNeeds: () => Promise.resolve({
-    needsApiKey: true,
-    needsOAuth: false,
-    needsWorkspace: true,
+    needsBillingConfig: true,
+    needsCredentials: false,
+    isFullyConfigured: false,
   }),
   startWorkspaceMcpOAuth: () => Promise.resolve({ success: false } as any),
   startClaudeOAuth: () => Promise.resolve({ success: false }),
@@ -343,7 +370,7 @@ const mock: ElectronAPI = {
   getSourcePermissionsConfig: () => Promise.resolve(null),
   getWorkspacePermissionsConfig: () => Promise.resolve(null),
   getDefaultPermissionsConfig: () => Promise.resolve({ config: null, path: '' }),
-  getMcpTools: () => Promise.resolve({ tools: [] }),
+  getMcpTools: () => Promise.resolve({ success: true, tools: [] }),
   performOAuth: () => Promise.resolve({ success: false, error: 'Mock: not available' }),
   oauthRevoke: () => Promise.resolve({ success: true }),
   searchSessionContent: () => Promise.resolve([]),
@@ -465,7 +492,7 @@ const mock: ElectronAPI = {
     deletions: 0,
     isBinary: false,
   }),
-  checkGitBash: () => Promise.resolve({ available: false, path: null }),
+  checkGitBash: () => Promise.resolve({ found: false, path: null, platform: mockPlatform() }),
   browseForGitBash: () => Promise.resolve(null),
   setGitBashPath: () => Promise.resolve({ success: true }),
 
@@ -557,9 +584,10 @@ const mock: ElectronAPI = {
   getLlmInferenceHistory: () => Promise.resolve({
     slug: '',
     events: [],
+    reliability: 1,
     totalEvents: 0,
     successCount: 0,
-    failCount: 0,
+    failureCount: 0,
   }),
   getLlmInferenceHistoryAll: () => Promise.resolve({}),
   onLlmInferenceChanged: () => noop,
@@ -590,6 +618,14 @@ const mock: ElectronAPI = {
   getAutomationLastExecuted: () => Promise.resolve({}),
   replayAutomation: () => Promise.resolve({ results: [] }),
   onAutomationsChanged: () => noop,
+
+  // ── App-level preferences ─────────────────────────────────────────────
+  getLaunchAtLogin: () => Promise.resolve(false),
+  setLaunchAtLogin: voidResult,
+  getConfirmBeforeExit: () => Promise.resolve(false),
+  setConfirmBeforeExit: voidResult,
+  exportSettings: () => Promise.resolve({ success: false, canceled: true }),
+  importSettings: () => Promise.resolve({ success: false, canceled: true }),
 
   // ── Language ──────────────────────────────────────────────────────────
   changeLanguage: voidResult,

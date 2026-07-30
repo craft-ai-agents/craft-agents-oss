@@ -23,6 +23,7 @@ import {
   Wifi,
   GitCompare,
   FileText,
+  type LucideIcon,
 } from 'lucide-react'
 import { useAtomValue } from 'jotai'
 import { activeSessionIdAtom, sessionMetaMapAtom } from '../../atoms/sessions'
@@ -56,6 +57,17 @@ type Profile = {
   mode: string
 }
 
+/**
+ * A row in `compactDiff`: either a real diff line, or a synthetic marker for a
+ * collapsed run of unchanged lines. `ellipsis` is renderer-only — it never
+ * comes back from `diffLines()`.
+ */
+type CompactDiffLine = {
+  type: DiffLine['type'] | 'ellipsis'
+  content: string
+  hidden?: boolean
+}
+
 type VersionEntry = {
   id: string
   time: string
@@ -65,7 +77,7 @@ type VersionEntry = {
   prompt: string
 }
 
-const LAYER_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
+const LAYER_ICONS: Record<string, LucideIcon> = {
   'runtime-contract': Zap,
   'owner-identity': User,
   'execution-policy': Shield,
@@ -277,8 +289,8 @@ export function PromptStudioPanel() {
       .then((results) => {
         if (cancelled) return
         const mapped = results.map((r) => ({
-          title: r.title ?? 'Memory',
-          content: r.content ?? '',
+          title: r.memory.title ?? 'Memory',
+          content: r.memory.content ?? '',
           score: r.score ?? 0,
         }))
         sessionMemoriesRef.current = mapped
@@ -474,25 +486,26 @@ export function PromptStudioPanel() {
   }, [])
 
   // Merge unchanged lines in the diff for more compact display (show first 3 of each unchanged run)
-  const compactDiff = useMemo(() => {
+  const compactDiff = useMemo<CompactDiffLine[]>(() => {
     if (diffResult.length === 0) return []
-    const result: (DiffLine & { hidden?: boolean })[] = []
+    const result: CompactDiffLine[] = []
     let unchangedRun = 0
     for (const line of diffResult) {
       if (line.type === 'unchanged') {
         unchangedRun++
         if (unchangedRun > 3) {
-          if (!result.length || result[result.length - 1].type !== 'ellipsis') {
-            result.push({ type: 'ellipsis' as any, content: '', hidden: true })
+          const last = result[result.length - 1]
+          if (!last || last.type !== 'ellipsis') {
+            result.push({ type: 'ellipsis', content: '', hidden: true })
           }
           continue
         }
       } else {
         unchangedRun = 0
       }
-      result.push(line as any)
+      result.push(line)
     }
-    return result as (DiffLine & { hidden?: boolean })[]
+    return result
   }, [diffResult])
 
   // Divider mouse handler — tracks drag on the horizontal split
@@ -546,7 +559,7 @@ export function PromptStudioPanel() {
             <span className="ps-sidebar__count">{layers.length}</span>
           </div>
           <div className="ps-sidebar__actions">
-            <button type="button" className="ps-btn ps-btn--icon" onClick={compile} disabled={compiling} title="Compile prompt">
+            <button type="button" className="ps-btn ps-btn--icon" onClick={() => void compile()} disabled={compiling} title="Compile prompt">
               {compiling ? <Loader2 size={14} className="ps-spin" /> : <Zap size={14} />}
             </button>
             <button
@@ -888,7 +901,7 @@ export function PromptStudioPanel() {
                   ) : (
                     <div className="ps-diff-panel__lines">
                       {compactDiff.map((line, i) => {
-                        if ((line as any).type === 'ellipsis') {
+                        if (line.type === 'ellipsis') {
                           return (
                             <div key={i} className="ps-diff-line ps-diff-line--ellipsis">
                               <span className="ps-diff-line__prefix">⋯</span>

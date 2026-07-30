@@ -26,8 +26,35 @@
  */
 
 import { mock } from 'bun:test'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { parseExcludePaths } from './read-bunfig-excludes'
+
+// ── 0. Build-artifact exclusion summary ─────────────────────────────────
+// Print why certain paths are excluded from test discovery so contributors
+// understand the exclusion list without reading bunfig.toml comments.
+// Uses a globalThis flag so the summary prints only once per worker process
+// (Bun may run multiple test files in the same worker).
+//
+// import.meta.main guard in read-bunfig-excludes.ts prevents the CLI block
+// from executing when we import parseExcludePaths here.
+if (!(globalThis as any).__EXCLUDE_SUMMARY_PRINTED) {
+  ;(globalThis as any).__EXCLUDE_SUMMARY_PRINTED = true
+  try {
+    const tomlPath = resolve(process.cwd(), 'bunfig.toml')
+    const tomlText = readFileSync(tomlPath, 'utf-8')
+    const excludes = parseExcludePaths(tomlText)
+    if (excludes.length > 0) {
+      const patterns = excludes.map((e) => e.pattern).join(', ')
+      console.log(
+        `[test-setup] ${excludes.length} path(s) excluded from discovery: ${patterns}`,
+      )
+    }
+  } catch {
+    // bunfig.toml missing or unreadable — silently skip.
+  }
+}
 
 // ── 1. Vite `?url` / `?worker` / `?raw` asset imports ───────────────────────
 // These are just URL strings at runtime. The catch-all plugin doesn't fire
@@ -104,3 +131,17 @@ mock.module('pdfjs-dist', () => ({
   GlobalWorkerOptions: { workerSrc: '' },
   getDocument: () => ({}),
 }))
+
+// ── 5. NAPI panic fix (previously Bun v1.3.x issue) ─────────────────────
+//
+// bun test previously crashed with:
+//   panic(main thread): NAPI FATAL ERROR: Error::New napi_get_last_error_info
+// after all tests passed. Root cause: better-sqlite3's native .node binary
+// was loaded via process_dlopen during test execution (context-file-watcher
+// test → prompts handler → getMemoryRepository → new Database →
+// loadBetterSqlite3). Bun's NAPI cleanup callback failed at exit.
+//
+// Fixed by switching database-compat.ts to use bun:sqlite (built into the
+// Bun runtime) when running under Bun. No native addon is loaded, so the
+// NAPI cleanup crash is eliminated. better-sqlite3 is still used for
+// Node/Electron production builds.

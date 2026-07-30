@@ -5655,6 +5655,52 @@ export class SessionManager implements ISessionManager {
     this.sendEvent({ type: 'message_annotations_updated', sessionId, messageId, annotations: message.annotations }, managed.workspace.id)
   }
 
+  removeMessageAttachment(sessionId: string, messageId: string, attachmentId: string): void {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      sessionLog.warn(`Cannot remove attachment: session ${sessionId} not found`)
+      return
+    }
+
+    const message = managed.messages.find(m => m.id === messageId)
+    if (!message) {
+      sessionLog.warn(`Cannot remove attachment: message ${messageId} not found in session ${sessionId}`)
+      return
+    }
+
+    const existing = message.attachments ?? []
+    if (!existing.some(a => a.id === attachmentId)) {
+      sessionLog.warn(`Cannot remove attachment: attachment ${attachmentId} not found on message ${messageId}`)
+      return
+    }
+
+    message.attachments = existing.filter(a => a.id !== attachmentId)
+    this.persistSession(managed)
+    // Broadcast the session so the renderer re-derives attachedFiles.
+    this.sendEvent({ type: 'complete', sessionId, hasUnread: false }, managed.workspace.id)
+  }
+
+  clearMessageAttachments(sessionId: string): void {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      sessionLog.warn(`Cannot clear attachments: session ${sessionId} not found`)
+      return
+    }
+
+    let changed = false
+    for (const message of managed.messages) {
+      if (message.attachments && message.attachments.length > 0) {
+        message.attachments = []
+        changed = true
+      }
+    }
+
+    if (changed) {
+      this.persistSession(managed)
+      this.sendEvent({ type: 'complete', sessionId, hasUnread: false }, managed.workspace.id)
+    }
+  }
+
   async deleteSession(sessionId: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (!managed) {

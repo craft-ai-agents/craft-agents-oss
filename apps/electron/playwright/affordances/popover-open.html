@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<!--
+  apps/electron/playwright/affordances/popover-open.html
+
+  Captures the depth-selector popover in its OPEN state.  The DOM and
+  classnames below mirror what apps/electron/src/renderer/shell/
+  LayoutShell.tsx renders at lines 2811–2853:
+
+    <span class="wd-depth-popover">
+      <button class="wd-depth-popover__trigger is-open">…</button>
+      <div class="wd-depth-popover__menu" role="listbox">
+        <button class="wd-depth-popover__item is-active"
+                data-depth-value="2"
+                aria-selected="true">…</button>
+        …
+      </div>
+    </span>
+
+  Layout: trigger sits on the section header (mimicked as a row at the
+  top of the page) and the menu drops down beneath it.  The captured
+  element (`.popover-affordance`) wraps both for a single bounding-box
+  snapshot.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Depth popover — open</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      /* Page-local: header bar mimics the LayoutShell rail header so
+         the popover drop-position matches production. */
+      .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 4px 10px;
+        border-radius: 4px;
+        background: transparent;
+      }
+      .section-header__title {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--foreground);
+        letter-spacing: 0.02em;
+      }
+      .section-header__actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .section-header__link {
+        font-size: 9px;
+        font-weight: 600;
+        color: var(--shell-text-dim);
+        text-decoration: none;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="affordance-stage">
+      <span class="affordance-stage__label">Depth popover — open</span>
+
+      <div class="popover-affordance">
+        <!-- Mimics the LayoutShell rail-header layout: a title row on
+             the left and the depth-popover trigger on the right.  The
+             popover drop appears beneath the trigger. -->
+        <div class="section-header">
+          <span class="section-header__title">Working directory</span>
+          <div class="section-header__actions">
+            <a class="section-header__link" href="#">Expand all</a>
+            <span class="wd-depth-popover">
+              <button
+                type="button"
+                class="wd-depth-popover__trigger is-open"
+                aria-expanded="true"
+                aria-haspopup="listbox"
+                title="Depth: 2 levels deep — click to change"
+              >
+                <span class="wd-depth-popover__trigger-label">2</span>
+                <!-- ChevronDown size=8: inline SVG keeps snapshots
+                     deterministic and avoids fetching a JSX-rendered
+                     lucide icon. -->
+                <svg
+                  class="wd-depth-popover__trigger-chevron--open"
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="8"
+                  height="8"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m6 9 6 6 6-6"></path>
+                </svg>
+              </button>
+              <div
+                class="wd-depth-popover__menu"
+                role="listbox"
+                aria-label="Depth selector"
+              >
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected="false"
+                  class="wd-depth-popover__item"
+                  data-depth-value="1"
+                >
+                  <span class="wd-depth-popover__item-label">
+                    <span>1 level deep</span>
+                  </span>
+                  <kbd class="wd-depth-popover__item-shortcut">1</kbd>
+                </button>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected="true"
+                  class="wd-depth-popover__item is-active"
+                  data-depth-value="2"
+                >
+                  <span class="wd-depth-popover__item-label">
+                    <!-- Check size=9 SVG -->
+                    <svg
+                      class="wd-depth-popover__item-check"
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="9"
+                      height="9"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="3"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M20 6 9 17l-5-5"></path>
+                    </svg>
+                    <span>2 levels deep</span>
+                  </span>
+                  <kbd class="wd-depth-popover__item-shortcut">2</kbd>
+                </button>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected="false"
+                  class="wd-depth-popover__item"
+                  data-depth-value="3"
+                >
+                  <span class="wd-depth-popover__item-label">
+                    <span>3 levels deep</span>
+                  </span>
+                  <kbd class="wd-depth-popover__item-shortcut">3</kbd>
+                </button>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected="false"
+                  class="wd-depth-popover__item"
+                  data-depth-value="4"
+                >
+                  <span class="wd-depth-popover__item-label">
+                    <span>4 levels deep</span>
+                  </span>
+                  <kbd class="wd-depth-popover__item-shortcut">4</kbd>
+                </button>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected="false"
+                  class="wd-depth-popover__item"
+                  data-depth-value="Infinity"
+                >
+                  <span class="wd-depth-popover__item-label">
+                    <span>All levels</span>
+                  </span>
+                  <kbd class="wd-depth-popover__item-shortcut">A</kbd>
+                </button>
+              </div>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

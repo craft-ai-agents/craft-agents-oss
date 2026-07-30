@@ -1,24 +1,22 @@
-import { describe, it, expect, mock } from 'bun:test'
+import { describe, it, expect } from 'bun:test'
 import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { StoredAttachment } from '@craft-agent/core'
 
 // ---------------------------------------------------------------------------
-// UserMessageBubble pulls in react-i18next for tooltip labels (clickToOpen,
-// queuedBadge, openInApp, closeLightbox).  renderToStaticMarkup does not
-// provide a React context tree, so we stub useTranslation with a pass-through
-// identity function.  Trans passthrough lets any <Trans> children render
-// unchanged.
+// Module-level mocks — must run before any import that resolves these
+// specifiers, or the real modules get cached and mock.module has no effect.
+// pdfjs-dist / react-i18next mocks are defined in the shared test-utils
+// so all chat-component tests use the same stub.
 // ---------------------------------------------------------------------------
-mock.module('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string, fallback?: string) => fallback ?? key,
-    i18n: { language: 'en' },
-  }),
-  Trans: ({ children }: { children: React.ReactNode }) => children,
-}))
+import { setupModuleMocks } from '../../../__tests__/test-utils'
+setupModuleMocks()
 
-import { UserMessageBubble } from '../UserMessageBubble'
+// Dynamic import — must use await import() instead of static import so
+// mock.module is processed by Bun before the module graph resolves.
+// (?url specifiers are an exception where static imports don't respect
+// the mock from the same file.)
+const { UserMessageBubble } = await import('../UserMessageBubble')
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -33,7 +31,7 @@ function renderBubble(attachments: StoredAttachment[]): string {
   )
 }
 
-/** Base64-encoded 1×1 transparent PNG (minimal valid PNG, 67 bytes). */
+/** Base64-encoded 1x1 transparent PNG (minimal valid PNG, 67 bytes). */
 const DUMMY_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 

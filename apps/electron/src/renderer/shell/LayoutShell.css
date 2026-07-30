@@ -686,6 +686,91 @@
   vertical-align: middle;
 }
 
+/* ── Combined "Refreshing" badge (file-watch bulk re-fetch) ─────────────
+   Fires ONCE around Promise.allSettled(dirs.map(fetchDirectorySilent))
+   inside the 1s-debounced onSessionFilesChanged handler.  Lives next to
+   the count badge in the section header so the user sees a single
+   "Refreshing" indicator when N expanded directories are being re-read
+   in parallel, not N flickers.  Tinted brand-purple (consistent with
+   the existing count badge hue) so it reads as a sibling of the existing
+   chip rows. */
+.wd-files-refreshing-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 0 7px 0 5px;
+  height: 14px;
+  border-radius: 7px;
+  background: color-mix(in oklch, var(--brand-purple) 26%, transparent);
+  color: var(--foreground);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 14px;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.wd-files-refreshing-badge .arch-changes-spinner {
+  /* Override the default 12px on -changes contexts.  The badge is
+     14px tall so a smaller glyph keeps optical balance with the text. */
+  width: 9px;
+  height: 9px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Keep the badge visible but freeze the spinner — the user still wants
+     to know a refresh is in flight, but the rotation itself is the
+     motion they opted out of. */
+  .wd-files-refreshing-badge .arch-changes-spinner {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* ── Expansion-cap warning badge (MAX_EXPAND_DIRS trip) ───────────
+   Renders next to the depth selector when runDepthBFS hits the safety
+   cap and stopped the BFS before exhausting the tree.  Destructive-tinted
+   so it reads as a problem, not as a generic state.  A one-shot 600ms
+   scale pulse draws the eye on first paint — without it the sub-9px
+   pill disappears into the section header background.  The pulse
+   respects prefers-reduced-motion (colour contrast alone carries the
+   warning surface). */
+.wd-files-capped-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 0 7px;
+  height: 14px;
+  border-radius: 7px;
+  background: color-mix(in oklch, var(--destructive) 18%, transparent);
+  color: var(--destructive);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 14px;
+  text-transform: uppercase;
+  vertical-align: middle;
+  transform-origin: center;
+  animation: wd-files-cap-pulse 600ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes wd-files-cap-pulse {
+  0% { transform: scale(0.85); opacity: 0; }
+  35% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Reduced-motion users see the badge without the pulse — colour
+     contrast alone surfaces the warning. */
+  .wd-files-capped-badge {
+    animation: none;
+  }
+}
+
 .arch-file-item {
   display: flex;
   align-items: center;
@@ -722,6 +807,31 @@
   height: 22px;
   border-radius: 5px;
   background: var(--shell-fill);
+}
+
+/* Loading shimmer for image files awaiting thumbnailBase64.
+   Same pattern as .wd-files-item__icon[data-loading='true'] — a
+   sliding highlight overlay signals "preview coming" while the
+   IPC stores the attachment and generates the thumbnail server-side.
+   Non-image files and already-loaded thumbnails stay static. */
+.arch-file-item__icon[data-loading='true'] {
+  position: relative;
+  overflow: hidden;
+}
+
+.arch-file-item__icon[data-loading='true']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    color-mix(in oklch, var(--foreground) 10%, transparent) 45%,
+    color-mix(in oklch, var(--foreground) 16%, transparent) 55%,
+    transparent 100%
+  );
+  animation: arch-shimmer 1.4s linear infinite;
+  pointer-events: none;
 }
 
 .arch-file-item__info {
@@ -775,6 +885,242 @@
 
 .arch-file-item:hover .arch-file-item__open {
   opacity: 1;
+}
+
+/* ── File remove button (hover reveal) ──────────────────────────── */
+
+.arch-file-item__remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  color: var(--shell-text-dim);
+  opacity: 0;
+  transition: opacity 120ms var(--ds-ease-standard, ease), color 120ms var(--ds-ease-standard, ease);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.arch-file-item:hover .arch-file-item__remove {
+  opacity: 1;
+}
+
+.arch-file-item__remove:hover {
+  color: var(--destructive);
+  background: color-mix(in oklch, var(--destructive) 10%, transparent);
+}
+
+.arch-file-list__clear,
+.arch-file-list__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--shell-text-dim);
+  font: inherit;
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 120ms var(--ds-ease-standard, ease), background-color 120ms var(--ds-ease-standard, ease);
+}
+
+.arch-file-list__clear:hover {
+  color: var(--destructive);
+  background: color-mix(in oklch, var(--destructive) 8%, transparent);
+}
+
+.arch-file-list__action:hover {
+  color: var(--foreground);
+  background: var(--shell-fill-strong);
+}
+
+/* ── Depth-selector popover ─────────────────────────────────────────
+   Replaces the old horizontal button row with a keyboard-first popover
+   menu.  The trigger shows the current depth + a chevron; clicking
+   opens a dropdown with 5 options (1–4 + All), each showing a keyboard
+   shortcut (<kbd>).  Pressing 1/2/3/4/A anywhere while the popover is
+   open picks the corresponding depth.  Scales trivially to new options. */
+
+.wd-depth-popover {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 2px;
+}
+
+.wd-depth-popover__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 26px;
+  height: 16px;
+  padding: 0 4px 0 6px;
+  border: 1px solid var(--shell-border-soft);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--shell-text-dim);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 100ms ease, color 100ms ease, border-color 100ms ease;
+}
+
+.wd-depth-popover__trigger:hover,
+.wd-depth-popover__trigger.is-open {
+  color: var(--foreground);
+  background: var(--shell-fill-strong);
+  border-color: var(--shell-border);
+}
+
+.wd-depth-popover__trigger-label {
+  line-height: 1;
+}
+
+.wd-depth-popover__trigger-chevron--open {
+  transform: rotate(180deg);
+  transition: transform 140ms var(--ds-ease-standard, ease);
+}
+
+.wd-depth-popover__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--shell-border);
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--shell-surface) 95%, var(--foreground));
+  backdrop-filter: blur(18px);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--shell-text-dim) 18%, transparent);
+  animation: wd-depth-popover-enter 120ms var(--ds-ease-standard, ease);
+}
+
+@keyframes wd-depth-popover-enter {
+  from { opacity: 0; transform: translateY(-4px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wd-depth-popover__menu {
+    animation: none;
+  }
+}
+
+.wd-depth-popover__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 100ms var(--ds-ease-standard, ease);
+}
+
+.wd-depth-popover__item:hover {
+  background: var(--shell-fill-strong);
+}
+
+.wd-depth-popover__item.is-active {
+  background: color-mix(in oklch, var(--brand-purple) 14%, transparent);
+}
+
+.wd-depth-popover__item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.wd-depth-popover__item-check {
+  color: var(--brand-lime);
+  flex-shrink: 0;
+}
+
+.wd-depth-popover__item-shortcut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 15px;
+  padding: 0 4px;
+  border: 1px solid var(--shell-border-soft);
+  border-radius: 3px;
+  background: var(--shell-fill);
+  color: var(--shell-text-dim);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 550;
+  line-height: 1;
+}
+
+.wd-depth-popover__item:hover .wd-depth-popover__item-shortcut {
+  color: var(--foreground);
+  border-color: var(--shell-border);
+}
+
+.wd-depth-popover__item.is-active .wd-depth-popover__item-shortcut {
+  color: var(--foreground);
+  border-color: color-mix(in oklch, var(--brand-purple) 35%, transparent);
+}
+
+/* ── Tree keyboard navigation focus ──────────────────────────────── */
+
+.wd-files-tree:focus {
+  outline: none;
+}
+
+/* Subtle focus ring on the tree container when keyboard-focused so users
+   see where their Tab landed before pressing any arrow key. */
+.wd-files-tree:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand-purple) 35%, transparent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+/* Suppress browser's default click-focus outline on tree rows so it doesn't
+   double up with the brand-purple --focused highlight. The `:focus-visible`
+   half is kept so that if row tabIndex is ever made tabbable, keyboard users
+   still see a focus ring for sighted navigation. */
+.wd-files-item:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.wd-files-item--focused {
+  background: color-mix(in srgb, var(--brand-purple) 14%, transparent);
+  border-left-color: var(--brand-purple);
+}
+
+.wd-files-item--focused .wd-files-item__name {
+  color: var(--foreground);
+}
+
+.wd-files-item--focused .wd-files-item__change--added,
+.wd-files-item--focused .wd-files-item__change--modified,
+.wd-files-item--focused .wd-files-item__change--deleted {
+  background: color-mix(in srgb, var(--brand-purple) 8%, transparent);
 }
 
 .arch-context-rail__meter > div {
@@ -842,14 +1188,24 @@
 /* ── Files rail summary bar ───────────────────────────────────── */
 
 .wd-files-summary {
+  position: sticky;
+  bottom: 0;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 8px 14px;
   border-top: 1px solid var(--shell-border-soft);
+  background: var(--shell-surface-muted);
   color: var(--shell-text-dim);
   font-size: 9px;
   flex-wrap: wrap;
+  z-index: 1;
+  /* Soft shadow above the bar creates a visible depth transition from the
+     scrollable file list — the flat border alone is easy to miss against
+     varied file-item backgrounds.  Uses color-mix so the shadow adapts
+     to light, dark, and scenic themes without hardcoding a hue.
+     Values: offset-y=-3px (above), blur=8px, no spread. */
+  box-shadow: 0 -3px 8px color-mix(in srgb, var(--shell-text-dim) 10%, transparent);
 }
 
 .wd-files-summary__stat {
@@ -901,6 +1257,114 @@
   color: var(--shell-text-muted);
 }
 
+/* Gated chevron — dims the click target when `shouldGateManualExpand`
+   decides `gate-forward` (click would be a silent no-op).  Hover bumps
+   the opacity so the user can still tell it's a chevron, and the
+   Tooltip wrapping the chevron in TSX explains *why*.  Source of truth
+   is the `data-gated="true"` attribute set in LayoutShell.tsx; the
+   CSS reads it without mirroring the gate logic. */
+.wd-files-item[data-gated="true"] .wd-files-tree__arrow {
+  opacity: 0.45;
+  transition: opacity 140ms var(--ds-ease-standard, ease);
+}
+
+.wd-files-item[data-gated="true"]:hover .wd-files-tree__arrow {
+  opacity: 0.75;
+}
+
+/* Respect users who opt out of motion — keep the dim, drop the transition. */
+@media (prefers-reduced-motion: reduce) {
+  .wd-files-item[data-gated="true"] .wd-files-tree__arrow {
+    transition: none;
+  }
+}
+
+/* Drill-mode chip — small pill rendered next to the depth selector
+   when the user has temporarily bumped the cap to drill into a gated
+   row.  Cancel ✕ restores the original depth.  Visual contract:
+   neutral-tinted background (informational, not destructive) so it
+   reads as a "you're in an override state" indicator rather than an
+   error. */
+.wd-files-drill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 14px;
+  padding: 0 4px 0 6px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--shell-text-muted);
+  background: color-mix(in oklch, var(--shell-text-muted) 12%, transparent);
+  border: 1px solid color-mix(in oklch, var(--shell-text-muted) 25%, transparent);
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.wd-files-drill-chip__cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  margin-left: 2px;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--shell-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 120ms var(--ds-ease-standard, ease);
+}
+
+.wd-files-drill-chip__cancel:hover {
+  background: color-mix(in oklch, var(--shell-text-muted) 25%, transparent);
+  color: var(--shell-text);
+}
+
+.wd-files-drill-chip__cancel:focus-visible {
+  outline: 2px solid var(--shell-focus-ring, currentColor);
+  outline-offset: 1px;
+}
+
+/* Gated-row tooltip banner — small warning icon prepended to the existing
+   row tooltip when the row's forward-expansion is gated.  Renders
+   inline above the directory metadata (size, modified time, etc.) so
+   the user sees both the explanation and the metadata in one hover. */
+.wd-files-gated-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--shell-text-muted);
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.wd-files-gated-banner__icon {
+  color: var(--destructive);
+  flex-shrink: 0;
+  /* Subtle pulse so the icon registers as a status indicator, not a
+     typo.  Same easing as the chevron dim transition. */
+  animation: wd-files-gated-banner__pulse 1.6s var(--ds-ease-standard, ease) infinite;
+}
+
+@keyframes wd-files-gated-banner__pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wd-files-gated-banner__icon {
+    animation: none;
+    opacity: 0.85;
+  }
+}
+
 .wd-files-list {
   display: flex;
   flex-direction: column;
@@ -934,6 +1398,154 @@
   background: var(--shell-surface-hover);
 }
 
+/* ── Icon scale-bounce on double-click (directory → Finder / file → editor)
+   A neutral motion signal — no color, so this doesn't borrow the
+   'success / growth' connotation that --brand-lime carries elsewhere on
+   the rail (status bar, "live" dot, success badges). The icon scales up
+   briefly and settles back over ~280ms with a slight overshoot ease,
+   giving a tactile confirm without celebrating the gesture. Pair with
+   the brand-purple expand/collapse flash so the two gesture types remain
+   visually distinct (motion-bounce = open externally, color-flash =
+   toggle expand). */
+
+@keyframes wd-dir-icon-pulse {
+  0%, 100% { transform: scale(1); }
+  45% { transform: scale(1.22); }
+}
+
+.wd-files-item--pulse .wd-files-item__icon {
+  /* transform-origin: center so the scale pivots around the icon's
+     geometric center rather than a flex-line origin. */
+  transform-origin: center;
+  /* cubic-bezier(0.34, 1.56, 0.64, 1) adds a subtle overshoot so the
+     bounce lands with a slight "spring" feel — the same shape commonly
+     used by Mac/Win11 file-icon click animations.
+     Duration MUST stay in sync with PULSE_TEARDOWN_MS in
+     LayoutShell.tsx (the JS timer that removes the --pulse class) —
+     otherwise the class can outlive the animation or vice versa and
+     the keyframe's resting state isn't guaranteed to match `transform: none`. */
+  animation: wd-dir-icon-pulse 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Reduced-motion users see no scale animation — the actual OS handoff
+     (Finder/Explorer focus change) is the only feedback they receive,
+     which matches their stated preference. */
+  .wd-files-item--pulse .wd-files-item__icon {
+    animation: none;
+  }
+}
+
+/* ── Expand/collapse flash (single-click) ──────────────────────────────
+   Brief brand-purple flash on single-click directory toggle — distinct
+   from the brand-lime double-click pulse so the two gestures feel
+   visually different.  Debounced in JS (FLASH_DEBOUNCE_MS = 2s). */
+
+@keyframes wd-dir-expand-flash {
+  0% {
+    background: color-mix(in oklch, var(--accent-purple, #8b5cf6) 18%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.wd-files-item--flash {
+  animation: wd-dir-expand-flash 280ms var(--ds-ease-standard, ease) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wd-files-item--flash {
+    animation: none;
+    background: color-mix(in oklch, var(--accent-purple, #8b5cf6) 10%, transparent);
+  }
+}
+
+/* ── Pinned directory indicator ─────────────────────────────
+   A pinned row is exempt from the count-cap trim — Cmd/Ctrl+click
+   to toggle.  Render the Pin icon in brand-lime (the "sticky/safe"
+   accent) and add a subtle left-edge accent bar that reads as
+   "this row is protected" without competing with the focused/
+   gated accents.  The row gets a thin lime rule on its leading
+   edge; the Pin glyph sits next to the chevron. */
+.wd-files-item--pinned {
+  position: relative;
+}
+.wd-files-item--pinned::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--brand-lime);
+  opacity: 0.7;
+  border-radius: 1px;
+}
+.wd-files-item__pin-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand-lime);
+  flex-shrink: 0;
+  margin-left: -2px; /* tuck closer to the chevron */
+}
+
+/* ── Pin/unpin toggle button ──────────────────────────────
+   Renders on every directory row (not only pinned ones) so the
+   affordance is discoverable.  Hidden at low opacity by default,
+   revealed at full opacity on row hover or keyboard focus.
+   Pinned rows show the button at full opacity always (handled
+   via the .wd-files-item--pinned override below).  Spans the
+   right edge of the row and uses native button semantics so
+   screen readers announce it as a real control. */
+.wd-files-item__pin-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto; /* push to the trailing edge of the row */
+  padding-right: 4px;
+  opacity: 0;
+  transition: opacity 120ms var(--ds-ease-standard, ease);
+}
+.wd-files-item:hover .wd-files-item__pin-toggle,
+.wd-files-item:focus-within .wd-files-item__pin-toggle,
+.wd-files-item--pinned .wd-files-item__pin-toggle {
+  opacity: 1;
+}
+.wd-files-item__pin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: var(--shell-text-dim);
+  padding: 0;
+  /* Reset native button styles to match row */
+  font: inherit;
+}
+.wd-files-item__pin-btn:hover {
+  background: var(--foreground, currentColor);
+  background: color-mix(in oklch, var(--foreground, currentColor) 6%, transparent);
+  color: var(--brand-lime);
+}
+.wd-files-item__pin-btn[aria-pressed="true"] {
+  color: var(--brand-lime);
+}
+.wd-files-item__pin-btn:focus-visible {
+  outline: 1px solid var(--brand-lime);
+  outline-offset: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wd-files-item__pin-toggle {
+    transition: none;
+  }
+}
+
 .wd-files-item__icon {
   display: flex;
   align-items: center;
@@ -949,8 +1561,139 @@
   color: var(--accent);
 }
 
+/* ⚠ error indicator on directories that failed to fetch (permissions, etc.).
+   Rendered inside the icon slot in place of the <Folder> icon so it's
+   immediately visible without widening the row. */
+
+.wd-files-item__err {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--destructive);
+  filter: grayscale(0.3);
+}
+
 .wd-files-item__icon[data-type="file"] {
   color: var(--shell-text-dim);
+}
+
+/* ── Styled tree-row tooltip (replaces native `title=` HTML tooltip) ─────────
+   Used inside the Radix TooltipContent from @craft-agent/ui.  LayoutShell
+   wraps each wd-files-item button in
+     <Tooltip delayDuration={400}>
+       <TooltipTrigger asChild>{button}</TooltipTrigger>
+       <TooltipContent side="left" className="arch-tree-tooltip-wrap">
+         <TreeTooltipContent data={buildTreeTooltip(...)} />
+       </TooltipContent>
+     </Tooltip>
+   so the popover is styled, has a delay before opening, anchors to the LEFT
+   of the trigger (rail lives on the right edge of the window), and renders
+   the structured path + stat rows in a readable 240-300px-wide column. */
+
+.arch-tree-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 240px;
+  max-width: 320px;
+}
+
+.arch-tree-tooltip__path {
+  padding-bottom: 6px;
+  border-bottom: 1px solid color-mix(in oklch, var(--foreground) 12%, transparent);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 550;
+  word-break: break-all;
+  /* The native title= attribute on the same string gives a fallback
+     tooltip when the styled popover fails to mount (e.g. happy-dom tests
+     or sandboxed iframes).  Cheap belt-and-suspenders. */
+}
+
+.arch-tree-tooltip__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.arch-tree-tooltip__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+}
+
+.arch-tree-tooltip__label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: color-mix(in oklch, var(--foreground) 60%, transparent);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.arch-tree-tooltip__value {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--foreground);
+  font-size: 11px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* Hint row — discovery call-to-action for uncached directories.
+   Rendered when the directory's children haven't been fetched yet
+   (childrenCache[path] === undefined).  Spans the full body width,
+   italic + muted, top-spaced so it reads as a separate paragraph
+   rather than a stat row.  The text rotates on user click — no
+   need for a dedicated "expand" icon here; the chevron in the row
+   itself already indicates the affordance visually. */
+.arch-tree-tooltip__hint {
+  margin-top: 4px;
+  padding: 6px 4px 4px;
+  border-top: 1px dashed color-mix(in oklch, var(--foreground) 14%, transparent);
+  text-align: center;
+  font-size: 10px;
+  font-style: italic;
+  color: color-mix(in oklch, var(--foreground) 58%, transparent);
+  letter-spacing: 0.01em;
+}
+   The Working Directory tree fetches image previews asynchronously via
+   readFilePreviewDataUrl. While the IPC is in-flight the icon slot still
+   shows the generic <File> glyph, but a subtle sliding highlight overlays
+   it to signal "preview coming." Non-image files never carry the
+   data-loading attribute and stay static. */
+
+.wd-files-item__icon[data-loading='true'] {
+  position: relative;
+  overflow: hidden;
+}
+
+.wd-files-item__icon[data-loading='true']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    color-mix(in oklch, var(--foreground) 10%, transparent) 45%,
+    color-mix(in oklch, var(--foreground) 16%, transparent) 55%,
+    transparent 100%
+  );
+  animation: arch-shimmer 1.4s linear infinite;
+  pointer-events: none;
+}
+
+/* Consolidated shimmer keyframe — replaces the two nearly-identical
+   `wd-thumb-shimmer` and `thumbnail-hover-preview__shimmer` animations
+   that only differed in translate distance (±60% vs ±30%).  Using
+   ±45% as a visual middle ground that works at both WD-icon (30px) and
+   popover (300px+) scales. */
+@keyframes arch-shimmer {
+  0% { transform: translateX(-45%); }
+  100% { transform: translateX(45%); }
 }
 
 .wd-files-item__info {
@@ -1026,6 +1769,40 @@
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.wd-files-item__thumb-wrap {
+  position: relative;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.wd-files-item__play-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+/* Circle behind the play icon gives it contrast against any thumbnail
+   background — uses the same colour as the WD tree surface fill so it
+   blends with the row rather than floating as a disconnected badge.
+   Both this circle and the play icon <svg> are centered by the parent
+   grid; ::before comes first in document order so the SVG stacks on top. */
+.wd-files-item__play-overlay::before {
+  content: '';
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--shell-fill) 85%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.wd-files-item__play-overlay > svg {
+  color: var(--foreground);
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
 }
 
 /* ── Changes rail (git status) ──────────────────────────────────── */
@@ -1113,6 +1890,49 @@
   padding: 1px 5px;
   border-radius: 8px;
   background: var(--shell-fill);
+}
+
+/* Bulk action button in the section header (e.g. "Copy all paths"). Muted
+   so it doesn't compete with the section label, brightens on hover. */
+.arch-changes-section__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 100ms ease, background 100ms ease;
+}
+
+.arch-changes-section__action:hover {
+  opacity: 1;
+  background: var(--shell-fill-strong, rgba(255, 255, 255, 0.08));
+}
+
+.arch-changes-section__action:active {
+  background: var(--shell-fill, rgba(255, 255, 255, 0.04));
+}
+
+/* Visual confirmation after a successful bulk copy. Combines with the icon
+   swap (Copy → Check) for ~1.2s to let users see the action registered. */
+.arch-changes-section__action--copied {
+  opacity: 1;
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+}
+
+/* Failure feedback: clipboard write rejected (permissions, non-secure
+   context). Swap the icon to X and tint destructive for ~1.2s. */
+.arch-changes-section__action--failed {
+  opacity: 1;
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 18%, transparent);
 }
 
 .arch-changes-section--staged .arch-changes-section__header { color: var(--info); }
@@ -1295,6 +2115,73 @@
   line-height: 1.5;
 }
 
+/* Diff view mode toggle — segmented Hunks / Full file switch. position:
+   sticky keeps it visible while the user scrolls a long diff (the
+   surrounding .arch-changes-diff-view__content owns overflow-y). */
+.arch-changes-diff-view__mode-toggle {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 6px 8px;
+  background: var(--shell-surface);
+  /* Match the wrapper's border-radius inside scroll so the sticky bg
+     doesn't show an exposed corner while content scrolls underneath. */
+  border-radius: 6px 6px 0 0;
+}
+
+/* Segmented control — generic two-pill switch. Lives in arch-* namespace
+   so any panel can reuse it without coupling to .arch-changes-diff-*. */
+.arch-segmented {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border: 1px solid var(--shell-border-soft);
+  border-radius: 6px;
+  background: var(--shell-surface-muted);
+}
+
+.arch-segmented__btn {
+  appearance: none;
+  border: 0;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: transparent;
+  font: inherit;
+  font-size: 9px;
+  color: var(--shell-text-dim);
+  cursor: pointer;
+  user-select: none;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.arch-segmented__btn:hover {
+  background: color-mix(in oklch, var(--foreground) 9%, transparent);
+  color: var(--foreground);
+}
+
+.arch-segmented__btn:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--brand-purple, var(--foreground)) 50%, transparent);
+  outline-offset: 1px;
+}
+
+.arch-segmented__btn:active {
+  background: color-mix(in oklch, var(--foreground) 14%, transparent);
+}
+
+/* Visual contract: active pill mirrors the surface and gains a subtle
+   inset border so it reads as 'pressed in' rather than 'highlighted.' */
+.arch-segmented__btn--active {
+  background: var(--shell-surface);
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px var(--shell-border-soft);
+}
+
+.arch-segmented__btn--active:hover {
+  background: var(--shell-surface);
+}
+
 .arch-changes-diff-view__line {
   display: flex;
   align-items: stretch;
@@ -1325,4 +2212,254 @@
   white-space: pre;
   overflow-x: auto;
   color: var(--foreground);
+}
+
+/* ── Regex-based syntax token styles ──────────────────────────────────
+   Applied by HighlightedDiffViewer.  Each token class is prefixed `hl-`
+   to avoid collisions with the rest of the shell.  Colours derive from
+   the theme's design tokens so they follow light/dark/scenic themes.
+
+   Moved to packages/ui/src/components/code-viewer/HighlightedDiffViewer.css
+   so the web viewer and any other consumer of @craft-agent/ui picks up
+   the syntax colours for free. The component self-imports its own
+   stylesheet — no consumer wiring is required. */
+
+
+/* ── Thumbnail hover-preview popover ─────────────────────────────────────
+   A floating enlarged preview anchored to a small thumbnail in either the
+   Session Files or Working Directory rail. Positioning is done in inline
+   style (top + left + translate) computed at hover-start via
+   getBoundingClientRect, so this stylesheet only owns visual styling.
+   ─────────────────────────────────────────────────────────────────── */
+
+.thumbnail-hover-preview__anchor {
+  /* Inline-flex keeps the anchor tightly sized to the thumbnail.
+     No extra spacing, no layout shift when the popover opens. */
+  position: relative;
+  display: inline-flex;
+}
+
+.thumbnail-hover-preview__popover {
+  z-index: 60;
+  display: grid;
+  gap: 6px;
+  max-width: min(480px, 90vw);
+  padding: 6px;
+  border: 1px solid color-mix(in oklch, var(--foreground) 8%, transparent);
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--shell-surface) 92%, transparent);
+  box-shadow:
+    0 16px 48px -10px color-mix(in oklch, var(--ds-shadow-color, #000) 70%, transparent),
+    0 0 0 1px color-mix(in oklch, var(--foreground) 4%, transparent) inset;
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  pointer-events: auto;
+  user-select: none;
+  transform-origin: right center;
+}
+
+.thumbnail-hover-preview__popover[data-testid] {
+  /* data-testid props ride along; nothing styles here yet. */
+}
+
+.thumbnail-hover-preview__frame {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 200px;
+  max-width: 480px;
+  min-height: 120px;
+  max-height: 360px;
+  background: var(--shell-bg-secondary, color-mix(in oklch, var(--background) 90%, var(--foreground)));
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.thumbnail-hover-preview__frame[data-loading='true']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    color-mix(in oklch, var(--foreground) 8%, transparent) 45%,
+    color-mix(in oklch, var(--foreground) 14%, transparent) 55%,
+    transparent 100%
+  );
+  animation: arch-shimmer 1.4s linear infinite;
+  pointer-events: none;
+}
+
+
+
+.thumbnail-hover-preview__img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+}
+
+.thumbnail-hover-preview__caption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px 4px;
+  font-size: 11px;
+  color: var(--shell-text-dim);
+  pointer-events: none;
+}
+
+.thumbnail-hover-preview__name {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  max-width: 38ch;
+}
+
+.thumbnail-hover-preview__error {
+  display: grid;
+  place-items: center;
+  min-height: 80px;
+  padding: 0 12px;
+  color: var(--shell-text-dim);
+  font-size: 11px;
+  font-style: italic;
+}
+
+/* ── Pinned state — subtle outline + close button ───────────────────────
+   When the user clicks a thumbnail, the popover pins open. The border
+   gains a slightly stronger brand tint to signal the pinned state, and
+   a small ✕ close button appears in the top-right corner.
+   Click-outside, Escape, and the ✕ button all unpin. ─────────────── */
+
+.thumbnail-hover-preview__popover[data-pinned='true'] {
+  border-color: color-mix(in oklch, var(--brand-purple) 35%, transparent);
+  box-shadow:
+    0 16px 48px -10px color-mix(in oklch, var(--ds-shadow-color, #000) 70%, transparent),
+    0 0 0 1px color-mix(in oklch, var(--brand-lime) 25%, transparent) inset;
+}
+
+.thumbnail-hover-preview__pin-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--foreground) 10%, transparent);
+  color: var(--foreground);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 120ms ease, background-color 120ms ease;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.thumbnail-hover-preview__pin-close:hover {
+  opacity: 1;
+  background: color-mix(in oklch, var(--destructive) 20%, transparent);
+  color: var(--destructive);
+}
+
+/* ── Context menu for git status file items ──────────────────────── */
+
+.arch-changes-ctx-menu {
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 140px;
+  padding: 4px;
+  border: 1px solid var(--shell-border);
+  border-radius: 8px;
+  background: var(--shell-surface);
+  box-shadow:
+    0 8px 28px -6px color-mix(in oklch, var(--ds-shadow-color, #000) 55%, transparent),
+    0 0 0 1px color-mix(in oklch, var(--foreground) 4%, transparent) inset;
+  backdrop-filter: blur(12px);
+  transform: translate(4px, 4px);
+}
+
+.arch-changes-ctx-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 100ms ease;
+}
+
+.arch-changes-ctx-menu__item:hover {
+  background: var(--shell-fill-strong);
+}
+
+.arch-changes-ctx-menu__item:active {
+  background: var(--shell-surface-hover);
+}
+
+.arch-changes-ctx-menu__item span {
+  flex: 1;
+  white-space: nowrap;
+}
+
+/* Single-letter keyboard shortcut hint, right-aligned in each menu item.
+   Mirrors the C/E/F keys wired in the keydown useEffect above (Copy path /
+   Open file / Show in folder respectively). Tinted to read as a hint, not a
+   button — pointer-events: none so it never steals the click. */
+.arch-changes-ctx-menu__shortcut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  margin-left: 8px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--shell-text-dim);
+  background: var(--shell-fill);
+  border: 1px solid var(--shell-border-soft, var(--shell-border));
+  border-radius: 3px;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.arch-changes-ctx-menu__item:hover .arch-changes-ctx-menu__shortcut {
+  opacity: 1;
+}
+
+/* Destructive menu item variant (e.g. Discard changes) — tints the
+   destructive action so users see the gravity before clicking. Reuses the
+   existing --destructive token so it hue-matches the rest of the rail's
+   warning affordances. */
+.arch-changes-ctx-menu__item--destructive {
+  color: var(--destructive);
+}
+
+.arch-changes-ctx-menu__item--destructive:hover {
+  background: color-mix(in srgb, var(--destructive) 14%, transparent);
+}
+
+.arch-changes-ctx-menu__item--destructive .arch-changes-ctx-menu__shortcut {
+  color: var(--destructive);
+  border-color: color-mix(in srgb, var(--destructive) 30%, transparent);
 }

@@ -69,7 +69,7 @@ beforeAll(async () => {
   const store = jotai.getDefaultStore()
   store.set(activeSessionIdAtom, 'test-session-id')
   // Cleanup so other suites in the same process don't see a stale session.
-  resetActiveSession = () => store.set(activeSessionIdAtom, undefined)
+  resetActiveSession = () => store.set(activeSessionIdAtom, null)
 })
 
 afterAll(() => {

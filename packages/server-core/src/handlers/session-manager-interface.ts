@@ -141,6 +141,8 @@ export interface ISessionManager {
     annotationId: string,
     patch: Partial<AnnotationV1>,
   ): void
+  removeMessageAttachment(sessionId: string, messageId: string, attachmentId: string): void
+  clearMessageAttachments(sessionId: string): void
 
   // ---------------------------------------------------------------------------
   // Permissions & credentials

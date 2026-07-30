@@ -283,13 +283,15 @@ describe('PromptStudioPanel smoke test', () => {
     })
 
     // Token count badge
-    const statBadges = container.querySelectorAll('.ps-stat-badge')
-    const tokenBadge = Array.from(statBadges).find(b => b.textContent?.includes('tokens'))
+    // `container` is `any` (happy-dom element), so the query result needs an
+    // explicit element type before `.textContent` is reachable.
+    const statBadges = Array.from(container.querySelectorAll('.ps-stat-badge')) as HTMLElement[]
+    const tokenBadge = statBadges.find(b => b.textContent?.includes('tokens'))
     expect(tokenBadge).toBeTruthy()
     expect(tokenBadge!.textContent).toMatch(/[1-9]/)
 
     // Layer count badge
-    const layerBadge = Array.from(statBadges).find(b => b.textContent?.includes('layers'))
+    const layerBadge = statBadges.find(b => b.textContent?.includes('layers'))
     expect(layerBadge).toBeTruthy()
   })
 
@@ -319,8 +321,8 @@ describe('PromptStudioPanel smoke test', () => {
     })
 
     // All cards should be disabled
-    const cards = container.querySelectorAll('.ps-layer-card')
-    for (const card of Array.from(cards)) {
+    const cards = Array.from(container.querySelectorAll('.ps-layer-card')) as HTMLElement[]
+    for (const card of cards) {
       expect(card.className).toContain('ps-layer-card--disabled')
     }
 
@@ -331,7 +333,7 @@ describe('PromptStudioPanel smoke test', () => {
     })
 
     // All cards should be enabled again
-    for (const card of Array.from(cards)) {
+    for (const card of cards) {
       expect(card.className).not.toContain('ps-layer-card--disabled')
     }
   })

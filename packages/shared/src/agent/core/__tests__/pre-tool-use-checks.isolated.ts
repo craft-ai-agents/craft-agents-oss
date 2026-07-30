@@ -467,7 +467,7 @@ describe('runPreToolUseChecks', () => {
       }
     });
 
-    it('blocks direct label folder reads and suggests craft-agent label help when feature is enabled', () => {
+    it('blocks direct label folder reads and suggests archstudio label help when feature is enabled', () => {
       mockCraftAgentsCliFlag = true;
 
       const result = runPreToolUseChecks(createInput({
@@ -477,13 +477,13 @@ describe('runPreToolUseChecks', () => {
 
       expect(result.type).toBe('block');
       if (result.type === 'block') {
-        expect(result.reason).toContain('craft-agent label');
-        expect(result.reason).toContain('craft-agent label --help');
+        expect(result.reason).toContain('archstudio label');
+        expect(result.reason).toContain('archstudio label --help');
         expect(result.reason).toContain('labels/');
       }
     });
 
-    it('blocks direct label config writes and suggests craft-agent label help when feature is enabled', () => {
+    it('blocks direct label config writes and suggests archstudio label help when feature is enabled', () => {
       mockCraftAgentsCliFlag = true;
       mockDetectConfigFileType.mockImplementation(() => ({ type: 'labels', displayFile: 'labels/config.json' }));
 
@@ -494,8 +494,8 @@ describe('runPreToolUseChecks', () => {
 
       expect(result.type).toBe('block');
       if (result.type === 'block') {
-        expect(result.reason).toContain('craft-agent label');
-        expect(result.reason).toContain('craft-agent label --help');
+        expect(result.reason).toContain('archstudio label');
+        expect(result.reason).toContain('archstudio label --help');
       }
     });
 
@@ -535,7 +535,7 @@ describe('runPreToolUseChecks', () => {
       expect(result.type).toBe('allow');
     });
 
-    it('blocks direct automations config edits and suggests craft-agent automation commands when feature is enabled', () => {
+    it('blocks direct automations config edits and suggests archstudio automation commands when feature is enabled', () => {
       mockCraftAgentsCliFlag = true;
       mockDetectConfigFileType.mockImplementation(() => ({ type: 'automations', displayFile: 'automations.json' }));
 
@@ -550,12 +550,12 @@ describe('runPreToolUseChecks', () => {
 
       expect(result.type).toBe('block');
       if (result.type === 'block') {
-        expect(result.reason).toContain('craft-agent automation');
+        expect(result.reason).toContain('archstudio automation');
         expect(result.reason).toContain('automations.json');
       }
     });
 
-    it('blocks direct source config edits and suggests craft-agent source commands when feature is enabled', () => {
+    it('blocks direct source config edits and suggests archstudio source commands when feature is enabled', () => {
       mockCraftAgentsCliFlag = true;
       mockDetectConfigFileType.mockImplementation(() => ({
         type: 'source',
@@ -574,12 +574,12 @@ describe('runPreToolUseChecks', () => {
 
       expect(result.type).toBe('block');
       if (result.type === 'block') {
-        expect(result.reason).toContain('craft-agent source');
+        expect(result.reason).toContain('archstudio source');
         expect(result.reason).toContain('sources/linear/config.json');
       }
     });
 
-    it('blocks direct skill file edits and suggests craft-agent skill commands when feature is enabled', () => {
+    it('blocks direct skill file edits and suggests archstudio skill commands when feature is enabled', () => {
       mockCraftAgentsCliFlag = true;
       mockDetectConfigFileType.mockImplementation(() => ({
         type: 'skill',
@@ -598,12 +598,12 @@ describe('runPreToolUseChecks', () => {
 
       expect(result.type).toBe('block');
       if (result.type === 'block') {
-        expect(result.reason).toContain('craft-agent skill');
+        expect(result.reason).toContain('archstudio skill');
         expect(result.reason).toContain('skills/commit-helper/SKILL.md');
       }
     });
 
-    it('blocks bash commands touching labels paths and points to craft-agent label --help when feature is enabled', () => {
+    it('blocks bash commands touching labels paths and points to archstudio label --help when feature is enabled', () => {
       mockCraftAgentsCliFlag = true;
 
       const result = runPreToolUseChecks(createInput({
@@ -614,22 +614,22 @@ describe('runPreToolUseChecks', () => {
 
       expect(result.type).toBe('block');
       if (result.type === 'block') {
-        expect(result.reason).toContain('craft-agent label --help');
-        expect(result.reason).toContain('craft-agent label');
+        expect(result.reason).toContain('archstudio label --help');
+        expect(result.reason).toContain('archstudio label');
       }
     });
 
-    it('allows bash craft-agent label commands through labels guard', () => {
+    it('allows bash archstudio label commands through labels guard', () => {
       const result = runPreToolUseChecks(createInput({
         toolName: 'Bash',
-        input: { command: 'craft-agent label list' },
+        input: { command: 'archstudio label list' },
         permissionMode: 'allow-all',
       }));
 
       expect(result.type).toBe('allow');
     });
 
-    it('blocks bash commands touching automations files and points to craft-agent automation --help when feature is enabled', () => {
+    it('blocks bash commands touching automations files and points to archstudio automation --help when feature is enabled', () => {
       mockCraftAgentsCliFlag = true;
 
       const result = runPreToolUseChecks(createInput({
@@ -640,15 +640,15 @@ describe('runPreToolUseChecks', () => {
 
       expect(result.type).toBe('block');
       if (result.type === 'block') {
-        expect(result.reason).toContain('craft-agent automation --help');
-        expect(result.reason).toContain('craft-agent automation');
+        expect(result.reason).toContain('archstudio automation --help');
+        expect(result.reason).toContain('archstudio automation');
       }
     });
 
-    it('allows bash craft-agent automation commands through config-domain bash guard', () => {
+    it('allows bash archstudio automation commands through config-domain bash guard', () => {
       const result = runPreToolUseChecks(createInput({
         toolName: 'Bash',
-        input: { command: 'craft-agent automation list' },
+        input: { command: 'archstudio automation list' },
         permissionMode: 'allow-all',
       }));
 

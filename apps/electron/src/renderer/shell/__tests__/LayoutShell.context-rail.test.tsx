@@ -28,15 +28,9 @@
 // and resolve them inside `beforeAll`.
 import { describe, expect, it, beforeAll } from 'bun:test'
 
-interface ShellSessionContext {
-  sessionName: string
-  connectionLabel: string
-  permissionModeLabel: string
-  thinkingLabel: string
-  sourceNames: string[]
-  workingDirectory?: string
-  isProcessing?: boolean
-}
+// `./types` is a pure type module — no Vite-only imports — so it is safe to
+// import statically here, unlike `../LayoutShell`.
+import type { ShellSessionContext } from '../types'
 
 let renderToStaticMarkup: any
 let LayoutShell: any

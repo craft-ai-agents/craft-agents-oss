@@ -618,6 +618,7 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
       type: 'file' | 'directory'
       size?: number
       mtime?: number
+      ctime?: number
       isSymlink: boolean
     }> = []
 
@@ -637,6 +638,12 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
           type: isDir ? 'directory' : 'file',
           size: isDir ? undefined : info.size,
           mtime: info.mtimeMs,
+          // Normalize birthtime — fs.Stats.birthtimeMs is documented as a
+          // number but is 0 on filesystems that don't track creation time
+          // (pre-Linux-4.11 ext4, FAT32, network mounts).  Coerce 0 \u2192
+          // undefined so renderers can honestly say "unknown" rather than
+          // 1970-01-01.
+          ctime: info.birthtimeMs > 0 ? info.birthtimeMs : undefined,
           isSymlink,
         })
       } catch {

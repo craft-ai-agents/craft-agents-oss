@@ -2256,6 +2256,7 @@ function MessageBubble({
         onUrlClick={onOpenUrl}
         onFileClick={onOpenFile}
         compactMode={compactMode}
+        loadImageFallback={(path) => window.electronAPI.readFileDataUrl(path)}
       />
     )
   }

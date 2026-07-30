@@ -29,6 +29,7 @@ import {
   type ConfigFileDetection,
 } from '../../config/validators.ts';
 import {
+  CLI_COMMAND,
   CLI_DOMAIN_POLICIES,
   CRAFT_AGENTS_CLI_BASH_GUARD_SCOPE_ENTRIES,
   CRAFT_AGENTS_CLI_WORKSPACE_SCOPE_ENTRIES,
@@ -423,7 +424,7 @@ function buildCliDomainBlockMessage(namespace: CliDomainNamespace, context: stri
 
   return [
     `${context}`,
-    `Use \`craft-agent ${namespace} ...\` instead.`,
+    `Use \`${CLI_COMMAND} ${namespace} ...\` instead.`,
     `Run \`${policy.helpCommand}\` for the full ${noun} command reference.`,
     '',
     quickExamplesHeading,
@@ -521,8 +522,18 @@ export function getConfigCliRedirect(
 }
 
 /**
- * Block bash commands that operate on guarded config paths unless they use craft-agent commands.
- * Current guarded domains in Bash are declared in shared CLI domain policy.
+ * Commands that are already using the CLI bypass the guarded-path block.
+ *
+ * The namespace subset here is deliberately narrower than the set of domains
+ * with `bashGuardPaths` — only these four are redirected through Bash today.
+ * `CLI_COMMAND` contains no regex metacharacters, so interpolating it is safe.
+ */
+const CLI_BASH_GUARD_BYPASS_RE = new RegExp(`^${CLI_COMMAND}\\s+(label|automation|source|skill)\\b`);
+
+/**
+ * Block bash commands that operate on guarded config paths unless they use the
+ * ARCHstudio CLI. Current guarded domains in Bash are declared in shared CLI
+ * domain policy.
  */
 export function getConfigDomainBashRedirect(
   input: Record<string, unknown>,
@@ -532,7 +543,7 @@ export function getConfigDomainBashRedirect(
   const command = typeof input.command === 'string' ? input.command.trim() : '';
   if (!command) return null;
 
-  if (/^craft-agent\s+(label|automation|source|skill)\b/.test(command)) {
+  if (CLI_BASH_GUARD_BYPASS_RE.test(command)) {
     return null;
   }
 

@@ -2,6 +2,7 @@ import {
   isLocalConnection,
   type LlmConnection,
 } from '@config/llm-connections'
+import { GROUP_NAME } from '@craft-agent/shared/branding'
 
 // Direct subpath, not the '@craft-agent/shared/config' barrel — the barrel
 // re-exports config/storage.ts (fs) and would break the renderer bundle.
@@ -43,7 +44,7 @@ export function groupConnectionsByProvider<T extends LlmConnection>(
   const groups: Record<string, T[]> = {
     'Anthropic': [],
     'Local': [],
-    'ARCHstudio Backend': [],
+    [GROUP_NAME]: [],
   }
   for (const conn of connections) {
     const provider = conn.providerType || 'anthropic'
@@ -52,7 +53,7 @@ export function groupConnectionsByProvider<T extends LlmConnection>(
     } else if (provider === 'pi_compat' && isLocalConnection(conn)) {
       groups['Local'].push(conn)
     } else if (provider === 'pi' || provider === 'pi_compat') {
-      groups['ARCHstudio Backend'].push(conn)
+      groups[GROUP_NAME].push(conn)
     }
   }
 
@@ -67,7 +68,7 @@ export function groupConnectionsByProvider<T extends LlmConnection>(
   const result: Array<[string, T[]]> = [
     ['Anthropic', groups['Anthropic']],
     [localGroupName, groups['Local']],
-    ['ARCHstudio Backend', groups['ARCHstudio Backend']],
+    [GROUP_NAME, groups[GROUP_NAME]],
   ]
   return result.filter(([, conns]) => conns.length > 0)
 }

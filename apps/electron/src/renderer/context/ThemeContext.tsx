@@ -74,18 +74,43 @@ interface StoredTheme {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
-const bundledThemeModules = import.meta.glob('../../../resources/themes/*.json', {
-  eager: true,
-  import: 'default',
-}) as Record<string, ThemeFile>
+// Static imports of bundled theme JSON files.
+// Replaced Vite's import.meta.glob (incompatible with bun:test) with
+// explicit imports so every consumer — Vite, esbuild, and bun — can
+// resolve them at module load time.
+import defaultTheme from '../../../resources/themes/default.json'
+import catppuccinTheme from '../../../resources/themes/catppuccin.json'
+import draculaTheme from '../../../resources/themes/dracula.json'
+import ghosttyTheme from '../../../resources/themes/ghostty.json'
+import githubTheme from '../../../resources/themes/github.json'
+import gruvboxTheme from '../../../resources/themes/gruvbox.json'
+import hazeTheme from '../../../resources/themes/haze.json'
+import nightOwlTheme from '../../../resources/themes/night-owl.json'
+import nordTheme from '../../../resources/themes/nord.json'
+import oneDarkProTheme from '../../../resources/themes/one-dark-pro.json'
+import pierreTheme from '../../../resources/themes/pierre.json'
+import rosePineTheme from '../../../resources/themes/rose-pine.json'
+import solarizedTheme from '../../../resources/themes/solarized.json'
+import tokyoNightTheme from '../../../resources/themes/tokyo-night.json'
+import vitesseTheme from '../../../resources/themes/vitesse.json'
 
-const BUNDLED_THEMES = new Map<string, ThemeFile>(
-  Object.entries(bundledThemeModules).map(([path, theme]) => {
-    const fileName = path.split('/').pop() ?? ''
-    const id = fileName.replace('.json', '')
-    return [id, theme]
-  })
-)
+const BUNDLED_THEMES = new Map<string, ThemeFile>([
+  ['default', defaultTheme as ThemeFile],
+  ['catppuccin', catppuccinTheme as ThemeFile],
+  ['dracula', draculaTheme as ThemeFile],
+  ['ghostty', ghosttyTheme as ThemeFile],
+  ['github', githubTheme as ThemeFile],
+  ['gruvbox', gruvboxTheme as ThemeFile],
+  ['haze', hazeTheme as ThemeFile],
+  ['night-owl', nightOwlTheme as ThemeFile],
+  ['nord', nordTheme as ThemeFile],
+  ['one-dark-pro', oneDarkProTheme as ThemeFile],
+  ['pierre', pierreTheme as ThemeFile],
+  ['rose-pine', rosePineTheme as ThemeFile],
+  ['solarized', solarizedTheme as ThemeFile],
+  ['tokyo-night', tokyoNightTheme as ThemeFile],
+  ['vitesse', vitesseTheme as ThemeFile],
+])
 
 interface ThemeProviderProps {
   children: ReactNode

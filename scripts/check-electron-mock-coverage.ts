@@ -1,154 +1,280 @@
 #!/usr/bin/env bun
 /**
- * Audit script: walks the configured consumer files (those that import from
- * `electron` and use BrowserWindow / BrowserView / WebContents), collects the
- * union of every property/method name those consumers access, and emits
- * `scripts/__generated__/required-electron-members.ts` as the canonical list
- * the test suite uses to assert mock coverage.
+ * Audit script: discovers every coverage.config.ts under
+ * apps/electron/src/main/, reads each test's declared consumer files,
+ * collects the union of BrowserWindow / BrowserView / WebContents members
+ * those consumers access, and writes per-test __snapshots__/coverage.ts.
  *
- * The generated list is consumed by `apps/electron/src/main/__tests__/_mock-coverage.ts`,
- * which verifies at `beforeAll` time that every required member exists on the
- * mock instance. Drift (real code adds `window.setVisibleOnAllWorkspaces`,
- * mock doesn't expose it) fails the test loud + early instead of silently
- * returning `undefined` and going green.
- *
- * Run:
+ * Default — WRITE (regenerates every snapshot in place):
  *   bun scripts/check-electron-mock-coverage.ts
+ *   bun run mock:audit:write
  *
- * When consumer files change their call surface, the generated list changes;
- * pre-commit hook (`bun scripts/check-electron-mock-coverage.ts`) regenerates
- * and the test fails if the developer forgot to git-add the regenerated file.
- */import { Project, SyntaxKind } from 'ts-morph'
-import { writeFileSync, mkdirSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+ * --check (no writes; exits non-zero if any snapshot is missing or differs
+ * from the content this run would produce). This is the gate mode used by
+ * the pre-commit hook and CI:
+ *   bun scripts/check-electron-mock-coverage.ts --check
+ *   bun run mock:audit
+ *
+ * After adding a new test file that mocks electron:
+ *   1. Create <test-dir>/coverage.config.ts with coverageConsumers
+ *   2. Run this script (default mode) to generate coverage.ts
+ *   3. Wire assertCoverage in the test file using the generated snapshot
+ */
+import { Project, SyntaxKind } from 'ts-morph'
+import {
+  writeFileSync,
+  readFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  statSync,
+} from 'node:fs'
+import { dirname, resolve, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = resolve(fileURLToPath(import.meta.url), '../..')
+const MAIN_SRC = resolve(projectRoot, 'apps/electron/src/main')
+const CHECK_MODE = process.argv.includes('--check') || process.argv.includes('--ci')
 
-/**
- * Consumer files: which production source files' call surface we audit.
- *
- * Scope is deliberately narrow: one entry maps to one mock.module('electron')
- * factory in one test file. Each test that mocks electron owns its own
- * consumer list. Extending coverage to a new test/consumer pair is a
- * coordinated change:
- *
- *   1. Add the consumer path here.
- *   2. Extend the corresponding mock.module('electron', ...) factory in the
- *      test file to expose every member the audit flags.
- *   3. Re-run this script to regenerate REQUIRED_ELECTRON_MEMBERS.
- *   4. Wire assertMockCoverage() into the test file (3 top-level calls for
- *      BrowserWindow / BrowserView / WebContents).
- *
- * Auto-discovering every Electron consumer under apps/electron/src/main
- * (an earlier iteration of this script did that) was rejected: each
- * test file's mock.module factory should match the call surface of the
- * source files THAT TEST IMPORTS transitively, not every consumer in the
- * monorepo. Bundling them together over-broadens REQUIRED_ELECTRON_MEMBERS
- * to a union that no single mock can fulfill.
- */
-const CONSUMERS = [
-  'apps/electron/src/main/browser-pane-manager.ts',
-]  
-
-// Types we're auditing. Matched by ts-morph's resolved type symbol name.
+// Types we're auditing.
 const TARGET_TYPES = ['BrowserWindow', 'BrowserView', 'WebContents'] as const
 
+// Shared ts-morph Project (expensive to create — do once, add files lazily).
 const project = new Project({
   tsConfigFilePath: resolve(projectRoot, 'apps/electron/tsconfig.json'),
   skipAddingFilesFromTsConfig: true,
 })
 
-for (const path of CONSUMERS) {
-  project.addSourceFileAtPathIfExists(resolve(projectRoot, path))
+// ---------------------------------------------------------------------------
+// Discovery: find every coverage.config.ts under apps/electron/src/main/
+// ---------------------------------------------------------------------------
+
+interface CoverageConfig {
+  /** Absolute path to the config file itself. */
+  configPath: string
+  /** Absolute path to the directory containing the config (the test dir). */
+  dir: string
+  /** Absolute path to the snapshot file. */
+  snapPath: string
+  /** Consumer source file paths (relative to projectRoot). */
+  consumers: string[]
 }
 
-const usages = new Map<string, Set<string>>()
-for (const k of TARGET_TYPES) usages.set(k, new Set())
+function discoverConfigs(): CoverageConfig[] {
+  const configs: CoverageConfig[] = []
 
-let droppedPropertyAccesses = 0
-let resolvedViaSymbol = 0
-let resolvedViaText = 0
-
-for (const sourceFile of project.getSourceFiles()) {
-  sourceFile.forEachDescendant((node) => {
-    if (node.getKind() !== SyntaxKind.PropertyAccessExpression) return
-    const access = node.asKindOrThrow(SyntaxKind.PropertyAccessExpression)
-    const memberName = access.getName()
-    if (!memberName || memberName.startsWith('_')) return // skip our `_emit` style helpers
-
-    const base = access.getExpression()
-    const baseType = base.getType()
-    const symbolName = baseType.getSymbol()?.getName()
-
-    let matched: string | undefined
-    if (symbolName) {
-      for (const t of TARGET_TYPES) {
-        if (symbolName === t) {
-          matched = t
-          resolvedViaSymbol++
-          break
+  function walk(dir: string) {
+    let entries: string[]
+    try {
+      entries = readdirSync(dir)
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const full = resolve(dir, entry)
+      if (entry === 'node_modules' || entry.startsWith('.')) continue
+      const s = statSync(full)
+      if (s.isDirectory()) {
+        walk(full)
+      } else if (entry === 'coverage.config.ts') {
+        // Extract coverageConsumers via ts-morph AST (robust against formatting).
+        const sf = project.addSourceFileAtPathIfExists(full)
+        if (!sf) {
+          console.error(`[warn] ${full}: could not add to ts-morph project — skipping`)
+          continue
         }
+        const decl = sf.getVariableDeclaration('coverageConsumers')
+        if (!decl) {
+          console.error(`[warn] ${full}: variable coverageConsumers not found — skipping`)
+          continue
+        }
+        // Handle `[...] as const` — ts-morph wraps the array in an AsExpression.
+        let rawInit = decl.getInitializer()
+        if (!rawInit) {
+          console.error(`[warn] ${full}: coverageConsumers has no initializer — skipping`)
+          continue
+        }
+        if (rawInit.getKind() === SyntaxKind.AsExpression) {
+          rawInit = (rawInit as import('ts-morph').AsExpression).getExpression()
+        }
+        const init = rawInit.asKind(SyntaxKind.ArrayLiteralExpression)
+        if (!init) {
+          console.error(`[warn] ${full}: coverageConsumers initializer is not an array literal — got ${rawInit.getKindName()} — skipping`)
+          continue
+        }
+        const items = init.getElements().map((e) => {
+          const text = e.getText()
+          return text.replace(/^['"]|['"]$/g, '')
+        })
+
+        const configDir = dirname(full)
+        configs.push({
+          configPath: full,
+          dir: configDir,
+          snapPath: resolve(configDir, '__snapshots__', 'coverage.ts'),
+          consumers: items,
+        })
       }
     }
-    if (!matched) {
-      // Fallback: accept only when the rendered type's *first token* is the
-      // target name. This catches nullable (`BrowserWindow | undefined`),
-      // array (`BrowserWindow[]`), and promise-bearing flavours, while
-      // ignoring compound types like `Set<BrowserWindow>` or
-      // `Map<string, BrowserWindow>` whose first token is `Set`/`Map` (the
-      // property access on those is on the container, not on BrowserWindow).
-      const rendered = baseType.getText()
-      const firstToken = rendered.match(/^[A-Za-z_$][A-Za-z0-9_$]*/)?.[0]
-      if (firstToken) {
+  }
+
+  walk(MAIN_SRC)
+  return configs.sort((a, b) => a.dir.localeCompare(b.dir))
+}
+
+// ---------------------------------------------------------------------------
+// Consumer scanning (same logic as before, but per-config-set)
+// ---------------------------------------------------------------------------
+
+function scanConsumers(
+  consumerPaths: string[],
+): Record<string, string[]> {
+  const usages = new Map<string, Set<string>>()
+  for (const k of TARGET_TYPES) usages.set(k, new Set())
+
+  let resolvedViaSymbol = 0
+  let resolvedViaText = 0
+  let dropped = 0
+
+  for (const relPath of consumerPaths) {
+    const absPath = resolve(projectRoot, relPath)
+    const sf = project.addSourceFileAtPathIfExists(absPath)
+    if (!sf) {
+      console.error(`[warn] consumer file not found: ${relPath}`)
+      continue
+    }
+
+    sf.forEachDescendant((node) => {
+      if (node.getKind() !== SyntaxKind.PropertyAccessExpression) return
+      const access = node.asKindOrThrow(SyntaxKind.PropertyAccessExpression)
+      const memberName = access.getName()
+      if (!memberName || memberName.startsWith('_')) return
+
+      const base = access.getExpression()
+      if (base.getKind() === SyntaxKind.Identifier && TARGET_TYPES.includes(base.getText() as any)) {
+        dropped++
+        return
+      }
+
+      const baseType = base.getType()
+      const symbolName = baseType.getSymbol()?.getName()
+
+      let matched: string | undefined
+      if (symbolName) {
         for (const t of TARGET_TYPES) {
-          if (firstToken === t) {
-            matched = t
-            resolvedViaText++
-            break
+          if (symbolName === t) { matched = t; resolvedViaSymbol++; break }
+        }
+      }
+      if (!matched) {
+        const rendered = baseType.getText()
+        const firstToken = rendered.match(/^[A-Za-z_$][A-Za-z0-9_$]*/)?.[0]
+        if (firstToken) {
+          for (const t of TARGET_TYPES) {
+            if (firstToken === t) { matched = t; resolvedViaText++; break }
           }
         }
       }
-    }
-    if (!matched) {
-      droppedPropertyAccesses++
-      return
-    }
+      if (!matched) { dropped++; return }
 
-    usages.get(matched)!.add(memberName)
-  })
+      usages.get(matched)!.add(memberName)
+    })
+  }
+
+  const sorted: Record<string, string[]> = {}
+  for (const k of TARGET_TYPES) {
+    sorted[k] = Array.from(usages.get(k)!).sort()
+  }
+  return sorted
 }
 
-// Sort + emit
-const sorted = Object.fromEntries(
-  TARGET_TYPES.map((k) => [k, Array.from(usages.get(k)!).sort()]),
-) as Record<(typeof TARGET_TYPES)[number], string[]>
+// ---------------------------------------------------------------------------
+// Snapshot rendering (extracted so --check mode can diff against disk)
+// ---------------------------------------------------------------------------
 
-const generatedPath = resolve(projectRoot, 'scripts/__generated__/required-electron-members.ts')
-mkdirSync(dirname(generatedPath), { recursive: true })
-
-const header = [
-  '/**',
-  ' * Auto-generated by scripts/check-electron-mock-coverage.ts — DO NOT edit by hand.',
-  ` * Consumer ${CONSUMERS.length === 1 ? 'file' : 'files'} scanned: ${CONSUMERS.join(', ')}. Run 'bun scripts/check-electron-mock-coverage.ts' to refresh.`,
-  ' *',
-  ' * Required = union of every BrowserWindow / BrowserView / WebContents member',
-  ' * accessed by the consumers above. The browser-pane-manager test asserts at',
-  ' * module-load time that every entry here exists on the corresponding mock',
-  ' * instance. Drift (real code adds a new BrowserWindow.setVisibleOnAllWorkspaces call,',
-  " * the mock does not expose it) raises a top-level MockCoverageError.",
-  ' */',
-  '',
-  `export const REQUIRED_ELECTRON_MEMBERS = ${JSON.stringify(sorted, null, 2)} as const`,
-  '',
-].join('\n')
-
-writeFileSync(generatedPath, header)
-
-console.log(`scanned ${CONSUMERS.length} consumer file(s)`)
-console.log(`matched by symbol: ${resolvedViaSymbol}, by type-text: ${resolvedViaText}, dropped: ${droppedPropertyAccesses}`)
-console.log()
-console.log(`wrote ${generatedPath}`)
-for (const k of TARGET_TYPES) {
-  console.log(`  ${k}: ${sorted[k].length} required members`)
+function renderSnapshot(
+  members: Record<string, string[]>,
+  consumers: string[],
+): string {
+  const header = [
+    '/**',
+    ' * Auto-generated by scripts/check-electron-mock-coverage.ts — DO NOT edit by hand.',
+    ` * Consumer files: ${consumers.join(', ')}.`,
+    ' * Run `bun scripts/check-electron-mock-coverage.ts` to refresh.',
+    ' */',
+    '',
+    'export const coverageSnapshot = {',
+  ]
+  const body: string[] = []
+  for (let i = 0; i < TARGET_TYPES.length; i++) {
+    const k = TARGET_TYPES[i]
+    const isLast = i === TARGET_TYPES.length - 1
+    body.push(`  "${k}": ${JSON.stringify(members[k])}${isLast ? '' : ','}`)
+  }
+  const footer = ['} as const', '']
+  return [...header, ...body, ...footer].join('\n')
 }
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+const configs = discoverConfigs()
+console.log(`${CHECK_MODE ? '[check] ' : ''}discovered ${configs.length} coverage config(s)\n`)
+
+const drifted: string[] = []
+let written = 0
+
+for (const cfg of configs) {
+  const relDir = relative(projectRoot, cfg.dir)
+  console.log(`  ${relDir}/`)
+
+  const members = scanConsumers(cfg.consumers)
+  const desired = renderSnapshot(members, cfg.consumers)
+  const onDisk = existsSync(cfg.snapPath) ? readFileSync(cfg.snapPath, 'utf-8') : null
+  const relSnap = relative(projectRoot, cfg.snapPath)
+
+  if (CHECK_MODE) {
+    if (onDisk === null) {
+      console.log(`    MISSING: ${relSnap}`)
+      drifted.push(relSnap)
+    } else if (onDisk !== desired) {
+      console.log(`    DRIFTED: ${relSnap}`)
+      drifted.push(relSnap)
+    } else {
+      console.log(`    OK`)
+    }
+  } else {
+    if (onDisk !== desired) {
+      mkdirSync(dirname(cfg.snapPath), { recursive: true })
+      writeFileSync(cfg.snapPath, desired)
+      written++
+    }
+    console.log(`    consumers: ${cfg.consumers.join(', ')}`)
+    for (const k of TARGET_TYPES) {
+      console.log(`    ${k}: ${members[k].length} required members`)
+    }
+  }
+  console.log()
+}
+
+if (CHECK_MODE) {
+  if (drifted.length === 0) {
+    console.log(`\u2713 all ${configs.length} snapshot(s) match`)
+    process.exit(0)
+  }
+  console.log(
+    `\u2717 ${drifted.length}/${configs.length} snapshot(s) need updating`,
+  )
+  console.log('  Run `bun run mock:audit:write` to regenerate, then git-add the changed files.')
+  for (const f of drifted) {
+    console.log(`    ${f}`)
+  }
+  process.exit(1)
+}
+
+console.log(
+  written === 0
+    ? `all ${configs.length} snapshot(s) already up to date`
+    : `wrote ${written} snapshot file(s) (${configs.length} total)`,
+)
+

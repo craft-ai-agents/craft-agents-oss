@@ -182,6 +182,9 @@
   --ring-width: 1px;
   --ring-offset: 0px;
 
+  /* === OVERLAY SCRIM === */
+  --scrim: oklch(0 0 0);
+
   /* Markdown list markers */
   --md-bullets: var(--foreground-50);
   --md-counters: var(--foreground-50);
@@ -311,6 +314,9 @@
   --input: oklch(from var(--foreground) l c h / 0.1);
   --ring: oklch(from var(--foreground) l c h / 0.25);
 
+  /* === OVERLAY SCRIM === */
+  --scrim: oklch(0 0 0);
+
   /* Markdown list markers */
   --md-bullets: var(--foreground-50);
   --md-counters: var(--foreground-50);
@@ -432,6 +438,7 @@ html[data-font="inter"] {
   --color-navigator: var(--navigator);
   /* User message bubble background (overridden on unfocused panels) */
   --color-user-message-bubble: var(--user-message-bubble);
+  --color-scrim: var(--scrim);
 
   /* === LEGACY COMPATIBILITY === */
   --color-card: var(--card);

@@ -468,6 +468,9 @@ export type SessionCommand =
   | { type: 'addAnnotation'; messageId: string; annotation: AnnotationV1 }
   | { type: 'removeAnnotation'; messageId: string; annotationId: string }
   | { type: 'updateAnnotation'; messageId: string; annotationId: string; patch: Partial<AnnotationV1> }
+  | { type: 'removeAttachment'; messageId: string; attachmentId: string }
+  | { type: 'clearAttachments' }
+  | { type: 'gitCheckout'; filePath: string }
 
 export interface NewChatActionParams {
   input?: string
@@ -870,6 +873,20 @@ export interface WorkspaceSettings {
   localMcpEnabled?: boolean
   defaultLlmConnection?: string
   enabledSourceSlugs?: string[]
+  /**
+   * Cumulative open-directory cap for the working-directory tree's right
+   * rail. Limits the number of directories that can be simultaneously
+   * expanded (across any combination of manual clicks, file-watch
+   * re-expands, drill-mode bumps, or the bulk BFS). When exceeded, leaf-most
+   * entries are silently collapsed until under the cap. Undefined falls
+   * back to a renderer-side default of 50.
+   *
+   * Promote-to-setting path for `MAX_OPEN_DIRS` in LayoutShell — see the
+   * count-cap useEffect there. Power users with wide monorepos can bump
+   * this to 100 or 200 without paying the cost of the default for
+   * typical repos.
+   */
+  maxOpenDirs?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -953,6 +970,13 @@ export interface ReadDirectoryEntry {
   size?: number
   /** File modification timestamp (ms since epoch). */
   mtime?: number
+  /**
+   * File birth / creation timestamp (ms since epoch).  Undefined on
+   * filesystems that do not track birthtime reliably (pre-Linux-4.11
+   * ext4, FAT32, network mounts).  Renderers should treat absence as
+   * "unknown" rather than synthesizing a value from mtime.
+   */
+  ctime?: number
   isSymlink: boolean
 }
 

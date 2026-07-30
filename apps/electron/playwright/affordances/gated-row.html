@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<!--
+  apps/electron/playwright/affordances/gated-row.html
+
+  Captures a gated row rendered with its full tooltip wrap: the dimmed
+  chevron (data-gated="true"), the AlertTriangle banner with the "Capped
+  at N levels" copy, and the directory metadata beneath.
+
+  DOM mirrors LayoutShell.tsx's TreeRow render path — see the snapshot
+  in apps/electron/src/renderer/shell/__tests__/__snapshots__/
+  LayoutShell.gated-row-snapshot.test.tsx.snap for the exact production
+  markup.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Gated row — banner + tooltip</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="affordance-stage">
+      <span class="affordance-stage__label">Gated row — banner + tooltip</span>
+
+      <div class="gated-row-affordance">
+        <!-- Mimics an expanded parent directory whose third-level child
+             is gated (expandDepth=2 in the production component).
+             The tooltip wrap on the right is the real production
+             tooltip surface (rendered inline so the snapshot can
+             capture the banner at the same time as the row). -->
+        <button
+          type="button"
+          tabindex="-1"
+          role="treeitem"
+          aria-expanded="false"
+          aria-describedby="gated-banner-id"
+          data-gated="true"
+          class="wd-files-item wd-files-item--dir"
+          style="padding-left: 24px;"
+        >
+          <span class="wd-files-tree__arrow">
+            <!-- chevron-right -->
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m9 18 6-6-6-6"></path>
+            </svg>
+          </span>
+          <span class="wd-files-item__icon" data-type="directory">
+            <!-- folder icon -->
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path>
+            </svg>
+          </span>
+          <div class="wd-files-item__info">
+            <strong class="wd-files-item__name">nested</strong>
+          </div>
+        </button>
+
+        <div class="arch-tree-tooltip-wrap" side="left">
+          <!-- The gated-row banner — id matches aria-describedby on
+               the row above.  Mirrors the lucide-triangle-alert icon
+               + the "Capped at N levels" copy. -->
+          <div id="gated-banner-id" class="wd-files-gated-banner">
+            <!-- AlertTriangle size=12 -->
+            <svg
+              class="wd-files-gated-banner__icon"
+              xmlns="http://www.w3.org/2000/svg"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path>
+              <path d="M12 9v4"></path>
+              <path d="M12 17h.01"></path>
+            </svg>
+            <span>Capped at 2 levels — bump the selector to drill in.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
