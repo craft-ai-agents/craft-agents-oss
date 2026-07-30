@@ -35,11 +35,14 @@
 | `test:ui:treeBfsGate` | PASS |
 | `check:test-count` | PASS |
 | `lint:i18n:parity` / `:sorted` / `:coverage` | PASS (fixed this session) |
-| `check-brand-leaks.sh` | **FAIL** — pre-existing, see §3.1 |
-| `check-rebrand-commit.sh` | **FAIL** — expected, see §3.1 |
+| `check-brand-leaks.sh` | **PASS** — fixed in `7eedc9be` (Phase 1 done) |
+| `check-rebrand-commit.sh` | **PASS** — fixed in `7eedc9be` (Phase 1 done) |
 
-`aa82e71c` was committed with `--no-verify`. Every gate above was verified manually
-beforehand except the two marked FAIL, which are pre-existing and documented.
+`aa82e71c` was committed with `--no-verify`. **Phase 1 is now complete** (commits
+`fccc6a01` + `7eedc9be`) — every gate passes and normal `git commit` (no bypass) works.
+See §3.1 for what Phase 1 fixed, including a real functional bug found along the way
+(`install-app.sh` pointed at build-artifact names that no longer exist) and a bug in
+the gate tooling itself (stale `.git/COMMIT_EDITMSG` read).
 
 ---
 
@@ -185,17 +188,35 @@ reachable in-app.
 
 ## 3. Open work
 
-### 3.1 Known-failing gates (pre-existing, not introduced)
+### 3.1 Phase 1 — DONE (`fccc6a01`, `7eedc9be`)
 
-1. **`check-brand-leaks.sh`** — `scripts/install-app.sh`, `build-dmg.sh`,
-   `build-linux.sh`, `docker-smoke-test.sh`, `split-commits.sh` still contain
-   "Craft Agents" in install-path and process-name strings. These came from the
-   recovered stash. **Fix them forward to ARCHstudio** — do not revert the rebrand.
-   Note `scripts/check-brand-leaks.sh` and `tools/check-branding-leaks.sh` also match
-   their own `PATTERN=` lines; those are self-references and need an exclusion.
-2. **`check-rebrand-commit.sh`** — refuses commits mixing rebranding and functional
-   changes. `aa82e71c` necessarily mixes them because the half-applied rename *was* the
-   bug. Future commits should respect the two-commit discipline.
+Both previously-failing gates now pass with no bypass. What was fixed:
+
+1. **`install-app.sh` was a real functional bug, not just a lint miss.** It looked for
+   build artifacts named `Craft-Agents-*.AppImage` / `"Craft Agents.app"` and bundle id
+   `com.lukilabs.craft-agent` — none of which match what `electron-builder.yml` actually
+   produces (`ARCHstudio-${arch}.${ext}`, appId `com.skobez.archstudio`). A user running
+   this script against a real release would have hit "No .app found in ZIP" or a
+   checksum/filename mismatch. Fixed every runtime reference. **Left the download domain
+   (`agents.craft.do`) untouched** — no evidence anywhere in the repo of what the current
+   one should be; still an open question for the owner.
+2. Fixed the build-log echo strings in `build-dmg.sh` / `build-linux.sh` and the
+   `docker-smoke-test.sh` header comment.
+3. `scripts/split-commits.sh` and `docs/git/rebrand-2026-commit-strategy.md` are
+   historical records of the 8-branch split itself — added to `FILE_EXCLUSIONS` rather
+   than rewritten (rewriting them would misrepresent what actually happened; the
+   split-commits manifest literally lists old icon filenames that same split renamed).
+4. **Found a real bug in the branding gate itself**: `tools/check-branding-leaks.sh`'s
+   untracked-file scan already skipped `.hermes/*`, but its tracked-file `git grep` pass
+   had no equivalent exclusion — so a committed `.hermes/plans/` handoff doc describing
+   a past brand-string bug in prose tripped the gate. Fixed.
+5. **Found a real bug in `check-rebrand-commit.sh`**: it reads `.git/COMMIT_EDITMSG` to
+   detect the `Rebrand-Only: true` trailer, but that file holds the *previous* commit's
+   message when committing via `git commit -m` — the pre-commit hook fires before git
+   overwrites it for the current invocation. Worked around by deleting the stale file
+   before retrying; **not fixed in the script itself** — a future session should either
+   read `$COMMIT_MSG_FILE` (the actual argument git passes hooks, if this repo's husky
+   setup exposes it) or accept that `-m`-based commits need this workaround.
 
 ### 3.2 Confirmed bugs, unfixed
 
@@ -318,12 +339,13 @@ cleanup its own comment asks for (drop the prop from both call sites and the dea
 
 Ordered by user-visible value and risk. Each phase has an acceptance gate.
 
-### Phase 1 — Unblock the gates
-- Fix "Craft Agents" strings forward to ARCHstudio in `scripts/install-app.sh`,
-  `build-dmg.sh`, `build-linux.sh`, `docker-smoke-test.sh`, `split-commits.sh`
-- Add self-reference exclusions for `check-brand-leaks.sh` / `tools/check-branding-leaks.sh`
+### Phase 1 — Unblock the gates ✅ DONE (`fccc6a01`, `7eedc9be`)
+- Fixed "Craft Agents" strings forward to ARCHstudio in `scripts/install-app.sh`,
+  `build-dmg.sh`, `build-linux.sh`, `docker-smoke-test.sh`
+- Added historical-record exclusions for `split-commits.sh` and the rebrand-strategy
+  doc; added self-reference exclusions for both branding-gate scripts
 - **Gate:** `bash scripts/check-brand-leaks.sh` exits 0; a normal `git commit` works
-  without `--no-verify`
+  without `--no-verify` — **verified, both commits landed clean**
 
 ### Phase 2 — Fix the renderer log bridge, then the OAuth crash
 - Fix the `[renderer-console]` recursion so errors are actually recorded
