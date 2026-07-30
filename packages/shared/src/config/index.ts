@@ -6,5 +6,6 @@ export * from './model-fetcher.ts';
 export * from './preferences.ts';
 export * from './storage.ts';
 export * from './theme.ts';
+export * from './llm-validation.ts';
 export * from './cli-domains.ts';
 export * from './provider-labels.ts';
