@@ -85,7 +85,7 @@
     "electron:build:resources": "bun run scripts/electron-build-resources.ts",
     "build:wa-worker": "bun run scripts/build-wa-worker.ts",
     "electron:build:assets": "cd apps/electron && bun scripts/copy-assets.ts",
-    "electron:build": "bun run electron:build:main && bun run electron:build:preload && bun run electron:build:renderer && bun run electron:build:resources && bun run electron:build:assets",
+    "electron:build": "bun run electron:build:main && bun run electron:build:preload && bun run electron:build:renderer && bun run electron:build:subprocess-servers && bun run electron:build:resources && bun run electron:build:assets",
     "electron:start": "bun run electron:build && electron apps/electron",
     "electron:dev": "bun run scripts/electron-dev.ts",
     "electron:dev:terminal": "bun run scripts/electron-dev.ts --terminal",
@@ -123,7 +123,8 @@
     "release": "bun run scripts/release.ts",
     "check-version": "bun run scripts/check-version.ts",
     "oss:sync": "bun run scripts/oss-sync.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "electron:build:subprocess-servers": "bun run scripts/electron-stage-subprocess-servers.ts"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.947.0",

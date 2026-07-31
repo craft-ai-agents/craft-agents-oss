@@ -82,3 +82,8 @@ credentials.enc
 # Stray driver/tooling logs that land in the repo root on Windows
 NVIDIA Corporation/
 
+
+# Built subprocess bundles, staged by electron:build:subprocess-servers.
+# Regenerated on every electron:build; bridge-mcp-server is committed instead.
+apps/electron/resources/pi-agent-server/
+apps/electron/resources/session-mcp-server/

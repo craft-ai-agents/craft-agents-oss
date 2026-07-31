@@ -31,6 +31,7 @@ import {
   Building2,
   Sparkles,
   ListPlus,
+  Cloud,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useSetAtom } from 'jotai'
@@ -183,6 +184,20 @@ const QUICK_ADD_PRESETS: QuickAddPreset[] = [
     hint: 'Models already running on this machine',
     choice: 'local',
     icon: <Monitor size={16} />,
+  },
+  {
+    // Ollama's hosted service. Same OpenAI-compatible wire format as a local
+    // Ollama, so it rides the generic api_key/custom path rather than the
+    // `local` choice — `local` implies "already running on this machine" and
+    // skips credential entry, which the cloud endpoint requires.
+    label: 'Ollama Cloud',
+    hint: 'Hosted Ollama — paste your API key',
+    choice: 'api_key',
+    icon: <Cloud size={16} />,
+    initialValues: {
+      activePreset: 'custom',
+      baseUrl: 'https://ollama.com/v1',
+    },
   },
   {
     label: 'Custom endpoint',
