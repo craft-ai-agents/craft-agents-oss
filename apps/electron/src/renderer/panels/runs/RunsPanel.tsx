@@ -1,7 +1,9 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useAtomValue } from 'jotai'
-import { Activity, Clock, Square, CheckCircle2, XCircle, Loader2, Coins } from 'lucide-react'
+import { Activity, Clock, Square, CheckCircle2, XCircle, Loader2, Coins, Download, Send, Share2, Trash2, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { sessionMetaMapAtom, type SessionMeta } from '../../atoms/sessions'
+import { useAppShellContext } from '../../context/AppShellContext'
 import './RunsPanel.css'
 
 type RunStatus = 'running' | 'completed' | 'failed' | 'idle'
@@ -34,8 +36,31 @@ export interface RunsPanelProps {
   onOpenSession?: (sessionId: string) => void
 }
 
+function safeFilename(value: string): string {
+  return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80) || 'activity'
+}
+
+function messageText(content: unknown): string {
+  if (typeof content === 'string') return content
+  try { return JSON.stringify(content) } catch { return String(content ?? '') }
+}
+
+async function buildHandoff(sessionId: string, title: string): Promise<string> {
+  const session = await window.electronAPI.getSessionMessages(sessionId)
+  const transcript = (session?.messages ?? [])
+    .filter((message) => message.role === 'user' || message.role === 'assistant' || message.role === 'error')
+    .map((message) => `## ${message.role === 'assistant' ? 'Agent' : message.role === 'user' ? 'User' : 'Error'}\n${messageText(message.content)}`)
+    .join('\n\n')
+  const clipped = transcript.length > 40_000 ? `${transcript.slice(0, 40_000)}\n\n[Transcript clipped]` : transcript
+  return `Continue from this ARCHstudio Activity: **${title}**\n\nSource session: ${sessionId}\n\n${clipped || 'No transcript is available.'}`
+}
+
 export function RunsPanel({ onOpenSession }: RunsPanelProps = {}) {
   const metaMap = useAtomValue(sessionMetaMapAtom)
+  const { onDeleteSession, onSendMessage, onCreateSession, activeWorkspaceId } = useAppShellContext()
+  const [agentSource, setAgentSource] = useState<SessionMeta | null>(null)
+  const [agentTarget, setAgentTarget] = useState('new')
+  const [pendingAction, setPendingAction] = useState<string | null>(null)
 
   const runs = useMemo(() => {
     return Array.from(metaMap.values())
@@ -71,6 +96,66 @@ export function RunsPanel({ onOpenSession }: RunsPanelProps = {}) {
     }
     return { tokens, costUsd, sessionsWithUsage }
   }, [runs])
+
+  const saveActivity = async (meta: SessionMeta) => {
+    setPendingAction(`save:${meta.id}`)
+    try {
+      const bundle = await window.electronAPI.exportSession(meta.id)
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${safeFilename(meta.name || meta.preview || meta.id)}.archstudio-session.json`
+      link.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
+      toast.success('Activity saved')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not save activity')
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  const shareActivity = async (meta: SessionMeta) => {
+    setPendingAction(`share:${meta.id}`)
+    try {
+      const title = meta.name || meta.preview || meta.id
+      const text = await buildHandoff(meta.id, title)
+      if (navigator.share) {
+        await navigator.share({ title, text })
+      } else {
+        await navigator.clipboard.writeText(text)
+        toast.success('Activity copied — paste it into any app')
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      toast.error(error instanceof Error ? error.message : 'Could not share activity')
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  const addToAgent = async () => {
+    if (!agentSource || !activeWorkspaceId) return
+    setPendingAction(`agent:${agentSource.id}`)
+    try {
+      const title = agentSource.name || agentSource.preview || agentSource.id
+      const handoff = await buildHandoff(agentSource.id, title)
+      let targetId = agentTarget
+      if (targetId === 'new') {
+        const target = await onCreateSession(activeWorkspaceId)
+        targetId = target.id
+      }
+      onSendMessage(targetId, handoff)
+      toast.success('Activity added to agent')
+      setAgentSource(null)
+      onOpenSession?.(targetId)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not add activity to agent')
+    } finally {
+      setPendingAction(null)
+    }
+  }
 
   return (
     <div className="runs-panel">
@@ -144,10 +229,40 @@ export function RunsPanel({ onOpenSession }: RunsPanelProps = {}) {
                   {meta.tokenUsage.costUsd > 0 && <span>· ${meta.tokenUsage.costUsd.toFixed(4)}</span>}
                 </div>
               )}
+              <div className="runs-panel__actions" role="group" aria-label={`Actions for ${title}`} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                <button type="button" title="Save activity" aria-label="Save activity" disabled={!!pendingAction} onClick={() => void saveActivity(meta)}><Download size={15} /><span>Save</span></button>
+                <button type="button" title="Add to agent" aria-label="Add to agent" disabled={!!pendingAction} onClick={() => { setAgentTarget('new'); setAgentSource(meta) }}><Send size={15} /><span>Add to Agent</span></button>
+                <button type="button" title="Share to another app" aria-label="Share to another app" disabled={!!pendingAction} onClick={() => void shareActivity(meta)}><Share2 size={15} /><span>Share</span></button>
+                <button type="button" className="runs-panel__delete" title="Delete activity" aria-label="Delete activity" disabled={!!pendingAction} onClick={() => void onDeleteSession(meta.id)}><Trash2 size={15} /><span>Delete</span></button>
+              </div>
             </div>
           )
         })}
       </div>
+
+      {agentSource && (
+        <div className="runs-agent-dialog" role="dialog" aria-modal="true" aria-labelledby="runs-agent-title" onMouseDown={(e) => { if (e.target === e.currentTarget) setAgentSource(null) }}>
+          <div className="runs-agent-dialog__card">
+            <div className="runs-agent-dialog__header">
+              <div><h3 id="runs-agent-title">Add to Agent</h3><p>Send this activity as context to another chat.</p></div>
+              <button type="button" aria-label="Close" onClick={() => setAgentSource(null)}><X size={18} /></button>
+            </div>
+            <label htmlFor="runs-agent-target">Destination</label>
+            <select id="runs-agent-target" value={agentTarget} onChange={(e) => setAgentTarget(e.target.value)}>
+              <option value="new">New agent chat</option>
+              {runs.filter((meta) => meta.id !== agentSource.id).map((meta) => (
+                <option key={meta.id} value={meta.id}>{meta.name || meta.preview || meta.id}</option>
+              ))}
+            </select>
+            <div className="runs-agent-dialog__footer">
+              <button type="button" onClick={() => setAgentSource(null)}>Cancel</button>
+              <button type="button" className="runs-agent-dialog__primary" disabled={pendingAction === `agent:${agentSource.id}`} onClick={() => void addToAgent()}>
+                {pendingAction === `agent:${agentSource.id}` ? <Loader2 size={15} className="runs-badge__spin" /> : <Send size={15} />} Add to Agent
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

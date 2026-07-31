@@ -515,8 +515,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Reverse pagination: show last N turns initially, load more on scroll up
   const TURNS_PER_PAGE = 20
   const [visibleTurnCount, setVisibleTurnCount] = React.useState(TURNS_PER_PAGE)
-  // Sticky-bottom: When true, auto-scroll on content changes. Toggled by user scroll behavior.
+  // Sticky-bottom: the ref is read by high-frequency observers; state drives the
+  // jump-to-latest affordance without forcing streaming callbacks to rebind.
   const isStickToBottomRef = React.useRef(true)
+  const [isAtBottom, setIsAtBottom] = React.useState(true)
   // Mirror isFocusedPanel into a ref so the ResizeObserver closure reads the latest value
   const isFocusedPanelRef = React.useRef(isFocusedPanel)
   isFocusedPanelRef.current = isFocusedPanel
@@ -1106,8 +1108,11 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     if (!viewport) return
     const { scrollTop, scrollHeight, clientHeight } = viewport
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-    // 20px threshold for "at bottom" detection
-    isStickToBottomRef.current = distanceFromBottom < 20
+    // Keep a forgiving threshold for fractional layout changes while markdown
+    // streams. Moving beyond it is treated as an intentional reading position.
+    const atBottom = distanceFromBottom < 64
+    isStickToBottomRef.current = atBottom
+    setIsAtBottom(atBottom)
 
     // Load more turns when scrolling near top (within 100px)
     if (scrollTop < 100) {
@@ -1150,6 +1155,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     // On session switch: reset UI state (scroll handled by ScrollOnMount)
     if (isSessionSwitch) {
       isStickToBottomRef.current = true
+      setIsAtBottom(true)
       setVisibleTurnCount(TURNS_PER_PAGE)
     }
 
@@ -1159,6 +1165,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     const resizeObserver = new ResizeObserver(() => {
       // Unfocused panels: always scroll to bottom instantly (user isn't reading them)
       if (!isFocusedPanelRef.current) {
+        isStickToBottomRef.current = true
+        setIsAtBottom(true)
         messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
         return
       }
@@ -1215,6 +1223,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
     // Sending a message should always re-stick to bottom.
     isStickToBottomRef.current = true
+    setIsAtBottom(true)
 
     requestAnimationFrame(() => {
       messagesEndRef.current?.scrollIntoView({
@@ -1237,6 +1246,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
     // Force stick-to-bottom when user sends a message
     isStickToBottomRef.current = true
+    setIsAtBottom(true)
     onSendMessage(normalizedMessage, attachments, skillSlugs)
 
     // Persist sent marker on follow-up annotations so TurnCard can distinguish
@@ -1320,6 +1330,12 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       console.error('[ChatDisplay] Failed to cancel processing:', error)
     })
   }
+
+  const scrollToLatest = React.useCallback(() => {
+    isStickToBottomRef.current = true
+    setIsAtBottom(true)
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [])
 
   // Per-frame scroll compensation during input height animation
   // Only compensate when user is "stuck to bottom" - otherwise let them control their scroll position
@@ -1924,6 +1940,25 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               </div>
               </ScrollArea>
             </div>
+
+            <AnimatePresence>
+              {!compactMode && isFocusedPanel && !isAtBottom && (
+                <motion.button
+                  type="button"
+                  initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  onClick={scrollToLatest}
+                  aria-label={t('chat.jumpToLatest')}
+                  title={t('chat.jumpToLatest')}
+                  className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border/70 bg-background/95 px-3 py-1.5 text-xs font-medium text-foreground shadow-modal-small backdrop-blur-md transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{t('chat.jumpToLatest')}</span>
+                </motion.button>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* === INPUT CONTAINER: FreeForm or Structured Input === */}

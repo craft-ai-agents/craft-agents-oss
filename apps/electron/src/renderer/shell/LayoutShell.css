@@ -141,19 +141,35 @@
 }
 
 .layout-sidebar__brand {
-  display: block;
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  /* border-radius is the SOURCE OF TRUTH for the tile shape: it wins over the
-     PNG's baked-in corners and is what the outline traces. Bumped to 9px so
-     the CSS clip and the PNG's natural radius (rx=115 on a 512 viewBox ≈ 9px
-     on a 40px render) align — no double-AA, no edge seam. */
-  border-radius: 9px;
-  outline: 1px solid var(--shell-border);
-  outline-offset: -1px;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  color: var(--foreground);
   user-select: none;
-  -webkit-user-drag: none;
+}
+
+.layout-sidebar__brand-symbol {
+  display: block;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+}
+
+.layout-sidebar__brand-symbol svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.layout-sidebar__brand-wordmark {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .layout-sidebar__toggle {

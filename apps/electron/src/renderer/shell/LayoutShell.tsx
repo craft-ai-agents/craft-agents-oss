@@ -18,7 +18,6 @@ import {
   Sun,
   Moon,
   Monitor,
-  Construction,
   FileText,
   Image,
   File,
@@ -56,11 +55,9 @@ import { ShikiDiffViewer } from '../components/shiki'
 import { HighlightedDiffViewer, type DiffViewMode } from '@craft-agent/ui'
 import { HomeHero } from '../home'
 import { sessionMetaMapAtom, activeSessionIdAtom, sessionAtomFamily } from '../atoms/sessions'
+import { CodeWorkspacePanel, CanvasWorkspacePanel, PreviewWorkspacePanel, TasksWorkspacePanel, type WorkspaceArtifact } from './WorkspaceTabPanels'
 import type { StoredAttachment, Session } from '../../shared/types'
-// Sidebar brand uses the rasterised icon-set PNG (which already has the
-// rounded-square dark card + emblem baked in), so the brand mark in the
-// chrome is identical to the desktop app icon users see on their launcher.
-import brandIconUrl from '@resources/icon-set/icon-512.png?url'
+import { AnimatedARCHstudioSymbol } from '../components/icons/AnimatedARCHstudioSymbol'
 import { toast } from 'sonner'
 import type { GitFileEntry, GitStatusData, ShellSessionContext } from './types'
 import { buildTreeTooltip, TreeTooltipContent, type TooltipData } from './treeTooltip'
@@ -240,6 +237,38 @@ export type { ShellSessionContext } from './types'
 /** A constant atom that always holds null — used in place of a missing session atom
  *  so we can call useAtomValue unconditionally even when no session is selected. */
 const nullSessionAtom = atom<Session | null>(null)
+
+/**
+ * Guarded `localStorage` access for the per-session workspace-tab state.
+ *
+ * LayoutShell is rendered in bare test/SSR harnesses (`renderToStaticMarkup`
+ * with no DOM globals installed), where `localStorage` is not merely empty but
+ * *undefined*. An unguarded `localStorage.setItem` therefore threw
+ * `ReferenceError: localStorage is not defined` during the persist effect,
+ * which took the whole component down and failed 29 shell tests at once.
+ *
+ * Persistence here is a convenience, never load-bearing — so both helpers
+ * swallow failure and the caller carries on with in-memory state. The try/catch
+ * also covers the real-browser failure modes the `typeof` check does not:
+ * private-browsing denials and quota-exceeded on write.
+ */
+function readWorkspaceStateRaw(key: string): string | null {
+  try {
+    if (typeof localStorage === 'undefined') return null
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function writeWorkspaceStateRaw(key: string, value: string): void {
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(key, value)
+  } catch {
+    // Storage unavailable or full — tab state simply won't survive a reload.
+  }
+}
 
 // Local copy of formatFileSize for the wd-files-summary bar.  Keep it
 // here rather than importing from treeTooltip.ts because the summary
@@ -667,10 +696,56 @@ function LayoutShell({
   const [activeView, setActiveView] = useState<ShellView>(initialView)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WorkspaceTab>('agent-chat')
+  const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState<string | null>(null)
+  const [previewArtifactId, setPreviewArtifactId] = useState<string | null>(null)
+  const [canvasArtifacts, setCanvasArtifacts] = useState<WorkspaceArtifact[]>([])
+  const [selectedCanvasArtifactId, setSelectedCanvasArtifactId] = useState<string | null>(null)
+  const skipWorkspacePersistRef = useRef(false)
   const [activeRailTab, setActiveRailTab] = useState<RailTab>(initialRailTab ?? 'context')
+  const openWorkspaceFileExternal = useCallback((path: string) => {
+    // Explicitly bypass the overlay: these surfaces already provide the in-app preview.
+    // eslint-disable-next-line craft-links/no-direct-file-open
+    void window.electronAPI.openFile(path)
+  }, [])
   const [serverStatus, setServerStatus] = useState<{ running: boolean; url?: string } | null>(null)
   const metaMap = useAtomValue(sessionMetaMapAtom)
   const activeSessionId = useAtomValue(activeSessionIdAtom)
+  useEffect(() => {
+    skipWorkspacePersistRef.current = true
+    if (!activeSessionId) {
+      setCanvasArtifacts([])
+      setSelectedCanvasArtifactId(null)
+      setSelectedWorkspaceFile(null)
+      setPreviewArtifactId(null)
+      setActiveWorkspaceTab('agent-chat')
+      return
+    }
+    try {
+      const saved = JSON.parse(readWorkspaceStateRaw(`archstudio:workspace:${activeSessionId}`) || '{}') as { artifacts?: WorkspaceArtifact[]; selectedFile?: string; activeTab?: WorkspaceTab }
+      const artifacts = Array.isArray(saved.artifacts) ? saved.artifacts : []
+      setCanvasArtifacts(artifacts)
+      setSelectedCanvasArtifactId(artifacts[0]?.id ?? null)
+      setSelectedWorkspaceFile(saved.selectedFile ?? null)
+      setPreviewArtifactId(null)
+      setActiveWorkspaceTab(saved.activeTab ?? 'agent-chat')
+    } catch {
+      setCanvasArtifacts([])
+      setSelectedCanvasArtifactId(null)
+      setSelectedWorkspaceFile(null)
+      setPreviewArtifactId(null)
+      setActiveWorkspaceTab('agent-chat')
+    }
+  }, [activeSessionId])
+
+  useEffect(() => {
+    if (!activeSessionId) return
+    if (skipWorkspacePersistRef.current) {
+      skipWorkspacePersistRef.current = false
+      return
+    }
+    writeWorkspaceStateRaw(`archstudio:workspace:${activeSessionId}`, JSON.stringify({ artifacts: canvasArtifacts, selectedFile: selectedWorkspaceFile, activeTab: activeWorkspaceTab }))
+  }, [activeSessionId, activeWorkspaceTab, canvasArtifacts, selectedWorkspaceFile])
+
   const sessionAtom = useMemo(
     () => activeSessionId ? sessionAtomFamily(activeSessionId) : nullSessionAtom,
     [activeSessionId],
@@ -2443,12 +2518,12 @@ const DEPTH_POPOVER_OPTIONS = [
       >
         <div className="layout-sidebar__header">
           {!sidebarCollapsed && (
-            <img
-              src={brandIconUrl}
-              alt="ARCHstudio"
-              className="layout-sidebar__brand"
-              draggable={false}
-            />
+            <div className="layout-sidebar__brand" aria-label="ARCHstudio">
+              <span className="layout-sidebar__brand-symbol" aria-hidden="true">
+                <AnimatedARCHstudioSymbol />
+              </span>
+              <span className="layout-sidebar__brand-wordmark">ARCHstudio</span>
+            </div>
           )}
           <button
             type="button"
@@ -2613,21 +2688,20 @@ const DEPTH_POPOVER_OPTIONS = [
             children ? (
               <section className="arch-agent-workspace" aria-label="Agent session workspace">
                 <div className="arch-agent-workspace__tabs">
-                  {WORKSPACE_TABS.map((tab) => {
-                    const isImplemented = tab.id === 'agent-chat'
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        className={activeWorkspaceTab === tab.id ? 'is-active' : ''}
-                        onClick={() => setActiveWorkspaceTab(tab.id)}
-                        aria-label={isImplemented ? tab.label : `${tab.label} (not yet implemented)`}
-                        title={isImplemented ? tab.label : `${tab.label} — coming soon`}
-                      >
-                        {tab.label}
-                      </button>
-                    )
-                  })}
+                  {WORKSPACE_TABS.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeWorkspaceTab === tab.id}
+                      className={activeWorkspaceTab === tab.id ? 'is-active' : ''}
+                      onClick={() => setActiveWorkspaceTab(tab.id)}
+                      aria-label={tab.label}
+                      title={tab.label}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                   {hasLiveSession && <span className="arch-agent-workspace__live"><i /> Live</span>}
                   {/* The theme toggle used to live here, in the workspace tab bar — which
                       meant it only existed while a chat session was open, and sat mid-bar
@@ -2636,13 +2710,33 @@ const DEPTH_POPOVER_OPTIONS = [
                 </div>
                 <div className="arch-agent-workspace__body">
                 <div className="arch-agent-workspace__session">
-                  {activeWorkspaceTab === 'agent-chat' ? (
-                    children
+                  {activeWorkspaceTab === 'agent-chat' ? children : activeWorkspaceTab === 'code' ? (
+                    <CodeWorkspacePanel
+                      filePath={selectedWorkspaceFile}
+                      onChooseFile={() => void window.electronAPI.openFileDialog().then((paths) => { if (paths[0]) setSelectedWorkspaceFile(paths[0]) })}
+                      onPreview={() => { setPreviewArtifactId(null); setActiveWorkspaceTab('preview') }}
+                      onOpenExternal={openWorkspaceFileExternal}
+                      onAddToCanvas={(artifact) => { setCanvasArtifacts((items) => [...items, artifact]); setSelectedCanvasArtifactId(artifact.id); setActiveWorkspaceTab('canvas') }}
+                    />
+                  ) : activeWorkspaceTab === 'canvas' ? (
+                    <CanvasWorkspacePanel
+                      artifacts={canvasArtifacts}
+                      selectedId={selectedCanvasArtifactId}
+                      onSelect={setSelectedCanvasArtifactId}
+                      onChange={(artifact) => setCanvasArtifacts((items) => items.map((item) => item.id === artifact.id ? artifact : item))}
+                      onCreate={() => { const artifact: WorkspaceArtifact = { id: crypto.randomUUID(), title: 'Untitled artifact', kind: 'markdown', content: '# New artifact\n', updatedAt: Date.now() }; setCanvasArtifacts((items) => [...items, artifact]); setSelectedCanvasArtifactId(artifact.id) }}
+                      onDelete={(id) => { if (!window.confirm('Delete this Canvas artifact?')) return; setCanvasArtifacts((items) => items.filter((item) => item.id !== id)); setSelectedCanvasArtifactId((current) => current === id ? null : current) }}
+                      onPreview={(artifact) => { setPreviewArtifactId(artifact.id); setActiveWorkspaceTab('preview') }}
+                    />
+                  ) : activeWorkspaceTab === 'preview' ? (
+                    <PreviewWorkspacePanel
+                      filePath={selectedWorkspaceFile}
+                      artifact={canvasArtifacts.find((item) => item.id === previewArtifactId) ?? null}
+                      onChooseFile={() => void window.electronAPI.openFileDialog().then((paths) => { if (paths[0]) { setSelectedWorkspaceFile(paths[0]); setPreviewArtifactId(null) } })}
+                      onOpenExternal={openWorkspaceFileExternal}
+                    />
                   ) : (
-                    <div className="layout-placeholder">
-                      <Construction size={48} />
-                      <p>{WORKSPACE_TABS.find((t) => t.id === activeWorkspaceTab)?.label} view is not yet implemented.</p>
-                    </div>
+                    <TasksWorkspacePanel sessionId={activeSessionId} onOpenOutput={(path) => { setSelectedWorkspaceFile(path); setPreviewArtifactId(null); setActiveWorkspaceTab('preview') }} />
                   )}
                 </div>
                 <aside className="arch-context-rail" aria-label="Session context">
@@ -3051,7 +3145,7 @@ const DEPTH_POPOVER_OPTIONS = [
                                   openFileLocation={openFileLocation}
                                   onOpenFile={
                                     typeof window !== 'undefined'
-                                      ? (path: string) => window.electronAPI?.openFile?.(path)
+                                      ? (path: string) => { setSelectedWorkspaceFile(path); setPreviewArtifactId(null); setActiveWorkspaceTab('code') }
                                       : undefined
                                   }
                                 />

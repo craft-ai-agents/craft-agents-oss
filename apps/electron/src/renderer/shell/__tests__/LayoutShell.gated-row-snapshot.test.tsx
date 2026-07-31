@@ -296,7 +296,16 @@ function findTreeButton(container: HTMLElement, name: string): HTMLButtonElement
 }
 
 function normalizeSnapshotHtml(html: string): string {
-  return html.replace(/id=":r\d+:"/g, 'id="SNAPSHOT_ID"')
+  // React `useId()` values (":r2:", ":r4:", …) are allocated from a global
+  // counter, so they shift whenever an unrelated component adds a hook earlier
+  // in the tree — these snapshots broke purely because the workspace-tab work
+  // introduced hooks upstream, moving `:r2:` to `:r4:`.
+  //
+  // The previous pattern only scrubbed the `id="…"` attribute and left the
+  // *references* to it — notably the gate banner's `aria-describedby` — intact,
+  // so the id still leaked into the snapshot. Scrub the token wherever it
+  // appears instead of guessing which attributes carry it.
+  return html.replace(/:r[0-9a-z]+:/gi, 'SNAPSHOT_ID')
 }
 
 function snapshotTree(container: HTMLElement): string {
