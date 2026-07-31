@@ -73,6 +73,55 @@
   background: var(--color-surface-muted);
 }
 
+/* Rows are only interactive when an `onOpenSession` handler is supplied, so the
+   affordance is never shown for a click that would do nothing. */
+.runs-panel__item--interactive {
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
+}
+
+.runs-panel__item--interactive:hover {
+  border-color: color-mix(in oklch, var(--brand-purple) 45%, transparent);
+  background: color-mix(in srgb, var(--color-surface-muted) 88%, var(--foreground));
+  transform: translateY(-1px);
+}
+
+.runs-panel__item--interactive:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--brand-purple) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* Workspace-wide spend, pinned opposite the title. */
+.runs-panel__totals {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+  font-size: 12px;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.runs-panel__totals-cost {
+  color: var(--brand-lime, var(--foreground));
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runs-panel__item--interactive {
+    transition: none;
+  }
+  .runs-panel__item--interactive:hover {
+    transform: none;
+  }
+}
+
 .runs-panel__item-header {
   display: flex;
   align-items: center;

@@ -65,6 +65,7 @@ import { toast } from 'sonner'
 import type { GitFileEntry, GitStatusData, ShellSessionContext } from './types'
 import { buildTreeTooltip, TreeTooltipContent, type TooltipData } from './treeTooltip'
 import { useOptionalTheme } from '../context/ThemeContext'
+import { navigate, routes } from '../lib/navigate'
 import { shouldGateManualExpand, trimExpandedByCount } from '@craft-agent/ui'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import './LayoutShell.css'
@@ -103,7 +104,11 @@ const RAIL_TABS: { id: RailTab; label: string }[] = [
 
 const navItems = [
   { id: 'command' as ShellView, label: 'Command', icon: Command },
-  { id: 'runs' as ShellView, label: 'Runs', icon: Activity },
+  // Label only — the `runs` id is a wire-level deep-link route
+  // (`craftagents://runs/...`, see shared/route-parser.ts) and must not change.
+  // "Activity" is the honest name: these are sessions with status and spend,
+  // not discrete job executions.
+  { id: 'runs' as ShellView, label: 'Activity', icon: Activity },
   { id: 'projects' as ShellView, label: 'Projects', icon: FolderKanban },
   { id: 'memory' as ShellView, label: 'Memory', icon: Brain },
   { id: 'media-lab' as ShellView, label: 'Media Lab', icon: Clapperboard },
@@ -2579,7 +2584,15 @@ const DEPTH_POPOVER_OPTIONS = [
           {activeView === 'memory' ? (
             <MemoryPanel />
           ) : activeView === 'runs' ? (
-            <RunsPanel />
+            <RunsPanel
+              onOpenSession={(sessionId) => {
+                // Two moves: route the session navigator to that session, and
+                // bring the shell back to the chat view — the panel can do the
+                // former on its own but not the latter.
+                navigate(routes.view.allSessions(sessionId))
+                handleNavigate('command')
+              }}
+            />
           ) : activeView === 'projects' ? (
             <ProjectsPanel />
           ) : activeView === 'providers' ? (

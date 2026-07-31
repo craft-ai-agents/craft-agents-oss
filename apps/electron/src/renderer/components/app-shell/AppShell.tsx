@@ -2770,7 +2770,10 @@ function AppShellContent({
                     // --- Owner Agent: Runs, Memory, Media Lab ---
                     {
                       id: "nav:runs",
-                      title: t("sidebar.runs", "Runs"),
+                      // Key stays `sidebar.runs` (it is referenced by the nav
+                      // state helpers and the `runs` deep-link route); only the
+                      // displayed string changed to match LayoutShell's label.
+                      title: t("sidebar.runs", "Activity"),
                       icon: Activity,
                       iconColor: 'var(--brand-lime)',
                       variant: isRunsNavigation(navState) ? "default" : "ghost",

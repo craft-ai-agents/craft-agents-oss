@@ -24,7 +24,17 @@ function formatDuration(startMs?: number, endMs?: number): string | null {
   return `${Math.floor(m / 60)}h ${m % 60}m`
 }
 
-export function RunsPanel() {
+export interface RunsPanelProps {
+  /**
+   * Open the session behind a row. Supplied by LayoutShell, which both
+   * switches the shell back to the chat view and routes to the session —
+   * a panel can't do the first part on its own. Omitted in tests and in the
+   * playground, where rows simply render as non-interactive.
+   */
+  onOpenSession?: (sessionId: string) => void
+}
+
+export function RunsPanel({ onOpenSession }: RunsPanelProps = {}) {
   const metaMap = useAtomValue(sessionMetaMapAtom)
 
   const runs = useMemo(() => {
@@ -39,36 +49,92 @@ export function RunsPanel() {
 
   const activeCount = runs.filter((m) => runStatus(m) === 'running').length
 
+  /**
+   * Workspace-wide spend. This is the one number the panel surfaces that
+   * nothing else in the app does — sessions carry `tokenUsage` individually,
+   * but until now there was nowhere to see the total.
+   *
+   * Only sessions with recorded usage contribute; a session whose provider
+   * never reported usage is absent from the totals rather than counted as
+   * zero, so `sessionsWithUsage` is shown alongside to make the denominator
+   * explicit instead of implying the figure covers everything.
+   */
+  const totals = useMemo(() => {
+    let tokens = 0
+    let costUsd = 0
+    let sessionsWithUsage = 0
+    for (const m of runs) {
+      if (!m.tokenUsage) continue
+      sessionsWithUsage++
+      tokens += m.tokenUsage.totalTokens ?? 0
+      costUsd += m.tokenUsage.costUsd ?? 0
+    }
+    return { tokens, costUsd, sessionsWithUsage }
+  }, [runs])
+
   return (
     <div className="runs-panel">
       <div className="runs-panel__header">
         <div className="runs-panel__title">
           <Activity size={20} />
-          <h2>Runs</h2>
+          <h2>Activity</h2>
           {activeCount > 0 && <span className="runs-panel__live">{activeCount} active</span>}
         </div>
+        {totals.sessionsWithUsage > 0 && (
+          <div
+            className="runs-panel__totals"
+            title={`Across ${totals.sessionsWithUsage} of ${runs.length} session${runs.length === 1 ? '' : 's'} with recorded usage`}
+          >
+            <Coins size={14} />
+            <span>{totals.tokens.toLocaleString()} tokens</span>
+            {totals.costUsd > 0 && (
+              <span className="runs-panel__totals-cost">${totals.costUsd.toFixed(4)}</span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="runs-panel__list">
         {runs.length === 0 && (
-          <div className="runs-panel__empty">No runs yet. Start an agent session and it will appear here.</div>
+          <div className="runs-panel__empty">No activity yet. Start a session and it will appear here.</div>
         )}
         {runs.map((meta) => {
           const status = runStatus(meta)
           const duration =
             status === 'running' ? null : formatDuration(meta.createdAt, meta.lastMessageAt)
+          const title = meta.name || meta.preview || meta.id
+          const interactive = !!onOpenSession
           return (
-            <div key={meta.id} className="runs-panel__item">
+            <div
+              key={meta.id}
+              className={`runs-panel__item ${interactive ? 'runs-panel__item--interactive' : ''}`}
+              {...(interactive
+                ? {
+                    role: 'button' as const,
+                    tabIndex: 0,
+                    title: `Open "${title}"`,
+                    onClick: () => onOpenSession(meta.id),
+                    onKeyDown: (e: React.KeyboardEvent) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onOpenSession(meta.id)
+                      }
+                    },
+                  }
+                : {})}
+            >
               <div className="runs-panel__item-header">
-                <span className="runs-panel__item-title">
-                  {meta.name || meta.preview || meta.id}
-                </span>
+                <span className="runs-panel__item-title">{title}</span>
                 <StatusBadge status={status} />
               </div>
               <div className="runs-panel__item-meta">
                 <Clock size={14} />
+                {/* Wall-clock between the first and last message — NOT time spent
+                    working. A session left open overnight reads as many hours.
+                    Labelled "open for" rather than a bare duration so it doesn't
+                    imply compute time. */}
                 {meta.createdAt && <span>Started {new Date(meta.createdAt).toLocaleString()}</span>}
-                {duration && <span>· {duration}</span>}
+                {duration && <span>· open for {duration}</span>}
                 {meta.messageCount != null && <span>· {meta.messageCount} msgs</span>}
               </div>
               {meta.tokenUsage && (
