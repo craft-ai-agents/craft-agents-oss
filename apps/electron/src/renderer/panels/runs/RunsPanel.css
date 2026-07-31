@@ -32,13 +32,28 @@
   font-weight: 600;
 }
 
+/* Responsive card grid.
+   This was a single full-width flex column, so with only a handful of runs
+   each card stretched edge-to-edge and three of them filled the viewport.
+   `auto-fill` (not `auto-fit`) keeps the track width stable when there are
+   fewer runs than columns — with `auto-fit` a single run would collapse the
+   empty tracks and stretch that one card back across the full width, which is
+   the exact problem being fixed. */
 .runs-panel__list {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-auto-rows: min-content;
+  align-content: start;
   gap: 12px;
+}
+
+/* The empty state is a single cell in a multi-column grid — span every track
+   so it stays centred instead of hugging the first column. */
+.runs-panel__empty {
+  grid-column: 1 / -1;
 }
 
 .runs-panel__empty {

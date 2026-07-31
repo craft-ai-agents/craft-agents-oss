@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAtomValue } from 'jotai'
 import { VariableSizeGrid, type VariableSizeGrid as VariableSizeGridType } from 'react-window'
-import { Clapperboard, Image, Music, Video, FileText, Loader2, ExternalLink, Sparkles, Wand2, Download, Trash2, Check, X, CheckSquare, FolderOpen } from 'lucide-react'
+import { Clapperboard, Image, Music, Video, FileText, Loader2, ExternalLink, Sparkles, Wand2, Download, EyeOff, Check, X, CheckSquare, FolderOpen } from 'lucide-react'
 import type { MediaItem, MediaKind, MediaListPage, MediaListRequest } from '@craft-agent/shared/protocol'
 import { sessionMetaMapAtom } from '../../atoms/sessions'
 import { useAppShellContext } from '../../context/AppShellContext'
@@ -461,13 +461,21 @@ export function MediaLabPanel() {
     clearSelection()
   }, [items, selectedKeys, itemKey, onOpenFile, clearSelection])
 
-  const batchDelete = useCallback(async () => {
+  /**
+   * Hide the selected items from this view. This is a VIEW-LOCAL operation:
+   * nothing is written, moved, or removed on disk, and the items reappear on
+   * the next load. That is the intended behaviour — the button is labelled
+   * "Hide" — but it was previously wearing a trash-can icon and destructive
+   * red styling, which read as "delete these files".
+   *
+   * There is deliberately no delete here. Media items are session artifacts
+   * resolved server-side from workspace session directories; a real delete
+   * needs its own path-validated RPC (see the handoff plan) rather than a
+   * renderer-side call that could be handed an arbitrary path.
+   */
+  const batchHide = useCallback(async () => {
     const selected = items.filter((i) => selectedKeys.has(itemKey(i)))
     if (selected.length === 0) return
-    // Confirmation is built into the action — user explicitly clicked "Delete"
-    // For now, we hide these items from the list and remove from the dataset.
-    // A proper implementation would call window.electronAPI.deleteResource or similar
-    // once that RPC exists.
     const keysToRemove = new Set(selected.map(itemKey))
     setItems((prev) => prev.filter((i) => !keysToRemove.has(itemKey(i))))
     clearSelection()
@@ -601,14 +609,18 @@ export function MediaLabPanel() {
                     <Download size={14} />
                     Download ({selectedKeys.size})
                   </button>
+                  {/* Not destructive — hides from this view only, nothing is
+                      touched on disk. Uses EyeOff rather than a trash can, and
+                      no --danger styling, so the affordance matches what it
+                      actually does. */}
                   <button
                     type="button"
-                    className="media-action-btn media-action-btn--danger"
-                    onClick={() => void batchDelete()}
-                    title="Remove from this view"
+                    className="media-action-btn"
+                    onClick={() => void batchHide()}
+                    title="Hide from this view — files are not deleted"
                   >
-                    <Trash2 size={14} />
-                    Hide
+                    <EyeOff size={14} />
+                    Hide ({selectedKeys.size})
                   </button>
                   <button
                     type="button"
