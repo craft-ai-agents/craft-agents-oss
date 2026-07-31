@@ -263,6 +263,86 @@
   .runs-panel__actions button { min-width: 32px; padding-inline: 7px; }
 }
 
+/* ===== Save to Memory dialog ===== */
+
+.runs-memory-dialog__card {
+  width: min(560px, 100%);
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 30%);
+}
+
+.runs-memory-dialog__input {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.runs-memory-dialog__input:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--brand-purple) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.runs-memory-dialog__textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', 'Source Code Pro', monospace;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 160px;
+}
+
+.runs-memory-dialog__textarea:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--brand-purple) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.runs-memory-dialog__warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in oklch, var(--ds-warning) 40%, transparent);
+  background: color-mix(in srgb, var(--ds-warning) 8%, var(--color-surface));
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.runs-memory-dialog__warning svg {
+  color: var(--ds-warning);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.runs-memory-dialog__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 0;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
 .runs-badge {
   display: inline-flex;
   align-items: center;

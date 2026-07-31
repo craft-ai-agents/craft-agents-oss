@@ -4,6 +4,8 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Features
 
+- **Save to Memory from Activity cards** — each activity card in the Activities panel now has a "Memory" button that opens a review dialog pre-filled with a session summary (task, outcome, message count, duration). Users can edit the title and content, choose the memory class (episodic, semantic, procedural, or profile), and save to the persistent memory store. Duplicate detection warns when a similar memory already exists.
+
 - **Activity card actions** — every Activity session can now be saved as a portable export, handed off as context to a new or existing agent chat, shared through an installed app (with clipboard fallback), or deleted using the existing confirmation flow.
 
 - **Connected chat workspace** — the Code, Canvas, Preview, and Tasks tabs now open real session-aware surfaces: inspect workspace files, collect editable artifacts, render selected outputs, and monitor background jobs without leaving the active chat.
@@ -19,6 +21,8 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 - **Restored visual regression runner** — adds the missing Playwright dependency, Chromium setup and test scripts, stable visual baselines, and Playwright-only test discovery so browser specs no longer collide with Bun unit tests.
 
 ## Bug Fixes
+
+- **Installed Memory database support** — packages the native SQLite runtime required by the Memory repository in desktop installers, restoring Memory loading along with vault sync, graph, relationships, and related-search features.
 
 - **Reliable renderer console logging** — explicitly enables electron-log's renderer console spy and removes the duplicate WindowManager forwarding path, preserving renderer diagnostics without writing each console event twice.
 

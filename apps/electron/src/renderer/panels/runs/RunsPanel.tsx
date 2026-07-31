@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react'
 import { useAtomValue } from 'jotai'
-import { Activity, Clock, Square, CheckCircle2, XCircle, Loader2, Coins, Download, Send, Share2, Trash2, X } from 'lucide-react'
+import { Activity, Clock, Square, CheckCircle2, XCircle, Loader2, Coins, Download, Send, Share2, Trash2, X, Brain, AlertTriangle, Archive } from 'lucide-react'
 import { toast } from 'sonner'
 import { sessionMetaMapAtom, type SessionMeta } from '../../atoms/sessions'
 import { useAppShellContext } from '../../context/AppShellContext'
+import type { AnyMemory } from '@craft-agent/shared/memory/types'
 import './RunsPanel.css'
 
 type RunStatus = 'running' | 'completed' | 'failed' | 'idle'
@@ -57,10 +58,20 @@ async function buildHandoff(sessionId: string, title: string): Promise<string> {
 
 export function RunsPanel({ onOpenSession }: RunsPanelProps = {}) {
   const metaMap = useAtomValue(sessionMetaMapAtom)
-  const { onDeleteSession, onSendMessage, onCreateSession, activeWorkspaceId } = useAppShellContext()
+  const { onDeleteSession, onArchiveSession, onSendMessage, onCreateSession, activeWorkspaceId } = useAppShellContext()
   const [agentSource, setAgentSource] = useState<SessionMeta | null>(null)
   const [agentTarget, setAgentTarget] = useState('new')
   const [pendingAction, setPendingAction] = useState<string | null>(null)
+
+  // Save-to-Memory dialog state
+  const [memorySource, setMemorySource] = useState<SessionMeta | null>(null)
+  const [memoryDraft, setMemoryDraft] = useState<{
+    title: string
+    content: string
+    memoryClass: 'episodic' | 'semantic' | 'procedural' | 'profile'
+  } | null>(null)
+  const [duplicateWarning, setDuplicateWarning] = useState<{ id: string; title: string } | null>(null)
+  const [savingMemory, setSavingMemory] = useState(false)
 
   const runs = useMemo(() => {
     return Array.from(metaMap.values())
@@ -157,6 +168,155 @@ export function RunsPanel({ onOpenSession }: RunsPanelProps = {}) {
     }
   }
 
+  /**
+   * Open the Save-to-Memory dialog for a session. Fetches the transcript,
+   * auto-generates a memory draft, and checks for duplicates before showing
+   * the editable dialog.
+   */
+  const openSaveToMemory = async (meta: SessionMeta) => {
+    setPendingAction(`memory-load:${meta.id}`)
+    setMemorySource(meta)
+    setMemoryDraft(null)
+    setDuplicateWarning(null)
+    try {
+      const session = await window.electronAPI.getSessionMessages(meta.id)
+      const messages = session?.messages ?? []
+      const userMessages = messages.filter((m) => m.role === 'user')
+      const assistantMessages = messages.filter((m) => m.role === 'assistant')
+      const errorMessages = messages.filter((m) => m.role === 'error')
+
+      const firstUser = userMessages[0]
+      const lastAssistant = assistantMessages[assistantMessages.length - 1]
+
+      const taskText = firstUser ? messageText(firstUser.content).slice(0, 500).trim() : 'No user message recorded'
+      const outcomeText = lastAssistant
+        ? messageText(lastAssistant.content).slice(0, 1500).trim()
+        : errorMessages.length > 0
+          ? messageText(errorMessages[errorMessages.length - 1].content).slice(0, 500).trim()
+          : 'No outcome recorded'
+
+      const status = runStatus(meta)
+      const duration = formatDuration(meta.createdAt, meta.lastMessageAt)
+
+      const contentParts = [
+        `Task: ${taskText}`,
+        '',
+        `Outcome: ${outcomeText}`,
+        '',
+        `Messages: ${messages.length} (${userMessages.length} user, ${assistantMessages.length} assistant)`,
+        duration ? `Duration: ${duration}` : null,
+        status === 'failed' ? 'Status: Failed' : null,
+      ].filter(Boolean)
+
+      const title = (meta.name || meta.preview || meta.id).slice(0, 80)
+
+      setMemoryDraft({
+        title,
+        content: contentParts.join('\n'),
+        memoryClass: 'episodic',
+      })
+
+      // Check for duplicates — search existing memories by title
+      try {
+        const hits = await window.electronAPI.searchMemories({ query: title, limit: 5 })
+        const closeMatch = hits.find((h) => h.score > 0.7)
+        if (closeMatch) {
+          setDuplicateWarning({ id: closeMatch.memory.id, title: closeMatch.memory.title })
+        }
+      } catch {
+        // Duplicate check is best-effort — don't block the dialog on failure
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not load session for memory')
+      setMemorySource(null)
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  /**
+   * Save the memory draft to the memory store. Constructs a full AnyMemory
+   * object from the dialog inputs and calls createMemory IPC.
+   */
+  const confirmSaveToMemory = async () => {
+    if (!memoryDraft || !memorySource) return
+    setSavingMemory(true)
+    try {
+      const now = new Date().toISOString()
+      const status = runStatus(memorySource)
+      const outcomeMap: Record<RunStatus, 'completed' | 'interrupted' | 'failed' | 'abandoned'> = {
+        running: 'interrupted',
+        completed: 'completed',
+        failed: 'failed',
+        idle: 'abandoned',
+      }
+
+      const memory: AnyMemory = {
+        id: crypto.randomUUID(),
+        class: memoryDraft.memoryClass,
+        title: memoryDraft.title.trim() || 'Untitled activity',
+        content: memoryDraft.content.trim(),
+        scope: 'workspace',
+        confidence: 0.8,
+        sensitivity: 'internal',
+        source: { sessionId: memorySource.id },
+        createdAt: now,
+        updatedAt: now,
+        tags: ['session', 'activity'],
+        archived: false,
+        supersedesIds: [],
+        // Episodic-specific fields
+        ...(memoryDraft.memoryClass === 'episodic'
+          ? {
+              sessionId: memorySource.id,
+              outcome: outcomeMap[status],
+              decisions: [],
+              artifacts: [],
+              tokenCost: memorySource.tokenUsage?.totalTokens,
+              durationSeconds:
+                memorySource.createdAt && memorySource.lastMessageAt
+                  ? Math.round((memorySource.lastMessageAt - memorySource.createdAt) / 1000)
+                  : undefined,
+            }
+          : {}),
+        // Semantic-specific fields
+        ...(memoryDraft.memoryClass === 'semantic'
+          ? {
+              category: 'decision' as const,
+              explicit: true,
+            }
+          : {}),
+        // Procedural-specific fields
+        ...(memoryDraft.memoryClass === 'procedural'
+          ? {
+              triggers: [],
+              steps: [],
+              successCount: 0,
+              pitfalls: [],
+              dependencies: [],
+            }
+          : {}),
+        // Profile-specific fields
+        ...(memoryDraft.memoryClass === 'profile'
+          ? {
+              key: memoryDraft.title.trim().toLowerCase().replace(/\s+/g, '-'),
+              previousValues: [],
+            }
+          : {}),
+      } as AnyMemory
+
+      await window.electronAPI.createMemory(memory)
+      toast.success('Saved to Memory', { description: memoryDraft.title })
+      setMemorySource(null)
+      setMemoryDraft(null)
+      setDuplicateWarning(null)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not save memory')
+    } finally {
+      setSavingMemory(false)
+    }
+  }
+
   return (
     <div className="runs-panel">
       <div className="runs-panel__header">
@@ -233,6 +393,10 @@ export function RunsPanel({ onOpenSession }: RunsPanelProps = {}) {
                 <button type="button" title="Save activity" aria-label="Save activity" disabled={!!pendingAction} onClick={() => void saveActivity(meta)}><Download size={15} /><span>Save</span></button>
                 <button type="button" title="Add to agent" aria-label="Add to agent" disabled={!!pendingAction} onClick={() => { setAgentTarget('new'); setAgentSource(meta) }}><Send size={15} /><span>Add to Agent</span></button>
                 <button type="button" title="Share to another app" aria-label="Share to another app" disabled={!!pendingAction} onClick={() => void shareActivity(meta)}><Share2 size={15} /><span>Share</span></button>
+                <button type="button" title="Save to Memory" aria-label="Save to Memory" disabled={!!pendingAction} onClick={() => void openSaveToMemory(meta)}><Brain size={15} /><span>Memory</span></button>
+                {onArchiveSession && (
+                  <button type="button" title="Archive activity" aria-label="Archive activity" disabled={!!pendingAction} onClick={() => onArchiveSession(meta.id)}><Archive size={15} /><span>Archive</span></button>
+                )}
                 <button type="button" className="runs-panel__delete" title="Delete activity" aria-label="Delete activity" disabled={!!pendingAction} onClick={() => void onDeleteSession(meta.id)}><Trash2 size={15} /><span>Delete</span></button>
               </div>
             </div>
@@ -260,6 +424,96 @@ export function RunsPanel({ onOpenSession }: RunsPanelProps = {}) {
                 {pendingAction === `agent:${agentSource.id}` ? <Loader2 size={15} className="runs-badge__spin" /> : <Send size={15} />} Add to Agent
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save to Memory dialog */}
+      {memorySource && (
+        <div
+          className="runs-agent-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="runs-memory-title"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) { setMemorySource(null); setMemoryDraft(null); setDuplicateWarning(null) } }}
+        >
+          <div className="runs-memory-dialog__card">
+            <div className="runs-agent-dialog__header">
+              <div>
+                <h3 id="runs-memory-title">Save to Memory</h3>
+                <p>Extract key takeaways from this activity into a persistent memory.</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => { setMemorySource(null); setMemoryDraft(null); setDuplicateWarning(null) }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {memoryDraft ? (
+              <>
+                <label htmlFor="runs-memory-title-input">Title</label>
+                <input
+                  id="runs-memory-title-input"
+                  type="text"
+                  className="runs-memory-dialog__input"
+                  value={memoryDraft.title}
+                  onChange={(e) => setMemoryDraft({ ...memoryDraft, title: e.target.value })}
+                  maxLength={120}
+                />
+
+                <label htmlFor="runs-memory-class">Memory class</label>
+                <select
+                  id="runs-memory-class"
+                  value={memoryDraft.memoryClass}
+                  onChange={(e) => setMemoryDraft({ ...memoryDraft, memoryClass: e.target.value as typeof memoryDraft.memoryClass })}
+                >
+                  <option value="episodic">Episodic — session summary</option>
+                  <option value="semantic">Semantic — durable fact / decision</option>
+                  <option value="procedural">Procedural — reusable workflow</option>
+                  <option value="profile">Profile — user preference</option>
+                </select>
+
+                <label htmlFor="runs-memory-content">Content</label>
+                <textarea
+                  id="runs-memory-content"
+                  className="runs-memory-dialog__textarea"
+                  value={memoryDraft.content}
+                  onChange={(e) => setMemoryDraft({ ...memoryDraft, content: e.target.value })}
+                  rows={10}
+                />
+
+                {duplicateWarning && (
+                  <div className="runs-memory-dialog__warning">
+                    <AlertTriangle size={14} />
+                    <span>
+                      Similar memory exists: <strong>{duplicateWarning.title}</strong>. This will create a new memory alongside it.
+                    </span>
+                  </div>
+                )}
+
+                <div className="runs-agent-dialog__footer">
+                  <button type="button" onClick={() => { setMemorySource(null); setMemoryDraft(null); setDuplicateWarning(null) }}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="runs-agent-dialog__primary"
+                    disabled={savingMemory || !memoryDraft.title.trim() || !memoryDraft.content.trim()}
+                    onClick={() => void confirmSaveToMemory()}
+                  >
+                    {savingMemory ? <Loader2 size={15} className="runs-badge__spin" /> : <Brain size={15} />} Save to Memory
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="runs-memory-dialog__loading">
+                <Loader2 size={20} className="runs-badge__spin" />
+                <span>Loading session transcript…</span>
+              </div>
+            )}
           </div>
         </div>
       )}
