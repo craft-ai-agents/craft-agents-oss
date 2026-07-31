@@ -9,26 +9,16 @@
  */
 
 import { join } from 'path';
-// Namespace imports (not `{ homedir }` / `{ existsSync, ... }`): a named
+// Namespace imports (not `{ existsSync, ... }`): a named
 // import destructures the property at module top-level, before any
 // try/catch can run. This module is transitively reachable from the
 // Electron renderer bundle, where Vite externalizes `os`/`fs` behind a proxy
 // that throws on property access. The renderer never calls the doc-writing
 // functions below, but merely importing this file must not crash the app.
-import * as os from 'os';
 import * as fs from 'fs';
 import { getBundledAssetsDir } from '../utils/paths.ts';
 import { debug } from '../utils/debug.ts';
-
-function resolveConfigDir(): string {
-  try {
-    return join(os.homedir(), '.craft-agent');
-  } catch {
-    return '';
-  }
-}
-
-const CONFIG_DIR = resolveConfigDir();
+import { CONFIG_DIR } from '../config/paths.ts';
 const DOCS_DIR = join(CONFIG_DIR, 'docs');
 
 // Track if docs have been initialized this session (prevents re-init on hot reload)

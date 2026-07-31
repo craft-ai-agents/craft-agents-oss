@@ -15,9 +15,9 @@
 // the app.
 import * as fs from 'fs';
 import { join } from 'path';
-import * as os from 'os';
 import * as nodeCrypto from 'crypto';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
+import { CONFIG_DIR } from '../config/paths.ts';
 import { atomicWriteFileSync, readJsonFileSync } from '../utils/files.ts';
 import { getDefaultStatusConfig, saveStatusConfig, ensureDefaultIconFiles } from '../statuses/storage.ts';
 import { getDefaultLabelConfig, saveLabelConfig } from '../labels/storage.ts';
@@ -31,15 +31,6 @@ import type {
   WorkspaceSummary,
 } from './types.ts';
 
-function resolveConfigDir(): string {
-  try {
-    return join(os.homedir(), '.craft-agent');
-  } catch {
-    return '';
-  }
-}
-
-const CONFIG_DIR = resolveConfigDir();
 const DEFAULT_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces');
 
 // ============================================================

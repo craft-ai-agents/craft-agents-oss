@@ -177,6 +177,29 @@
   font-size: 14px;
   font-weight: 500;
   margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-panel__item-snippet {
+  font-size: 12px;
+  color: var(--color-muted);
+  line-height: 1.4;
+  margin-bottom: 6px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.memory-panel__item-snippet mark {
+  background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+  color: var(--color-text);
+  border-radius: 2px;
+  padding: 0 1px;
 }
 
 .memory-panel__item-meta,
@@ -186,6 +209,13 @@
   gap: 6px;
   font-size: 12px;
   color: var(--color-muted);
+  overflow: hidden;
+}
+
+.memory-panel__item-meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .memory-panel__item-date {
@@ -201,6 +231,7 @@
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
   font-size: 13px;
+  overflow-x: hidden;
 }
 
 .memory-panel__stats-header {
@@ -330,7 +361,10 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .memory-panel__stats-field-label {
@@ -340,6 +374,11 @@
 .memory-panel__stats-field-value {
   font-weight: 500;
   color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  text-align: right;
 }
 
 .memory-panel__stats-health-badge {
@@ -421,6 +460,8 @@
 .memory-panel__detail-header h3 {
   margin: 0;
   font-size: 18px;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .memory-panel__detail-meta {
@@ -457,6 +498,8 @@
 .memory-panel__detail-content {
   white-space: pre-wrap;
   line-height: 1.6;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .memory-panel__detail-tags {
@@ -490,6 +533,62 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  overflow: hidden;
+}
+
+.memory-panel__detail-source span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Toast notification (was completely unstyled) ─────────────────── */
+
+.memory-panel__toast {
+  margin: 0 16px 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.memory-panel__toast-title {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+.memory-panel__toast-detail {
+  color: var(--color-muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.memory-panel__toast-errors {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--color-muted);
+  max-height: 60px;
+  overflow-y: auto;
+}
+
+.memory-panel__toast-errors code {
+  font-family: monospace;
+  font-size: 10px;
+  background: var(--color-surface-muted);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.memory-panel__toast-errors li {
+  overflow-wrap: anywhere;
+  margin-bottom: 2px;
 }
 
 /* ── Phase 3: Vault settings ─────────────────────────────────────── */

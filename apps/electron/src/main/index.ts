@@ -110,6 +110,7 @@ import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
 import { loadWindowState, saveWindowState } from './window-state'
 import { getWorkspaces, getWorkspaceByNameOrId, loadStoredConfig, addWorkspace, saveConfig } from '@craft-agent/shared/config'
+import { CONFIG_DIR } from '@craft-agent/shared/config/paths.ts'
 import { getDefaultWorkspacesDir } from '@craft-agent/shared/workspaces'
 import { initializeDocs } from '@craft-agent/shared/docs'
 import { initializeReleaseNotes } from '@craft-agent/shared/release-notes'
@@ -235,6 +236,16 @@ let moduleClientResolver: ((webContentsId: number) => string | undefined) | null
 // through createMessagingBootstrap — do not construct MessagingGatewayRegistry
 // directly.
 let messagingHandle: MessagingBootstrapHandle | null = null
+
+// Redirect Electron's userData directory into CONFIG_DIR so that the memory
+// database, health database, and vault all live under the same root as the
+// rest of the app data. This ensures CRAFT_CONFIG_DIR controls everything.
+// Must run before app.whenReady() and before any app.getPath('userData') call.
+const electronDataDir = join(CONFIG_DIR, 'electron-data')
+if (!existsSync(electronDataDir)) {
+  mkdirSync(electronDataDir, { recursive: true })
+}
+app.setPath('userData', electronDataDir)
 
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
@@ -681,7 +692,7 @@ app.whenReady().then(async () => {
             sessionManager: sm,
             credentialManager: getCredentialManager(),
             getMessagingDir: (wsId: string) =>
-              join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
+              join(CONFIG_DIR, 'workspaces', wsId, 'messaging'),
             getLegacyMessagingDir: (wsId: string) => {
               const ws = getWorkspaces().find((w) => w.id === wsId)
               return ws ? join(ws.rootPath, 'messaging') : undefined

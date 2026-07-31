@@ -2,12 +2,13 @@ import { BrowserWindow, shell, nativeTheme, Menu, app } from 'electron'
 import { windowLog } from './logger'
 import { join, resolve, sep } from 'path'
 import { existsSync, readFileSync } from 'fs'
-import { homedir, release } from 'os'
+import { release } from 'os'
 import { fileURLToPath } from 'url'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { classifyExternalUrl, formatBlockedUrlError } from '@craft-agent/shared/utils/url-safety'
 import { RPC_CHANNELS, type WindowCloseRequestSource } from '../shared/types'
 import type { SavedWindow } from './window-state'
+import { CONFIG_DIR } from '@craft-agent/shared/config/paths.ts'
 
 // Vite dev server URL for hot reload
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
@@ -469,7 +470,7 @@ export class WindowManager {
       // Check the confirm-before-exit preference. If false, close directly
       // without querying the renderer for confirmation.
       try {
-        const prefsPath = join(homedir(), '.craft-agent', 'config', 'preferences.json')
+        const prefsPath = join(CONFIG_DIR, 'config', 'preferences.json')
         if (existsSync(prefsPath)) {
           const raw = readFileSync(prefsPath, 'utf-8')
           const prefs = JSON.parse(raw)
