@@ -164,6 +164,7 @@
   "chat.imageWarning.title": "{{modelName}} is configured as text-only. Images will be stripped before sending.",
   "chat.inputFailedDescription": "The rest of this chat is still available. You can retry, or clear the local draft if it became corrupted.",
   "chat.inputFailedTitle": "The input failed to load",
+  "chat.jumpToLatest": "Jump to latest",
   "chat.learnMore": "Learn More",
   "chat.mentionFilesSkillsSources": "Mention files, skills, sources",
   "chat.modelPicker.contextSection": "Context",

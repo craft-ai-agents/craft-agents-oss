@@ -164,6 +164,7 @@
   "chat.imageWarning.title": "{{modelName}} está configurado como solo texto. Las imágenes se eliminarán antes de enviar.",
   "chat.inputFailedDescription": "El resto de este chat sigue disponible. Puedes reintentarlo o borrar el borrador local si se dañó.",
   "chat.inputFailedTitle": "No se pudo cargar la entrada",
+  "chat.jumpToLatest": "Ir a los mensajes más recientes",
   "chat.learnMore": "Más información",
   "chat.mentionFilesSkillsSources": "Menciona archivos, habilidades, fuentes",
   "chat.modelPicker.contextSection": "Contexto",

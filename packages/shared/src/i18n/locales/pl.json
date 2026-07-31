@@ -164,6 +164,7 @@
   "chat.imageWarning.title": "{{modelName}} jest skonfigurowany jako wyłącznie tekstowy. Obrazy zostaną usunięte przed wysłaniem.",
   "chat.inputFailedDescription": "Reszta tego czatu jest nadal dostępna. Możesz spróbować ponownie albo wyczyścić lokalny szkic, jeśli został uszkodzony.",
   "chat.inputFailedTitle": "Nie udało się załadować pola wejściowego",
+  "chat.jumpToLatest": "Przejdź do najnowszych wiadomości",
   "chat.learnMore": "Dowiedz się więcej",
   "chat.mentionFilesSkillsSources": "Wspomnij pliki, umiejętności, źródła",
   "chat.modelPicker.contextSection": "Kontekst",

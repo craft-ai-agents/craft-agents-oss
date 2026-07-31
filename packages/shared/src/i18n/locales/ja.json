@@ -164,6 +164,7 @@
   "chat.imageWarning.title": "{{modelName}} はテキスト専用として設定されています。画像は送信前に削除されます。",
   "chat.inputFailedDescription": "このチャットの他の部分は引き続き利用できます。再試行するか、ローカルの下書きが壊れている場合は削除してください。",
   "chat.inputFailedTitle": "入力欄を読み込めませんでした",
+  "chat.jumpToLatest": "最新のメッセージへ移動",
   "chat.learnMore": "詳細を見る",
   "chat.mentionFilesSkillsSources": "ファイル、スキル、ソースをメンション",
   "chat.modelPicker.contextSection": "コンテキスト",

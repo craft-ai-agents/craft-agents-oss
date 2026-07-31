@@ -164,6 +164,7 @@
   "chat.imageWarning.title": "{{modelName}} ist als reines Textmodell konfiguriert. Bilder werden vor dem Senden entfernt.",
   "chat.inputFailedDescription": "Der Rest dieses Chats ist weiterhin verfügbar. Du kannst es erneut versuchen oder den lokalen Entwurf löschen, falls er beschädigt wurde.",
   "chat.inputFailedTitle": "Der Eingabebereich konnte nicht geladen werden",
+  "chat.jumpToLatest": "Zu den neuesten Nachrichten",
   "chat.learnMore": "Mehr erfahren",
   "chat.mentionFilesSkillsSources": "Dateien, Skills oder Quellen erwähnen",
   "chat.modelPicker.contextSection": "Kontext",

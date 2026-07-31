@@ -349,26 +349,26 @@ craft-cli --validate-server --url ws://127.0.0.1:9100 --token <token>
 ## Architecture
 
 ```
-craft-agent/
+archstudio/
 ├── apps/
-│   ├── cli/                   # Terminal client (CLI)
-│   └── electron/              # Desktop GUI (primary)
-│       └── src/
-│           ├── main/          # Electron main process
-│           ├── preload/       # Context bridge
-│           └── renderer/      # React UI (Vite + shadcn)
+│   ├── electron/              # Primary desktop app (main, preload, React renderer)
+│   ├── webui/                 # Browser client for the headless server
+│   ├── viewer/                # Shared-session viewer
+│   └── cli/                   # Terminal client and server validation CLI
 └── packages/
-    ├── core/                  # Shared types
-    └── shared/                # Business logic
-        └── src/
-            ├── agent/         # CraftAgent, permissions
-            ├── auth/          # OAuth, tokens
-            ├── config/        # Storage, preferences, themes
-            ├── credentials/   # AES-256-GCM encrypted storage
-            ├── sessions/      # Session persistence
-            ├── sources/       # MCP, API, local sources
-            └── statuses/      # Dynamic status system
+    ├── core/                  # Stable shared types and lightweight utilities
+    ├── shared/                # Agent backends, config, sources, credentials, persistence
+    ├── server-core/           # RPC, sessions, tasks, runtime bootstrap, WebUI hosting
+    ├── server/                # Standalone headless server entry point
+    ├── ui/                    # Shared React chat and rich-content components
+    ├── session-tools-core/    # Agent-facing session and workspace tools
+    ├── session-mcp-server/    # MCP transport for session-scoped tools
+    ├── pi-agent-server/       # Isolated Pi agent runtime
+    ├── messaging-gateway/     # Telegram and WhatsApp session routing
+    └── messaging-whatsapp-worker/ # WhatsApp worker process
 ```
+
+The Electron app and headless server share `server-core` and `shared`, so session behavior, tools, sources, and persistence stay consistent across desktop, web, CLI, and messaging clients.
 
 ## Development
 

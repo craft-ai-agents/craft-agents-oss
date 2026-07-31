@@ -164,6 +164,7 @@
   "chat.imageWarning.title": "A(z) {{modelName}} csak szöveges modellként van beállítva. A képek küldés előtt eltávolításra kerülnek.",
   "chat.inputFailedDescription": "A beszélgetés többi része továbbra is elérhető. Megpróbálhatod újra, vagy törölheted a helyi piszkozatot, ha megsérült.",
   "chat.inputFailedTitle": "Nem sikerült betölteni a beviteli mezőt",
+  "chat.jumpToLatest": "Ugrás a legújabb üzenetekhez",
   "chat.learnMore": "Tudj meg többet",
   "chat.mentionFilesSkillsSources": "Fájlok, skillek, források megemlítése",
   "chat.modelPicker.contextSection": "Kontextus",

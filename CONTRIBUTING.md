@@ -59,13 +59,16 @@ Use descriptive branch names:
 - Use meaningful variable and function names
 - Add comments for complex logic
 
-### Type Checking
+### Validation
 
-Before submitting a PR, ensure all type checks pass:
+Run the fast validation gate while iterating, then the full CI-equivalent suite before submitting a PR:
 
 ```bash
-bun run typecheck:all
+bun run validate:dev:fast
+bun run validate:ci
 ```
+
+For a narrower compile-only check, use `bun run typecheck:all`.
 
 ## Pull Request Process
 
@@ -93,23 +96,29 @@ How you tested these changes
 ## Project Structure
 
 ```
-craft-agents/
+archstudio/
 ├── apps/
-│   ├── electron/    # Desktop GUI (primary interface)
-│   └── tui/         # Terminal CLI (deprecated)
+│   ├── electron/    # Primary desktop application
+│   ├── webui/       # Browser client for remote servers
+│   ├── viewer/      # Shared-session viewer
+│   └── cli/         # Terminal client and integration validator
 └── packages/
-    ├── core/        # @craft-agent/core - Shared types
-    ├── shared/      # @craft-agent/shared - Business logic
-    └── ui/          # @craft-agent/ui - React components
+    ├── core/        # Shared public types
+    ├── shared/      # Agent, source, config, and persistence logic
+    ├── server-core/ # Shared server, RPC, session, and task infrastructure
+    ├── server/      # Standalone headless server
+    ├── ui/          # Shared React components
+    └── ...          # Session tools, agent runtimes, and messaging packages
 ```
 
 ## Key Areas
 
-- **Agent Logic**: `packages/shared/src/agent/`
-- **Authentication**: `packages/shared/src/auth/`
-- **MCP Integration**: `packages/shared/src/mcp/`
-- **UI Components**: `packages/ui/src/`
-- **Electron App**: `apps/electron/`
+- **Agent backends and permissions**: `packages/shared/src/agent/`
+- **Sources and credentials**: `packages/shared/src/sources/`, `packages/shared/src/credentials/`
+- **Session and task orchestration**: `packages/server-core/src/sessions/`, `packages/server-core/src/tasks/`
+- **Shared UI components**: `packages/ui/src/`
+- **Electron main and renderer**: `apps/electron/src/main/`, `apps/electron/src/renderer/`
+- **Headless server and WebUI**: `packages/server/`, `apps/webui/`
 
 ## Questions?
 

@@ -164,6 +164,7 @@
   "chat.imageWarning.title": "{{modelName}} 配置为纯文本模型，图像将在发送前被移除。",
   "chat.inputFailedDescription": "此聊天的其余部分仍可使用。你可以重试，或者在本地草稿损坏时将其清除。",
   "chat.inputFailedTitle": "输入区域加载失败",
+  "chat.jumpToLatest": "跳转到最新消息",
   "chat.learnMore": "了解更多",
   "chat.mentionFilesSkillsSources": "提及文件、技能、数据源",
   "chat.modelPicker.contextSection": "上下文",
