@@ -1085,6 +1085,16 @@
 
 .providers-panel__card {
   position: relative;
+  /* The list is a flex column, so cards default to `flex-shrink: 1` and get
+     COMPRESSED to fit rather than growing past the viewport. Combined with the
+     `overflow: hidden` below (needed to clip the coloured category edge-bar to
+     the rounded corner) that silently truncated every card's content — and
+     because the list itself then never overflowed, it never grew a scrollbar
+     either. That is the root cause of "can't scroll down each provider's list":
+     there was nothing to scroll, the content had been squashed away.
+     `flex-shrink: 0` lets cards take their natural height so the list overflows
+     and its `overflow-y: auto` finally engages. */
+  flex-shrink: 0;
   border: 1px solid var(--ds-panel-border);
   border-radius: var(--ds-radius-lg);
   background: var(--ds-panel);
@@ -1153,11 +1163,45 @@
 
 /* ---- Card header ------------------------------------------------------ */
 
+/* Doubles as the disclosure control for the detail view — see the role="button"
+   wrapper in ProvidersPanel.tsx. Padding tightens when collapsed so the list
+   reads as a list of rows rather than a stack of tall cards. */
 .providers-panel__card-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  padding: 12px 20px;
+  cursor: pointer;
+  border-radius: inherit;
+  transition: background-color var(--ds-duration-fast) var(--ds-ease-standard);
+}
+
+.providers-panel__card-header:hover {
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+.providers-panel__card-header:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--brand-purple) 70%, transparent);
+  outline-offset: -2px;
+}
+
+/* Restore the roomier header spacing once the row is open, so the detail view
+   below it doesn't feel cramped against the title. */
+.providers-panel__card--open .providers-panel__card-header {
   padding: 18px 20px 12px;
+  background: color-mix(in srgb, var(--foreground) 3%, transparent);
+}
+
+/* The detail region is the scroll boundary. The card itself is
+   `overflow: hidden` (it clips the coloured category edge-bar to the rounded
+   corner), which previously meant a long model list or uptime chart was cut
+   off with no way to reach the rest — the reported "can't scroll down each
+   provider's list". Capping the detail and letting it scroll internally keeps
+   the outer list short and every row reachable. */
+.providers-panel__card-detail {
+  max-height: min(52vh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .providers-panel__card-info {

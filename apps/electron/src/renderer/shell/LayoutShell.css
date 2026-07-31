@@ -41,7 +41,19 @@
   --color-accent: var(--brand-purple);
   position: relative;
   display: flex;
-  height: 100vh;
+  /* `height: 100vh` was wrong here: LayoutShell is NOT the document root — it
+     is mounted inside AppShell, below a ~48px TopBar. Pinning it to the full
+     viewport made it 48px taller than its container on every view, and since
+     the ancestor is `overflow: hidden` that surplus was silently clipped off
+     the bottom — which is why panel content (e.g. the Providers list) ran out
+     of room and could not be scrolled to.
+     `height: 100%` + `min-height: 0` makes it fill whatever the parent
+     actually grants and lets inner `overflow-y: auto` regions size correctly.
+     min-height:0 is required because this is itself a flex child; without it
+     the default `min-height: auto` refuses to shrink below content height and
+     the inner scrollers never engage. */
+  height: 100%;
+  min-height: 0;
   width: 100vw;
   overflow: hidden;
   background:

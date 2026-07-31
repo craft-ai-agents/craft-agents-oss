@@ -1214,6 +1214,22 @@ export function ProvidersPanel({
   // declaring these after them puts them in their TDZ and throws
   // "Cannot access 'expandedNotifications' before initialization".
 
+  /**
+   * Slug of the provider whose details are open, or null for none.
+   *
+   * The panel used to render every provider fully expanded, which had two
+   * problems: with more than a couple of connections the list was unreadable,
+   * and each card clipped its own body (`.providers-panel__card` is
+   * `overflow: hidden`) so the tail of a long model list or uptime chart was
+   * simply unreachable — there was nothing to scroll. Now the list is a set of
+   * compact rows and exactly one detail view opens at a time.
+   */
+  const [openSlug, setOpenSlug] = useState<string | null>(null)
+
+  const toggleOpenProvider = useCallback((slug: string) => {
+    setOpenSlug(prev => (prev === slug ? null : slug))
+  }, [])
+
   // Track which cards have expanded notification history (persisted)
   const [expandedNotifications, setExpandedNotifications] = useState<Record<string, boolean>>(
     () => {
@@ -2249,13 +2265,42 @@ export function ProvidersPanel({
               </button>
             </div>
           ) : (
-            sortedProviders.map((provider) => (
+            sortedProviders.map((provider) => {
+              const isOpen = openSlug === provider.slug
+              return (
               <div
                 key={provider.slug}
-                className={`providers-panel__card providers-panel__card--${providerCategory(provider)} ${provider.isDefault ? 'providers-panel__card--default' : ''}`}
+                className={`providers-panel__card providers-panel__card--${providerCategory(provider)} ${provider.isDefault ? 'providers-panel__card--default' : ''} ${isOpen ? 'providers-panel__card--open' : ''}`}
               >
-                {/* Card header */}
-                <div className="providers-panel__card-header">
+                {/*
+                  Header doubles as the disclosure control for the detail view.
+                  It is a plain div rather than a <button> because it already
+                  contains buttons (default/edit/delete) and nesting interactive
+                  elements is invalid HTML — the keyboard affordance is provided
+                  explicitly via role/tabIndex/aria-expanded instead.
+                */}
+                <div
+                  className="providers-panel__card-header"
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isOpen}
+                  aria-controls={`provider-detail-${provider.slug}`}
+                  title={isOpen ? 'Hide details' : 'Show details'}
+                  onClick={(e) => {
+                    // Ignore clicks that originated on one of the nested action
+                    // buttons (set-default / edit / delete) — those have their
+                    // own handlers and must not also toggle the panel.
+                    if ((e.target as HTMLElement).closest('button')) return
+                    toggleOpenProvider(provider.slug)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      if ((e.target as HTMLElement).closest('button')) return
+                      e.preventDefault()
+                      toggleOpenProvider(provider.slug)
+                    }
+                  }}
+                >
                   <div className="providers-panel__card-info">
                     <div className="providers-panel__card-name">
                       <span
@@ -2381,6 +2426,9 @@ export function ProvidersPanel({
                   </div>
                 </div>
 
+                {/* Detail view — only for the currently-open provider. */}
+                {isOpen && (
+                <div id={`provider-detail-${provider.slug}`} className="providers-panel__card-detail">
                 {/* Card body */}
                 <div className="providers-panel__card-body">
                   {/* Status badge */}
@@ -2615,8 +2663,11 @@ export function ProvidersPanel({
                     </div>
                   )
                 })()}
+                </div>
+                )}
               </div>
-            ))
+              )
+            })
           )}
         </div>
       )}
