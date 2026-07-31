@@ -75,6 +75,7 @@ credentials.enc
 
 # Local agent/tooling scratch state (databases, logs, downloaded binaries).
 # Nothing here is reproducible or reviewable — it must not be committed.
+.abacusai/
 .freebuff/
 .tmp-tools/
 

@@ -28,10 +28,10 @@ three affordances that carry the most visual weight.
   LayoutShell.css` containing exactly the selectors that drive the
   three affordances. No React, no Jotai, no theme provider — the goal
   is pixel-fidelity to the affordances, not full-app fidelity.
-- `tests/affordances.spec.ts` — three Playwright specs, each loads
-  one HTML page via `file://` and screenshots the captured element.
-- `__screenshots__/` — committed baselines; pixel-diff (0 threshold)
-  drives commit-time detection of unintended CSS refactors.
+- `tests/affordances.pw.ts` — Playwright-only visual specs. The `.pw.ts`
+  suffix keeps Bun's unit-test discovery from loading browser-runner tests.
+- `tests/__screenshots__/` — committed, platform-neutral baselines;
+  pixel-diff drives detection of unintended CSS refactors.
 
 ## Setup (one-time)
 
@@ -47,7 +47,7 @@ git commit
 ## Day-to-day
 
 ```bash
-# Run all three specs.
+# Run all visual specs.
 bun run playwright:test
 
 # Re-record after an intentional CSS change.
@@ -75,15 +75,9 @@ these selectors should be paired with a diff to `styles.css` + a
   plus their `@keyframes`/`@media` companions, and emits a fresh
   `affordances/styles.css`. Run from a pre-commit hook so the
   curated file can never drift.
-- **Wire into `validate:dev` / `validate:ci`** — ✓ DONE.  Root-level
-  passthroughs `playwright:test`, `playwright:test:update`, and
-  `playwright:install` (`cd apps/electron && bun run ...`) are in
-  `package.json`.  `validate:dev` runs Playwright as its tail step;
-  `validate:ci` runs Playwright both via the `validate:dev >>=`
-  inheritance AND explicitly at its own tail — the duplication is
-  intentional so the CI chain stays self-evident if `validate:dev`'s
-  composition ever changes, and the extra Chromium-launch cost is
-  bounded (~5–15 s on `bun run validate:ci`).
+- **Wire into `validate:dev` / `validate:ci`** — root-level passthroughs
+  now exist, but CI still needs an explicit Chromium-install/cache step and
+  cross-platform baseline policy before the visual suite can be made mandatory.
 - **Reduced-motion spec** — a fourth spec that emulates
   `reducedMotion: 'reduce'` and snapshots the static
   fallback for `.wd-files-gated-banner__icon` and

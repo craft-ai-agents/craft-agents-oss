@@ -132,8 +132,11 @@ import type { EventSink } from '@craft-agent/server-core/transport'
 import { validateGitBashPath, checkVCRedistInstalled } from '@craft-agent/server-core/services'
 import { APP_NAME } from '@craft-agent/shared/branding'
 
-// Initialize electron-log for renderer process support
-log.initialize()
+// Initialize electron-log for renderer process support. Console spying is
+// opt-in in electron-log 5.x; keep it explicit so ordinary renderer
+// console.* calls continue to reach the main log without a second ad-hoc
+// webContents listener in WindowManager.
+log.initialize({ spyRendererConsole: true })
 
 // Diagnostic: report main-process i18n hydration result. We log here (not inline
 // at the hydration site above) because mainLog is only available after this point.

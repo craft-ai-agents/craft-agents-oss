@@ -387,9 +387,11 @@ export class WindowManager {
       }
     })
 
-    window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-      windowLog.info(`[renderer-console] level=${level} ${sourceId}:${line} ${message}`)
-    })
+    // Renderer console forwarding is owned by electron-log's explicitly
+    // enabled spyRendererConsole pipeline in main/index.ts. Do not add a second
+    // console-message listener here or every renderer console call is logged
+    // twice. BrowserPaneManager has a separate listener for browser-pane
+    // capture and theme-color signaling; it is intentionally unaffected.
     window.webContents.on('render-process-gone', (_event, details) => {
       windowLog.error('[renderer-console] render-process-gone', details)
     })

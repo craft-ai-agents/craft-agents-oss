@@ -28,6 +28,9 @@
     "start": "bun run build && electron .",
     "start:win": "bun run build:win && electron .",
     "dev": "vite dev",
+    "playwright:install": "playwright install chromium",
+    "playwright:test": "playwright test --config playwright.config.ts",
+    "playwright:test:update": "playwright test --config playwright.config.ts --update-snapshots",
     "typecheck": "tsc --noEmit",
     "generate-icons": "node resources/generate-icon-set.mjs",
     "generate-icons:win": "node resources/generate-icon-set.mjs",
@@ -83,6 +86,7 @@
     "ws": "^8.19.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/react-window": "^1.8.0",
     "@types/ws": "^8.18.1",
     "happy-dom": "^20.11.1"
