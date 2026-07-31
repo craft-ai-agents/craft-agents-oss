@@ -79,6 +79,24 @@ export function MemoryPanel({
   const [statsLoading, setStatsLoading] = useState(false)
   const [statsError, setStatsError] = useState<string | null>(null)
 
+  // Phase 3: Vault configuration state
+  const [vaultInfo, setVaultInfo] = useState<{ path: string; isCustom: boolean; exists: boolean } | null>(null)
+  const [showVaultSettings, setShowVaultSettings] = useState(false)
+  const [vaultPathInput, setVaultPathInput] = useState('')
+  const [vaultSetting, setVaultSetting] = useState(false)
+  // Phase 4: Sync state
+  const [syncing, setSyncing] = useState(false)
+  const [watcherActive, setWatcherActive] = useState(false)
+
+  // Phase 6: Edge management state
+  const [selectedEdges, setSelectedEdges] = useState<MemoryEdge[]>([])
+  const [edgesLoading, setEdgesLoading] = useState(false)
+  const [showEdgePicker, setShowEdgePicker] = useState(false)
+  const [edgeTargetId, setEdgeTargetId] = useState('')
+  const [edgeType, setEdgeType] = useState('related-to')
+  // Refresh trigger to force graph reload after edge changes
+  const [edgeRefreshKey, setEdgeRefreshKey] = useState(0)
+
   // Auto-dismiss the import toast after 6 s. The ref keeps the timeout
   // handle around so the previous timer cancels cleanly when a new
   // import fires before the prior one expires.
@@ -96,7 +114,8 @@ export function MemoryPanel({
   }, [externalMemories])
 
   // Graph: lazy-load the full memory list when the user clicks the Graph
-  // button. Cached after first fetch.
+  // button. Cached after first fetch, but re-fetches when edgeRefreshKey
+  // changes (Phase 6: edge CRUD should refresh the graph).
   useEffect(() => {
     if (externalMemories) return
     if (viewMode !== 'graph') return
@@ -120,7 +139,7 @@ export function MemoryPanel({
     return () => {
       cancelled = true
     }
-  }, [viewMode, graphEdges.length, graphMemories.length, externalMemories])
+  }, [viewMode, graphEdges.length, graphMemories.length, externalMemories, edgeRefreshKey])
 
   // Boot: initial full list. Skip the first debounced effect run so we don't
   // double-fetch.
@@ -209,6 +228,7 @@ export function MemoryPanel({
         setStatsLoading(false)
       }
     }
+    handleCheckWatcherStatus()
   }, [showStats, stats])
 
   const handleRefreshStats = useCallback(async () => {
@@ -223,6 +243,129 @@ export function MemoryPanel({
       setStatsLoading(false)
     }
   }, [])
+
+  // Phase 3: Vault configuration handlers
+  const handleLoadVaultInfo = useCallback(async () => {
+    try {
+      const info = await window.electronAPI.getVaultInfo()
+      setVaultInfo(info)
+      setVaultPathInput(info.path)
+    } catch (error) {
+      console.error('Failed to load vault info:', error)
+    }
+  }, [])
+
+  const handleSetVaultPath = useCallback(async () => {
+    if (!vaultPathInput.trim()) return
+    setVaultSetting(true)
+    try {
+      const result = await window.electronAPI.setVaultPath(vaultPathInput.trim())
+      setVaultInfo({ path: result.path, isCustom: true, exists: true })
+      setShowVaultSettings(false)
+      // Refresh stats to show new vault
+      handleRefreshStats()
+    } catch (error) {
+      console.error('Failed to set vault path:', error)
+    } finally {
+      setVaultSetting(false)
+    }
+  }, [vaultPathInput, handleRefreshStats])
+
+  const handleOpenVault = useCallback(async () => {
+    try {
+      await window.electronAPI.openVaultFolder()
+    } catch (error) {
+      console.error('Failed to open vault folder:', error)
+    }
+  }, [])
+
+  // Phase 4: Full sync handler
+  const handleSyncVault = useCallback(async () => {
+    setSyncing(true)
+    try {
+      await window.electronAPI.syncVault()
+      // Refresh stats after sync
+      handleRefreshStats()
+    } catch (error) {
+      console.error('Failed to sync vault:', error)
+    } finally {
+      setSyncing(false)
+    }
+  }, [handleRefreshStats])
+
+  // Phase 4: Check watcher status when stats panel opens
+  const handleCheckWatcherStatus = useCallback(async () => {
+    try {
+      const status = await window.electronAPI.getVaultWatcherStatus()
+      setWatcherActive(status.active)
+    } catch {
+      setWatcherActive(false)
+    }
+  }, [])
+
+  // Phase 6: Edge management handlers
+  const handleLoadEdges = useCallback(async (memoryId: string) => {
+    setEdgesLoading(true)
+    try {
+      const edges = await window.electronAPI.getMemoryEdges(memoryId)
+      setSelectedEdges(edges)
+    } catch (error) {
+      console.error('Failed to load edges:', error)
+      setSelectedEdges([])
+    } finally {
+      setEdgesLoading(false)
+    }
+  }, [])
+
+  const handleCreateEdge = useCallback(async (sourceId: string, targetId: string) => {
+    try {
+      await window.electronAPI.createMemoryEdge(sourceId, targetId, 'related-to', 1)
+      // Refresh edges for the selected memory
+      if (selectedIdFinal) await handleLoadEdges(selectedIdFinal)
+      // Trigger graph refresh
+      setGraphMemories([])
+      setGraphEdges([])
+      setEdgeRefreshKey(k => k + 1)
+    } catch (error) {
+      console.error('Failed to create edge:', error)
+    }
+  }, [selectedIdFinal, handleLoadEdges])
+
+  const handleDeleteEdge = useCallback(async (edgeId: string) => {
+    try {
+      await window.electronAPI.deleteMemoryEdge(edgeId)
+      if (selectedIdFinal) await handleLoadEdges(selectedIdFinal)
+      setGraphMemories([])
+      setGraphEdges([])
+      setEdgeRefreshKey(k => k + 1)
+    } catch (error) {
+      console.error('Failed to delete edge:', error)
+    }
+  }, [selectedIdFinal, handleLoadEdges])
+
+  const handleAddEdge = useCallback(async () => {
+    if (!selectedIdFinal || !edgeTargetId || edgeTargetId === selectedIdFinal) return
+    try {
+      await window.electronAPI.createMemoryEdge(selectedIdFinal, edgeTargetId, edgeType, 1)
+      await handleLoadEdges(selectedIdFinal)
+      setShowEdgePicker(false)
+      setEdgeTargetId('')
+      setGraphMemories([])
+      setGraphEdges([])
+      setEdgeRefreshKey(k => k + 1)
+    } catch (error) {
+      console.error('Failed to create edge:', error)
+    }
+  }, [selectedIdFinal, edgeTargetId, edgeType, handleLoadEdges])
+
+  // Phase 6: Load edges for the selected memory when selection changes.
+  useEffect(() => {
+    if (!selectedIdFinal) {
+      setSelectedEdges([])
+      return
+    }
+    handleLoadEdges(selectedIdFinal)
+  }, [selectedIdFinal, handleLoadEdges])
 
   /**
    * Fire the bulk-import RPC, surface the result in a toast, and refresh the
@@ -443,6 +586,62 @@ export function MemoryPanel({
                       </div>
                     )}
                   </div>
+                  <div className="memory-panel__vault-actions">
+                    <button
+                      type="button"
+                      className="memory-panel__vault-btn"
+                      onClick={() => { handleLoadVaultInfo(); setShowVaultSettings(!showVaultSettings) }}
+                      title="Configure vault path"
+                    >
+                      Change
+                    </button>
+                    <button
+                      type="button"
+                      className="memory-panel__vault-btn"
+                      onClick={handleOpenVault}
+                      title="Open vault in file manager"
+                    >
+                      Open
+                    </button>
+                    <button
+                      type="button"
+                      className="memory-panel__vault-btn"
+                      onClick={handleSyncVault}
+                      disabled={syncing}
+                      title="Full bidirectional sync"
+                    >
+                      {syncing ? 'Syncing…' : 'Sync now'}
+                    </button>
+                  </div>
+                  <div className="memory-panel__vault-watcher-status">
+                    Watcher: {watcherActive ? '● Active' : '○ Inactive'}
+                  </div>
+                  {showVaultSettings && (
+                    <div className="memory-panel__vault-settings">
+                      <input
+                        type="text"
+                        className="memory-panel__vault-input"
+                        placeholder="C:\Users\you\Obsidian\MyVault"
+                        value={vaultPathInput}
+                        onChange={(e) => setVaultPathInput(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="memory-panel__vault-btn memory-panel__vault-btn--primary"
+                        onClick={handleSetVaultPath}
+                        disabled={vaultSetting || !vaultPathInput.trim()}
+                      >
+                        {vaultSetting ? 'Setting…' : 'Set vault path'}
+                      </button>
+                      {vaultInfo && (
+                        <div className="memory-panel__vault-info">
+                          {vaultInfo.isCustom ? 'Custom vault' : 'Default vault'}
+                          {' · '}
+                          {vaultInfo.exists ? 'exists' : 'not found'}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </>
             ) : (
@@ -561,6 +760,11 @@ export function MemoryPanel({
               >
                 <div className="memory-panel__item-header">
                   <span className="memory-panel__item-type">{m.class}</span>
+                  {r.isRelated && (
+                    <span className="memory-panel__item-related-badge" title={`Related via graph (${r.relatedDepth ?? 1}-hop)`}>
+                      Related
+                    </span>
+                  )}
                   <span className="memory-panel__item-confidence">{Math.round(m.confidence * 100)}%</span>
                 </div>
                 <div className="memory-panel__item-title">{m.title}</div>
@@ -604,6 +808,8 @@ export function MemoryPanel({
                   setSelectedId(memory.id)
                   onSelectMemory?.(memory)
                 }}
+                onCreateEdge={handleCreateEdge}
+                onDeleteEdge={handleDeleteEdge}
               />
             )}
           </div>
@@ -631,6 +837,90 @@ export function MemoryPanel({
                   {tag}
                 </span>
               ))}
+            </div>
+
+            <div className="memory-panel__detail-relationships">
+              <div className="memory-panel__detail-relationships-header">
+                <Link2 size={14} />
+                <span>Relationships</span>
+                <button
+                  type="button"
+                  className="memory-panel__relationship-add-btn"
+                  onClick={() => setShowEdgePicker(!showEdgePicker)}
+                  title="Add relationship"
+                >
+                  +
+                </button>
+              </div>
+              {showEdgePicker && (
+                <div className="memory-panel__edge-picker">
+                  <select
+                    className="memory-panel__edge-picker-select"
+                    value={edgeTargetId}
+                    onChange={(e) => setEdgeTargetId(e.target.value)}
+                  >
+                    <option value="">Select a memory…</option>
+                    {[...results.map(r => r.memory), ...graphMemories]
+                      .filter((m, i, arr) => arr.findIndex(x => x.id === m.id) === i)
+                      .filter(m => m.id !== selected.id)
+                      .map(m => (
+                        <option key={m.id} value={m.id}>{m.title} ({m.class})</option>
+                      ))
+                  }
+                  </select>
+                  <select
+                    className="memory-panel__edge-picker-type"
+                    value={edgeType}
+                    onChange={(e) => setEdgeType(e.target.value)}
+                  >
+                    <option value="related-to">Related to</option>
+                    <option value="depends-on">Depends on</option>
+                    <option value="supersedes">Supersedes</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="memory-panel__vault-btn memory-panel__vault-btn--primary"
+                    onClick={handleAddEdge}
+                    disabled={!edgeTargetId}
+                  >
+                    Add
+                  </button>
+                </div>
+              )}
+              {edgesLoading ? (
+                <div className="memory-panel__relationships-loading">
+                  <Loader2 size={12} className="memory-panel__spinner" />
+                  <span>Loading…</span>
+                </div>
+              ) : selectedEdges.length === 0 ? (
+                <div className="memory-panel__relationships-empty">No relationships yet.</div>
+              ) : (
+                <ul className="memory-panel__relationships-list">
+                  {selectedEdges.map((edge) => {
+                    const otherId = edge.sourceMemoryId === selected.id ? edge.targetMemoryId : edge.sourceMemoryId
+                    const other = [...results.map(r => r.memory), ...graphMemories]
+                      .find(m => m.id === otherId)
+                    const direction = edge.sourceMemoryId === selected.id ? '→' : '←'
+                    return (
+                      <li key={edge.id} className="memory-panel__relationship-item">
+                        <span className="memory-panel__relationship-type">{edge.type}</span>
+                        <span className="memory-panel__relationship-direction">{direction}</span>
+                        <span className="memory-panel__relationship-title">{other?.title ?? otherId}</span>
+                        {edge.provenance === 'manual' && (
+                          <button
+                            type="button"
+                            className="memory-panel__relationship-delete"
+                            onClick={() => handleDeleteEdge(edge.id)}
+                            title="Delete relationship"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
             </div>
 
             <div className="memory-panel__detail-footer">

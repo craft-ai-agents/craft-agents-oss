@@ -491,3 +491,218 @@
   align-items: center;
   gap: 6px;
 }
+
+/* ── Phase 3: Vault settings ─────────────────────────────────────── */
+
+.memory-panel__vault-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.memory-panel__vault-btn {
+  padding: 4px 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.memory-panel__vault-btn:hover {
+  background: var(--color-surface-muted);
+}
+
+.memory-panel__vault-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.memory-panel__vault-btn--primary {
+  background: var(--color-accent);
+  color: #fff;
+  border-color: var(--color-accent);
+}
+
+.memory-panel__vault-btn--primary:hover {
+  opacity: 0.9;
+}
+
+.memory-panel__vault-settings {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.memory-panel__vault-input {
+  padding: 6px 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text);
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.memory-panel__vault-info {
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
+/* ── Phase 6: Relationships section ──────────────────────────────── */
+
+.memory-panel__detail-relationships {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.memory-panel__detail-relationships-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.memory-panel__relationship-add-btn {
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.memory-panel__relationship-add-btn:hover {
+  background: var(--color-surface-muted);
+}
+
+.memory-panel__edge-picker {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+
+.memory-panel__edge-picker-select,
+.memory-panel__edge-picker-type {
+  flex: 1;
+  padding: 4px 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text);
+  font-size: 12px;
+  min-width: 0;
+}
+
+.memory-panel__edge-picker-type {
+  flex: 0 0 100px;
+}
+
+.memory-panel__relationships-loading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.memory-panel__relationships-empty {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.memory-panel__relationships-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.memory-panel__relationship-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.memory-panel__relationship-type {
+  color: var(--color-accent);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.memory-panel__relationship-direction {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.memory-panel__relationship-title {
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.memory-panel__relationship-delete {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.memory-panel__relationship-delete:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+/* ── Phase 7: Related badge in search results ────────────────────── */
+
+.memory-panel__item-related-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+  border-radius: 8px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* ── Phase 4: Watcher status ──────────────────────────────────────── */
+
+.memory-panel__vault-watcher-status {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}

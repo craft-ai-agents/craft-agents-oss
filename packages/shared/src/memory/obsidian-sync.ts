@@ -100,7 +100,7 @@ export type VaultReadResult = {
  * no closing `---`, the file is malformed and we return an error rather
  * than fabricate a partial parse.
  */
-function splitFrontmatter(raw: string, filePath: string): { frontmatter: Record<string, string>; body: string } {
+export function splitFrontmatter(raw: string, filePath: string): { frontmatter: Record<string, string>; body: string } {
   // Normalize CRLF -> LF so leading-`\n` checks work on Windows-authored files.
   const normalized = raw.replace(/\r\n/g, '\n');
   if (!normalized.startsWith('---\n')) {

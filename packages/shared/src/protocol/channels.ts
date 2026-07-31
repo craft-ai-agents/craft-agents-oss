@@ -395,6 +395,22 @@ export const RPC_CHANNELS = {
      * errors: Array<{ message, filePath? }> }`. Synchronous — small vaults
      * (< few thousand files) finish in well under a second. */
     IMPORT: 'memory:import',
+    /** Return the current vault path and whether it's a custom (user-configured) path. */
+    VAULT_GET: 'memory:vault:get',
+    /** Set the vault path. Wire request: `path: string`. Re-creates the vault sync singleton. */
+    VAULT_SET: 'memory:vault:set',
+    /** Open the vault root in the OS file manager. */
+    VAULT_OPEN: 'memory:vault:open',
+    /** Perform a full bidirectional sync between DB and vault. */
+    VAULT_SYNC: 'memory:vault:sync',
+    /** Get watcher status (active/inactive). */
+    VAULT_WATCHER_STATUS: 'memory:vault:watcherStatus',
+    /** Create a user-defined edge between two memories. Wire request: `{ sourceId, targetId, type, weight? }`. */
+    EDGE_CREATE: 'memory:edge:create',
+    /** Delete an edge by its ID. Wire request: `edgeId: string`. */
+    EDGE_DELETE: 'memory:edge:delete',
+    /** List all edges involving a given memory. Wire request: `memoryId: string`. */
+    EDGE_LIST: 'memory:edge:list',
   },
   prompts: {
     /**

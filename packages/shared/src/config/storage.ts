@@ -92,6 +92,8 @@ export interface StoredConfig {
   setupDeferred?: boolean;
   // Server mode — embedded remote server settings
   serverConfig?: import('./server-config.ts').ServerConfig;
+  // Memory / Obsidian vault
+  memoryVaultPath?: string;  // Custom Obsidian vault path (default: %APPDATA%/ARCHstudio/vault)
   // One-shot migration markers. Used by migrations that should run at most
   // once per user (e.g. restoring a previously-removed model to connection
   // lists without re-adding it if the user later removes it deliberately).

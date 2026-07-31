@@ -25,9 +25,11 @@
       "@config/*": ["../../packages/shared/src/config/*"],
       "@resources/*": ["resources/*"],
       "@craft-agent/shared": ["../../packages/shared/src/index.ts"],
-      "@craft-agent/shared/*": ["../../packages/shared/src/*"]
+      "@craft-agent/shared/*": ["../../packages/shared/src/*"],
+      "@craft-agent/ui": ["../../packages/ui/src/index.ts"],
+      "@craft-agent/ui/*": ["../../packages/ui/src/*"]
     }
   },
-  "include": ["src/**/*", "../../packages/shared/src/**/*.d.ts"],
+  "include": ["src/**/*", "../../packages/shared/src/**/*.d.ts", "../../packages/ui/src/**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
 }

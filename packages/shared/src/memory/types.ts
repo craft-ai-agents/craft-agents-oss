@@ -210,13 +210,20 @@ export interface MemorySearchResult {
   memory: AnyMemory;
   score: number;            // relevance score from FTS5
   snippet?: string;         // highlighted snippet
+  /** True when this result was found via graph-edge traversal (Phase 7). */
+  isRelated?: boolean;
+  /** The memory ID this result is related to (via graph edge). */
+  relatedToId?: string;
+  /** BFS hop count from the origin memory (1 = direct edge). */
+  relatedDepth?: number;
 }
 
 export type MemoryEdgeType =
   | 'supersedes'
   | 'same-session'
   | 'same-tag'
-  | 'depends-on';
+  | 'depends-on'
+  | 'related-to';
 
 export interface MemoryEdge {
   id: string;
@@ -224,7 +231,7 @@ export interface MemoryEdge {
   targetMemoryId: string;
   type: MemoryEdgeType;
   weight: number;
-  provenance: 'system' | 'imported';
+  provenance: 'system' | 'imported' | 'manual';
   createdAt: string;
   updatedAt: string;
 }

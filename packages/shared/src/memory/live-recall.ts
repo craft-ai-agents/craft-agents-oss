@@ -64,7 +64,7 @@ export function isMemoryVisible(memory: AnyMemory, context: LiveRecallContext): 
  * FTS5, whose whitespace-separated tokens use AND semantics.
  */
 export function retrieveRelevantMemories(
-  repository: Pick<MemoryRepository, 'searchMemories'>,
+  repository: Pick<MemoryRepository, 'searchMemories' | 'findRelated'>,
   message: string,
   context: LiveRecallContext,
   options: LiveRecallOptions = {},
@@ -87,6 +87,30 @@ export function retrieveRelevantMemories(
         score: (current?.score ?? 0) + normalizeScore(hit),
         matches: (current?.matches ?? 0) + 1,
       });
+    }
+  }
+
+  // Phase 7: Expand top FTS hits with 1-hop graph neighbors. Related
+  // memories get a lower score (0.3x) so they only surface when there's
+  // room in the budget — they supplement, not replace, FTS matches.
+  const topHits = [...ranked.values()].sort((a, b) =>
+    b.matches - a.matches || b.score - a.score
+  ).slice(0, 3);
+
+  for (const hit of topHits) {
+    try {
+      const related = repository.findRelated(hit.memory.id, 1, 3);
+      for (const rel of related) {
+        if (!isMemoryVisible(rel.memory, context)) continue;
+        if (ranked.has(rel.memory.id)) continue;
+        ranked.set(rel.memory.id, {
+          memory: rel.memory,
+          score: hit.score * 0.3,
+          matches: 0, // 0 matches = graph-derived, not FTS
+        });
+      }
+    } catch {
+      // findRelated may fail if the memory has no edges — safe to skip
     }
   }
 

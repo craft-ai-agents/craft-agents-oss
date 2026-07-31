@@ -519,6 +519,14 @@ const mock: ElectronAPI = {
     graph: { edgeCount: 0, edgeTypeDistribution: {} },
   }),
   importMemoriesFromVault: () => Promise.resolve({ read: 0, imported: 0, skipped: 0, errors: [] }),
+  getVaultInfo: () => Promise.resolve({ path: '', isCustom: false, exists: false }),
+  setVaultPath: (_path: string) => Promise.resolve({ success: true, path: '' }),
+  openVaultFolder: () => Promise.resolve({ success: true }),
+  syncVault: () => Promise.resolve([]),
+  getVaultWatcherStatus: () => Promise.resolve({ active: false }),
+  createMemoryEdge: (_sourceId: string, _targetId: string, _type: string, _weight?: number) => Promise.resolve({} as any),
+  deleteMemoryEdge: (_edgeId: string) => Promise.resolve({ success: true }),
+  getMemoryEdges: (_memoryId: string) => Promise.resolve([]),
 
   // ── Prompt compiler ───────────────────────────────────────────────────
   compilePrompt: () => Promise.resolve({

@@ -709,6 +709,22 @@ export interface ElectronAPI {
     skipped: number
     errors: Array<{ message: string; filePath?: string }>
   }>
+  /** Return the current vault path and whether it's user-configured. */
+  getVaultInfo(): Promise<{ path: string; isCustom: boolean; exists: boolean }>
+  /** Set the vault path (re-creates the vault sync singleton). */
+  setVaultPath(path: string): Promise<{ success: boolean; path: string }>
+  /** Open the vault root in the OS file manager. */
+  openVaultFolder(): Promise<{ success: boolean }>
+  /** Perform a full bidirectional sync between DB and vault. */
+  syncVault(): Promise<Array<{ filePath: string; action: string; memoryId?: string; error?: string }>>
+  /** Get vault watcher status. */
+  getVaultWatcherStatus(): Promise<{ active: boolean }>
+  /** Create a user-defined edge between two memories. */
+  createMemoryEdge(sourceId: string, targetId: string, type: string, weight?: number): Promise<import('@craft-agent/shared/memory/types').MemoryEdge>
+  /** Delete an edge by its ID. */
+  deleteMemoryEdge(edgeId: string): Promise<{ success: boolean }>
+  /** List all edges involving a given memory. */
+  getMemoryEdges(memoryId: string): Promise<import('@craft-agent/shared/memory/types').MemoryEdge[]>
 
   // Prompt Compiler
   /**

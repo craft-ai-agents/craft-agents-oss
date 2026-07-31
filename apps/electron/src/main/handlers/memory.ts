@@ -1,25 +1,58 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
-import type { AnyMemory, MemoryQuery, MemorySearchResult } from '@craft-agent/shared/memory/types'
-import { app } from 'electron'
+import type { AnyMemory, MemoryEdge, MemoryQuery, MemorySearchResult } from '@craft-agent/shared/memory/types'
+import { app, shell } from 'electron'
+import { existsSync } from 'fs'
+import { join } from 'path'
 
 import type { MemoryRepository } from '@craft-agent/shared/memory/repository'
-import { join } from 'path'
+import type { VaultWatcher } from '@craft-agent/shared/memory/vault-watcher'
 
 let repoPromise: Promise<MemoryRepository> | null = null
 let vaultPromise: Promise<import('@craft-agent/shared/memory/obsidian-sync').ObsidianVaultSync> | null = null
+let watcherPromise: Promise<VaultWatcher> | null = null
+/** Current vault root path. May be overridden by `memoryVaultPath` in config. */
+let currentVaultRoot: string | null = null
 
 /**
  * Resolve the Obsidian vault root directory.
  *
- * Derived from `app.getPath('userData')`, which on macOS is
- * `~/Library/Application Support/ARCHstudio/` and on Windows is
- * `%APPDATA%/ARCHstudio/`. This matches the `getMemoryRepository()`
- * database path so the vault is a sibling of the memory DB.
+ * Reads `memoryVaultPath` from the stored config. If set and the path
+ * exists, uses it. Otherwise falls back to `app.getPath('userData')/vault`,
+ * which on macOS is `~/Library/Application Support/ARCHstudio/vault` and
+ * on Windows is `%APPDATA%/ARCHstudio/vault`.
  */
 function getVaultRoot(): string {
-  return join(app.getPath('userData'), 'vault')
+  if (currentVaultRoot) return currentVaultRoot
+  try {
+    const { loadStoredConfig } = require('@craft-agent/shared/config/storage')
+    const config = loadStoredConfig()
+    if (config?.memoryVaultPath) {
+      const customPath = config.memoryVaultPath
+      if (existsSync(customPath)) {
+        currentVaultRoot = customPath
+        return customPath
+      }
+    }
+  } catch {
+    // Config not available yet (early boot) — fall through to default
+  }
+  currentVaultRoot = join(app.getPath('userData'), 'vault')
+  return currentVaultRoot
+}
+
+/**
+ * Check whether the vault path is user-configured (vs. the default).
+ */
+function isCustomVaultPath(): boolean {
+  try {
+    const { loadStoredConfig } = require('@craft-agent/shared/config/storage')
+    const config = loadStoredConfig()
+    return !!config?.memoryVaultPath
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -68,6 +101,43 @@ export async function getVaultSync() {
   return vaultPromise
 }
 
+/**
+ * Get (or lazily create) the process-wide VaultWatcher singleton.
+ * The watcher monitors the vault directory for external file changes
+ * and syncs them back into the DB (Phase 4).
+ */
+export async function getVaultWatcher(): Promise<VaultWatcher> {
+  if (!watcherPromise) {
+    watcherPromise = (async () => {
+      const { VaultWatcher } = await import('@craft-agent/shared/memory/vault-watcher')
+      const repo = await getMemoryRepository()
+      const vault = await getVaultSync()
+      const watcher = new VaultWatcher(getVaultRoot(), repo, vault)
+      watcher.start()
+      return watcher
+    })()
+  }
+  return watcherPromise
+}
+
+/**
+ * Reset the vault sync + watcher singletons so the next call re-creates
+ * them with the new vault path. Called when the user changes the vault
+ * path via `VAULT_SET`.
+ */
+async function resetVaultSync(): Promise<void> {
+  // Stop the existing watcher
+  if (watcherPromise) {
+    try {
+      const w = await watcherPromise
+      w.stop()
+    } catch { /* ignore */ }
+  }
+  watcherPromise = null
+  vaultPromise = null
+  currentVaultRoot = null
+}
+
 export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.memory.LIST,
   RPC_CHANNELS.memory.GET,
@@ -80,6 +150,14 @@ export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.memory.GRAPH,
   RPC_CHANNELS.memory.STATS,
   RPC_CHANNELS.memory.IMPORT,
+  RPC_CHANNELS.memory.VAULT_GET,
+  RPC_CHANNELS.memory.VAULT_SET,
+  RPC_CHANNELS.memory.VAULT_OPEN,
+  RPC_CHANNELS.memory.VAULT_SYNC,
+  RPC_CHANNELS.memory.VAULT_WATCHER_STATUS,
+  RPC_CHANNELS.memory.EDGE_CREATE,
+  RPC_CHANNELS.memory.EDGE_DELETE,
+  RPC_CHANNELS.memory.EDGE_LIST,
 ] as const
 
 export function registerMemoryHandlers(server: RpcServer, _deps: HandlerDeps): void {
@@ -152,20 +230,40 @@ export function registerMemoryHandlers(server: RpcServer, _deps: HandlerDeps): v
   // FILTER columns (class/scope/tags/category/confidence) are applied in
   // SQL with parameter binding — escapes any injection risk from the
   // user-supplied `MemoryQuery`.
+  //
+  // Phase 7 — Hybrid retrieval: after FTS5 returns the top hits, we
+  // expand each hit via 1-hop graph edges (`findRelated`) and merge the
+  // related memories into the result set. This surfaces connected
+  // memories that may not share keywords with the query but are
+  // semantically linked through the graph.
   server.handle(RPC_CHANNELS.memory.SEARCH, async (_ctx, query: MemoryQuery): Promise<MemorySearchResult[]> => {
     const r = await getMemoryRepository()
-    return r.searchMemories(query)
+    const ftsResults = r.searchMemories(query)
+
+    // Hybrid retrieval: expand top FTS hits with 1-hop graph neighbors
+    const expandDepth = 1
+    const expandPerHit = 3
+    const ftsHitIds = new Set(ftsResults.map((res) => res.memory.id))
+    const related: MemorySearchResult[] = []
+
+    for (const hit of ftsResults.slice(0, 5)) {
+      const neighbors = r.findRelated(hit.memory.id, expandDepth, expandPerHit)
+      for (const neighbor of neighbors) {
+        if (!ftsHitIds.has(neighbor.memory.id)) {
+          // Don't add duplicates from multiple hit expansions
+          if (!related.some((r2) => r2.memory.id === neighbor.memory.id)) {
+            related.push(neighbor)
+          }
+        }
+      }
+    }
+
+    // Merge: FTS results first (higher confidence), then related
+    return [...ftsResults, ...related]
   })
 
   /**
-   * Bulk-import memories from the Obsidian vault on disk. Reads every
-   * `.md` file in the four class folders, parses them into typed
-   * `AnyMemory`s, and writes them back through the repository's bulk
-   * importer (with skip-dedupe + per-row audit 'import' entries).
-   *
-   * Returns counts so the renderer can show a stats toast. Reads are
-   * synchronous; the database transaction wraps the import batch so a
-   * crash midway leaves zero partial rows behind.
+   * Bulk-import memories from the Obsidian vault on disk.
    */
   server.handle(RPC_CHANNELS.memory.IMPORT, async (): Promise<{
     read: number
@@ -177,9 +275,6 @@ export function registerMemoryHandlers(server: RpcServer, _deps: HandlerDeps): v
     const v = await getVaultSync()
     const { records, errors: readErrors } = v.readVault()
     const stats = r.importMemories(records, 'obsidian-vault-sync')
-    // Combine vault-read failures (malformed frontmatter, missing
-    // delimiters) with import-time failures (parse / DB errors) into a
-    // single shape so the renderer doesn't have to merge them.
     const combinedErrors = [
       ...readErrors.map((e) => ({ message: e.message, filePath: e.filePath })),
       ...stats.errors,
@@ -190,5 +285,87 @@ export function registerMemoryHandlers(server: RpcServer, _deps: HandlerDeps): v
       skipped: stats.skipped,
       errors: combinedErrors,
     }
+  })
+
+  // ── Phase 3: Vault configuration ───────────────────────────────────
+
+  server.handle(RPC_CHANNELS.memory.VAULT_GET, async () => {
+    const path = getVaultRoot()
+    return {
+      path,
+      isCustom: isCustomVaultPath(),
+      exists: existsSync(path),
+    }
+  })
+
+  server.handle(RPC_CHANNELS.memory.VAULT_SET, async (_ctx, path: string) => {
+    // Persist to config
+    const { loadStoredConfig, saveConfig } = await import('@craft-agent/shared/config/storage')
+    const config = loadStoredConfig()
+    if (config) {
+      config.memoryVaultPath = path
+      saveConfig(config)
+    }
+    // Reset vault sync singleton so next call re-creates with new path
+    await resetVaultSync()
+    // Re-create vault sync and export existing memories to the new vault
+    const v = await getVaultSync()
+    const r = await getMemoryRepository()
+    const memories = r.listMemories()
+    for (const mem of memories) {
+      if (!mem.archived) v.syncMemory(mem)
+    }
+    return { success: true, path: getVaultRoot() }
+  })
+
+  server.handle(RPC_CHANNELS.memory.VAULT_OPEN, async () => {
+    const path = getVaultRoot()
+    await shell.openPath(path)
+    return { success: true }
+  })
+
+  // Phase 4: Full bidirectional sync
+  server.handle(RPC_CHANNELS.memory.VAULT_SYNC, async () => {
+    const watcher = await getVaultWatcher()
+    return watcher.fullSync()
+  })
+
+  // Phase 4: Watcher status
+  server.handle(RPC_CHANNELS.memory.VAULT_WATCHER_STATUS, async () => {
+    if (!watcherPromise) return { active: false }
+    try {
+      const w = await watcherPromise
+      return { active: w.isActive() }
+    } catch {
+      return { active: false }
+    }
+  })
+
+  // ── Phase 6: Edge CRUD ──────────────────────────────────────────────
+
+  server.handle(RPC_CHANNELS.memory.EDGE_CREATE, async (_ctx, params: {
+    sourceId: string
+    targetId: string
+    type: string
+    weight?: number
+  }): Promise<MemoryEdge> => {
+    const r = await getMemoryRepository()
+    return r.createEdge(
+      params.sourceId,
+      params.targetId,
+      params.type as MemoryEdge['type'],
+      params.weight ?? 1,
+    )
+  })
+
+  server.handle(RPC_CHANNELS.memory.EDGE_DELETE, async (_ctx, edgeId: string) => {
+    const r = await getMemoryRepository()
+    const deleted = r.deleteEdge(edgeId)
+    return { success: deleted }
+  })
+
+  server.handle(RPC_CHANNELS.memory.EDGE_LIST, async (_ctx, memoryId: string): Promise<MemoryEdge[]> => {
+    const r = await getMemoryRepository()
+    return r.getEdgesForMemory(memoryId)
   })
 }

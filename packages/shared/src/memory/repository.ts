@@ -886,6 +886,115 @@ export class MemoryRepository {
     }
   }
 
+  /**
+   * Create a user-defined edge between two memories. Unlike the private
+   * `upsertEdge`, this is public and stamps `provenance: 'manual'` so the
+   * UI can distinguish user-created edges from system-inferred ones.
+   * Returns the created/updated edge.
+   */
+  createEdge(
+    sourceMemoryId: string,
+    targetMemoryId: string,
+    type: MemoryEdge['type'],
+    weight: number = 1,
+  ): MemoryEdge {
+    if (sourceMemoryId === targetMemoryId) {
+      throw new Error('Cannot create an edge between a memory and itself');
+    }
+    // Verify both memories exist
+    const src = this.getMemory(sourceMemoryId);
+    const tgt = this.getMemory(targetMemoryId);
+    if (!src) throw new Error(`Source memory ${sourceMemoryId} not found`);
+    if (!tgt) throw new Error(`Target memory ${targetMemoryId} not found`);
+
+    this.upsertEdge(sourceMemoryId, targetMemoryId, type, weight, 'manual');
+    const id = `edge:${type}:${sourceMemoryId}:${targetMemoryId}`;
+    const row = this.db.prepare('SELECT * FROM memory_edges WHERE id = ?').get(id);
+    return this.hydrateEdge(row);
+  }
+
+  /**
+   * Delete an edge by its ID. Returns true if an edge was deleted.
+   * System edges will be re-created on next reconcile, but the user may
+   * want to temporarily remove them.
+   */
+  deleteEdge(edgeId: string): boolean {
+    const row = this.db.prepare('SELECT provenance FROM memory_edges WHERE id = ?').get(edgeId) as { provenance: string } | undefined;
+    if (!row) return false;
+    const result = this.db.prepare('DELETE FROM memory_edges WHERE id = ?').run(edgeId);
+    return result.changes > 0;
+  }
+
+  /**
+   * Get all edges involving a given memory (either as source or target).
+   * Returns edges sorted by weight descending.
+   */
+  getEdgesForMemory(memoryId: string): MemoryEdge[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM memory_edges
+      WHERE source_memory_id = ? OR target_memory_id = ?
+      ORDER BY weight DESC, created_at ASC
+    `).all(memoryId, memoryId);
+    return rows.map((row: any) => this.hydrateEdge(row));
+  }
+
+  /**
+   * Find memories related to a given memory through graph edges, using
+   * BFS traversal up to `maxDepth` hops. Returns results sorted by a
+   * score that decays with depth and is weighted by edge weight.
+   */
+  findRelated(memoryId: string, maxDepth: number = 2, limit: number = 10): MemorySearchResult[] {
+    const visited = new Set<string>([memoryId]);
+    const queue: Array<{ id: string; depth: number; score: number }> = [];
+    const results: Array<{ id: string; score: number; depth: number; via: string }> = [];
+
+    // Seed: 1-hop neighbors
+    const edges = this.getEdgesForMemory(memoryId);
+    for (const edge of edges) {
+      const otherId = edge.sourceMemoryId === memoryId ? edge.targetMemoryId : edge.sourceMemoryId;
+      if (visited.has(otherId)) continue;
+      visited.add(otherId);
+      const score = edge.weight / 1; // depth=1
+      queue.push({ id: otherId, depth: 1, score });
+      results.push({ id: otherId, score, depth: 1, via: memoryId });
+    }
+
+    // BFS: expand to maxDepth
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (current.depth >= maxDepth) continue;
+      const currentEdges = this.getEdgesForMemory(current.id);
+      for (const edge of currentEdges) {
+        const otherId = edge.sourceMemoryId === current.id ? edge.targetMemoryId : edge.sourceMemoryId;
+        if (visited.has(otherId)) continue;
+        visited.add(otherId);
+        const depth = current.depth + 1;
+        const score = (edge.weight / depth) * current.score;
+        queue.push({ id: otherId, depth, score });
+        results.push({ id: otherId, score, depth, via: current.id });
+      }
+    }
+
+    // Sort by score descending, take top `limit`
+    results.sort((a, b) => b.score - a.score);
+    const top = results.slice(0, limit);
+
+    // Hydrate into MemorySearchResult
+    return top
+      .map((r) => {
+        const mem = this.getMemory(r.id);
+        if (!mem || mem.archived) return null;
+        return {
+          memory: mem,
+          score: r.score,
+          isRelated: true,
+          relatedToId: r.via,
+          relatedDepth: r.depth,
+        } as MemorySearchResult;
+      })
+      .filter((r): r is MemorySearchResult => r !== null);
+  }
+
   private upsertEdge(
     sourceMemoryId: string,
     targetMemoryId: string,
