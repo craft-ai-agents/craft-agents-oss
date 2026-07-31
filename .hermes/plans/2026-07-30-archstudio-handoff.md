@@ -220,7 +220,26 @@ Both previously-failing gates now pass with no bypass. What was fixed:
 
 ### 3.2 Confirmed bugs, unfixed
 
-**(a) OAuth provider-connect crash — HIGHEST PRIORITY**
+**(a) OAuth provider-connect crash — ✅ ROOT-CAUSED AND FIXED (`4ff66295`)**
+
+> **Resolved.** It was never a reload and never OAuth-specific: `OnboardingWizard`
+> is `React.lazy` and was rendered with **no Suspense boundary**. Opening the
+> wizard from a click suspended during a discrete input update, React threw
+> error **#426**, and it propagated to the Sentry ErrorBoundary → "Something went
+> wrong / Reload".
+>
+> Reproduced live over CDP (Providers → Add Connection → "All providers…"):
+> `crash: true` before, `crash: false` + wizard renders after. Audited the whole
+> renderer + packages/ui — this was the only `React.lazy` and the only missing
+> boundary.
+>
+> Caveat kept open: this fixes the crash **on opening the wizard**. A separate
+> fault later in the OAuth *exchange* is not ruled out and still needs a real
+> sign-in to exercise.
+>
+> The original (now historical) analysis follows.
+
+**(a-historical) OAuth provider-connect crash**
 
 User report: *"when I pick a provider and connect through web auth, the app reloads, like
 crashes and I gotta push reload."*
@@ -281,15 +300,40 @@ future re-introduction can't loop.
 **Then** reproduce the OAuth crash live with DevTools attached (CDP driver in §5) —
 with the bridge fixed, the actual stack should finally reach `main.log`.
 
-**(b) Media Lab delete is an illusion**
+**(b) Media Lab "delete" — ✅ CORRECTED AND FIXED (`1834c0d8`)**
 
-`apps/electron/src/renderer/panels/media-lab/MediaLabPanel.tsx:463` — `batchDelete`
-filters items out of local state only. Its own comment: *"A proper implementation would
-call window.electronAPI.deleteResource or similar once that RPC exists."* Files are never
-deleted and reappear on reload. A user who selects 20 files and hits Delete believes they
-are gone. **Data-confidence bug — fix or disable the button.**
+> **This finding was overstated in the original audit.** I reported it as a
+> data-integrity bug ("selects 20 files, hits Delete, believes they're gone").
+> Wrong: the button was already labelled **"Hide"** with tooltip "Remove from
+> this view", and that is exactly what it did. No files were ever at risk. The
+> stale `deleteResource` comment is what led to the misread.
+>
+> The real defect was a mismatched affordance — trash-can icon + destructive red
+> styling on a view-local action. Fixed: EyeOff icon, no danger styling, explicit
+> tooltip, `batchDelete` → `batchHide`.
+>
+> **Still open — a real delete.** Deliberately not added. Media items are session
+> artifacts resolved server-side from workspace session directories, so a delete
+> RPC taking a renderer-supplied path is an arbitrary-file-deletion surface.
+> Spec for whoever picks it up:
+>   - new channel `media:trash` (not `delete` — use `shell.trashItem` so it is
+>     recoverable via the OS trash)
+>   - handler MUST validate the target resolves inside one of the **caller's own
+>     workspace session directories**, reusing the existing session-path
+>     validation helpers (see the `getSessionPath — defense in depth` tests)
+>   - renderer needs a real confirm step; "Hide" should remain as a separate,
+>     non-destructive action
+>   - full wiring: channels.ts → routing.ts → handler → channel-map → preload
+>     types → electron-api-mock → `bun run gen:ipc-snapshot`
 
-**(c) Runs panel cards are enormous**
+**(c) Runs panel cards are enormous — ✅ FIXED (`1834c0d8`)**
+
+> Now `repeat(auto-fill, minmax(280px, 1fr))`. Verified live at 1386px: 3 columns
+> of ~363px, previously 1 full-width column. `auto-fill` not `auto-fit` — with
+> `auto-fit` a single run collapses the empty tracks and stretches back to full
+> width, recreating the bug.
+
+**(c-historical) Runs panel cards are enormous**
 
 `panels/runs/RunsPanel.css:35` — `.runs-panel__list` is
 `display:flex; flex-direction:column` with no grid and no max-width, so 3 cards fill the
@@ -383,7 +427,7 @@ Ordered by user-visible value and risk. Each phase has an acceptance gate.
 - **Gate:** `bash scripts/check-brand-leaks.sh` exits 0; a normal `git commit` works
   without `--no-verify` — **verified, both commits landed clean**
 
-### Phase 2 — Fix the renderer log bridge, then the OAuth crash ◑ IN PROGRESS
+### Phase 2 — OAuth crash ✅ DONE (`4ff66295`) ◑ IN PROGRESS
 - **Root-cause analysis is done — see §3.2(a), including the two-pipeline diagnosis and
   the exact fix direction. Start there; the investigation does not need repeating.**
 - Fix the `[renderer-console]` recursion so errors are actually recorded
@@ -391,13 +435,13 @@ Ordered by user-visible value and risk. Each phase has an acceptance gate.
 - **Gate:** `main.log` shows a real stack trace on a renderer error (no nesting), AND
   connecting a provider via web auth completes without hitting `CrashFallback`
 
-### Phase 3 — Honest UI (small, high-impact)
+### Phase 3 — Honest UI ✅ DONE (`1834c0d8`)
 - Media Lab: wire a real `deleteResource` RPC, or disable the Delete button
 - Runs panel: grid layout
 - **Gate:** deleting media actually removes files and they stay gone after reload;
   Runs shows ≥3 cards per row at 1400px
 
-### Phase 4 — Theme toggle + Settings nav (§3.3a, §3.3b)
+### Phase 4 — Theme toggle + Settings nav ✅ DONE (`8b6afe3c`)
 - **Gate:** toggle visible on every screen incl. empty state; correct glow colors;
   Settings pinned bottom-left with brand gradient glow
 
