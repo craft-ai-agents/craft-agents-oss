@@ -344,6 +344,49 @@ screen. Fix: `grid-template-columns: repeat(auto-fill, minmax(280px, 1fr))`.
 > (running/failed/completed/idle), duration, message count, tokens, cost.
 > **It is NOT MCPs.** MCPs live in Integrations / Providers.
 
+### 3.2b Packaging / install — brand migration is broken (found 2026-08-01)
+
+Reported symptom: *"when ARCHstudio needs to update itself I can't reopen it."*
+Diagnosed on the owner's machine.
+
+**Root cause — the Start Menu shortcut points at a filename that was never built:**
+
+```
+ARCHstudio.lnk   -> %LOCALAPPDATA%\Programs\@craft-agentelectron\ARCHstudio.exe    MISSING
+Craft Agents.lnk -> %LOCALAPPDATA%\Programs\@craft-agentelectron\Craft Agents.exe  EXISTS (201MB, 23 Jul)
+```
+
+The installed build predates `productName: ARCHstudio` in `electron-builder.yml`, so
+it produced `Craft Agents.exe` and installed to `@craft-agentelectron` (the mangled
+`@craft-agent/electron` package name). A later step created an ARCHstudio-named
+shortcut pointing at an exe that build never emitted. **There is no desktop shortcut
+at all.** A fresh `bun run electron:dist:win` installs correctly to
+`...\Programs\ARCHstudio\ARCHstudio.exe`, but nothing reconciles an existing
+old-brand install — every user upgrading across the rebrand hits this.
+
+**Also unresolved and higher-risk:**
+
+1. **`deleteAppDataOnUninstall: true`** (`electron-builder.yml`). If a brand migration is
+   ever implemented as uninstall-then-install, this wipes the Electron userData dir.
+   Verify what it actually removes before shipping any migration path.
+2. **Four stale Electron userData dirs** exist side by side under `%APPDATA%`:
+   `@craft-agent/electron`, `ARCHstudio`, `archstudio`, `Craft Agents`.
+3. **Credentials are still in the OLD brand directory, and it is hardcoded.**
+   `packages/shared/src/credentials/backends/secure-storage.ts:44` pins
+   `CREDENTIALS_DIR = join(homedir(), '.craft-agent')` — it does **not** use
+   `CONFIG_DIR`, which `paths.ts:27` already moved to `~/.archstudio`. Real
+   credentials live at `~/.craft-agent/credentials.enc`; the app works today only
+   because of that hardcode.
+   > **Do not "finish the rebrand" by editing that constant.** Changing it without a
+   > migration silently orphans every stored credential — the file simply won't be
+   > found at the new path. Needs: read new path, fall back to old, migrate on
+   > success.
+4. **`clearAllConfig()` deletes the wrong file.** `config/storage.ts:677` removes
+   `join(CONFIG_DIR, 'credentials.enc')` = `~/.archstudio/credentials.enc`, which does
+   not exist, while the real file sits in `~/.craft-agent`. Latent today (the function
+   has **no callers**), but it is a "reset everything" path that would leave encrypted
+   credentials on disk. Fix alongside item 3.
+
 ### 3.3 Requested UI work (specs captured from the owner)
 
 **(a) Theme toggle — the "3 dots"**
