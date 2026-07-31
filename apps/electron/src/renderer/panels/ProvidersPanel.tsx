@@ -2628,6 +2628,24 @@ export function ProvidersPanel({
         accessibleTitle="Add a provider connection"
         className="z-splash flex flex-col bg-foreground-2"
       >
+        {/*
+          `OnboardingWizard` is `React.lazy`, so it MUST render under a Suspense
+          boundary. Without one, opening the wizard from a click threw React
+          error #426 ("a component suspended while responding to synchronous
+          input") — the chunk had not loaded yet, the suspension happened during
+          a discrete input update with nothing to catch it, and the throw
+          propagated all the way to the app's Sentry ErrorBoundary. The user saw
+          "Something went wrong / Reload" every time they tried to add a
+          provider. Reproduced via CDP on the "All providers…" quick-add tile.
+        */}
+        <React.Suspense
+          fallback={
+            <div className="flex flex-1 items-center justify-center" role="status" aria-live="polite">
+              <Loader2 size={24} className="providers-panel__spinner" />
+              <span className="sr-only">Loading connection setup…</span>
+            </div>
+          }
+        >
         <OnboardingWizard
           state={wizard.state}
           onContinue={wizard.handleContinue}
@@ -2650,6 +2668,7 @@ export function ProvidersPanel({
           editInitialValues={editInitialValues}
           className="h-full"
         />
+        </React.Suspense>
         <button
           type="button"
           className="providers-panel__wizard-close"
