@@ -385,6 +385,8 @@ export const RPC_CHANNELS = {
     RESTORE: 'memory:restore',
     DELETE: 'memory:delete',
     SEARCH: 'memory:search',
+    /** Return the active memory list plus persisted edges for the graph view. */
+    GRAPH: 'memory:graph',
     /** Return aggregate stats: class distribution, FTS health, vault sync status. */
     STATS: 'memory:stats',
     /** Bulk-import memories from the Obsidian vault on disk.

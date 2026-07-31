@@ -171,6 +171,25 @@ export function bootstrapStorage(db: Database) {
 
   db.run('CREATE INDEX IF NOT EXISTS idx_memory_audit_memory ON memory_audit(memory_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_memory_audit_timestamp ON memory_audit(timestamp)');
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS memory_edges (
+      id TEXT PRIMARY KEY,
+      source_memory_id TEXT NOT NULL,
+      target_memory_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      weight REAL NOT NULL DEFAULT 1,
+      provenance TEXT NOT NULL DEFAULT 'system',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(source_memory_id, target_memory_id, type),
+      FOREIGN KEY (source_memory_id) REFERENCES memories(id) ON DELETE CASCADE,
+      FOREIGN KEY (target_memory_id) REFERENCES memories(id) ON DELETE CASCADE
+    )
+  `);
+  db.run('CREATE INDEX IF NOT EXISTS idx_memory_edges_source ON memory_edges(source_memory_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_memory_edges_target ON memory_edges(target_memory_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_memory_edges_type ON memory_edges(type)');
 }
 
 export function createAuditEntry(db: Database, entry: AuditEntry) {

@@ -77,6 +77,7 @@ export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.memory.RESTORE,
   RPC_CHANNELS.memory.DELETE,
   RPC_CHANNELS.memory.SEARCH,
+  RPC_CHANNELS.memory.GRAPH,
   RPC_CHANNELS.memory.STATS,
   RPC_CHANNELS.memory.IMPORT,
 ] as const
@@ -133,6 +134,11 @@ export function registerMemoryHandlers(server: RpcServer, _deps: HandlerDeps): v
     }
     r.deleteMemory(id)
     return { success: true }
+  })
+
+  server.handle(RPC_CHANNELS.memory.GRAPH, async () => {
+    const r = await getMemoryRepository()
+    return r.getMemoryGraph()
   })
 
   // Aggregate stats: class distribution, FTS health, vault sync status

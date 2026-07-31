@@ -680,6 +680,7 @@ export interface ElectronAPI {
    * the panel renders `<mark>` tags from the FTS5 `snippet(...)` call.
    */
   searchMemories(query: import('@craft-agent/shared/memory/types').MemoryQuery): Promise<import('@craft-agent/shared/memory/types').MemorySearchResult[]>
+  getMemoryGraph(): Promise<import('@craft-agent/shared/memory/types').MemoryGraphData>
   /**
    * Return aggregate statistics about the memory store: class distribution,
    * FTS health (memoriesTable vs ftsIndex row count parity), vault status.
@@ -690,6 +691,7 @@ export interface ElectronAPI {
     totalArchived: number
     ftsHealth: { memoriesRows: number; ftsRows: number; healthy: boolean }
     vault: { root: string; filesOnDisk: number; lastImportAt: string | null }
+    graph: { edgeCount: number; edgeTypeDistribution: Record<string, number> }
   }>
   /**
    * Bulk-import memories from the Obsidian vault on disk. Reads every

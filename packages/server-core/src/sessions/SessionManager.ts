@@ -100,6 +100,7 @@ import { ensureLabelsExist, ensureTaskItemLabel } from '@craft-agent/shared/labe
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
 import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
 import { buildBackendRuntimeSignature, buildRestartRequiredSignature, filterAttachmentsForModelInput } from './runtime-config'
+import { formatRecalledMemories, retrieveRelevantMemories } from '@craft-agent/shared/memory/live-recall'
 
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
@@ -6209,6 +6210,35 @@ export class SessionManager implements ISessionManager {
       if (managed.wasInterrupted) {
         effectiveMessage = `${message}\n\n<system-reminder>The previous assistant response was interrupted by the user and may be incomplete. Do not repeat or continue the interrupted response unless asked. Focus on the new message above.</system-reminder>`
         managed.wasInterrupted = false
+      }
+
+      // Retrieve relevant durable context for ordinary user turns. The original
+      // persisted message remains unchanged; this bounded block exists only in
+      // the model input for this turn. Hidden system nudges deliberately skip
+      // recall so background-task plumbing cannot unexpectedly expose memories.
+      if (this.memoryRepository && !options?.hidden) {
+        try {
+          const recalled = retrieveRelevantMemories(this.memoryRepository, message, {
+            sessionId,
+            workspaceId: managed.workspace.id,
+            projectId: managed.projectId,
+          })
+          const memoryBlock = formatRecalledMemories(recalled)
+          if (memoryBlock) {
+            effectiveMessage = `${effectiveMessage}\n\n${memoryBlock}`
+            sessionLog.info('[memory] Injected relevant memories', {
+              sessionId,
+              count: recalled.length,
+              memoryIds: recalled.map(memory => memory.id),
+            })
+          }
+        } catch (error) {
+          // Recall is an enhancement, never a reason to fail the user's turn.
+          sessionLog.warn('[memory] Live recall failed; continuing without memory context', {
+            sessionId,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
       }
 
       const messageBackendContext = resolveBackendContext({

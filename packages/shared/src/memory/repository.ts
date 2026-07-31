@@ -1,7 +1,9 @@
 import { Database } from './database-compat';
 import { createAuditEntry } from './database';
-import type { AnyMemory, AuditEntry, MemoryQuery, MemorySearchResult } from './types';
+import type { AnyMemory, AuditEntry, MemoryEdge, MemoryGraphData, MemoryQuery, MemorySearchResult } from './types';
 import type { VaultFileRecord } from './obsidian-sync';
+import { existsSync, readdirSync } from 'fs';
+import { join } from 'path';
 
 type SerializableSource = NonNullable<AnyMemory['source']>;
 
@@ -129,6 +131,7 @@ export class MemoryRepository {
     totalArchived: number;
     ftsHealth: { memoriesRows: number; ftsRows: number; healthy: boolean };
     vault: { root: string; filesOnDisk: number; lastImportAt: string | null };
+    graph: { edgeCount: number; edgeTypeDistribution: Record<string, number> };
   } {
     // Class distribution (active only)
     const classRows = this.db.prepare(`
@@ -148,9 +151,8 @@ export class MemoryRepository {
     let filesOnDisk = 0;
     if (vaultRoot) {
       try {
-        const { existsSync, readdirSync } = require('fs') as typeof import('fs');
         for (const cls of ['profile', 'semantic', 'episodic', 'procedural']) {
-          const dir = require('path').join(vaultRoot, cls);
+          const dir = join(vaultRoot, cls);
           if (existsSync(dir)) {
             for (const _f of readdirSync(dir)) {
               if (_f.endsWith('.md')) filesOnDisk++;
@@ -167,6 +169,13 @@ export class MemoryRepository {
       SELECT timestamp FROM memory_audit WHERE action = 'import' ORDER BY datetime(timestamp) DESC LIMIT 1
     `).get() as { timestamp: string } | undefined;
 
+    const edgeRows = this.db.prepare(`
+      SELECT type, COUNT(*) AS n FROM memory_edges GROUP BY type ORDER BY type
+    `).all() as Array<{ type: string; n: number }>;
+    const edgeTypeDistribution: Record<string, number> = {};
+    for (const row of edgeRows) edgeTypeDistribution[row.type] = row.n;
+    const edgeCount = edgeRows.reduce((sum, row) => sum + row.n, 0);
+
     return {
       classDistribution,
       totalActive: totalRow.n,
@@ -181,6 +190,24 @@ export class MemoryRepository {
         filesOnDisk,
         lastImportAt: lastAudit?.timestamp ?? null,
       },
+      graph: {
+        edgeCount,
+        edgeTypeDistribution,
+      },
+    };
+  }
+
+  listMemoryEdges(): MemoryEdge[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM memory_edges ORDER BY datetime(created_at) ASC, id ASC
+    `).all() as any[];
+    return rows.map((row) => this.hydrateEdge(row));
+  }
+
+  getMemoryGraph(): MemoryGraphData {
+    return {
+      memories: this.listMemories(),
+      edges: this.listMemoryEdges(),
     };
   }
 
@@ -213,6 +240,7 @@ export class MemoryRepository {
     try {
       const result = this.insertMemoryRow(memory);
       this.populateFts(result);
+      this.reconcileEdgesForMemory(result);
       if (auditEntry) {
         createAuditEntry(this.db, auditEntry);
       }
@@ -308,6 +336,7 @@ export class MemoryRepository {
       const updated = this.hydrateMemory(row);
 
       this.populateFts(updated);
+      this.reconcileEdgesForMemory(updated);
 
       if (auditEntry) {
         createAuditEntry(this.db, auditEntry);
@@ -464,6 +493,7 @@ export class MemoryRepository {
           try {
             this.insertMemoryRow(memory);
             this.populateFts(memory);
+            this.reconcileEdgesForMemory(memory);
             createAuditEntry(this.db, {
               id: `audit:import:${memory.id}:${Date.now()}`,
               memoryId: memory.id,
@@ -810,6 +840,81 @@ export class MemoryRepository {
     };
 
     return base;
+  }
+
+  private reconcileEdgesForMemory(memory: AnyMemory): void {
+    this.db.prepare(`
+      DELETE FROM memory_edges WHERE source_memory_id = ? OR target_memory_id = ?
+    `).run(memory.id, memory.id);
+
+    const activeMemories = this.listMemories();
+    const otherMemories = activeMemories.filter((candidate) => candidate.id !== memory.id);
+    const memoryTags = new Set(memory.tags ?? []);
+
+    for (const other of otherMemories) {
+      const otherTags = other.tags ?? [];
+      const sharedTagCount = otherTags.filter((tag) => memoryTags.has(tag)).length;
+      const sameSession = !!memory.source?.sessionId && memory.source.sessionId === other.source?.sessionId;
+      const referencesCurrent = other.supersededById === memory.id || (other.supersedesIds ?? []).includes(memory.id);
+
+      if (sameSession) {
+        this.upsertEdge(
+          memory.id < other.id ? memory.id : other.id,
+          memory.id < other.id ? other.id : memory.id,
+          'same-session',
+          0.5,
+        );
+      }
+      if (sharedTagCount > 0) {
+        this.upsertEdge(
+          memory.id < other.id ? memory.id : other.id,
+          memory.id < other.id ? other.id : memory.id,
+          'same-tag',
+          Math.min(sharedTagCount, 5),
+        );
+      }
+      if (referencesCurrent) {
+        this.upsertEdge(other.id, memory.id, 'supersedes', 1);
+      }
+    }
+
+    if (memory.supersededById) {
+      this.upsertEdge(memory.supersededById, memory.id, 'supersedes', 1);
+    }
+    for (const supersedesId of memory.supersedesIds ?? []) {
+      this.upsertEdge(memory.id, supersedesId, 'supersedes', 1);
+    }
+  }
+
+  private upsertEdge(
+    sourceMemoryId: string,
+    targetMemoryId: string,
+    type: MemoryEdge['type'],
+    weight: number,
+    provenance: MemoryEdge['provenance'] = 'system',
+  ): void {
+    if (sourceMemoryId === targetMemoryId) return;
+    const now = new Date().toISOString();
+    const id = `edge:${type}:${sourceMemoryId}:${targetMemoryId}`;
+    this.db.prepare(`
+      INSERT INTO memory_edges (id, source_memory_id, target_memory_id, type, weight, provenance, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(source_memory_id, target_memory_id, type)
+      DO UPDATE SET weight = excluded.weight, provenance = excluded.provenance, updated_at = excluded.updated_at
+    `).run(id, sourceMemoryId, targetMemoryId, type, weight, provenance, now, now);
+  }
+
+  private hydrateEdge(row: any): MemoryEdge {
+    return {
+      id: row.id,
+      sourceMemoryId: row.source_memory_id,
+      targetMemoryId: row.target_memory_id,
+      type: row.type,
+      weight: row.weight,
+      provenance: row.provenance,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
   }
 
   private hydrateMemory(row: any): AnyMemory {

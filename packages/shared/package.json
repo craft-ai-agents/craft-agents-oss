@@ -54,6 +54,7 @@
     "./mcp": "./src/mcp/index.ts",
     "./memory/database": "./src/memory/database.ts",
     "./memory/database-compat": "./src/memory/database-compat.ts",
+    "./memory/live-recall": "./src/memory/live-recall.ts",
     "./memory/repository": "./src/memory/repository.ts",
     "./memory/types": "./src/memory/types.ts",
     "./mentions": "./src/mentions/index.ts",

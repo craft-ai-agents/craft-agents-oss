@@ -1,6 +1,9 @@
 import React, { useMemo } from 'react'
+import type { AnyMemory, MemoryEdge } from '@craft-agent/shared/memory/types'
+import './MemoryGraph.css'
 
 type MemoryNode = {
+  memory: AnyMemory
   id: string
   title: string
   class: string
@@ -9,13 +12,20 @@ type MemoryNode = {
   y: number
 }
 
-type MemoryGraphProps = {
-  memories: any[]
-  selectedId?: string
-  onSelect?: (memory: any) => void
+type MemoryLink = {
+  source: MemoryNode
+  target: MemoryNode
+  edge: MemoryEdge
 }
 
-export function MemoryGraph({ memories, selectedId, onSelect }: MemoryGraphProps) {
+type MemoryGraphProps = {
+  memories: AnyMemory[]
+  edges: MemoryEdge[]
+  selectedId?: string
+  onSelect?: (memory: AnyMemory) => void
+}
+
+export function MemoryGraph({ memories, edges, selectedId, onSelect }: MemoryGraphProps) {
   const nodes = useMemo(() => {
     const cx = 220
     const cy = 160
@@ -23,6 +33,7 @@ export function MemoryGraph({ memories, selectedId, onSelect }: MemoryGraphProps
     return memories.map((m, idx) => {
       const angle = (2 * Math.PI * idx) / Math.max(memories.length, 1)
       return {
+        memory: m,
         id: m.id,
         title: m.title,
         class: m.class,
@@ -34,17 +45,20 @@ export function MemoryGraph({ memories, selectedId, onSelect }: MemoryGraphProps
   }, [memories])
 
   const links = useMemo(() => {
-    const out: { source: MemoryNode; target: MemoryNode }[] = []
-    for (let i = 0; i < nodes.length; i++) {
-      const next = (i + 1) % nodes.length
-      out.push({ source: nodes[i], target: nodes[next] })
-      if (nodes.length > 2 && i % 2 === 0) {
-        const opposite = (i + Math.floor(nodes.length / 2)) % nodes.length
-        out.push({ source: nodes[i], target: nodes[opposite] })
-      }
-    }
-    return out
-  }, [nodes])
+    const byId = new Map(nodes.map((node) => [node.id, node]))
+    return edges
+      .map((edge) => {
+        const source = byId.get(edge.sourceMemoryId)
+        const target = byId.get(edge.targetMemoryId)
+        if (!source || !target || source.id === target.id) return null
+        return { source, target, edge } satisfies MemoryLink
+      })
+      .filter((link): link is MemoryLink => link !== null)
+  }, [edges, nodes])
+
+  if (nodes.length === 0) {
+    return <div className="memory-graph__empty">No memories available to graph.</div>
+  }
 
   return (
     <svg viewBox="0 0 440 320" className="memory-graph" aria-label="Memory knowledge graph">
@@ -63,8 +77,10 @@ export function MemoryGraph({ memories, selectedId, onSelect }: MemoryGraphProps
             y1={link.source.y}
             x2={link.target.x}
             y2={link.target.y}
-            stroke="var(--color-border)"
-            strokeWidth="1.2"
+            stroke={link.edge.type === 'supersedes' ? 'var(--color-accent)' : 'var(--color-border)'}
+            strokeWidth={link.edge.type === 'same-tag' ? 1.6 : link.edge.type === 'supersedes' ? 2 : 1.2}
+            strokeDasharray={link.edge.type === 'same-session' ? '4 4' : undefined}
+            opacity={Math.max(0.35, Math.min(link.edge.weight, 1))}
           />
         ))}
       </g>
@@ -79,7 +95,13 @@ export function MemoryGraph({ memories, selectedId, onSelect }: MemoryGraphProps
               key={node.id}
               transform={`translate(${node.x}, ${node.y})`}
               style={{ cursor: 'pointer' }}
-              onClick={() => onSelect?.({ id: node.id, title: node.title, class: node.class, confidence: node.confidence })}
+              role="button"
+              tabIndex={0}
+              aria-label={`${node.title}, ${node.class} memory`}
+              onClick={() => onSelect?.(node.memory)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') onSelect?.(node.memory)
+              }}
             >
               <circle r="18" fill={fill} stroke={stroke} strokeWidth="2" />
               <text

@@ -211,3 +211,25 @@ export interface MemorySearchResult {
   score: number;            // relevance score from FTS5
   snippet?: string;         // highlighted snippet
 }
+
+export type MemoryEdgeType =
+  | 'supersedes'
+  | 'same-session'
+  | 'same-tag'
+  | 'depends-on';
+
+export interface MemoryEdge {
+  id: string;
+  sourceMemoryId: string;
+  targetMemoryId: string;
+  type: MemoryEdgeType;
+  weight: number;
+  provenance: 'system' | 'imported';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MemoryGraphData {
+  memories: AnyMemory[];
+  edges: MemoryEdge[];
+}

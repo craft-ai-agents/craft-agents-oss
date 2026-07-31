@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Brain, Search, Plus, Download, Filter, Network, FileText, Tag, Calendar, Link2, MoreHorizontal, Loader2, BarChart3, Database, RefreshCw } from 'lucide-react'
-import type { AnyMemory, MemoryQuery, MemorySearchResult } from '@craft-agent/shared/memory/types'
+import type { AnyMemory, MemoryEdge, MemoryQuery, MemorySearchResult } from '@craft-agent/shared/memory/types'
 import { MemoryGraph } from './MemoryGraph'
 import './MemoryPanel.css'
 
@@ -54,6 +54,9 @@ export function MemoryPanel({
   // Graph view needs the unfiltered list (it draws relationships). We keep
   // that fetched separately so a search query doesn't blow away the graph.
   const [graphMemories, setGraphMemories] = useState<AnyMemory[]>([])
+  const [graphEdges, setGraphEdges] = useState<MemoryEdge[]>([])
+  const [graphLoading, setGraphLoading] = useState(false)
+  const [graphError, setGraphError] = useState<string | null>(null)
 
   // Import-from-vault state. `importing` is the in-flight flag so the
   // button can't be double-pressed; `importStats` is null when there's no
@@ -71,8 +74,10 @@ export function MemoryPanel({
     totalArchived: number
     ftsHealth: { memoriesRows: number; ftsRows: number; healthy: boolean }
     vault: { root: string; filesOnDisk: number; lastImportAt: string | null }
+    graph: { edgeCount: number; edgeTypeDistribution: Record<string, number> }
   } | null>(null)
   const [statsLoading, setStatsLoading] = useState(false)
+  const [statsError, setStatsError] = useState<string | null>(null)
 
   // Auto-dismiss the import toast after 6 s. The ref keeps the timeout
   // handle around so the previous timer cancels cleanly when a new
@@ -85,6 +90,7 @@ export function MemoryPanel({
     if (!externalMemories) return
     setResults(externalMemories.map((m) => ({ memory: m, score: 0 })))
     setGraphMemories(externalMemories)
+    setGraphEdges([])
     setLoading(false)
     setError(null)
   }, [externalMemories])
@@ -94,22 +100,27 @@ export function MemoryPanel({
   useEffect(() => {
     if (externalMemories) return
     if (viewMode !== 'graph') return
-    if (graphMemories.length > 0) return
+    if (graphMemories.length > 0 || graphEdges.length > 0) return
     let cancelled = false
+    setGraphLoading(true)
+    setGraphError(null)
     window.electronAPI
-      .listMemories()
-      .then((m) => {
+      .getMemoryGraph()
+      .then((graph) => {
         if (cancelled) return
-        setGraphMemories(m)
+        setGraphMemories(graph.memories)
+        setGraphEdges(graph.edges)
+        setGraphLoading(false)
       })
       .catch((e) => {
         if (cancelled) return
-        setError(e?.message ?? 'Failed to load memories')
+        setGraphError(e?.message ?? 'Failed to load graph memories')
+        setGraphLoading(false)
       })
     return () => {
       cancelled = true
     }
-  }, [viewMode, graphMemories.length, externalMemories])
+  }, [viewMode, graphEdges.length, graphMemories.length, externalMemories])
 
   // Boot: initial full list. Skip the first debounced effect run so we don't
   // double-fetch.
@@ -188,11 +199,12 @@ export function MemoryPanel({
     setShowStats(true)
     if (!stats) {
       setStatsLoading(true)
+      setStatsError(null)
       try {
         const s = await window.electronAPI.getMemoryStats()
         setStats(s)
-      } catch {
-        // stats fetch failed non-fatally
+      } catch (error) {
+        setStatsError(error instanceof Error ? error.message : String(error))
       } finally {
         setStatsLoading(false)
       }
@@ -201,11 +213,12 @@ export function MemoryPanel({
 
   const handleRefreshStats = useCallback(async () => {
     setStatsLoading(true)
+    setStatsError(null)
     try {
       const s = await window.electronAPI.getMemoryStats()
       setStats(s)
-    } catch {
-      // stats fetch failed non-fatally
+    } catch (error) {
+      setStatsError(error instanceof Error ? error.message : String(error))
     } finally {
       setStatsLoading(false)
     }
@@ -308,6 +321,11 @@ export function MemoryPanel({
                 <Loader2 size={14} className="memory-panel__spinner" />
                 <span>Loading stats…</span>
               </div>
+            ) : statsError ? (
+              <div className="memory-panel__stats-loading memory-panel__error">
+                <span>Failed to load stats: {statsError}</span>
+                <button type="button" onClick={handleRefreshStats}>Retry</button>
+              </div>
             ) : stats ? (
               <>
                 <div className="memory-panel__stats-header">
@@ -375,6 +393,26 @@ export function MemoryPanel({
                   </div>
                 </div>
 
+                {/* Graph status */}
+                <div className="memory-panel__stats-section">
+                  <div className="memory-panel__stats-section-title">
+                    <Network size={12} />
+                    <span>Graph</span>
+                  </div>
+                  <div className="memory-panel__stats-fields">
+                    <div className="memory-panel__stats-field">
+                      <span className="memory-panel__stats-field-label">Persisted edges</span>
+                      <span className="memory-panel__stats-field-value">{stats.graph.edgeCount}</span>
+                    </div>
+                    {Object.entries(stats.graph.edgeTypeDistribution).slice(0, 4).map(([type, count]) => (
+                      <div key={type} className="memory-panel__stats-field">
+                        <span className="memory-panel__stats-field-label">{type}</span>
+                        <span className="memory-panel__stats-field-value">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Vault sync status */}
                 <div className="memory-panel__stats-section">
                   <div className="memory-panel__stats-section-title">
@@ -382,6 +420,10 @@ export function MemoryPanel({
                     <span>Vault Sync</span>
                   </div>
                   <div className="memory-panel__stats-fields">
+                    <div className="memory-panel__stats-field">
+                      <span className="memory-panel__stats-field-label">Vault path</span>
+                      <span className="memory-panel__stats-field-value" title={stats.vault.root}>{stats.vault.root}</span>
+                    </div>
                     <div className="memory-panel__stats-field">
                       <span className="memory-panel__stats-field-label">Files on disk</span>
                       <span className="memory-panel__stats-field-value">{stats.vault.filesOnDisk}</span>
@@ -465,9 +507,11 @@ export function MemoryPanel({
             <option value="episodic">Episodic</option>
             <option value="procedural">Procedural</option>
             <option value="profile">Profile</option>
-            <option value="user">User scope</option>
+            <option value="session">Session scope</option>
             <option value="project">Project scope</option>
             <option value="workspace">Workspace scope</option>
+            <option value="agent">Agent scope</option>
+            <option value="global">Global scope</option>
           </select>
         </div>
 
@@ -547,7 +591,21 @@ export function MemoryPanel({
       <div className="memory-panel__main">
         {viewMode === 'graph' ? (
           <div className="memory-panel__graph">
-            <MemoryGraph memories={graphMemories} selectedId={selectedIdFinal} onSelect={onSelectMemory} />
+            {graphLoading ? (
+              <div className="memory-panel__placeholder"><Loader2 size={24} className="memory-panel__spinner" /><p>Loading graph…</p></div>
+            ) : graphError ? (
+              <div className="memory-panel__placeholder memory-panel__error"><p>{graphError}</p></div>
+            ) : (
+              <MemoryGraph
+                memories={graphMemories}
+                edges={graphEdges}
+                selectedId={selectedIdFinal}
+                onSelect={(memory) => {
+                  setSelectedId(memory.id)
+                  onSelectMemory?.(memory)
+                }}
+              />
+            )}
           </div>
         ) : selected ? (
           <div className="memory-panel__detail">

@@ -509,12 +509,14 @@ const mock: ElectronAPI = {
   restoreMemory: () => Promise.resolve({} as any),
   deleteMemory: () => Promise.resolve({ success: true }),
   searchMemories: () => Promise.resolve([]),
+  getMemoryGraph: () => Promise.resolve({ memories: [], edges: [] }),
   getMemoryStats: () => Promise.resolve({
     classDistribution: {},
     totalActive: 0,
     totalArchived: 0,
     ftsHealth: { memoriesRows: 0, ftsRows: 0, healthy: true },
     vault: { root: '', filesOnDisk: 0, lastImportAt: null },
+    graph: { edgeCount: 0, edgeTypeDistribution: {} },
   }),
   importMemoriesFromVault: () => Promise.resolve({ read: 0, imported: 0, skipped: 0, errors: [] }),
 

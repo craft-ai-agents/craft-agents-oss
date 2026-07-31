@@ -364,6 +364,7 @@ export const CHANNEL_MAP = {
   restoreMemory: invoke(RPC_CHANNELS.memory.RESTORE),
   deleteMemory: invoke(RPC_CHANNELS.memory.DELETE),
   searchMemories: invoke(RPC_CHANNELS.memory.SEARCH),
+  getMemoryGraph: invoke(RPC_CHANNELS.memory.GRAPH),
   getMemoryStats: invoke(RPC_CHANNELS.memory.STATS),
   importMemoriesFromVault: invoke(RPC_CHANNELS.memory.IMPORT),
   // Health check persistence + heatmap
