@@ -121,6 +121,12 @@ mock.module(themeContextPath, () => ({
     setFont: () => {},
     setUserOverride: () => {},
   }),
+  // Non-throwing accessor used by components that also render outside a
+  // ThemeProvider (LayoutShell's header theme toggle). Returning `undefined`
+  // mirrors the real "no provider mounted" case, which is exactly the
+  // situation these bare `renderToStaticMarkup` harnesses are in — the toggle
+  // then falls back to its default mode instead of driving a live context.
+  useOptionalTheme: () => undefined,
 }))
 
 // ── 4. pdfjs-dist main module ───────────────────────────────────────────────

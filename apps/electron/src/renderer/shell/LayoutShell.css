@@ -289,9 +289,53 @@
   white-space: nowrap;
 }
 
+/* Pinned footer. `margin-top: auto` pushes it to the bottom of the sidebar
+   flex column; the top hairline separates it from the scrolling nav list so
+   Settings reads as anchored chrome rather than "the last nav item". */
 .layout-sidebar__footer {
   margin-top: auto;
   padding: 10px;
+  border-top: 1px solid var(--shell-border-soft);
+}
+
+/* Settings gets the brand green→purple treatment. It carries a faint tint even
+   when inactive so the pinned slot is visibly distinct from the plain nav
+   items above it, then lifts to a full glow when it's the active view. */
+.layout-nav-item--settings {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklch, var(--brand-lime) 6%, transparent),
+    color-mix(in oklch, var(--brand-purple) 6%, transparent)
+  );
+  border-color: color-mix(in oklch, var(--brand-purple) 20%, transparent);
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease;
+}
+
+.layout-nav-item--settings:hover {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklch, var(--brand-lime) 14%, transparent),
+    color-mix(in oklch, var(--brand-purple) 14%, transparent)
+  );
+  border-color: color-mix(in oklch, var(--brand-purple) 38%, transparent);
+  color: var(--foreground);
+}
+
+.layout-nav-item--settings.layout-nav-item--active {
+  box-shadow:
+    inset 2px 0 0 var(--brand-lime),
+    0 0 12px color-mix(in oklch, var(--brand-purple) 34%, transparent),
+    0 0 4px color-mix(in oklch, var(--brand-lime) 26%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layout-nav-item--settings {
+    transition: none;
+  }
 }
 
 .layout-theme-toggle {
@@ -299,15 +343,13 @@
   gap: 4px;
 }
 
+/* Topbar placement. `margin-left: auto` (rather than relying on the header's
+   `justify-content: space-between`) keeps the toggle hard against the right
+   edge even when it is the only child — which is the case whenever a caller
+   supplies a custom `topBar` that renders no trailing element. */
 .layout-theme-toggle--topbar {
-  padding: 2px;
-  border: 1px solid var(--shell-border);
-  border-radius: 8px;
-  background: var(--shell-fill);
-}
-
-.layout-theme-toggle--live {
-  margin-left: 6px;
+  margin-left: auto;
+  flex: 0 0 auto;
   padding: 2px;
   border: 1px solid var(--shell-border);
   border-radius: 8px;
@@ -326,7 +368,11 @@
   color: var(--shell-text-muted);
   cursor: pointer;
   font-size: 12px;
-  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .layout-theme-option:hover {
@@ -334,10 +380,48 @@
   background: var(--shell-fill-strong);
 }
 
+/* ── Active-state glow ──────────────────────────────────────────────────
+   Each option owns a distinct hue so the selected mode is legible from
+   colour alone, without reading the icon. Left-to-right the three read as
+   a traffic light: night = red, day = amber, system = green. The tone is
+   driven by `data-tone` (set from `themeOptions` in LayoutShell.tsx) rather
+   than by :nth-child, so reordering the array can't silently reassign
+   colours to the wrong modes.
+
+   `--glow` is consumed by the shared rule below; each tone only has to
+   declare its own hue. */
 .layout-theme-option--active {
-  background: color-mix(in oklch, var(--brand-purple) 18%, transparent);
-  border-color: color-mix(in oklch, var(--brand-purple) 45%, transparent);
   color: var(--foreground);
+  background: color-mix(in oklch, var(--glow) 20%, transparent);
+  border-color: color-mix(in oklch, var(--glow) 55%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--glow) 28%, transparent),
+    0 0 10px color-mix(in oklch, var(--glow) 45%, transparent),
+    inset 0 0 6px color-mix(in oklch, var(--glow) 18%, transparent);
+}
+
+.layout-theme-option[data-tone='night'] {
+  --glow: oklch(0.62 0.21 25);
+}
+
+.layout-theme-option[data-tone='day'] {
+  --glow: oklch(0.82 0.16 85);
+}
+
+.layout-theme-option[data-tone='system'] {
+  --glow: var(--brand-lime, oklch(0.75 0.19 145));
+}
+
+/* The active icon picks up its tone too, so the glyph reads as lit rather
+   than as a plain white icon sitting on a coloured pad. */
+.layout-theme-option--active svg {
+  color: color-mix(in oklch, var(--glow) 72%, var(--foreground));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layout-theme-option {
+    transition: none;
+  }
 }
 
 /* Main region */
@@ -361,6 +445,19 @@
   border-bottom: 1px solid var(--shell-border-soft);
   background: var(--shell-topbar-bg);
   backdrop-filter: blur(18px);
+}
+
+/* Had no rule at all, so it defaulted to `display: block` and stacked its two
+   children vertically — the server-status badge sat under the title instead of
+   opposite it. Made it the flex row the class names already implied, and let it
+   grow so the theme toggle beside it still lands hard right. */
+.layout-topbar__default {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
 }
 
 .layout-topbar__title {

@@ -558,3 +558,19 @@ export function useTheme(): ThemeContextType {
   }
   return context
 }
+
+/**
+ * Non-throwing variant of {@link useTheme}.
+ *
+ * Returns `undefined` instead of throwing when no `ThemeProvider` is mounted.
+ * Intended for components that render both inside the real app (where the
+ * provider always exists) and in bare test/SSR harnesses that mount them
+ * directly — LayoutShell's snapshot tests call `renderToStaticMarkup` with no
+ * providers at all, and would fail on the throwing hook.
+ *
+ * Prefer `useTheme()` anywhere a provider is guaranteed; reaching for this one
+ * should be a deliberate "this renders outside the tree too" decision.
+ */
+export function useOptionalTheme(): ThemeContextType | undefined {
+  return useContext(ThemeContext)
+}

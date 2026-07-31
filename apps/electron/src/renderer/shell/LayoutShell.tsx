@@ -64,6 +64,7 @@ import brandIconUrl from '@resources/icon-set/icon-512.png?url'
 import { toast } from 'sonner'
 import type { GitFileEntry, GitStatusData, ShellSessionContext } from './types'
 import { buildTreeTooltip, TreeTooltipContent, type TooltipData } from './treeTooltip'
+import { useOptionalTheme } from '../context/ThemeContext'
 import { shouldGateManualExpand, trimExpandedByCount } from '@craft-agent/ui'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import './LayoutShell.css'
@@ -111,7 +112,26 @@ const navItems = [
   { id: 'integrations' as ShellView, label: 'Integrations', icon: Globe },
   { id: 'security' as ShellView, label: 'Security', icon: ShieldCheck },
   { id: 'search' as ShellView, label: 'Search', icon: Search },
-  { id: 'settings' as ShellView, label: 'Settings', icon: Settings },
+] as const
+
+// Settings is deliberately NOT in `navItems`: it renders pinned to the bottom
+// of the sidebar (in `.layout-sidebar__footer`) rather than as the last entry
+// in the scrolling nav list, so it stays reachable no matter how long the nav
+// list grows. Kept as its own const — rather than inlined at the render site —
+// so the topbar title lookup can still resolve a label for the settings view.
+const settingsNavItem = { id: 'settings' as ShellView, label: 'Settings', icon: Settings } as const
+
+// Theme toggle options, pinned top-right in the shell header.
+//
+// Order and colour are deliberate and coupled: read left-to-right the three
+// options form a traffic light (red → amber → green), so the active mode is
+// identifiable by colour alone at a glance without parsing the icon. The
+// `tone` drives the per-option glow in LayoutShell.css; changing the array
+// order without changing the tones would break that reading.
+const themeOptions = [
+  { mode: 'dark' as ThemeMode, icon: Moon, label: 'Night', tone: 'night' },
+  { mode: 'light' as ThemeMode, icon: Sun, label: 'Day', tone: 'day' },
+  { mode: 'system' as ThemeMode, icon: Monitor, label: 'System', tone: 'system' },
 ] as const
 
 // ── Expansion safety cap ─────────────────────────────────────────────
@@ -609,7 +629,7 @@ function LayoutShell({
   initialRailTab,
   initialGitStatus,
   onNavigate,
-  theme = 'system',
+  theme: themeProp,
   onThemeChange,
   topBar,
   breadcrumbs,
@@ -618,6 +638,27 @@ function LayoutShell({
   maxOpenDirs,
   children,
 }: LayoutShellProps) {
+  // Theme wiring.
+  //
+  // The `theme` / `onThemeChange` props are honoured when supplied, but nothing
+  // in the app actually passes them — AppShell renders <LayoutShell> without
+  // either. Combined with the old `theme = 'system'` default, that meant the
+  // header toggle permanently displayed "System" as active and every click was
+  // a no-op through `onThemeChange?.()`: the control was decorative.
+  //
+  // Falling back to ThemeContext makes it real. `useOptionalTheme` (rather than
+  // `useTheme`) because the snapshot tests mount this component with no
+  // providers, where the throwing hook would fail the render outright.
+  const themeCtx = useOptionalTheme()
+  const theme: ThemeMode = themeProp ?? themeCtx?.mode ?? 'system'
+  const applyTheme = useCallback(
+    (next: ThemeMode) => {
+      if (onThemeChange) onThemeChange(next)
+      else themeCtx?.setMode(next)
+    },
+    [onThemeChange, themeCtx],
+  )
+
   const [activeView, setActiveView] = useState<ShellView>(initialView)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WorkspaceTab>('agent-chat')
@@ -2093,7 +2134,10 @@ const DEPTH_POPOVER_OPTIONS = [
     return theme
   }, [theme])
 
-  const activeLabel = navItems.find((item) => item.id === activeView)?.label ?? activeView
+  // Settings lives in the sidebar footer, outside `navItems` — include it here
+  // so the topbar still shows "Settings" as the title on that view.
+  const activeLabel =
+    [...navItems, settingsNavItem].find((item) => item.id === activeView)?.label ?? activeView
 
   const handleNavigate = (view: ShellView) => {
     setActiveView(view)
@@ -2444,7 +2488,19 @@ const DEPTH_POPOVER_OPTIONS = [
           })}
         </nav>
 
-        <div className="layout-sidebar__footer" />
+        <div className="layout-sidebar__footer">
+          <button
+            type="button"
+            className={`layout-nav-item layout-nav-item--settings ${activeView === 'settings' ? 'layout-nav-item--active' : ''}`}
+            onClick={() => handleNavigate('settings')}
+            title={settingsNavItem.label}
+          >
+            <settingsNavItem.icon size={18} aria-hidden="true" />
+            {!sidebarCollapsed && (
+              <span className="layout-nav-item__label">{settingsNavItem.label}</span>
+            )}
+          </button>
+        </div>
       </aside>
 
       <div className="layout-main">
@@ -2491,6 +2547,32 @@ const DEPTH_POPOVER_OPTIONS = [
               </div>
             </div>
           )}
+          {/* Rendered outside the `topBar ??` fallback so a caller supplying a custom
+              topBar can't accidentally drop the theme control. `margin-left: auto` in
+              the stylesheet pins it to the far right regardless of what precedes it. */}
+          <div
+            className="layout-theme-toggle layout-theme-toggle--topbar titlebar-no-drag"
+            role="group"
+            aria-label="Theme"
+          >
+            {themeOptions.map(({ mode: m, icon: Icon, label, tone }) => {
+              const isActive = theme === m
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  className={`layout-theme-option ${isActive ? 'layout-theme-option--active' : ''}`}
+                  data-tone={tone}
+                  aria-pressed={isActive}
+                  onClick={() => applyTheme(m)}
+                  aria-label={`${label} theme`}
+                  title={`${label} theme`}
+                >
+                  <Icon size={13} aria-hidden="true" />
+                </button>
+              )
+            })}
+          </div>
         </header>
 
         <main className="layout-content" role="main">
@@ -2534,25 +2616,12 @@ const DEPTH_POPOVER_OPTIONS = [
                     )
                   })}
                   {hasLiveSession && <span className="arch-agent-workspace__live"><i /> Live</span>}
-                  <div className="layout-theme-toggle layout-theme-toggle--live titlebar-no-drag">
-                    {([
-                      { mode: 'light' as ThemeMode, icon: Sun, label: 'Light' },
-                      { mode: 'dark' as ThemeMode, icon: Moon, label: 'Dark' },
-                      { mode: 'system' as ThemeMode, icon: Monitor, label: 'System' },
-                    ]).map(({ mode: m, icon: Icon, label }) => (
-                      <button
-                        key={m}
-                        type="button"
-                        className={`layout-theme-option ${theme === m ? 'layout-theme-option--active' : ''}`}
-                        onClick={() => onThemeChange?.(m)}
-                        aria-label={`${label} theme`}
-                        title={label}
-                      >
-                        <Icon size={13} aria-hidden="true" />
-                      </button>
-                    ))}
-                  </div>
-                </div>                <div className="arch-agent-workspace__body">
+                  {/* The theme toggle used to live here, in the workspace tab bar — which
+                      meant it only existed while a chat session was open, and sat mid-bar
+                      rather than top-right. It now renders once in the shell header; see
+                      `.layout-theme-toggle--topbar`. */}
+                </div>
+                <div className="arch-agent-workspace__body">
                 <div className="arch-agent-workspace__session">
                   {activeWorkspaceTab === 'agent-chat' ? (
                     children
