@@ -120,14 +120,22 @@
   transition: width 160ms ease, min-width 160ms ease, padding 160ms ease;
 }
 
+.layout-sessions-view {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .layout-shell--dark .layout-sidebar {
   background: var(--shell-sidebar-bg);
   border-right-color: var(--shell-border-soft);
 }
 
 .layout-sidebar--collapsed {
-  width: 64px;
-  min-width: 64px;
+  width: 56px;
+  min-width: 56px;
+  overflow: hidden;
 }
 
 .layout-sidebar__header {

@@ -791,7 +791,7 @@ export function IntegrationsPanel({ onSelectSource, selectedSourceId }: Integrat
               All <span>{userSources.length}</span>
             </button>
             {STATUS_ORDER.filter((s) => counts.get(s)).map((status) => {
-              const meta = STATUS_META[status]
+              const meta = STATUS_META[status] ?? STATUS_META.untested
               const Icon = meta.icon
               return (
                 <button
@@ -817,7 +817,7 @@ export function IntegrationsPanel({ onSelectSource, selectedSourceId }: Integrat
             {visible.map((source) => {
               const cfg = source.config
               const status = cfg.connectionStatus ?? 'untested'
-              const meta = STATUS_META[status]
+              const meta = STATUS_META[status] ?? STATUS_META.untested
               const Icon = meta.icon
               const isSelected = cfg.id === selectedSourceId
               return (

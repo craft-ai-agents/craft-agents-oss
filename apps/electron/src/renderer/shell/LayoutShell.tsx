@@ -23,6 +23,7 @@ import {
   File,
   Plus,
   MessageSquarePlus,
+  MessagesSquare,
   ExternalLink,
   Trash2,
   FilePlus,
@@ -69,6 +70,7 @@ import './LayoutShell.css'
 
 export type ShellView =
   | 'command'
+  | 'sessions'
   | 'runs'
   | 'projects'
   | 'memory'
@@ -100,6 +102,7 @@ const RAIL_TABS: { id: RailTab; label: string }[] = [
 ]
 
 const navItems = [
+  { id: 'sessions' as ShellView, label: 'Sessions', icon: MessagesSquare },
   { id: 'command' as ShellView, label: 'Command', icon: Command },
   // Label only — the `runs` id is a wire-level deep-link route
   // (`archstudio://runs/...`, see shared/route-parser.ts) and must not change.
@@ -228,6 +231,19 @@ type LayoutShellProps = {
   children?: React.ReactNode
   /** Called when the sidebar toggle button is clicked (e.g. from TopBar) */
   onToggleSidebar?: () => void
+  /**
+   * Session list (and its LeftSidebar) rendered inside the brand rail, below
+   * the nav items and above the footer. Optional so the playground/tests can
+   * mount the shell without session plumbing.
+   */
+  sessionListSlot?: React.ReactNode
+  /**
+   * Controlled collapse state for the brand rail. When provided, it drives the
+   * `layout-sidebar--collapsed` class and toggle icon, and the toggle button
+   * calls `onToggleSidebar` instead of mutating local state. When undefined,
+   * falls back to local state so the playground/tests still work.
+   */
+  sidebarCollapsed?: boolean
 }
 
 // What the context rail can honestly report about the active session.
@@ -674,6 +690,8 @@ function LayoutShell({
   maxOpenDirs,
   children,
   onToggleSidebar,
+  sessionListSlot,
+  sidebarCollapsed: sidebarCollapsedProp,
 }: LayoutShellProps) {
   // Theme wiring.
   //
@@ -697,7 +715,9 @@ function LayoutShell({
   )
 
   const [activeView, setActiveView] = useState<ShellView>(initialView)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsedLocal, setSidebarCollapsed] = useState(false)
+  // Controlled when the parent supplies `sidebarCollapsed`; otherwise local.
+  const sidebarCollapsed = sidebarCollapsedProp ?? sidebarCollapsedLocal
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WorkspaceTab>('agent-chat')
   const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState<string | null>(null)
   const [previewArtifactId, setPreviewArtifactId] = useState<string | null>(null)
@@ -2532,7 +2552,9 @@ const DEPTH_POPOVER_OPTIONS = [
             type="button"
             className="layout-sidebar__toggle"
             onClick={() => {
-              setSidebarCollapsed((v) => !v)
+              // When uncontrolled, drive local state; the parent (controlled)
+              // case relies solely on onToggleSidebar.
+              if (sidebarCollapsedProp === undefined) setSidebarCollapsed((v) => !v)
               onToggleSidebar?.()
             }}
             aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -2573,6 +2595,7 @@ const DEPTH_POPOVER_OPTIONS = [
             )
           })}
         </nav>
+
 
         <div className="layout-sidebar__footer">
           <button
@@ -2662,7 +2685,9 @@ const DEPTH_POPOVER_OPTIONS = [
         </header>
 
         <main className="layout-content" role="main">
-          {activeView === 'memory' ? (
+          {activeView === 'sessions' ? (
+            <div className="layout-sessions-view">{sessionListSlot}</div>
+          ) : activeView === 'memory' ? (
             <MemoryPanel />
           ) : activeView === 'runs' ? (
             <RunsPanel
