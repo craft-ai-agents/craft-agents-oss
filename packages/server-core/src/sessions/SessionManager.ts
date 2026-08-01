@@ -121,6 +121,12 @@ import {
   type BackgroundTaskOutput,
   type RunningBackgroundTask,
 } from './background-task-registry'
+import {
+  clearSessionUnread,
+  markSessionMetadataRead,
+  markSessionMetadataUnread,
+  reconcileExternalSessionMetadata,
+} from './session-metadata'
 
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@archstudio/server-core/domain'
@@ -1140,62 +1146,31 @@ export class SessionManager implements ISessionManager {
    */
   private applyExternalSessionMetadata(managed: ManagedSession, header: SessionHeader): boolean {
     const sessionId = managed.id
-    let changed = false
+    const changes = reconcileExternalSessionMetadata(managed, header)
 
-    // Labels
-    const oldLabels = JSON.stringify(managed.labels ?? [])
-    const newLabels = JSON.stringify(header.labels ?? [])
-    if (oldLabels !== newLabels) {
-      managed.labels = header.labels
-      this.sendEvent({ type: 'labels_changed', sessionId, labels: header.labels ?? [] }, managed.workspace.id)
-      changed = true
+    if (changes.labelsChanged) {
+      this.sendEvent({ type: 'labels_changed', sessionId, labels: changes.labelsChanged }, managed.workspace.id)
     }
-
-    // Flagged
-    if ((managed.isFlagged ?? false) !== (header.isFlagged ?? false)) {
-      managed.isFlagged = header.isFlagged ?? false
+    if (changes.flagChanged !== undefined) {
       this.sendEvent(
-        { type: header.isFlagged ? 'session_flagged' : 'session_unflagged', sessionId },
-        managed.workspace.id
+        { type: changes.flagChanged ? 'session_flagged' : 'session_unflagged', sessionId },
+        managed.workspace.id,
       )
-      changed = true
+    }
+    if (changes.statusChanged !== undefined) {
+      this.sendEvent({ type: 'session_status_changed', sessionId, sessionStatus: changes.statusChanged }, managed.workspace.id)
+    }
+    if (changes.nameChanged !== undefined) {
+      this.sendEvent({ type: 'name_changed', sessionId, name: changes.nameChanged }, managed.workspace.id)
     }
 
-    // Session status
-    if (managed.sessionStatus !== header.sessionStatus) {
-      managed.sessionStatus = header.sessionStatus
-      this.sendEvent({ type: 'session_status_changed', sessionId, sessionStatus: header.sessionStatus ?? '' }, managed.workspace.id)
-      changed = true
-    }
-
-    // Name
-    if (managed.name !== header.name) {
-      managed.name = header.name
-      this.sendEvent({ type: 'name_changed', sessionId, name: header.name }, managed.workspace.id)
-      changed = true
-    }
-
-    // Project binding (no dedicated event today — handled via metaChanged broadcast)
-    if (managed.projectId !== header.projectId) {
-      managed.projectId = header.projectId
-      changed = true
-    }
-
-    // Kanban column (mutable via drag; reconcile external/multi-window changes)
-    if (managed.kanbanColumn !== header.kanbanColumn) {
-      managed.kanbanColumn = header.kanbanColumn
-      changed = true
-    }
-
-    if (changed) {
+    if (changes.changed) {
       sessionLog.info(`External metadata change detected for session ${sessionId}`)
-
-      // Prevent stale pending writes from reverting externally-updated metadata.
       sessionPersistenceQueue.cancel(sessionId)
       this.persistSession(managed)
     }
 
-    return changed
+    return changes.changed
   }
 
   /**
@@ -4801,36 +4776,14 @@ export class SessionManager implements ISessionManager {
     const managed = this.sessions.get(sessionId)
     if (!managed) return
 
-    // Only mark as read if not currently processing
-    // (user is viewing but we want to wait for processing to complete)
-    if (managed.isProcessing) return
+    const lastFinalId = managed.messages.length > 0
+      ? this.getLastFinalAssistantMessageId(managed.messages)
+      : undefined
+    const updates = markSessionMetadataRead(managed, lastFinalId)
+    if (!updates) return
 
-    let needsPersist = false
-    const updates: { lastReadMessageId?: string; hasUnread?: boolean } = {}
-
-    // Update lastReadMessageId for legacy/manual unread functionality
-    if (managed.messages.length > 0) {
-      const lastFinalId = this.getLastFinalAssistantMessageId(managed.messages)
-      if (lastFinalId && managed.lastReadMessageId !== lastFinalId) {
-        managed.lastReadMessageId = lastFinalId
-        updates.lastReadMessageId = lastFinalId
-        needsPersist = true
-      }
-    }
-
-    // Clear hasUnread flag (primary source of truth for NEW badge)
-    if (managed.hasUnread) {
-      managed.hasUnread = false
-      updates.hasUnread = false
-      needsPersist = true
-    }
-
-    // Persist changes
-    if (needsPersist) {
-      const workspaceRootPath = managed.workspace.rootPath
-      await updateSessionMetadata(workspaceRootPath, sessionId, updates)
-      this.emitUnreadSummaryChanged()
-    }
+    await updateSessionMetadata(managed.workspace.rootPath, sessionId, updates)
+    this.emitUnreadSummaryChanged()
   }
 
   /**
@@ -4840,11 +4793,8 @@ export class SessionManager implements ISessionManager {
   async markSessionUnread(sessionId: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
-      managed.hasUnread = true
-      managed.lastReadMessageId = undefined
-      // Persist to disk
-      const workspaceRootPath = managed.workspace.rootPath
-      await updateSessionMetadata(workspaceRootPath, sessionId, { hasUnread: true, lastReadMessageId: undefined })
+      const updates = markSessionMetadataUnread(managed)
+      await updateSessionMetadata(managed.workspace.rootPath, sessionId, updates)
       this.emitUnreadSummaryChanged()
     }
   }
@@ -4858,9 +4808,7 @@ export class SessionManager implements ISessionManager {
     for (const managed of this.sessions.values()) {
       if (managed.workspace.id !== workspaceId) continue
       if (managed.hidden || managed.isArchived) continue
-      if (managed.isProcessing) continue
-      if (!managed.hasUnread) continue
-      managed.hasUnread = false
+      if (!clearSessionUnread(managed)) continue
       updates.push(
         updateSessionMetadata(managed.workspace.rootPath, managed.id, { hasUnread: false })
       )
