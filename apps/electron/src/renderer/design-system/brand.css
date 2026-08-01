@@ -137,3 +137,78 @@ input:focus,
 .border-brand {
   border-color: var(--brand-purple) !important;
 }
+
+/* --- Rotating purple glow around the chat input ──────────────────────────
+   Dual-layer effect: a blurred purple aura behind the box + a crisp
+   rotating light ring on top. The --input-glow-angle is driven by JS
+   (requestAnimationFrame in InputContainer.tsx) for reliable rotation
+   regardless of @property support or OS reduced-motion settings.
+══════════════════════════════════════════════════════════════════════════ */
+
+.input-glow-wrapper {
+  position: relative;
+  isolation: isolate;          /* stacking context so ::before z:-1 stays within */
+  --input-glow-angle: 0deg;    /* set by JS rAF loop, fallback 0deg */
+}
+
+/* Layer 1: blurred purple aura behind the box */
+.input-glow-wrapper::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 18px;
+  background: conic-gradient(
+    from var(--input-glow-angle),
+    transparent 0%,
+    var(--brand-purple) 8%,
+    var(--brand-purple) 22%,
+    transparent 38%,
+    transparent 50%,
+    var(--brand-purple-deep) 58%,
+    var(--brand-purple-deep) 72%,
+    transparent 88%
+  );
+  filter: blur(12px);
+  opacity: 0.5;
+  z-index: -1;
+  pointer-events: none;
+  transition: opacity 400ms ease;
+}
+
+/* Layer 2: crisp rotating ring on top (mask-composite technique) */
+.input-glow-wrapper::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 13px;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--input-glow-angle),
+    transparent 0%,
+    var(--brand-purple) 10%,
+    var(--brand-purple) 18%,
+    transparent 32%,
+    transparent 50%,
+    var(--brand-purple-deep) 58%,
+    var(--brand-purple-deep) 66%,
+    transparent 80%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.8;
+  z-index: 1;
+  pointer-events: none;
+  transition: opacity 400ms ease;
+}
+
+/* Brighter when the input is focused */
+.input-glow-wrapper:has(.input-container:focus-within)::before {
+  opacity: 0.75;
+}
+
+.input-glow-wrapper:has(.input-container:focus-within)::after {
+  opacity: 1;
+}

@@ -1,5 +1,9 @@
 /**
  * Linux-specific build logic
+ *
+ * ⚠️ NOT CURRENTLY WIRED UP. `packageLinux` has no callers; the live path is
+ * apps/electron/scripts/build-linux.sh. See win32.ts for the full note —
+ * edits here do not affect a real build.
  */
 
 import { $ } from 'bun';

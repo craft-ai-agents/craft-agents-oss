@@ -13,9 +13,16 @@
 #      - If trailer is NOT present: mixed staging → refuse
 #
 # The classification uses:
-#   - REBRAND_GLOBS: files that are ALWAYS pure rebranding (docs, config, templates)
-#   - ≤4-line heuristic: files with ≤4 total changed lines are likely pure rebranding
 #   - KNOWN_FUNCTIONAL: files that are always classified as functional
+#   - OLD_BRAND_PATTERN gate: a file whose staged diff does not add or remove
+#     any old-brand string cannot be a rebranding change, regardless of size
+#   - REBRAND_GLOBS: files that are pure rebranding (docs, config, templates)
+#   - ≤4-line heuristic: small diffs that DO touch brand strings are likely
+#     pure rebranding
+#
+# The brand-content gate runs before the glob and size checks. Without it,
+# any small functional diff (a one-line channel addition, a new mock method)
+# was misclassified as rebranding purely because it was short.
 #
 # Commit trailer convention:
 #   Add 'Rebrand-Only: true' to the commit message footer to signal a
@@ -96,7 +103,36 @@ KNOWN_FUNCTIONAL=(
 
 MAX_CHANGED_LINES=4
 
+# ── Old brand strings ─────────────────────────────────────────────────────
+# The names being replaced by the ARCHstudio rebrand. A diff that neither
+# adds nor removes one of these is not a rebranding change.
+#
+# Read from scripts/check-brand-leaks.sh rather than duplicated here: one
+# source of truth, and no literal old-brand string in this file for the
+# brand-leak gate to flag.
+BRAND_LEAKS_SCRIPT="scripts/check-brand-leaks.sh"
+OLD_BRAND_PATTERN=$(sed -n "s/^PATTERN='\(.*\)'[[:space:]]*$/\1/p" "$BRAND_LEAKS_SCRIPT" | head -1)
+
+if [ -z "$OLD_BRAND_PATTERN" ]; then
+  echo "🚫 Could not read PATTERN from $BRAND_LEAKS_SCRIPT."
+  echo "   The rebrand classifier cannot run without the old-brand pattern."
+  echo "   If that script moved or its PATTERN line changed shape, update"
+  echo "   BRAND_LEAKS_SCRIPT / the sed expression in this file."
+  exit 1
+fi
+
 # ── Helpers ────────────────────────────────────────────────────────────────
+
+# True if the file's staged diff adds or removes an old-brand string.
+# Excludes the +++/--- file headers so a path containing a brand token
+# does not count as brand content.
+touches_old_brand() {
+  local file="$1"
+  git diff --cached -U0 -- "$file" 2>/dev/null \
+    | grep -E '^[+-]' \
+    | grep -Ev '^(\+\+\+|---)' \
+    | grep -qE "$OLD_BRAND_PATTERN"
+}
 
 is_known_functional() {
   local file="$1"
@@ -151,6 +187,10 @@ while IFS= read -r file; do
   TOTAL_CHANGED=$(count_changed_lines "$ADDED" "$DELETED")
 
   if is_known_functional "$file"; then
+    FUNCTIONAL_FILES+=("$file")
+  elif ! touches_old_brand "$file"; then
+    # No old-brand string added or removed — cannot be a rebranding change,
+    # however small the diff or whichever glob the path matches.
     FUNCTIONAL_FILES+=("$file")
   elif matches_rebrand_glob "$file"; then
     REBRAND_FILES+=("$file")

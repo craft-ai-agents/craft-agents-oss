@@ -113,6 +113,11 @@ mac:
     # ripgrep (used by packages/server-core/src/services/search.ts).
     - from: node_modules/@vscode/ripgrep
       to: app/node_modules/@vscode/ripgrep
+    # Native SQLite runtime used by the Memory repository. The main bundle
+    # externalizes this package, so it must be copied explicitly because the
+    # global files rules exclude node_modules.
+    - from: ../../node_modules/better-sqlite3
+      to: app/node_modules/better-sqlite3
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs
@@ -177,6 +182,8 @@ win:
       to: app/node_modules/@anthropic-ai/claude-agent-sdk-binary
     - from: node_modules/@vscode/ripgrep
       to: app/node_modules/@vscode/ripgrep
+    - from: ../../node_modules/better-sqlite3
+      to: app/node_modules/better-sqlite3
     - from: vendor/bun/bun.exe
       to: vendor/bun/bun.exe
     - from: resources/bin/win32-x64
@@ -186,9 +193,20 @@ win:
       to: messaging-whatsapp-worker/worker.cjs
 
 nsis:
-  oneClick: true
-  # Per-user install to %LOCALAPPDATA%\Programs\ (not Program Files).
-  # Bun subprocess cannot read/write files in Program Files due to Windows permissions.
+  # Assisted (multi-step) installer so the install directory can be chosen at
+  # install time — the packaged app is ~1.1 GB and users may want it off the
+  # system drive. allowToChangeInstallationDirectory REQUIRES oneClick: false.
+  #
+  # TRADE-OFF: electron-updater cannot install an assisted NSIS package
+  # silently, so auto-updates now surface this same wizard instead of applying
+  # in the background on quit. autoDownload/autoInstallOnAppQuit in
+  # src/main/auto-update.ts still work; the install step is just no longer
+  # invisible.
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  # Per-user install (default root stays %LOCALAPPDATA%\Programs\, but the user
+  # can redirect it). Bun subprocess cannot read/write files in Program Files
+  # due to Windows permissions — avoid installing there.
   perMachine: false
   deleteAppDataOnUninstall: true
 
@@ -208,6 +226,8 @@ linux:
       to: app/node_modules/@anthropic-ai/claude-agent-sdk-binary
     - from: node_modules/@vscode/ripgrep
       to: app/node_modules/@vscode/ripgrep
+    - from: ../../node_modules/better-sqlite3
+      to: app/node_modules/better-sqlite3
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs

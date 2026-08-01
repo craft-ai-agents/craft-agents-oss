@@ -1,6 +1,17 @@
 /**
  * Windows-specific build logic (Node.js only - no Bun dependencies)
  *
+ * ⚠️ NOT CURRENTLY WIRED UP. `packageWindows` has no callers: `bun run dist:win`
+ * runs apps/electron/scripts/build-win.ps1, and nothing in package.json or
+ * .github/workflows references this module. The same is true of its darwin.ts
+ * and linux.ts siblings (only common.ts is live, via build-server.ts and
+ * electron-dev.ts).
+ *
+ * Consequence: edits here change NOTHING about a real build. `verifyPackagedSDK`
+ * and `verifyPackagedBetterSqlite3` below are duplicated by the equivalent
+ * checks in build-win.ps1 — that PowerShell copy is the one that actually runs.
+ * Keep them in sync, or delete this trio, but do not assume a fix here ships.
+ *
  * Note: This contains extensive workarounds for Windows Defender and file locking issues.
  * These are necessary for reliable CI builds on Windows.
  */
@@ -31,6 +42,28 @@ export function verifyPackagedSDK(unpackedPath: string): void {
   }
 
   console.log(`  SDK bundled: claude.exe is ${(stats.size / 1024 / 1024).toFixed(1)} MB`);
+}
+
+/** Verify the native SQLite runtime required by the Memory repository. */
+export function verifyPackagedBetterSqlite3(unpackedPath: string): void {
+  const packagePath = join(
+    unpackedPath, 'resources', 'app', 'node_modules', 'better-sqlite3',
+  );
+  const bindingPath = join(packagePath, 'prebuilds', 'win32-x64.node');
+
+  if (!existsSync(join(packagePath, 'package.json'))) {
+    throw new Error(`CRITICAL: better-sqlite3 not bundled! Expected at: ${packagePath}`);
+  }
+  if (!existsSync(bindingPath)) {
+    throw new Error(`CRITICAL: better-sqlite3 Windows binding not bundled! Expected at: ${bindingPath}`);
+  }
+
+  const stats = statSync(bindingPath);
+  if (stats.size < 1_000_000) {
+    throw new Error(`CRITICAL: better-sqlite3 binding too small (${stats.size} bytes)`);
+  }
+
+  console.log(`  SQLite bundled: win32-x64.node is ${(stats.size / 1024 / 1024).toFixed(1)} MB`);
 }
 
 /**
@@ -133,6 +166,9 @@ function buildMainProcess(config: BuildConfig): void {
     // app/node_modules/@anthropic-ai/claude-agent-sdk (asar:false) so the require resolves.
     // Must stay in sync with package.json build:main, electron-dev.ts, electron-build-main.ts.
     '--external:@anthropic-ai/claude-agent-sdk',
+    // Native addon loaded by the Memory repository and copied explicitly by
+    // electron-builder.yml. It cannot be bundled into main.cjs.
+    '--external:better-sqlite3',
     // Replace grammY's bundled polyfills (node-fetch@2 + abort-controller@3)
     // with native Node globals. Keeps parity with electron-dev.ts,
     // electron-build-main.ts, and apps/electron/package.json build:main.
@@ -270,8 +306,9 @@ export async function packageWindows(config: BuildConfig): Promise<string> {
   // Verify SDK is bundled in the unpacked app before checking artifacts
   const unpackedPath = join(electronDir, 'release', 'win-unpacked');
   if (existsSync(unpackedPath)) {
-    console.log('Verifying SDK in packaged app...');
+    console.log('Verifying native runtime dependencies in packaged app...');
     verifyPackagedSDK(unpackedPath);
+    verifyPackagedBetterSqlite3(unpackedPath);
   } else {
     console.warn('  win-unpacked not found, skipping SDK verification');
   }

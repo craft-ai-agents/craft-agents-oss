@@ -115,8 +115,16 @@ export function SourcesListPanel({
         const typeConfig = SOURCE_TYPE_CONFIG[source.config.type]
         const statusConfig = SOURCE_STATUS_CONFIG[connectionStatus]
         const subtitle = source.config.tagline || source.config.provider || ''
+        // Only these three glow. 'untested' and 'local_disabled' are not
+        // states the user needs flagged, so they render a plain icon.
+        const ringStatus =
+          connectionStatus === 'connected' ? 'connected' as const :
+          connectionStatus === 'failed' ? 'failed' as const :
+          connectionStatus === 'needs_auth' ? 'needs_auth' as const : null
         return {
-          icon: <SourceAvatar source={source} size="sm" />,
+          icon: (
+            <SourceAvatar source={source} size="sm" ringStatus={ringStatus} />
+          ),
           title: source.config.name,
           badges: (
             <>

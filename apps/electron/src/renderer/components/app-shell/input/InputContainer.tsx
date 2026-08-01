@@ -244,8 +244,61 @@ export function InputContainer({
     )
   }
 
+  // ── Rotating glow: JS-driven angle animation ──────────────────────────
+  // Drives --input-glow-angle on the wrapper via rAF, because animating a
+  // conic-gradient angle in pure CSS needs an @property registration that has
+  // proven brittle here. Unlike a CSS animation, a rAF loop gets none of the
+  // browser's automatic housekeeping, so we reimplement it: honour
+  // prefers-reduced-motion, and stop the loop whenever the window is hidden
+  // (otherwise it repaints forever in the background, draining battery).
+  const glowRef = React.useRef<HTMLDivElement>(null)
+  React.useEffect(() => {
+    const el = glowRef.current
+    if (!el) return
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    let angle = 0
+    let raf: number | null = null
+    let last = 0
+
+    const tick = (now: number) => {
+      const dt = now - last
+      last = now
+      // 6s per revolution = 60deg/s
+      angle = (angle + dt * 0.06) % 360
+      el.style.setProperty('--input-glow-angle', angle + 'deg')
+      raf = requestAnimationFrame(tick)
+    }
+
+    const stop = () => {
+      if (raf !== null) cancelAnimationFrame(raf)
+      raf = null
+    }
+
+    const start = () => {
+      if (raf !== null) return
+      // Re-baseline so a long pause doesn't jump the angle on resume.
+      last = performance.now()
+      raf = requestAnimationFrame(tick)
+    }
+
+    const sync = () => {
+      if (reduceMotion.matches || document.hidden) stop()
+      else start()
+    }
+
+    sync()
+    document.addEventListener('visibilitychange', sync)
+    reduceMotion.addEventListener('change', sync)
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', sync)
+      reduceMotion.removeEventListener('change', sync)
+    }
+  }, [])
+
   return (
-    <div className="relative">
+    <div ref={glowRef} className="relative input-glow-wrapper">
       {/* Hidden measuring div - only needed for structured inputs (freeform uses onHeightChange) */}
       {mode !== 'freeform' && (
         <div

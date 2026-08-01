@@ -170,6 +170,14 @@
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Brand ramp (lime -> purple), matching the emblem beside it and the
+     splash-screen wordmark. Falls back to --foreground where background-clip
+     isn't honoured, so the text never renders invisible. */
+  color: var(--foreground);
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .layout-sidebar__toggle {
@@ -785,6 +793,130 @@
   background: var(--shell-fill);
   font-size: 9px;
   text-align: center;
+}
+
+/* =============================================================================
+   Source status glow — context-rail chips
+
+   Same two-layer recipe as the purple chat-input glow (.input-glow-wrapper in
+   design-system/brand.css): a blurred conic aura behind the chip plus a crisp
+   conic ring on top, cut out with mask-composite. Green (brand ramp's lime end)
+   for connected, red for failed; every other status stays a plain chip.
+
+   These chips are rounded rectangles, so — unlike the circular source-avatar
+   rings — the ELEMENT cannot be rotated (a spinning rectangle looks wrong).
+   The gradient ANGLE is animated instead, which needs the @property
+   registration below. If @property is unavailable the angle simply stays at
+   its 0deg initial value: the glow still renders, it just doesn't rotate.
+============================================================================= */
+
+@property --arch-chip-glow-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.arch-capability-grid span[data-source-status='connected'],
+.arch-capability-grid span[data-source-status='failed'],
+.arch-capability-grid span[data-source-status='needs_auth'] {
+  position: relative;
+  isolation: isolate; /* keeps the z-index:-1 aura inside this chip */
+}
+
+.arch-capability-grid span[data-source-status='connected'] {
+  --arch-chip-glow-a: var(--brand-lime);
+  --arch-chip-glow-b: var(--brand-lime-deep);
+}
+
+.arch-capability-grid span[data-source-status='failed'] {
+  --arch-chip-glow-a: var(--destructive);
+  --arch-chip-glow-b: color-mix(in oklch, var(--destructive) 70%, black);
+}
+
+/* Amber = needs attention but NOT down: reachable, just not signed in.
+   --info is the palette's amber and is already what the needs_auth status
+   dot uses, so the two readouts agree. */
+.arch-capability-grid span[data-source-status='needs_auth'] {
+  --arch-chip-glow-a: var(--info);
+  --arch-chip-glow-b: color-mix(in oklch, var(--info) 70%, black);
+}
+
+/* Layer 1: blurred aura behind the chip */
+.arch-capability-grid span[data-source-status='connected']::before,
+.arch-capability-grid span[data-source-status='failed']::before,
+.arch-capability-grid span[data-source-status='needs_auth']::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 10px;
+  background: conic-gradient(
+    from var(--arch-chip-glow-angle),
+    transparent 0%,
+    var(--arch-chip-glow-a) 8%,
+    var(--arch-chip-glow-a) 22%,
+    transparent 38%,
+    transparent 50%,
+    var(--arch-chip-glow-b) 58%,
+    var(--arch-chip-glow-b) 72%,
+    transparent 88%
+  );
+  filter: blur(6px);
+  opacity: 0.5;
+  z-index: -1;
+  pointer-events: none;
+  animation: arch-chip-glow-spin 6s linear infinite;
+}
+
+/* Layer 2: crisp ring on top, cut out via mask-composite */
+.arch-capability-grid span[data-source-status='connected']::after,
+.arch-capability-grid span[data-source-status='failed']::after,
+.arch-capability-grid span[data-source-status='needs_auth']::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 8px;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--arch-chip-glow-angle),
+    transparent 0%,
+    var(--arch-chip-glow-a) 10%,
+    var(--arch-chip-glow-a) 18%,
+    transparent 32%,
+    transparent 50%,
+    var(--arch-chip-glow-b) 58%,
+    var(--arch-chip-glow-b) 66%,
+    transparent 80%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.9;
+  pointer-events: none;
+  animation: arch-chip-glow-spin 6s linear infinite;
+}
+
+/* Spin speed encodes urgency: healthy 6s, needs-auth 4.5s, down 3s. */
+.arch-capability-grid span[data-source-status='needs_auth']::before,
+.arch-capability-grid span[data-source-status='needs_auth']::after {
+  animation-duration: 4.5s;
+}
+
+.arch-capability-grid span[data-source-status='failed']::before,
+.arch-capability-grid span[data-source-status='failed']::after {
+  animation-duration: 3s;
+}
+
+@keyframes arch-chip-glow-spin {
+  to { --arch-chip-glow-angle: 360deg; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arch-capability-grid span[data-source-status]::before,
+  .arch-capability-grid span[data-source-status]::after {
+    animation: none;
+  }
 }
 
 .arch-file-list {

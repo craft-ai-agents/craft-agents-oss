@@ -255,6 +255,9 @@ $MainArgs = @(
     "--format=cjs",
     "--outfile=apps/electron/dist/main.cjs",
     "--external:electron",
+    # The Memory repository loads this native addon at runtime. Keep it external
+    # and let electron-builder.yml copy the package and Windows binding.
+    "--external:better-sqlite3",
     # SDK 0.3.x is pure ESM and calls createRequire(import.meta.url) at module init.
     # esbuild's CJS bundling leaves import.meta.url undefined for inlined ESM, crashing
     # the app on load (ERR_INVALID_ARG_VALUE). Externalize it so Node loads it natively
@@ -294,6 +297,28 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Preload build failed" }
 } finally {
     Pop-Location
+}
+
+# Build the network interceptor bundle.
+# REQUIRED, not optional: resolveInterceptorBundlePath (runtime-resolver.ts)
+# only falls back to the .ts source when !isPackaged. A packaged build loads
+# dist/interceptor.cjs and nothing else, so without this step the installer
+# ships whatever stale bundle happened to be left in dist/ — every interceptor
+# change silently fails to reach the packaged app. Copying the .ts sources
+# above (step 6) covers the dev/monorepo path only.
+Write-Host "  Building interceptor..."
+Push-Location $RootDir
+try {
+    & npx esbuild "packages/shared/src/unified-network-interceptor.ts" `
+        --bundle --platform=node --format=cjs `
+        --outfile="apps/electron/dist/interceptor.cjs"
+    if ($LASTEXITCODE -ne 0) { throw "Interceptor build failed" }
+} finally {
+    Pop-Location
+}
+
+if (-not (Test-Path "$ElectronDir\dist\interceptor.cjs")) {
+    throw "Interceptor build verification failed: dist/interceptor.cjs not found"
 }
 
 # Build renderer (frontend)
@@ -456,6 +481,34 @@ Pop-Location
 
 if (-not $builderSuccess) {
     throw "electron-builder failed after $maxBuilderRetries attempts"
+}
+
+# 8a. Verify the native SQLite runtime made it into the unpacked app.
+# main.cjs externalizes better-sqlite3, so if electron-builder.yml didn't copy
+# the package + binding the Memory panel dies at runtime with a bare
+# MODULE_NOT_FOUND. Mirrors verifyPackagedBetterSqlite3 in scripts/build/win32.ts.
+$UnpackedPath = Join-Path $ElectronDir "release\win-unpacked"
+if (Test-Path $UnpackedPath) {
+    Write-Host "Verifying native runtime dependencies in packaged app..."
+    $SqlitePkg = Join-Path $UnpackedPath "resources\app\node_modules\better-sqlite3"
+    $SqliteBinding = Join-Path $SqlitePkg "prebuilds\win32-x64.node"
+
+    if (-not (Test-Path (Join-Path $SqlitePkg "package.json"))) {
+        Write-Host "CRITICAL: better-sqlite3 not bundled! Expected at: $SqlitePkg" -ForegroundColor Red
+        exit 1
+    }
+    if (-not (Test-Path $SqliteBinding)) {
+        Write-Host "CRITICAL: better-sqlite3 Windows binding not bundled! Expected at: $SqliteBinding" -ForegroundColor Red
+        exit 1
+    }
+    $BindingSize = (Get-Item $SqliteBinding).Length
+    if ($BindingSize -lt 1000000) {
+        Write-Host "CRITICAL: better-sqlite3 binding too small ($BindingSize bytes)" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "  SQLite bundled: win32-x64.node is $([math]::Round($BindingSize / 1MB, 1)) MB" -ForegroundColor Green
+} else {
+    Write-Host "  win-unpacked not found, skipping native dependency verification" -ForegroundColor Yellow
 }
 
 # 8. Verify the installer was built

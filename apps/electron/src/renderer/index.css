@@ -1539,3 +1539,131 @@ html.dark[data-scenic] .fullscreen-overlay-background {
     animation: none;
   }
 }
+
+/* =============================================================================
+   Source Status Ring — Rotating glow around active/failed source icons
+
+   Same two-layer recipe as the purple chat-input glow (.input-glow-wrapper in
+   design-system/brand.css), just circular and in the brand ramp's green end:
+   Layer 1 = blurred conic aura behind the icon
+   Layer 2 = crisp conic ring on top, cut out via mask-composite
+
+   Green ring  = source connected/active (6s rotation)
+   Red ring    = source failed/disconnected (3s rotation)
+
+   Rotation is a plain CSS animation here (the element spins, rather than the
+   gradient angle), so it needs no @property registration and is switched off
+   by the prefers-reduced-motion block at the bottom.
+============================================================================= */
+
+.source-ring-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+.source-ring-icon {
+  position: relative;
+  display: inline-flex;
+  z-index: 1;
+}
+
+.source-ring-layer {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.source-ring-halo {
+  inset: -8px;
+  z-index: 0;
+}
+
+.source-ring-border {
+  inset: -4px;
+  z-index: 2;
+}
+
+/* Per-variant colour pair. Green uses the brand ramp's lime end so the ring is
+   the same brand family as the purple input glow, just the other side of it. */
+.source-ring-active {
+  --source-ring-a: var(--brand-lime);
+  --source-ring-b: var(--brand-lime-deep);
+}
+
+.source-ring-failed {
+  --source-ring-a: var(--destructive);
+  --source-ring-b: color-mix(in oklch, var(--destructive) 70%, black);
+}
+
+/* Amber = needs attention but NOT down (reachable, just not signed in).
+   --info is the palette's amber, matching the needs_auth status dot. */
+.source-ring-auth {
+  --source-ring-a: var(--info);
+  --source-ring-b: color-mix(in oklch, var(--info) 70%, black);
+}
+
+/* --- Layer 1: blurred aura behind the icon (matches .input-glow-wrapper::before) --- */
+.source-ring-halo {
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    var(--source-ring-a) 8%,
+    var(--source-ring-a) 22%,
+    transparent 38%,
+    transparent 50%,
+    var(--source-ring-b) 58%,
+    var(--source-ring-b) 72%,
+    transparent 88%
+  );
+  filter: blur(5px);
+  opacity: 0.55;
+  animation: source-ring-rotate 6s linear infinite;
+}
+
+/* --- Layer 2: crisp ring on top (mask-composite, matches ::after) --- */
+.source-ring-border {
+  padding: 1.5px;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    var(--source-ring-a) 10%,
+    var(--source-ring-a) 18%,
+    transparent 32%,
+    transparent 50%,
+    var(--source-ring-b) 58%,
+    var(--source-ring-b) 66%,
+    transparent 80%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.85;
+  animation: source-ring-rotate 6s linear infinite;
+}
+
+/* Spin speed encodes urgency: healthy 6s, needs-auth 4.5s, down 3s. */
+.source-ring-halo.source-ring-auth,
+.source-ring-border.source-ring-auth {
+  animation-duration: 4.5s;
+}
+
+.source-ring-halo.source-ring-failed,
+.source-ring-border.source-ring-failed {
+  animation-duration: 3s;
+}
+
+@keyframes source-ring-rotate {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .source-ring-layer {
+    animation: none;
+  }
+}

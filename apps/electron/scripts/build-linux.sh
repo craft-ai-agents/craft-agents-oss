@@ -193,6 +193,39 @@ cd "$ELECTRON_DIR"
 # Note: electron-builder may build both archs due to config, but we only use the requested one
 npx electron-builder --linux --${ARCH}
 
+# 7b. Verify the native SQLite runtime made it into the unpacked app.
+# main.cjs externalizes better-sqlite3, so if electron-builder.yml did not copy
+# the package + binding the Memory repository dies at runtime with a bare
+# MODULE_NOT_FOUND. Same guard as build-win.ps1 / build-dmg.sh.
+echo "Verifying native runtime dependencies in packaged app..."
+if [ "$ARCH" = "x64" ]; then
+    UNPACKED_DIR="$ELECTRON_DIR/release/linux-unpacked"
+else
+    UNPACKED_DIR="$ELECTRON_DIR/release/linux-arm64-unpacked"
+fi
+
+if [ ! -d "$UNPACKED_DIR" ]; then
+    echo "  $UNPACKED_DIR not found, skipping native dependency verification"
+else
+    SQLITE_PKG="$UNPACKED_DIR/resources/app/node_modules/better-sqlite3"
+    SQLITE_BINDING="$SQLITE_PKG/prebuilds/linux-${ARCH}.node"
+
+    if [ ! -f "$SQLITE_PKG/package.json" ]; then
+        echo "CRITICAL: better-sqlite3 not bundled! Expected at: $SQLITE_PKG"
+        exit 1
+    fi
+    if [ ! -f "$SQLITE_BINDING" ]; then
+        echo "CRITICAL: better-sqlite3 Linux binding not bundled! Expected at: $SQLITE_BINDING"
+        exit 1
+    fi
+    BINDING_SIZE="$(wc -c < "$SQLITE_BINDING" | tr -d ' ')"
+    if [ "$BINDING_SIZE" -lt 1000000 ]; then
+        echo "CRITICAL: better-sqlite3 binding too small (${BINDING_SIZE} bytes)"
+        exit 1
+    fi
+    echo "  SQLite bundled: linux-${ARCH}.node is $((BINDING_SIZE / 1024 / 1024)) MB"
+fi
+
 # 8. Verify the AppImage was built
 # electron-builder uses Linux-style arch names: x86_64 for x64, aarch64 for arm64
 if [ "$ARCH" = "x64" ]; then

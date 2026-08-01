@@ -131,6 +131,28 @@ export function SourceStatusIndicator({
 }
 
 /**
+ * Legacy status values written to config.json before `source_test` converted
+ * its probe vocabulary at the persistence boundary. Neither is a member of
+ * `SourceConnectionStatus`, so without this they fall through every consumer:
+ * the status dot looks up `STATUS_CONFIG['error']` and gets `undefined`, and
+ * nothing comparing against 'failed' ever matches.
+ *
+ * Both mean "the probe ran and did not succeed" — i.e. the source is down —
+ * so both normalise to 'failed'. Kept as a read-time repair (rather than a
+ * one-shot migration) because these values sit in user config files that are
+ * only rewritten when that specific source is re-tested.
+ */
+const LEGACY_STATUS_ALIASES: Record<string, SourceConnectionStatus> = {
+  error: 'failed',
+  disconnected: 'failed',
+  unknown: 'untested',
+}
+
+function normalizeStoredStatus(status: SourceConnectionStatus): SourceConnectionStatus {
+  return LEGACY_STATUS_ALIASES[status] ?? status
+}
+
+/**
  * Derive connection status from source config
  * This is a convenience function to determine status from existing fields
  *
@@ -154,7 +176,7 @@ export function deriveConnectionStatus(source: {
 
   // If explicit status is set, use it
   if (source.config.connectionStatus) {
-    return source.config.connectionStatus
+    return normalizeStoredStatus(source.config.connectionStatus)
   }
 
   // Derive from auth state

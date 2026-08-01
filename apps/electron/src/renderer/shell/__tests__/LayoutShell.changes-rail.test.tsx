@@ -47,7 +47,7 @@ interface ShellSessionContext {
   connectionLabel: string
   permissionModeLabel: string
   thinkingLabel: string
-  sourceNames: string[]
+  sourceNames: Array<{ name: string; status?: string }>
   workingDirectory?: string
   isProcessing?: boolean
 }

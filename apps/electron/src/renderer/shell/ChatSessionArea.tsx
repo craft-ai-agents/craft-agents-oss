@@ -132,6 +132,7 @@ import {
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../shared/types"
 import { SourcesListPanel } from "../components/app-shell/SourcesListPanel"
+import { deriveConnectionStatus } from "../components/ui/source-status-indicator"
 import { SkillsListPanel } from "../components/app-shell/SkillsListPanel"
 import { AutomationsListPanel } from "../components/automations/AutomationsListPanel"
 import { ProjectsListPanel } from "../components/app-shell/ProjectsListPanel"
@@ -1742,7 +1743,14 @@ function ChatSessionAreaContent({
       : undefined
 
     const sourceNames = (meta.enabledSourceSlugs ?? [])
-      .map(slug => sources.find(s => s.config.slug === slug)?.config.name ?? slug)
+      .map(slug => {
+        const source = sources.find(s => s.config.slug === slug)
+        if (!source) return { name: slug, status: undefined }
+        return {
+          name: source.config.name,
+          status: deriveConnectionStatus(source, localMcpEnabled),
+        }
+      })
 
     return {
       sessionName: meta.name,

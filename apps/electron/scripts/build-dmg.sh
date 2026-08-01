@@ -244,6 +244,34 @@ fi
 # Run electron-builder
 npx electron-builder $BUILDER_ARGS
 
+# 7b. Verify the native SQLite runtime made it into the packaged app.
+# main.cjs externalizes better-sqlite3, so if electron-builder.yml did not copy
+# the package + binding the Memory repository dies at runtime with a bare
+# MODULE_NOT_FOUND. Same guard as build-win.ps1 / build-linux.sh.
+echo "Verifying native runtime dependencies in packaged app..."
+APP_BUNDLE="$(find "$ELECTRON_DIR/release" -maxdepth 2 -name '*.app' -type d | head -1)"
+if [ -z "$APP_BUNDLE" ]; then
+    echo "  No .app bundle found under release/, skipping native dependency verification"
+else
+    SQLITE_PKG="$APP_BUNDLE/Contents/Resources/app/node_modules/better-sqlite3"
+    SQLITE_BINDING="$SQLITE_PKG/prebuilds/darwin-${ARCH}.node"
+
+    if [ ! -f "$SQLITE_PKG/package.json" ]; then
+        echo "CRITICAL: better-sqlite3 not bundled! Expected at: $SQLITE_PKG"
+        exit 1
+    fi
+    if [ ! -f "$SQLITE_BINDING" ]; then
+        echo "CRITICAL: better-sqlite3 macOS binding not bundled! Expected at: $SQLITE_BINDING"
+        exit 1
+    fi
+    BINDING_SIZE="$(wc -c < "$SQLITE_BINDING" | tr -d ' ')"
+    if [ "$BINDING_SIZE" -lt 1000000 ]; then
+        echo "CRITICAL: better-sqlite3 binding too small (${BINDING_SIZE} bytes)"
+        exit 1
+    fi
+    echo "  SQLite bundled: darwin-${ARCH}.node is $((BINDING_SIZE / 1024 / 1024)) MB"
+fi
+
 # 8. Verify the DMG was built
 # electron-builder.yml uses artifactName to output: Craft-Agents-${arch}.dmg
 DMG_NAME="Craft-Agents-${ARCH}.dmg"

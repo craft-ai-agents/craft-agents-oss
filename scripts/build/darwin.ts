@@ -1,5 +1,9 @@
 /**
  * macOS-specific build logic
+ *
+ * ⚠️ NOT CURRENTLY WIRED UP. `packageDarwin` has no callers: `bun run dist:mac`
+ * runs apps/electron/scripts/build-dmg.sh. See win32.ts for the full note —
+ * edits here do not affect a real build.
  */
 
 import { $ } from 'bun';

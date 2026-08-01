@@ -30,14 +30,14 @@ export function AnimatedARCHstudioSymbol({ className }: AnimatedARCHstudioSymbol
     >
       <defs>
         <linearGradient id={lg} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#86EFAC" />
-          <stop offset="55%" stopColor="#22C55E" />
-          <stop offset="100%" stopColor="#15803D" />
+          <stop offset="0%" style={{ stopColor: 'color-mix(in oklch, var(--brand-lime) 70%, white)' }} />
+          <stop offset="55%" style={{ stopColor: 'var(--brand-lime)' }} />
+          <stop offset="100%" style={{ stopColor: 'var(--brand-lime-deep)' }} />
         </linearGradient>
         <linearGradient id={rg} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#E9D5FF" />
-          <stop offset="55%" stopColor="#A855F7" />
-          <stop offset="100%" stopColor="#6B21A8" />
+          <stop offset="0%" style={{ stopColor: 'color-mix(in oklch, var(--brand-purple) 45%, white)' }} />
+          <stop offset="55%" style={{ stopColor: 'var(--brand-purple)' }} />
+          <stop offset="100%" style={{ stopColor: 'var(--brand-purple-deep)' }} />
         </linearGradient>
       </defs>
 

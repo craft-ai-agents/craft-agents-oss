@@ -3,7 +3,7 @@ import { join } from 'path'
 import { homedir } from 'os'
 import { execSync, spawn, type ChildProcess } from 'child_process'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
+import { getGitBashPath, setGitBashPath, clearGitBashPath, CONFIG_DIR } from '@craft-agent/shared/config'
 import { classifyExternalUrl, formatBlockedUrlError } from '@craft-agent/shared/utils/url-safety'
 import { isUsableGitBashPath, validateGitBashPath } from '@craft-agent/server-core/services'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
@@ -20,6 +20,7 @@ export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.theme.GET_SYSTEM_PREFERENCE,
   RPC_CHANNELS.system.VERSIONS,
   RPC_CHANNELS.system.HOME_DIR,
+  RPC_CHANNELS.system.CONFIG_DIR,
   RPC_CHANNELS.system.IS_DEBUG_MODE,
   RPC_CHANNELS.debug.LOG,
   RPC_CHANNELS.shell.OPEN_URL,
@@ -91,6 +92,11 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
   // Get user's home directory
   server.handle(RPC_CHANNELS.system.HOME_DIR, async () => {
     return homedir()
+  })
+
+  // Get the resolved app config directory (honors CRAFT_CONFIG_DIR)
+  server.handle(RPC_CHANNELS.system.CONFIG_DIR, async () => {
+    return CONFIG_DIR
   })
 
   // Check if running in debug mode (from source)

@@ -220,6 +220,7 @@ const mock: ElectronAPI = {
   }),
   getRuntimeEnvironment: () => 'web' as const,
   getHomeDir: () => Promise.resolve('/home/user'),
+  getConfigDir: () => Promise.resolve('/home/user/.archstudio'),
   isDebugMode: () => Promise.resolve(false),
 
   // ── Transport ─────────────────────────────────────────────────────────

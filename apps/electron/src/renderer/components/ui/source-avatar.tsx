@@ -33,6 +33,13 @@ interface SourceAvatarProps {
   fluid?: boolean
   /** Show connection status indicator (auto-derived from source) */
   showStatus?: boolean
+  /**
+   * Rotating glow ring around the icon. Pass the already-derived status —
+   * `deriveConnectionStatus` needs the caller's `localMcpEnabled` flag, which
+   * this component has no access to, so deriving it here would disagree with
+   * the row's own status badge for local MCP sources.
+   */
+  ringStatus?: 'connected' | 'failed' | 'needs_auth' | null
   /** Additional className overrides */
   className?: string
 }
@@ -142,7 +149,7 @@ function useFaviconFallback(
 // Component
 // ============================================================================
 
-export function SourceAvatar({ source, size = 'md', fluid, showStatus, className }: SourceAvatarProps) {
+export function SourceAvatar({ source, size = 'md', fluid, showStatus, ringStatus, className }: SourceAvatarProps) {
   const icon = useEntityIcon({
     workspaceId: source.workspaceId,
     entityType: 'source',
@@ -171,6 +178,26 @@ export function SourceAvatar({ source, size = 'md', fluid, showStatus, className
       containerClassName={fluid ? 'h-full w-full' : undefined}
     />
   )
+
+  // --- Rotating glow ring (styles live in index.css so they use theme tokens) ---
+  if (ringStatus) {
+    const variant =
+      ringStatus === 'connected' ? 'source-ring-active' :
+      ringStatus === 'failed' ? 'source-ring-failed' :
+      'source-ring-auth'
+    return (
+      <span className="source-ring-wrapper">
+        {/* Layer 1: blurred glow halo */}
+        <div className={`source-ring-layer source-ring-halo ${variant}`} aria-hidden="true" />
+        {/* Layer 2: crisp rotating border */}
+        <div className={`source-ring-layer source-ring-border ${variant}`} aria-hidden="true" />
+        {/* Icon on top */}
+        <span className="source-ring-icon">
+          {entityIcon}
+        </span>
+      </span>
+    )
+  }
 
   // Only wrap with relative container when status indicator is needed
   if (showStatus) {

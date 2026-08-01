@@ -2791,8 +2791,16 @@ const DEPTH_POPOVER_OPTIONS = [
                           <label>Sources</label>
                           {sessionContext.sourceNames.length > 0 ? (
                             <div className="arch-capability-grid">
-                              {sessionContext.sourceNames.map((name) => (
-                                <span key={name}>{name}</span>
+                              {sessionContext.sourceNames.map((source) => (
+                                <span
+                                  key={source.name}
+                                  // Drives the status glow in LayoutShell.css.
+                                  // Only 'connected' and 'failed' are styled;
+                                  // every other status renders a plain chip.
+                                  data-source-status={source.status}
+                                >
+                                  {source.name}
+                                </span>
                               ))}
                             </div>
                           ) : (

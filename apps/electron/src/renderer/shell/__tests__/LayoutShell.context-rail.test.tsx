@@ -47,7 +47,10 @@ const SESSION: ShellSessionContext = {
   permissionModeLabel: 'Safe',
   modelLabel: 'deepseek-r1:14b',
   thinkingLabel: 'Medium',
-  sourceNames: ['Gmail', 'Obsidian'],
+  sourceNames: [
+    { name: 'Gmail', status: 'connected' as const },
+    { name: 'Obsidian', status: 'untested' as const },
+  ],
   workingDirectory: 'D:/craft-agents-oss',
   isProcessing: true,
 }

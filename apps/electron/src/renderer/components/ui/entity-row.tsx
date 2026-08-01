@@ -299,7 +299,7 @@ export function EntityRow({
           {titleTrailing ? (
             <div className="flex items-center gap-[10px] w-full min-w-0">
               {icon && (
-                <div className="shrink-0 flex items-center gap-[10px] [&>*]:w-3 [&>*]:h-3">
+                <div className="shrink-0 flex items-center gap-[10px] overflow-visible">
                   {icon}
                 </div>
               )}
@@ -359,7 +359,7 @@ export function EntityRow({
           ) : (
             <div className="flex items-center gap-[10px] w-full pr-6 min-w-0">
               {icon && (
-                <div className="shrink-0 flex items-center gap-[10px] [&>*]:w-3 [&>*]:h-3">
+                <div className="shrink-0 flex items-center gap-[10px] overflow-visible">
                   {icon}
                 </div>
               )}
@@ -374,7 +374,7 @@ export function EntityRow({
           {subtitle && (
             <div className="flex items-start gap-[10px] w-full text-[12px] text-foreground/55 min-w-0 -mt-1">
               {icon && (
-                <div className="shrink-0 flex items-center gap-[10px] [&>*]:w-3 [&>*]:h-3 invisible" aria-hidden="true">
+                <div className="shrink-0 flex items-center gap-[10px] overflow-visible invisible" aria-hidden="true">
                   {icon}
                 </div>
               )}
@@ -389,7 +389,7 @@ export function EntityRow({
             <div className="flex items-center gap-[10px] text-xs text-foreground/70 w-full -mb-[2px] min-w-0">
               {/* Invisible spacer matching icon container width */}
               {icon && (
-                <div className="shrink-0 flex items-center gap-[10px] [&>*]:w-3 [&>*]:h-3 invisible" aria-hidden="true">
+                <div className="shrink-0 flex items-center gap-[10px] overflow-visible invisible" aria-hidden="true">
                   {icon}
                 </div>
               )}

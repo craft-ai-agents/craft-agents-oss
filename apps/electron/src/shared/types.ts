@@ -378,6 +378,11 @@ export interface ElectronAPI {
   /** Returns the renderer host environment without going through RPC. */
   getRuntimeEnvironment(): 'electron' | 'web'
   getHomeDir(): Promise<string>
+  /**
+   * Resolved app config directory (honors CRAFT_CONFIG_DIR). Use this for any
+   * path under the app's data root — never build one from getHomeDir().
+   */
+  getConfigDir(): Promise<string>
   isDebugMode(): Promise<boolean>
 
   // Transport connection status (preload-local, not RPC channels)

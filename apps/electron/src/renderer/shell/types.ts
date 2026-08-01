@@ -7,6 +7,8 @@
  * dynamic-import workaround.
  */
 
+import type { SourceConnectionStatus } from '../../shared/types'
+
 /**
  * Renderer-side shape for a single git-status row. Field semantics mirror
  * the server `GitStatusFileEntry` (from `dto.ts`) except `name` is the
@@ -52,8 +54,12 @@ export type ShellSessionContext = {
   modelLabel?: string
   /** Human-readable thinking level. */
   thinkingLabel: string
-  /** Names of sources enabled for this session. */
-  sourceNames: string[]
+  /**
+   * Sources enabled for this session, with the connection status used to
+   * drive the status glow on the context rail chips. `status` is undefined
+   * when the slug no longer resolves to a loaded source.
+   */
+  sourceNames: Array<{ name: string; status?: SourceConnectionStatus }>
   workingDirectory?: string
   isProcessing?: boolean
 }

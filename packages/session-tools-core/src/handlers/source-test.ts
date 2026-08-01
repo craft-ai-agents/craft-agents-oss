@@ -57,6 +57,33 @@ interface ConnectionTestResult {
  * 5. Auth status check - verifies authentication
  * 6. Metadata update - updates lastTestedAt, connectionStatus
  */
+/**
+ * Translate this tool's internal probe vocabulary (`ConnectionStatus`) into the
+ * canonical status persisted on `SourceConfig.connectionStatus`
+ * (`SourceConnectionStatus` in @craft-agent/shared).
+ *
+ * The two enums are NOT the same set. Writing 'error' / 'disconnected' /
+ * 'unknown' straight through — which is what used to happen — put values on
+ * disk that no consumer can match: `deriveConnectionStatus` returns a stored
+ * status verbatim, so the UI's status dot looked up `STATUS_CONFIG['error']`
+ * and got `undefined`, and nothing testing for 'failed' ever fired.
+ */
+function toSourceConnectionStatus(status: ConnectionStatus): SourceConfig['connectionStatus'] {
+  switch (status) {
+    case 'connected':
+      return 'connected';
+    // Both of these mean the probe RAN and did not succeed — a hard error, or
+    // a soft failure (reachable endpoint, uninterpretable response). The user
+    // needs to see "this source is down" either way, so both persist as
+    // 'failed'. 'untested' is reserved for "never probed".
+    case 'error':
+    case 'disconnected':
+      return 'failed';
+    case 'unknown':
+      return 'untested';
+  }
+}
+
 export async function handleSourceTest(
   ctx: SessionToolContext,
   args: SourceTestArgs
@@ -153,7 +180,7 @@ export async function handleSourceTest(
     const updatedSource: SourceConfig = {
       ...source,
       lastTestedAt: Date.now(),
-      connectionStatus,
+      connectionStatus: toSourceConnectionStatus(connectionStatus),
       connectionError,
       // Fold enabled flip into the same save — one write, not two.
       ...(willFlipEnabled ? { enabled: true } : {}),

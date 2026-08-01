@@ -948,6 +948,31 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
     bufferingToolCalls = false;
   }
 
+  /**
+   * Rebuild a chunk that carried BOTH tool_call deltas and a finish_reason,
+   * keeping only the terminal half.
+   *
+   * The consolidated tool_call events have already been emitted by
+   * flushTrackedCalls, so re-emitting the raw chunk would duplicate them.
+   * Everything except `delta.tool_calls` is preserved — top-level fields
+   * (id/model/created/object), sibling delta fields such as `content`, and
+   * each choice's `index` and `finish_reason` — so downstream sees a normal
+   * terminating event.
+   */
+  function buildFinishOnlyEvent(
+    data: Record<string, unknown>,
+    choices: Array<{ index?: number; delta?: Record<string, unknown>; finish_reason?: string | null }>,
+  ): Record<string, unknown> {
+    return {
+      ...data,
+      choices: choices.map(choice => {
+        const delta: Record<string, unknown> = { ...(choice?.delta ?? {}) };
+        delete delta.tool_calls;
+        return { ...choice, delta, finish_reason: choice?.finish_reason ?? null };
+      }),
+    };
+  }
+
   function processDataLine(dataStr: string, controller: TransformStreamDefaultController<Uint8Array>): void {
     if (DEBUG_SSE_RAW) debugLog(`[SSE RAW IN  openai] ${dataStr.slice(0, 4000)}`);
     if (dataStr === '[DONE]') {
@@ -1083,14 +1108,36 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
       }
     }
 
+    // Any non-null finish_reason terminates the turn — not just 'stop' and
+    // 'tool_calls'. 'length' (hit max tokens) and 'content_filter' are equally
+    // terminal, and downstream treats a stream that never carried ANY
+    // finish_reason as fatal: pi-ai's openai-completions adapter throws
+    // "Stream ended without finish_reason". Recognising only two of them meant
+    // buffered tool calls also flushed late (after the finish event) on the
+    // others.
+    const hasFinish = choices.some(
+      choice => typeof choice?.finish_reason === 'string' && choice.finish_reason.length > 0,
+    );
+
     // Suppress all upstream tool_call delta payloads. Consolidated events
     // are emitted on flush.
     if (handledToolCalls) {
+      // ...but a relay may pack `finish_reason` onto the SAME chunk as the
+      // final tool_call delta. Returning unconditionally here swallowed that
+      // terminator along with the deltas, so on those relays the stream ended
+      // with no finish_reason at all and the SDK threw. Emit a finish-only
+      // copy of the event instead: same choices, tool_call deltas stripped
+      // (flushTrackedCalls already emitted the consolidated versions).
+      if (hasFinish) {
+        if (bufferingToolCalls) {
+          flushTrackedCalls(controller);
+        }
+        emitSseLine(JSON.stringify(buildFinishOnlyEvent(data, choices)), controller);
+      }
       return;
     }
 
     // On finish, flush buffered tool calls with clean args BEFORE emitting finish event
-    const hasFinish = choices.some(choice => choice?.finish_reason === 'tool_calls' || choice?.finish_reason === 'stop');
     if (hasFinish) {
       if (bufferingToolCalls) {
         flushTrackedCalls(controller);

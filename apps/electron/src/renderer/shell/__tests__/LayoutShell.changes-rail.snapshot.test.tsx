@@ -33,17 +33,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { getDefaultStore } from 'jotai'
 import { activeSessionIdAtom } from '../../atoms/sessions'
 import LayoutShell from '../LayoutShell'
-import type { GitFileEntry } from '../types'
-
-interface ShellSessionContext {
-  sessionName: string
-  connectionLabel: string
-  permissionModeLabel: string
-  thinkingLabel: string
-  sourceNames: string[]
-  workingDirectory?: string
-  isProcessing?: boolean
-}
+import type { GitFileEntry, ShellSessionContext } from '../types'
 
 const store = getDefaultStore()
 store.set(activeSessionIdAtom, 'test-session-id')

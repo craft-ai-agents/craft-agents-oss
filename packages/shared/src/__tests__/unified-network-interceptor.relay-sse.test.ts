@@ -281,4 +281,79 @@ describe('unified-network-interceptor relay SSE quirks (#613)', () => {
     expect(JSON.parse(reassembled[1]!.function.arguments)).toEqual({ path: '/b' });
     expect(JSON.parse(reassembled[2]!.function.arguments)).toEqual({ pattern: 'foo' });
   });
+
+  // ── finish_reason packed onto a tool_call chunk ──────────────────────────
+  // Every other test in this suite sends finish_reason as its OWN chunk,
+  // which is why this class of relay went unnoticed. Relays are free to put
+  // the terminator on the same chunk as the final tool_call delta. The
+  // tool_call suppression used to return before the finish check ran, which
+  // swallowed the terminator — the stream then reached the downstream SDK
+  // with no finish_reason at all and pi-ai threw
+  // "Stream ended without finish_reason".
+
+  function finishReasons(out: string): string[] {
+    const found: string[] = [];
+    for (const line of out.split('\n')) {
+      if (!line.startsWith('data: ')) continue;
+      const payload = line.slice(6).trim();
+      if (!payload || payload === '[DONE]') continue;
+      let parsed: { choices?: Array<{ finish_reason?: string | null }> };
+      try { parsed = JSON.parse(payload); } catch { continue; }
+      for (const choice of parsed.choices ?? []) {
+        if (typeof choice?.finish_reason === 'string' && choice.finish_reason.length > 0) {
+          found.push(choice.finish_reason);
+        }
+      }
+    }
+    return found;
+  }
+
+  it('preserves finish_reason when a relay packs it onto the final tool_call chunk', async () => {
+    const sse = [
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"read","arguments":"{\\"path\\":\\"/x\\",\\"_intent\\":\\"i\\"}"}}]},"finish_reason":"tool_calls"}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const out = await runThroughProcessor(createOpenAiSseStrippingStream(), sse);
+
+    // The terminator must survive.
+    expect(finishReasons(out)).toContain('tool_calls');
+
+    // ...and the tool call must still arrive exactly once, consolidated and
+    // with metadata stripped (i.e. we did not re-emit the raw chunk).
+    const reassembled = reassembleToolCalls(out);
+    expect(reassembled).toHaveLength(1);
+    expect(reassembled[0]!.id).toBe('call_1');
+    expect(JSON.parse(reassembled[0]!.function.arguments)).toEqual({ path: '/x' });
+    expect(out).not.toContain('_intent');
+  });
+
+  it('preserves a non-stop finish_reason such as length', async () => {
+    // 'length' is equally terminal but was not in the recognised set, so
+    // buffered tool calls flushed after the finish event rather than before.
+    const sse = [
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_2","type":"function","function":{"name":"grep","arguments":"{\\"pattern\\":\\"y\\"}"}}]},"finish_reason":"length"}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const out = await runThroughProcessor(createOpenAiSseStrippingStream(), sse);
+
+    expect(finishReasons(out)).toContain('length');
+    const reassembled = reassembleToolCalls(out);
+    expect(reassembled).toHaveLength(1);
+    expect(reassembled[0]!.id).toBe('call_2');
+  });
+
+  it('emits the consolidated tool call BEFORE the finish event', async () => {
+    // Downstream accumulates tool calls until the terminator; a finish event
+    // that arrives first would close the turn with no calls attached.
+    const sse = [
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_3","type":"function","function":{"name":"ls","arguments":"{\\"path\\":\\"/\\"}"}}]},"finish_reason":"tool_calls"}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const out = await runThroughProcessor(createOpenAiSseStrippingStream(), sse);
+
+    expect(out.indexOf('call_3')).toBeLessThan(out.indexOf('"finish_reason":"tool_calls"'));
+  });
 });

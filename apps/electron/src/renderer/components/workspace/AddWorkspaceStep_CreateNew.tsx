@@ -34,17 +34,17 @@ export function AddWorkspaceStep_CreateNew({
   const [name, setName] = useState('')
   const [locationOption, setLocationOption] = useState<LocationOption>('default')
   const [customPath, setCustomPath] = useState<string | null>(null)
-  const [homeDir, setHomeDir] = useState('')
+  const [configDir, setConfigDir] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isValidating, setIsValidating] = useState(false)
 
-  // Get home directory on mount
+  // Get the app config directory on mount
   useEffect(() => {
-    window.electronAPI.getHomeDir().then(setHomeDir)
+    window.electronAPI.getConfigDir().then(setConfigDir)
   }, [])
 
   const slug = slugify(name)
-  const defaultBasePath = homeDir ? `${homeDir}/.craft-agent/workspaces` : null
+  const defaultBasePath = configDir ? `${configDir}/workspaces` : null
   const finalPath = locationOption === 'default'
     ? (defaultBasePath && slug ? `${defaultBasePath}/${slug}` : null)
     : customPath && slug

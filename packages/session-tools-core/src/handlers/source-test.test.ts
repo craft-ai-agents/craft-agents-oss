@@ -415,7 +415,10 @@ describe('source_test API connection branches', () => {
     ) as SourceConfig;
     // The enabled flag must not be flipped on a failed probe.
     expect(persisted.enabled).toBe(false);
-    expect(persisted.connectionStatus).toBe('disconnected');
+    // A soft failure persists as 'failed' — the probe ran and did not succeed.
+    // 'disconnected' is this tool's internal probe vocabulary and is not a
+    // valid SourceConnectionStatus.
+    expect(persisted.connectionStatus).toBe('failed');
   });
 
   it('404 → disconnected, NOT auto-enabled, activation NOT called', async () => {
