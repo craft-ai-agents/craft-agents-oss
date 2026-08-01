@@ -3,7 +3,6 @@ import { isAbsolute, join, resolve, dirname, parse as parsePath } from 'path'
 import { homedir } from 'os'
 import { validatePathFormat } from '../../utils/path-validation'
 import { randomUUID } from 'crypto'
-import { spawn } from 'child_process'
 import { RPC_CHANNELS, type FileAttachment, type DirectoryListingResult, type ReadDirectoryResult, type SessionFile } from '@archstudio/shared/protocol'
 import type { StoredAttachment } from '@archstudio/core/types'
 import { readFileAttachment, validateImageForClaudeAPI, IMAGE_LIMITS } from '@archstudio/shared/utils'
@@ -30,37 +29,6 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.fs.LIST_DIRECTORY,
   RPC_CHANNELS.fs.READ_DIRECTORY,
 ] as const
-
-async function transcodeMp4Preview(path: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('ffmpeg', [
-      '-v', 'error', '-i', path,
-      '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8',
-      '-b:v', '0', '-crf', '34',
-      '-c:a', 'libopus', '-f', 'webm', 'pipe:1',
-    ], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
-    const chunks: Buffer[] = []
-    let stderr = ''
-    const timeout = setTimeout(() => {
-      child.kill()
-      reject(new Error('Video preview transcoding timed out'))
-    }, 90_000)
-    child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk))
-    child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString() })
-    child.on('error', (error) => {
-      clearTimeout(timeout)
-      reject(error)
-    })
-    child.on('close', (code) => {
-      clearTimeout(timeout)
-      if (code !== 0) {
-        reject(new Error(stderr.trim() || `ffmpeg exited with code ${code}`))
-        return
-      }
-      resolve(Buffer.concat(chunks))
-    })
-  })
-}
 
 function getPreviewAllowedDirs(workspaceId?: string | null): string[] {
   const comfyRoot = process.env.COMFYUI_ROOT?.trim()
@@ -98,7 +66,7 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
       const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
       const safePath = await validateFilePath(path, getPreviewAllowedDirs(workspaceId))
       const ext = safePath.split('.').pop()?.toLowerCase() ?? ''
-      const buffer = ext === 'mp4' ? await transcodeMp4Preview(safePath) : await readFile(safePath)
+      const buffer = await readFile(safePath)
 
       // Map previewable image and media extensions to MIME types.
       // HEIC/HEIF/TIFF are intentionally excluded — no Chromium codec, opened externally instead.
@@ -112,7 +80,7 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
         bmp: 'image/bmp',
         ico: 'image/x-icon',
         avif: 'image/avif',
-        mp4: 'video/webm',
+        mp4: 'video/mp4',
         webm: 'video/webm',
         mov: 'video/quicktime',
       }
