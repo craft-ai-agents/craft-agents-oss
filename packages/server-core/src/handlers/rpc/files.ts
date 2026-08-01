@@ -80,6 +80,9 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
         bmp: 'image/bmp',
         ico: 'image/x-icon',
         avif: 'image/avif',
+        mp4: 'video/mp4',
+        webm: 'video/webm',
+        mov: 'video/quicktime',
       }
       const mime = mimeMap[ext] || 'application/octet-stream'
       const base64 = buffer.toString('base64')

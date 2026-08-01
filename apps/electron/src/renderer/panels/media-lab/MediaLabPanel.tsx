@@ -91,22 +91,16 @@ function MediaVideoPlayer({ item, onClose }: { item: MediaItem; onClose: () => v
   const stageRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    let objectUrl: string | null = null
     let cancelled = false
-    window.electronAPI.readFileBinary(item.path)
-      .then((data) => {
-        if (cancelled) return
-        const bytes = new Uint8Array(data.byteLength)
-        bytes.set(data)
-        objectUrl = URL.createObjectURL(new Blob([bytes.buffer], { type: 'video/mp4' }))
-        setSrc(objectUrl)
+    window.electronAPI.readFileDataUrl(item.path)
+      .then((dataUrl) => {
+        if (!cancelled) setSrc(dataUrl)
       })
       .catch((loadError) => {
         if (!cancelled) setError(loadError instanceof Error ? loadError.message : String(loadError))
       })
     return () => {
       cancelled = true
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
   }, [item.path])
 
@@ -136,6 +130,7 @@ function MediaVideoPlayer({ item, onClose }: { item: MediaItem; onClose: () => v
               onPause={() => setPlaying(false)}
               onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
               onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+              onError={() => setError('Chromium could not decode this video file.')}
             />
           ) : <Loader2 size={24} className="media-panel__spinner" />}
           {src && (
@@ -973,7 +968,7 @@ export function MediaLabPanel() {
                 <button type="button" onClick={() => setCreationTab('library')}>Open full library <ExternalLink size={13} /></button>
               </div>
               <div className="media-recent__grid">
-                {recentArtifacts.length === 0 ? <p>No ARCHstudio creations found yet.</p> : recentArtifacts.slice(0, 6).map((item) => {
+                {recentArtifacts.filter((item) => item.kind === creationKind).length === 0 ? <p>No ARCHstudio {creationKind} creations found yet.</p> : recentArtifacts.filter((item) => item.kind === creationKind).slice(0, 6).map((item) => {
                   const Icon = KIND_ICON[item.kind]
                   return (
                     <button type="button" key={item.path} className="media-recent-card" onClick={() => open(item)}>
