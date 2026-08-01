@@ -459,6 +459,7 @@ export const RPC_CHANNELS = {
     COMFY_HEALTH: 'media:comfy-health',
     COMFY_START: 'media:comfy-start',
     COMFY_WORKFLOWS: 'media:comfy-workflows',
+    COMFY_ARTIFACTS: 'media:comfy-artifacts',
     COMFY_RUN: 'media:comfy-run',
     COMFY_STATUS: 'media:comfy-status',
     COMFY_CANCEL: 'media:comfy-cancel',

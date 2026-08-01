@@ -183,7 +183,16 @@ const comfyRun = mock(async () => ({ promptId: 'prompt-12345678' }))
 const comfyStatus = mock(async (request: { promptId: string }) => ({ promptId: request.promptId, state: 'completed' }))
 const comfyCancel = mock(async () => undefined)
 
-;(win as any).electronAPI = { mediaList, comfyHealth, comfyStart, comfyWorkflows, comfyRun, comfyStatus, comfyCancel }
+;(win as any).electronAPI = {
+  mediaList,
+  comfyArtifacts: mediaList,
+  comfyHealth,
+  comfyStart,
+  comfyWorkflows,
+  comfyRun,
+  comfyStatus,
+  comfyCancel,
+}
 
 // -------------------------------------------------------------------------
 // 4. Mock the AppShellContext module — the panel calls `useAppShellContext`
@@ -308,7 +317,7 @@ describe('MediaLabPanel smoke test', () => {
     pageQueue = [
       {
         items: [
-          { name: 'c.pdf', path: '/tmp/c.pdf', kind: 'doc', sessionId: 's2', sessionTitle: 'two', lastMessageAt: 50 },
+          { name: 'c.wav', path: 'D:/Comfyui/output/c.wav', kind: 'audio', sessionId: 'comfyui:output', sessionTitle: 'ComfyUI output', lastMessageAt: 50 },
         ],
         hasMore: false,
         nextCursor: null,

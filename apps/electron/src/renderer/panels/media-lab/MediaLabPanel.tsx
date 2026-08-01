@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useAtomValue } from 'jotai'
 import { VariableSizeGrid, type VariableSizeGrid as VariableSizeGridType } from 'react-window'
 import { Clapperboard, Image, Music, Video, FileText, Loader2, ExternalLink, Sparkles, Wand2, Download, EyeOff, Check, X, CheckSquare, FolderOpen, Power } from 'lucide-react'
 import type {
@@ -11,7 +10,6 @@ import type {
   MediaListPage,
   MediaListRequest,
 } from '@archstudio/shared/protocol'
-import { sessionMetaMapAtom } from '../../atoms/sessions'
 import { useAppShellContext } from '../../context/AppShellContext'
 import './MediaLabPanel.css'
 
@@ -53,9 +51,9 @@ const GAP = 14
  * line-height variance across platforms.
  */
 const ROW_HEIGHT = 196
-/** Approximate height of the "Loading more sessions…" pager block. */
+/** Approximate height of the "Loading more creations…" pager block. */
 const PAGER_HEIGHT_APPROX = 56
-/** Approximate height of the "End of recent sessions" end-cap. */
+/** Approximate height of the output-library end-cap. */
 const END_HEIGHT_APPROX = 56
 
 function formatSize(bytes?: number): string {
@@ -73,7 +71,6 @@ function isRecentlyGenerated(mtime?: number): boolean {
 }
 
 export function MediaLabPanel() {
-  const metaMap = useAtomValue(sessionMetaMapAtom)
   const { onOpenFile } = useAppShellContext()
   const [kindFilter, setKindFilter] = useState<MediaKind | 'all'>('all')
   const [creationTab, setCreationTab] = useState<'create' | 'library'>('create')
@@ -88,24 +85,7 @@ export function MediaLabPanel() {
   const [comfyJob, setComfyJob] = useState<ComfyJobStatus | null>(null)
   const [comfySubmitting, setComfySubmitting] = useState(false)
   const [comfyStarting, setComfyStarting] = useState(false)
-
-  /**
-   * `topId` — renderer's coarse "the most recent session has changed"
-   * trigger. Server's `media:list` already orders by lastMessageAt desc,
-   * so a brand-new top-of-list session means the next page could carry
-   * media we haven't seen yet. The server has its own ordering and
-   * cursor; we mirror that with a cheap derive just to know when to
-   * reset the cursor.
-   */
-  const topId = useMemo(() => {
-    let newest: { lastMessageAt: number; id: string } | null = null
-    for (const m of metaMap.values()) {
-      if (m.hidden || m.isArchived) continue
-      const ts = m.lastMessageAt ?? m.createdAt ?? 0
-      if (!newest || ts > newest.lastMessageAt) newest = { lastMessageAt: ts, id: m.id }
-    }
-    return newest?.id ?? ''
-  }, [metaMap])
+  const artifactRefreshKey = comfyJob?.state === 'completed' ? comfyJob.promptId : ''
 
   useEffect(() => {
     let cancelled = false
@@ -372,13 +352,13 @@ export function MediaLabPanel() {
     }
     // loadPage / topId+kindFilter is the dependency we intentionally want
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topId, kindFilter])
+  }, [artifactRefreshKey, kindFilter])
 
   /** Fetch one server page and merge its classified items into state. */
   async function loadPage(request: MediaListRequest, runId: number, signal: AbortSignal): Promise<void> {
     const kindFilterForRequest = kindFilter === 'all' ? undefined : kindFilter
     try {
-      const page: MediaListPage = await window.electronAPI.mediaList(
+      const page: MediaListPage = await window.electronAPI.comfyArtifacts(
         { ...request, kind: kindFilterForRequest },
         signal,
       )
@@ -469,12 +449,12 @@ export function MediaLabPanel() {
   const pagerNode = (
     <div className="media-panel__pager" role="status" aria-live="polite">
       <Loader2 size={14} className="media-panel__pager-spin" />
-      <span>Loading more sessions…</span>
+      <span>Loading more creations…</span>
     </div>
   )
   const endNode = (
     <div className="media-panel__end" role="presentation">
-      End of recent sessions
+      End of ComfyUI creations
     </div>
   )
 
@@ -594,8 +574,8 @@ export function MediaLabPanel() {
    * "Hide" — but it was previously wearing a trash-can icon and destructive
    * red styling, which read as "delete these files".
    *
-   * There is deliberately no delete here. Media items are session artifacts
-   * resolved server-side from workspace session directories; a real delete
+   * There is deliberately no delete here. Media items are ComfyUI artifacts
+   * resolved server-side from the configured output directory; a real delete
    * needs its own path-validated RPC (see the handoff plan) rather than a
    * renderer-side call that could be handed an arbitrary path.
    */
@@ -882,8 +862,8 @@ export function MediaLabPanel() {
             ) : visible.length === 0 ? (
               <div className="media-panel__empty">
                 <Clapperboard size={48} />
-                <p>No media found</p>
-                <span>Images, video, audio and documents produced by your sessions appear here.</span>
+                <p>No ComfyUI creations found</p>
+                <span>Images, video, and audio generated into D:\Comfyui\output appear here.</span>
               </div>
             ) : containerSize.width > 0 && containerSize.height > 0 ? (
               <VariableSizeGrid

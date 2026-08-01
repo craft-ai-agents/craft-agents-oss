@@ -1,4 +1,4 @@
-import { access } from 'node:fs/promises'
+import { access, readdir, stat } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import type { RpcServer } from '@archstudio/server-core/transport'
@@ -10,15 +10,20 @@ import {
   type ComfyRunRequest,
   type ComfyRunResult,
   type ComfyWorkflowList,
+  type MediaItem,
+  type MediaListPage,
+  type MediaListRequest,
 } from '@archstudio/shared/protocol'
 import type { HandlerDeps } from '../handler-deps'
 import { ComfyUIClient } from '../../integrations/comfyui/client'
 import { applyWorkflowParameters, discoverComfyWorkflows } from '../../integrations/comfyui/workflow'
+import { classifyMedia } from './sessions'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.media.COMFY_HEALTH,
   RPC_CHANNELS.media.COMFY_START,
   RPC_CHANNELS.media.COMFY_WORKFLOWS,
+  RPC_CHANNELS.media.COMFY_ARTIFACTS,
   RPC_CHANNELS.media.COMFY_RUN,
   RPC_CHANNELS.media.COMFY_STATUS,
   RPC_CHANNELS.media.COMFY_CANCEL,
@@ -113,6 +118,50 @@ export function registerComfyUIHandlers(server: RpcServer, deps: HandlerDeps): v
       if (health.connected) return health
     }
     throw new Error('ComfyUI did not become ready within 60 seconds')
+  })
+
+  server.handle(RPC_CHANNELS.media.COMFY_ARTIFACTS, async (ctx, request: MediaListRequest = {}): Promise<MediaListPage> => {
+    const outputRoot = join(configuredRoot(), 'output')
+    const artifacts: MediaItem[] = []
+
+    async function walk(directory: string): Promise<void> {
+      if (ctx.signal.aborted) throw new Error('ComfyUI output scan was cancelled')
+      const entries = await readdir(directory, { withFileTypes: true })
+      for (const entry of entries) {
+        const path = join(directory, entry.name)
+        if (entry.isDirectory()) {
+          await walk(path)
+          continue
+        }
+        if (!entry.isFile()) continue
+        const kind = classifyMedia(entry.name)
+        if (!kind || kind === 'doc' || request.kind && request.kind !== kind) continue
+        const info = await stat(path)
+        const relativeFolder = path.slice(outputRoot.length).replace(/^[\\/]+/, '').split(/[\\/]/).slice(0, -1).join('/')
+        artifacts.push({
+          kind,
+          name: entry.name,
+          path,
+          size: info.size,
+          mtime: info.mtimeMs,
+          sessionId: `comfyui:${relativeFolder || 'output'}`,
+          sessionTitle: relativeFolder ? `ComfyUI · ${relativeFolder}` : 'ComfyUI output',
+          lastMessageAt: info.mtimeMs,
+        })
+      }
+    }
+
+    await walk(outputRoot)
+    artifacts.sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0) || a.path.localeCompare(b.path))
+    const offset = request.cursor ? Math.max(0, Number.parseInt(request.cursor, 10) || 0) : 0
+    const limit = Math.min(500, Math.max(1, Math.floor(request.limit ?? 200)))
+    const items = artifacts.slice(offset, offset + limit)
+    const nextOffset = offset + items.length
+    return {
+      items,
+      hasMore: nextOffset < artifacts.length,
+      nextCursor: nextOffset < artifacts.length ? String(nextOffset) : null,
+    }
   })
 
   server.handle(RPC_CHANNELS.media.COMFY_WORKFLOWS, async (): Promise<ComfyWorkflowList> => {
