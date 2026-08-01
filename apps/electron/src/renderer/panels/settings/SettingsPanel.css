@@ -210,11 +210,17 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
+  padding: 12px 14px;
+  margin: 0;
+  background: var(--ds-panel);
+  border-radius: 8px;
+  box-shadow: var(--ds-elevation-1);
 }
 
 .settings-field span {
   font-size: 11px;
   color: var(--ds-text-muted);
+  font-weight: 500;
 }
 
 .settings-field input {
