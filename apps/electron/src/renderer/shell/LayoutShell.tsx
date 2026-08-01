@@ -40,7 +40,7 @@ import {
   AlertTriangle,
   Pin,
 } from 'lucide-react'
-import { MemoryPanel } from '../panels/memory'
+import { KnowledgePanel } from '../panels/knowledge'
 import { RunsPanel } from '../panels/runs'
 import { CommandPanel } from '../panels/command'
 import { ProjectsPanel } from '../panels/projects'
@@ -51,6 +51,7 @@ import { SettingsPanel } from '../panels/settings'
 import { MediaLabPanel } from '../panels/media-lab'
 import { PromptStudioPanel } from '../panels/prompts'
 import { ProvidersPanel } from '../panels/ProvidersPanel'
+import { Drawer, DrawerPortal, DrawerOverlay, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from '@/components/ui/drawer'
 import { ThumbnailHoverPreview } from '../components/right-sidebar/ThumbnailHoverPreview'
 import { ShikiDiffViewer } from '../components/shiki'
 import { HighlightedDiffViewer, type DiffViewMode } from '@archstudio/ui'
@@ -74,7 +75,7 @@ export type ShellView =
   | 'sessions'
   | 'runs'
   | 'projects'
-  | 'memory'
+  | 'knowledge'
   | 'media-lab'
   | 'prompts'
   | 'providers'
@@ -111,7 +112,7 @@ const navItems = [
   // not discrete job executions.
   { id: 'runs' as ShellView, label: 'Activity', icon: Activity },
   { id: 'projects' as ShellView, label: 'Projects', icon: FolderKanban },
-  { id: 'memory' as ShellView, label: 'Memory', icon: Brain },
+  { id: 'knowledge' as ShellView, label: 'Knowledge', icon: Brain },
   { id: 'media-lab' as ShellView, label: 'Media Lab', icon: Clapperboard },
   { id: 'prompts' as ShellView, label: 'Prompt Studio', icon: BookOpen },
   { id: 'providers' as ShellView, label: 'Providers', icon: Plug },
@@ -718,6 +719,7 @@ function LayoutShell({
   const [previousView, setPreviousView] = useState<ShellView>('sessions')
   const [sessionsView, setSessionsView] = useState<'list' | 'board'>(getInitialSessionsView)
   const [sidebarCollapsedLocal, setSidebarCollapsed] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   // Controlled when the parent supplies `sidebarCollapsed`; otherwise local.
   const sidebarCollapsed = sidebarCollapsedProp ?? sidebarCollapsedLocal
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WorkspaceTab>('agent-chat')
@@ -2638,8 +2640,8 @@ const DEPTH_POPOVER_OPTIONS = [
         <div className="layout-sidebar__footer">
           <button
             type="button"
-            className={`layout-nav-item layout-nav-item--settings ${activeView === 'settings' ? 'layout-nav-item--active' : ''}`}
-            onClick={() => handleNavigate('settings')}
+            className="layout-nav-item layout-nav-item--settings"
+            onClick={() => setSettingsOpen(true)}
             title={settingsNavItem.label}
           >
             <settingsNavItem.icon size={18} aria-hidden="true" />
@@ -2729,8 +2731,6 @@ const DEPTH_POPOVER_OPTIONS = [
                 ? sessionListSlot(sessionsView, setSessionsView)
                 : sessionListSlot}
             </div>
-          ) : activeView === 'memory' ? (
-            <MemoryPanel />
           ) : activeView === 'runs' ? (
             <RunsPanel
               onOpenSession={(sessionId) => {
@@ -2743,6 +2743,8 @@ const DEPTH_POPOVER_OPTIONS = [
             />
           ) : activeView === 'projects' ? (
             <ProjectsPanel />
+          ) : activeView === 'knowledge' ? (
+            <KnowledgePanel />
           ) : activeView === 'providers' ? (
             <ProvidersPanel />
           ) : activeView === 'integrations' ? (
@@ -2751,8 +2753,6 @@ const DEPTH_POPOVER_OPTIONS = [
             <SearchPanel />
           ) : activeView === 'security' ? (
             <SecurityPanel />
-          ) : activeView === 'settings' ? (
-            <SettingsPanel />
           ) : activeView === 'media-lab' ? (
             <MediaLabPanel />
           ) : activeView === 'prompts' ? (
@@ -3500,7 +3500,7 @@ const DEPTH_POPOVER_OPTIONS = [
               <div className="layout-command-view">
                 <HomeHero
                   onOpenCommand={() => handleNavigate('command')}
-                  onExploreMemory={() => handleNavigate('memory')}
+                  onExploreMemory={() => handleNavigate('knowledge')}
                 />
                 {/* Primary way back into a conversation. Without this, closing the
                     last chat leaves the Command view with no path to a new one. */}
@@ -3525,6 +3525,28 @@ const DEPTH_POPOVER_OPTIONS = [
           )}
         </main>
       </div>
+
+      {/* Settings Drawer Modal */}
+      <Drawer
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        direction="left"
+      >
+        <DrawerPortal>
+          <DrawerOverlay />
+          <DrawerContent className="arch-settings-drawer">
+            <DrawerHeader>
+              <DrawerTitle>Settings</DrawerTitle>
+              <DrawerClose asChild>
+                <button type="button" className="arch-drawer-close-btn" aria-label="Close settings">×</button>
+              </DrawerClose>
+            </DrawerHeader>
+            <div className="arch-settings-drawer__body">
+              <SettingsPanel />
+            </div>
+          </DrawerContent>
+        </DrawerPortal>
+      </Drawer>
     </div>
   )
 }

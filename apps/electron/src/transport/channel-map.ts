@@ -383,6 +383,14 @@ export const CHANNEL_MAP = {
   createMemoryEdge: invoke(RPC_CHANNELS.memory.EDGE_CREATE),
   deleteMemoryEdge: invoke(RPC_CHANNELS.memory.EDGE_DELETE),
   getMemoryEdges: invoke(RPC_CHANNELS.memory.EDGE_LIST),
+
+  // Knowledge Galaxy (second brain)
+  buildGraph: invoke(RPC_CHANNELS.knowledge.BUILD_GRAPH),
+  getGraph: invoke(RPC_CHANNELS.knowledge.GET_GRAPH),
+  graphStatus: invoke(RPC_CHANNELS.knowledge.GRAPH_STATUS),
+  ask: invoke(RPC_CHANNELS.knowledge.ASK),
+  getConversation: invoke(RPC_CHANNELS.knowledge.GET_CONVERSATION),
+
   // Health check persistence + heatmap
   recordHealthCheck: invoke(RPC_CHANNELS.health.RECORD),
   getHealthHeatmap: invoke(RPC_CHANNELS.health.HEATMAP),

@@ -12,6 +12,7 @@ import { registerSettingsGuiHandlers } from './settings'
 import { registerMemoryHandlers } from './memory'
 import { registerPromptHandlers } from './prompts'
 import { registerHealthHandlers } from './health'
+import { registerKnowledgeHandlers } from './knowledge'
 
 export function registerGuiRpcHandlers(server: RpcServer, deps: HandlerDeps): void {
   registerSystemGuiHandlers(server, deps)
@@ -21,6 +22,7 @@ export function registerGuiRpcHandlers(server: RpcServer, deps: HandlerDeps): vo
   registerMemoryHandlers(server, deps)
   registerPromptHandlers(server, deps)
   registerHealthHandlers(server, deps)
+  registerKnowledgeHandlers(server, deps)
 }
 
 export function registerAllRpcHandlers(server: RpcServer, deps: HandlerDeps, serverCtx?: ServerHandlerContext): void {

@@ -134,6 +134,13 @@ export const RPC_CHANNELS = {
     /** Push channel: broadcast when a new inference event is recorded. */
     UPDATED: 'llmInference:updated',
   },
+  knowledge: {
+    BUILD_GRAPH: 'knowledge:buildGraph',
+    GET_GRAPH: 'knowledge:getGraph',
+    GRAPH_STATUS: 'knowledge:graphStatus',
+    ASK: 'knowledge:ask',
+    GET_CONVERSATION: 'knowledge:getConversation',
+  },
   health: {
     RECORD: 'health:record',
     HEATMAP: 'health:heatmap',

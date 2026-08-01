@@ -536,6 +536,25 @@ const mock: ElectronAPI = {
   deleteMemoryEdge: (_edgeId: string) => Promise.resolve({ success: true }),
   getMemoryEdges: (_memoryId: string) => Promise.resolve([]),
 
+  // ── Knowledge Galaxy ──────────────────────────────────────────────────
+  buildGraph: (_workspaceId: string) => Promise.resolve({
+    nodes: [],
+    edges: [],
+    builtAt: Date.now(),
+  }),
+  getGraph: (_workspaceId: string) => Promise.resolve(null),
+  graphStatus: (_workspaceId: string) => Promise.resolve({
+    built: false,
+    nodeCount: 0,
+    edgeCount: 0,
+    builtAt: null,
+  }),
+  ask: (_workspaceId: string, _query: string) => Promise.resolve({
+    answer: 'No workspace data available yet. Build a graph by creating some sessions first.',
+    nodeIds: [],
+  }),
+  getConversation: (_workspaceId: string) => Promise.resolve([]),
+
   // ── Prompt compiler ───────────────────────────────────────────────────
   compilePrompt: () => Promise.resolve({
     id: 'mock-compile',

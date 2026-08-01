@@ -156,7 +156,7 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
 }
 
 async function getExpectedGuiChannels(): Promise<Set<string>> {
-  const [browser, system, workspace, settings, health, prompt, memory] = await Promise.all([
+  const [browser, system, workspace, settings, health, prompt, memory, knowledge] = await Promise.all([
     import('../browser'),
     import('../system'),
     import('../workspace'),
@@ -164,6 +164,7 @@ async function getExpectedGuiChannels(): Promise<Set<string>> {
     import('../health'),
     import('../prompts'),
     import('../memory'),
+    import('../knowledge'),
   ])
 
   return new Set([
@@ -174,6 +175,7 @@ async function getExpectedGuiChannels(): Promise<Set<string>> {
     ...health.CORE_HANDLED_CHANNELS,
     ...prompt.CORE_HANDLED_CHANNELS,
     ...memory.CORE_HANDLED_CHANNELS,
+    ...knowledge.KNOWLEDGE_HANDLED_CHANNELS,
   ])
 }
 

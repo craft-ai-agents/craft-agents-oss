@@ -746,6 +746,13 @@ export interface ElectronAPI {
   /** List all edges involving a given memory. */
   getMemoryEdges(memoryId: string): Promise<import('@archstudio/shared/memory/types').MemoryEdge[]>
 
+  // Knowledge Galaxy (second brain)
+  buildGraph(workspaceId: string): Promise<import('@archstudio/shared/knowledge').WorkspaceGraph>
+  getGraph(workspaceId: string): Promise<import('@archstudio/shared/knowledge').WorkspaceGraph | null>
+  graphStatus(workspaceId: string): Promise<{ built: boolean; nodeCount: number; edgeCount: number; builtAt: number | null }>
+  ask(workspaceId: string, query: string): Promise<{ answer: string; nodeIds: number[] }>
+  getConversation(workspaceId: string): Promise<Array<{ role: 'user' | 'assistant'; content: string }>>
+
   // Prompt Compiler
   /**
    * Compile a prompt from the given options using the real PromptCompiler.

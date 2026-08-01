@@ -47,6 +47,8 @@
     "./i18n": "./src/i18n/index.ts",
     "./icons": "./src/icons/index.ts",
     "./interceptor": "./src/interceptor-common.ts",
+    "./knowledge": "./src/knowledge/index.ts",
+    "./knowledge/retrieval": "./src/knowledge/retrieval.ts",
     "./labels": "./src/labels/index.ts",
     "./labels/auto": "./src/labels/auto/index.ts",
     "./labels/crud": "./src/labels/crud.ts",

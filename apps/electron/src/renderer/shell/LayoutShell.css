@@ -2728,3 +2728,74 @@
   color: var(--destructive);
   border-color: color-mix(in srgb, var(--destructive) 30%, transparent);
 }
+
+/* ================================================================
+   Settings Drawer Modal
+   ================================================================ */
+
+/* Settings drawer overlay — semi-transparent */
+[data-slot="drawer-overlay"] {
+  background: rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Override vaul drawer to be a left-side panel */
+[data-slot="drawer-content"].arch-settings-drawer {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  width: 380px !important;
+  max-width: 90vw !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: var(--background) !important;
+  border-right: 1px solid var(--shell-border) !important;
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15) !important;
+  animation: slideInLeft 0.3s cubic-bezier(0.32, 0.72, 0, 1) !important;
+  z-index: 50 !important;
+}
+
+/* Hide the dragging indicator on top */
+[data-slot="drawer-content"].arch-settings-drawer .bg-muted {
+  display: none !important;
+}
+
+/* Close button styling */
+.arch-drawer-close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  font-size: 24px;
+  cursor: pointer;
+  color: var(--foreground);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 150ms ease;
+}
+
+.arch-drawer-close-btn:hover {
+  opacity: 0.6;
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.arch-settings-drawer__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}

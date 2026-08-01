@@ -1,0 +1,123 @@
+.knowledge-node-panel {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 380px;
+  background: rgba(20, 20, 20, 0.98);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.knowledge-node-panel__header {
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.knowledge-node-panel__header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.knowledge-node-panel__close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 150ms ease;
+}
+
+.knowledge-node-panel__close:hover {
+  color: #ffffff;
+}
+
+.knowledge-node-panel__meta {
+  padding: 12px 16px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.knowledge-node-panel__type {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.knowledge-node-panel__type--cyan {
+  background: rgba(0, 204, 255, 0.2);
+  color: #00ccff;
+}
+
+.knowledge-node-panel__type--purple {
+  background: rgba(170, 0, 255, 0.2);
+  color: #aa00ff;
+}
+
+.knowledge-node-panel__type--lime {
+  background: rgba(0, 255, 0, 0.2);
+  color: #00ff00;
+}
+
+.knowledge-node-panel__group {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.knowledge-node-panel__timestamp {
+  padding: 8px 16px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.knowledge-node-panel__excerpt {
+  flex: 1;
+  padding: 16px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.5;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.knowledge-node-panel__action {
+  margin: 12px 16px 16px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #00ff00, #aa00ff);
+  border: none;
+  border-radius: 6px;
+  color: #000000;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+
+.knowledge-node-panel__action:hover {
+  opacity: 0.9;
+}
