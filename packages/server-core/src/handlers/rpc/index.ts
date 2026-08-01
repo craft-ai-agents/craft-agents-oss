@@ -13,6 +13,8 @@ import { registerSessionsHandlers } from './sessions'
 export { registerSessionsHandlers, cleanupSessionFileWatchForClient } from './sessions'
 import { registerMediaHandlers } from './media'
 export { registerMediaHandlers } from './media'
+import { registerComfyUIHandlers } from './comfyui'
+export { registerComfyUIHandlers } from './comfyui'
 import { registerServerHandlers } from './server'
 import type { ServerHandlerContext } from '../../bootstrap/headless-start'
 export type { ServerHandlerContext } from '../../bootstrap/headless-start'
@@ -44,6 +46,7 @@ export function registerCoreRpcHandlers(
   registerResourcesHandlers(server, deps)
   registerSessionsHandlers(server, deps)
   registerMediaHandlers(server, deps)
+  registerComfyUIHandlers(server, deps)
   if (serverCtx) registerServerHandlers(server, deps, serverCtx)
   registerSettingsHandlers(server, deps)
   registerProjectsHandlers(server, deps)

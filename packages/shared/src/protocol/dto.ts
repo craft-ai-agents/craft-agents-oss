@@ -620,6 +620,63 @@ export interface MediaListPage {
   nextCursor: string | null
 }
 
+// ---------------------------------------------------------------------------
+// ComfyUI Media Lab generation
+// ---------------------------------------------------------------------------
+
+export type ComfyWorkflowKind = 'image' | 'video' | 'audio' | 'unknown'
+export type ComfyParameterKind = 'text' | 'number' | 'seed' | 'image' | 'model' | 'select'
+
+export interface ComfyHealth {
+  connected: boolean
+  baseUrl: string
+  version?: string
+  device?: string
+  vramTotal?: number
+  vramFree?: number
+  error?: string
+}
+
+export interface ComfyWorkflowParameterDto {
+  id: string
+  label: string
+  kind: ComfyParameterKind
+  value: string | number
+  options?: Array<string | number>
+}
+
+export interface ComfyWorkflowSummary {
+  id: string
+  name: string
+  kind: ComfyWorkflowKind
+  nodeClasses: string[]
+  parameters: ComfyWorkflowParameterDto[]
+}
+
+export interface ComfyWorkflowList {
+  workflows: ComfyWorkflowSummary[]
+  rejectedCount: number
+}
+
+export interface ComfyRunRequest {
+  workflowId: string
+  parameters?: Record<string, string | number>
+}
+
+export interface ComfyRunResult {
+  promptId: string
+  queueNumber?: number
+}
+
+export interface ComfyJobStatusRequest {
+  promptId: string
+}
+
+export interface ComfyJobStatus {
+  promptId: string
+  state: 'queued' | 'running' | 'completed' | 'failed' | 'unknown'
+}
+
 export interface FileSearchResult {
   name: string
   path: string

@@ -227,6 +227,11 @@ export const CHANNEL_MAP = {
   // duck-typed and stripped before serialization by the transport; the
   // typed request only carries {kind, cursor, limit}.
   mediaList: invoke(RPC_CHANNELS.media.LIST),
+  comfyHealth: invoke(RPC_CHANNELS.media.COMFY_HEALTH),
+  comfyWorkflows: invoke(RPC_CHANNELS.media.COMFY_WORKFLOWS),
+  comfyRun: invoke(RPC_CHANNELS.media.COMFY_RUN),
+  comfyStatus: invoke(RPC_CHANNELS.media.COMFY_STATUS),
+  comfyCancel: invoke(RPC_CHANNELS.media.COMFY_CANCEL),
 
   // Sources
   getSources: invoke(RPC_CHANNELS.sources.GET),

@@ -10,7 +10,15 @@ export * from '@archstudio/shared/protocol'
 // `GitFileDiffResult` is a protocol DTO, not a core type. The `export *` above
 // re-exports it publicly but does not bring it into this module's scope, so the
 // local annotation below needs an explicit import.
-import type { GitFileDiffResult } from '@archstudio/shared/protocol'
+import type {
+  ComfyHealth,
+  ComfyJobStatus,
+  ComfyJobStatusRequest,
+  ComfyRunRequest,
+  ComfyRunResult,
+  ComfyWorkflowList,
+  GitFileDiffResult,
+} from '@archstudio/shared/protocol'
 
 // Core types
 import type {
@@ -515,6 +523,11 @@ export interface ElectronAPI {
    * transport; it never crosses the wire.
    */
   mediaList(request: MediaListRequest, signal?: AbortSignal): Promise<MediaListPage>
+  comfyHealth(): Promise<ComfyHealth>
+  comfyWorkflows(): Promise<ComfyWorkflowList>
+  comfyRun(request: ComfyRunRequest): Promise<ComfyRunResult>
+  comfyStatus(request: ComfyJobStatusRequest): Promise<ComfyJobStatus>
+  comfyCancel(): Promise<void>
   getSessionNotes(sessionId: string): Promise<string>
   setSessionNotes(sessionId: string, content: string): Promise<void>
   watchSessionFiles(sessionId: string): Promise<void>

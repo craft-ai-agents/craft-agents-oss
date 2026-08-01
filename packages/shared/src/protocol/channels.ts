@@ -456,6 +456,11 @@ export const RPC_CHANNELS = {
      * fires, and the server's per-request AbortController flips).
      */
     LIST: 'media:list',
+    COMFY_HEALTH: 'media:comfy-health',
+    COMFY_WORKFLOWS: 'media:comfy-workflows',
+    COMFY_RUN: 'media:comfy-run',
+    COMFY_STATUS: 'media:comfy-status',
+    COMFY_CANCEL: 'media:comfy-cancel',
   },
   browserPane: {
     CREATE: 'browser-pane:create',
