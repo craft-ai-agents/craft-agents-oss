@@ -10,7 +10,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--ds-panel-border);
+  border-bottom: 1px solid color-mix(in oklch, var(--ds-shadow-color) 10%, transparent);
 }
 
 .settings-panel__title {
@@ -70,7 +70,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid color-mix(in oklch, var(--ds-shadow-color) 15%, transparent);
   color: var(--ds-text-secondary);
 }
 
@@ -97,22 +99,24 @@
 .settings-level {
   padding: 6px 14px;
   border-radius: 999px;
-  border: 1px solid var(--ds-panel-border);
-  background: transparent;
+  border: none;
+  background: var(--ds-neutral-bg);
   color: var(--ds-text-secondary);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.15s ease;
+  box-shadow: inset 0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 8%, transparent);
 }
 
 .settings-level:hover:not(:disabled) {
-  border-color: color-mix(in oklch, var(--brand-lime) 40%, transparent);
+  background: var(--ds-hover-bg);
+  box-shadow: inset 0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 12%, transparent);
 }
 
 .settings-level.is-active {
   color: var(--ds-text-on-brand);
-  border-color: transparent;
   background: linear-gradient(135deg, var(--brand-lime), var(--brand-purple));
+  box-shadow: 0 2px 8px color-mix(in oklch, var(--brand-lime) 30%, transparent);
 }
 
 .settings-level:disabled {
@@ -127,9 +131,16 @@
   gap: 16px;
   padding: 12px 14px;
   border-radius: 10px;
-  border: 1px solid var(--ds-panel-border);
-  background: color-mix(in oklch, var(--foreground) 2%, transparent);
+  border: none;
+  background: var(--ds-panel);
+  box-shadow: var(--ds-elevation-1);
   cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.settings-row:hover:not(:has(input:disabled, select:disabled, button:disabled)) {
+  background: var(--ds-hover-bg);
+  box-shadow: var(--ds-elevation-2);
 }
 
 .settings-row:has(input:disabled, select:disabled, button:disabled) {
@@ -192,7 +203,7 @@
   gap: 12px;
   margin-top: 12px;
   padding-left: 14px;
-  border-left: 2px solid var(--ds-panel-border);
+  border-left: 2px solid color-mix(in oklch, var(--ds-shadow-color) 15%, transparent);
 }
 
 .settings-field {
@@ -209,39 +220,47 @@
 .settings-field input {
   padding: 8px 11px;
   border-radius: 8px;
-  border: 1px solid var(--ds-panel-border);
+  border: none;
   background: color-mix(in oklch, var(--foreground) 3%, transparent);
+  box-shadow: inset 0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 12%, transparent);
   color: var(--ds-text);
   font-size: 12px;
   font-family: var(--mono-font, 'JetBrainsMono',monospace);
   outline: none;
+  transition: all 150ms ease;
 }
 
 .settings-field input:focus {
-  border-color: var(--brand-purple);
+  border: 1px solid var(--brand-purple);
+  box-shadow: 0 0 0 3px var(--ds-command-ring), inset 0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 12%, transparent);
+  background: var(--ds-command-surface);
 }
 
 .settings-select {
   padding: 8px 11px;
   border-radius: 8px;
-  border: 1px solid var(--ds-panel-border);
+  border: none;
   background: color-mix(in oklch, var(--foreground) 3%, transparent);
+  box-shadow: inset 0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 12%, transparent);
   color: var(--ds-text);
   font-size: 12px;
   outline: none;
   min-width: 160px;
   cursor: pointer;
+  transition: all 150ms ease;
 }
 
 .settings-select:focus {
-  border-color: var(--brand-purple);
+  border: 1px solid var(--brand-purple);
+  box-shadow: 0 0 0 3px var(--ds-command-ring), inset 0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 12%, transparent);
 }
 
 .settings-button {
   padding: 7px 14px;
   border-radius: 8px;
-  border: 1px solid var(--ds-panel-border);
-  background: color-mix(in oklch, var(--foreground) 4%, transparent);
+  border: none;
+  background: var(--ds-neutral-bg);
+  box-shadow: inset 0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 8%, transparent);
   color: var(--ds-text-secondary);
   font-size: 12px;
   cursor: pointer;
@@ -249,9 +268,9 @@
 }
 
 .settings-button:hover:not(:disabled) {
-  border-color: color-mix(in oklch, var(--brand-purple) 50%, transparent);
+  background: color-mix(in oklch, var(--brand-purple) 12%, transparent);
   color: var(--ds-text-on-brand);
-  background: color-mix(in oklch, var(--brand-purple) 10%, transparent);
+  box-shadow: 0 2px 6px color-mix(in oklch, var(--brand-purple) 25%, transparent);
 }
 
 .settings-button:disabled {
@@ -346,16 +365,17 @@
 
 .settings-button--primary {
   background: linear-gradient(135deg, var(--brand-lime), var(--brand-purple));
-  border-color: transparent;
+  border: none;
   color: var(--ds-text-on-brand);
   font-weight: 600;
+  box-shadow: 0 4px 12px color-mix(in oklch, var(--brand-lime) 30%, transparent);
 }
 
 .settings-button--primary:hover:not(:disabled) {
   opacity: 0.9;
-  border-color: transparent;
   color: var(--ds-text-on-brand);
   background: linear-gradient(135deg, var(--brand-lime), var(--brand-purple));
+  box-shadow: 0 6px 16px color-mix(in oklch, var(--brand-lime) 35%, transparent);
 }
 
 .settings-export-msg {
@@ -390,7 +410,7 @@
   color: var(--ds-text-muted);
   margin-bottom: 4px;
   padding-top: 4px;
-  border-top: 1px solid var(--ds-panel-border);
+  border-top: 1px solid color-mix(in oklch, var(--ds-shadow-color) 15%, transparent);
 }
 
 .settings-shortcut-row {
@@ -431,7 +451,7 @@
   font-family: inherit;
   color: var(--ds-text-secondary);
   background: var(--bg-muted, var(--ds-panel));
-  border: 1px solid var(--ds-panel-border);
+  border: 1px solid color-mix(in oklch, var(--ds-shadow-color) 20%, transparent);
   border-radius: 4px;
   box-shadow: 0 1px 1px color-mix(in oklch, var(--ds-shadow-color) 25%, transparent);
 }
