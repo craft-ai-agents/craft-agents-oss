@@ -132,7 +132,10 @@ let callIndex = 0
 let pendingFirstPage: ((value: MediaListResponse) => void) | null = null
 
 const mediaList = mock(
-  async (_request: unknown, _signal: AbortSignal): Promise<MediaListResponse> => {
+  async (_request: unknown, _signal?: AbortSignal): Promise<MediaListResponse> => {
+    if ((_request as { limit?: number } | null)?.limit === 6) {
+      return { items: [], hasMore: false, nextCursor: null }
+    }
     mediaListCalls.push(_request)
     const thisIndex = callIndex
     callIndex++
@@ -152,6 +155,10 @@ const comfyHealth = mock(async () => ({
   baseUrl: 'http://127.0.0.1:8188',
   version: comfyConnected ? '0.28.3' : undefined,
   device: comfyConnected ? 'NVIDIA GeForce RTX 5070 Ti' : undefined,
+  vramTotal: comfyConnected ? 17_179_869_184 : undefined,
+  vramFree: comfyConnected ? 12_884_901_888 : undefined,
+  queueRunning: 1,
+  queuePending: 2,
   error: comfyConnected ? undefined : 'ComfyUI is offline',
 }))
 const comfyStart = mock(async () => ({
@@ -337,7 +344,7 @@ describe('MediaLabPanel smoke test', () => {
     // Click Library tab.
     await act(async () => {
       const buttons = container.querySelectorAll('button.media-tab')
-      expect(buttons.length).toBe(3)
+      expect(buttons.length).toBe(2)
       const libraryButton = Array.from(buttons).find(
         (button: any) => button.textContent?.includes('Library'),
       ) as HTMLButtonElement
@@ -396,14 +403,16 @@ describe('MediaLabPanel smoke test', () => {
 
     expect(comfyHealth).toHaveBeenCalledTimes(1)
     expect(comfyWorkflows).toHaveBeenCalledTimes(1)
-    expect(container.textContent).toContain('ComfyUI 0.28.3')
+    expect(container.textContent).toContain('RTX 5070 Ti')
+    expect(container.textContent).toContain('25%')
+    expect(container.textContent).toContain('1 active · 2 waiting')
     expect(container.textContent).toContain('Agnes Image')
-    expect(container.textContent).toContain('Image 1')
-    expect(container.textContent).toContain('Video 1')
+    expect(container.textContent).toContain('Image Studio1 workflow')
+    expect(container.textContent).toContain('Video Studio1 workflow')
     expect(container.textContent).not.toContain('Coming soon')
 
     const runButton = Array.from(container.querySelectorAll('button')).find(
-      (button: any) => button.textContent?.includes('Run image workflow'),
+      (button: any) => button.textContent?.includes('Generate image'),
     ) as HTMLButtonElement
     await act(async () => {
       runButton.click()
@@ -430,7 +439,7 @@ describe('MediaLabPanel smoke test', () => {
     })
 
     const startButton = Array.from(container.querySelectorAll('button')).find(
-      (button: any) => button.textContent?.includes('Start ComfyUI'),
+      (button: any) => button.textContent?.includes('Start engine'),
     ) as HTMLButtonElement
     expect(startButton).toBeTruthy()
 
@@ -442,6 +451,6 @@ describe('MediaLabPanel smoke test', () => {
 
     expect(comfyStart).toHaveBeenCalledTimes(1)
     expect(comfyWorkflows).toHaveBeenCalledTimes(2)
-    expect(container.textContent).toContain('ComfyUI Online')
+    expect(container.textContent).toContain('Online')
   })
 })

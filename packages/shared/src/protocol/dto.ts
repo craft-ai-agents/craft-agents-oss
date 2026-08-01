@@ -634,6 +634,8 @@ export interface ComfyHealth {
   device?: string
   vramTotal?: number
   vramFree?: number
+  queueRunning?: number
+  queuePending?: number
   error?: string
 }
 
@@ -675,6 +677,12 @@ export interface ComfyJobStatusRequest {
 export interface ComfyJobStatus {
   promptId: string
   state: 'queued' | 'running' | 'completed' | 'failed' | 'unknown'
+  stage?: 'queued' | 'executing' | 'saving' | 'completed' | 'failed'
+  currentNode?: string
+  progress?: number
+  startedAt?: number
+  finishedAt?: number
+  error?: string
 }
 
 export interface FileSearchResult {

@@ -51,7 +51,10 @@ function wait(ms: number): Promise<void> {
 
 async function readHealth(client: ComfyUIClient): Promise<ComfyHealth> {
   try {
-    const stats = await client.getSystemStats()
+    const [stats, queue] = await Promise.all([
+      client.getSystemStats(),
+      client.getQueue(),
+    ])
     const device = stats.devices[0]
     return {
       connected: true,
@@ -60,6 +63,8 @@ async function readHealth(client: ComfyUIClient): Promise<ComfyHealth> {
       device: device?.name,
       vramTotal: device?.vram_total,
       vramFree: device?.vram_free,
+      queueRunning: queue.queue_running.length,
+      queuePending: queue.queue_pending.length,
     }
   } catch (error) {
     return {
@@ -102,15 +107,39 @@ function historyEntry(history: Record<string, unknown>, promptId: string): Recor
   return undefined
 }
 
-function summarizeHistoryState(entry: Record<string, unknown>): ComfyJobStatus['state'] {
-  const status = entry.status
-  if (status && typeof status === 'object' && !Array.isArray(status)) {
-    const value = (status as Record<string, unknown>).status_str
-    if (value === 'error') return 'failed'
-    if (value === 'success') return 'completed'
+export function safeHistoryStatus(entry: Record<string, unknown>, promptId: string): ComfyJobStatus {
+  const rawStatus = entry.status
+  const status = rawStatus && typeof rawStatus === 'object' && !Array.isArray(rawStatus)
+    ? rawStatus as Record<string, unknown>
+    : {}
+  const state = status.status_str === 'error'
+    ? 'failed'
+    : status.status_str === 'success' || entry.outputs && typeof entry.outputs === 'object'
+      ? 'completed'
+      : 'unknown'
+  const result: ComfyJobStatus = {
+    promptId,
+    state,
+    stage: state === 'failed' ? 'failed' : state === 'completed' ? 'completed' : undefined,
   }
-  if (entry.outputs && typeof entry.outputs === 'object') return 'completed'
-  return 'unknown'
+  const messages = Array.isArray(status.messages) ? status.messages : []
+  for (const rawMessage of messages) {
+    if (!Array.isArray(rawMessage) || typeof rawMessage[0] !== 'string') continue
+    const payload = rawMessage[1]
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) continue
+    const data = payload as Record<string, unknown>
+    const timestamp = typeof data.timestamp === 'number' ? data.timestamp : undefined
+    if (rawMessage[0] === 'execution_start' && timestamp) result.startedAt = timestamp
+    if (rawMessage[0] === 'execution_success' && timestamp) result.finishedAt = timestamp
+    if (rawMessage[0] === 'execution_error') {
+      if (timestamp) result.finishedAt = timestamp
+      if (typeof data.node_type === 'string') result.currentNode = data.node_type
+      if (typeof data.exception_message === 'string') {
+        result.error = data.exception_message.trim().slice(0, 1_200)
+      }
+    }
+  }
+  return result
 }
 
 export function registerComfyUIHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -254,10 +283,14 @@ export function registerComfyUIHandlers(server: RpcServer, deps: HandlerDeps): v
     if (entry) {
       // Never return raw history: ComfyUI stores the submitted workflow in it,
       // and custom nodes may persist credentials among their inputs.
-      return { promptId: request.promptId, state: summarizeHistoryState(entry) }
+      return safeHistoryStatus(entry, request.promptId)
     }
-    if (queueContains(queue.queue_running, request.promptId)) return { promptId: request.promptId, state: 'running' }
-    if (queueContains(queue.queue_pending, request.promptId)) return { promptId: request.promptId, state: 'queued' }
+    if (queueContains(queue.queue_running, request.promptId)) {
+      return { promptId: request.promptId, state: 'running', stage: 'executing' }
+    }
+    if (queueContains(queue.queue_pending, request.promptId)) {
+      return { promptId: request.promptId, state: 'queued', stage: 'queued' }
+    }
     return { promptId: request.promptId, state: 'unknown' }
   })
 

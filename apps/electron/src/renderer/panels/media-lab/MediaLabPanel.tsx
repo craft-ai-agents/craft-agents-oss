@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { VariableSizeGrid, type VariableSizeGrid as VariableSizeGridType } from 'react-window'
-import { Clapperboard, Image, Music, Video, FileText, Loader2, ExternalLink, Sparkles, Wand2, Download, EyeOff, Check, X, CheckSquare, FolderOpen, Power } from 'lucide-react'
+import { Clapperboard, Image, Music, Video, FileText, Loader2, ExternalLink, Sparkles, Wand2, Download, EyeOff, X, CheckSquare, FolderOpen, Power, Cpu, Gauge, Clock3, Layers3, ChevronDown, RotateCcw, PlayCircle } from 'lucide-react'
 import type {
   ComfyHealth,
   ComfyJobStatus,
@@ -56,6 +56,22 @@ function formatSize(bytes?: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+function formatVram(bytes?: number): string {
+  if (!bytes) return 'â€”'
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
+}
+
+function formatElapsed(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000))
+  const minutes = Math.floor(seconds / 60)
+  return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
+}
+
+function workflowProvider(workflow: ComfyWorkflowSummary | null): string {
+  if (!workflow) return 'ComfyUI'
+  return workflow.nodeClasses.some((name) => name.toLowerCase().includes('agnes')) ? 'Agnes' : 'Local'
+}
+
 const ONE_HOUR_MS = 60 * 60 * 1000
 
 function isRecentlyGenerated(mtime?: number): boolean {
@@ -97,6 +113,10 @@ export function MediaLabPanel() {
   const [comfyJob, setComfyJob] = useState<ComfyJobStatus | null>(null)
   const [comfySubmitting, setComfySubmitting] = useState(false)
   const [comfyStarting, setComfyStarting] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [jobStartedAt, setJobStartedAt] = useState<number | null>(null)
+  const [now, setNow] = useState(Date.now())
+  const [recentArtifacts, setRecentArtifacts] = useState<MediaItem[]>([])
   const [artifactRefreshTick, setArtifactRefreshTick] = useState(0)
   const artifactRefreshKey = comfyJob?.state === 'completed' ? comfyJob.promptId : ''
 
@@ -105,6 +125,45 @@ export function MediaLabPanel() {
     const timer = setInterval(() => setArtifactRefreshTick((tick) => tick + 1), 5_000)
     return () => clearInterval(timer)
   }, [creationTab])
+
+  useEffect(() => {
+    if (!comfyHealth?.connected) return
+    const refresh = async () => {
+      try {
+        const health = await window.electronAPI.comfyHealth()
+        setComfyHealth(health)
+      } catch {
+        // The main status surface handles connection failures on its next poll.
+      }
+    }
+    const timer = setInterval(() => void refresh(), 2_500)
+    return () => clearInterval(timer)
+  }, [comfyHealth?.connected])
+
+  useEffect(() => {
+    if (!comfyJob || !['queued', 'running', 'unknown'].includes(comfyJob.state)) return
+    const timer = setInterval(() => setNow(Date.now()), 1_000)
+    return () => clearInterval(timer)
+  }, [comfyJob?.state])
+
+  useEffect(() => {
+    if (creationTab !== 'create') return
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const page = await window.electronAPI.comfyArtifacts({ limit: 6 })
+        if (!cancelled) setRecentArtifacts(page.items)
+      } catch {
+        // Recent output is secondary; primary creation controls remain usable.
+      }
+    }
+    void refresh()
+    const timer = setInterval(() => void refresh(), 5_000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [creationTab, artifactRefreshKey])
 
   useEffect(() => {
     let cancelled = false
@@ -139,6 +198,18 @@ export function MediaLabPanel() {
     () => creationWorkflows.find((workflow) => workflow.id === selectedWorkflowId) ?? creationWorkflows[0] ?? null,
     [creationWorkflows, selectedWorkflowId],
   )
+  const promptParameter = selectedWorkflow?.parameters.find((parameter) => parameter.kind === 'text') ?? null
+  const essentialParameters = selectedWorkflow?.parameters.filter((parameter) =>
+    parameter.id !== promptParameter?.id && ['model', 'select'].includes(parameter.kind),
+  ).slice(0, 4) ?? []
+  const advancedParameters = selectedWorkflow?.parameters.filter((parameter) =>
+    parameter.id !== promptParameter?.id && !essentialParameters.some((essential) => essential.id === parameter.id),
+  ) ?? []
+  const vramUsed = Math.max(0, (comfyHealth?.vramTotal ?? 0) - (comfyHealth?.vramFree ?? 0))
+  const vramPercent = comfyHealth?.vramTotal ? Math.min(100, Math.round(vramUsed / comfyHealth.vramTotal * 100)) : 0
+  const jobActive = !!comfyJob && ['queued', 'running', 'unknown'].includes(comfyJob.state)
+  const elapsedFrom = comfyJob?.startedAt ?? jobStartedAt
+  const elapsed = elapsedFrom ? formatElapsed((comfyJob?.finishedAt ?? now) - elapsedFrom) : '00:00'
 
   useEffect(() => {
     if (!selectedWorkflow) {
@@ -178,7 +249,10 @@ export function MediaLabPanel() {
         workflowId: selectedWorkflow.id,
         parameters: workflowValues,
       })
-      setComfyJob({ promptId: result.promptId, state: 'queued' })
+      const startedAt = Date.now()
+      setJobStartedAt(startedAt)
+      setNow(startedAt)
+      setComfyJob({ promptId: result.promptId, state: 'queued', stage: 'queued', startedAt })
     } catch (runError) {
       setComfyError(runError instanceof Error ? runError.message : String(runError))
     } finally {
@@ -611,170 +685,204 @@ export function MediaLabPanel() {
 
   return (
     <div className="media-panel">
-      <div className="media-panel__header">
-        <div className="media-panel__title">
-          <Clapperboard size={20} />
-          <h2>Media Lab</h2>
-          {isLibraryLoading ? (
-            <Loader2 size={15} className="media-panel__spinner" />
-          ) : (
-            creationTab === 'library' && (
-              <span
-                className="media-panel__count"
-                title={
-                  kindFilter === 'all'
-                    ? `${items.length} media`
-                    : `${visible.length} of ${items.length} filtered media`
-                }
-              >
-                {visible.length}
-                {hasMore && <span className="media-panel__count-detail">+</span>}
-              </span>
-            )
-          )}
+      <div className="media-console-header">
+        <div className="media-console-header__identity">
+          <span className="media-console-header__mark"><Clapperboard size={18} /></span>
+          <div>
+            <h2>Media Lab</h2>
+            <p>ComfyUI production console</p>
+          </div>
+        </div>
+        <div className="media-console-header__signals">
+          <div className={`media-signal${comfyHealth?.connected ? ' is-live' : ' is-offline'}`}>
+            <span className="media-signal__pulse" />
+            <div><small>Engine</small><strong>{comfyHealth?.connected ? 'Online' : 'Offline'}</strong></div>
+          </div>
+          <div className="media-signal media-signal--gpu" title={comfyHealth?.device}>
+            <Cpu size={15} />
+            <div><small>GPU</small><strong>{comfyHealth?.device?.replace('NVIDIA GeForce ', '') ?? 'Unavailable'}</strong></div>
+          </div>
+          <div className="media-signal media-signal--vram">
+            <Gauge size={15} />
+            <div>
+              <small>VRAM <b>{vramPercent}%</b></small>
+              <strong>{formatVram(vramUsed)} / {formatVram(comfyHealth?.vramTotal)}</strong>
+              <span className="media-vram-track"><i style={{ width: `${vramPercent}%` }} /></span>
+            </div>
+          </div>
+          <div className="media-signal">
+            <Layers3 size={15} />
+            <div><small>Queue</small><strong>{comfyHealth?.queueRunning ?? 0} active Â· {comfyHealth?.queuePending ?? 0} waiting</strong></div>
+          </div>
         </div>
         <div className="media-panel__tabs">
-          <button
-            type="button"
-            className={`media-tab media-tab--service${comfyHealth?.connected ? ' is-online' : ''}`}
-            disabled={comfyStarting || comfyHealth?.connected}
-            onClick={() => void startComfyUI()}
-            title={comfyHealth?.connected ? 'ComfyUI is running' : 'Start local ComfyUI'}
-          >
-            {comfyStarting ? <Loader2 size={14} className="media-panel__spinner" /> : <Power size={14} />}
-            {comfyStarting ? 'Startingâ€¦' : comfyHealth?.connected ? 'ComfyUI Online' : 'Start ComfyUI'}
-          </button>
-          <button
-            type="button"
-            className={`media-tab${creationTab === 'create' ? ' is-active' : ''}`}
-            onClick={() => setCreationTab('create')}
-          >
+          {!comfyHealth?.connected && (
+            <button type="button" className="media-tab media-tab--service" disabled={comfyStarting} onClick={() => void startComfyUI()}>
+              {comfyStarting ? <Loader2 size={14} className="media-panel__spinner" /> : <Power size={14} />}
+              {comfyStarting ? 'Startingâ€¦' : 'Start engine'}
+            </button>
+          )}
+          <button type="button" className={`media-tab${creationTab === 'create' ? ' is-active' : ''}`} onClick={() => setCreationTab('create')}>
             <Sparkles size={14} /> Create
           </button>
-          <button
-            type="button"
-            className={`media-tab${creationTab === 'library' ? ' is-active' : ''}`}
-            onClick={() => setCreationTab('library')}
-          >
+          <button type="button" className={`media-tab${creationTab === 'library' ? ' is-active' : ''}`} onClick={() => setCreationTab('library')}>
             <Video size={14} /> Library
+            {isLibraryLoading ? <Loader2 size={12} className="media-panel__spinner" /> : recentArtifacts.length > 0 && <span>{recentArtifacts.length}</span>}
           </button>
         </div>
       </div>
 
       {creationTab === 'create' ? (
-        <div className="media-create">
-          <div className="media-create__hero">
-            <Wand2 size={32} />
-            <h3>ComfyUI Creation Station</h3>
-            <p>Run your existing local and Agnes workflows without leaving ARCHstudio.</p>
-            <div className={`media-create__health${comfyHealth?.connected ? ' is-online' : ''}`}>
-              <span />
-              {comfyLoading
-                ? 'Connecting to ComfyUIâ€¦'
-                : comfyHealth?.connected
-                  ? `ComfyUI ${comfyHealth.version ?? ''} Â· ${comfyHealth.device ?? 'Ready'}`
-                  : 'ComfyUI offline'}
+        <div className="media-studio">
+          <aside className="media-studio__rail">
+            <div className="media-studio__rail-label">Studio mode</div>
+            <button type="button" className={creationKind === 'image' ? 'is-active' : ''} onClick={() => setCreationKind('image')}>
+              <span className="media-studio__mode-icon is-image"><Image size={18} /></span>
+              <div><strong>Image Studio</strong><small>{comfyWorkflows.filter((workflow) => workflow.kind === 'image').length} workflows</small></div>
+            </button>
+            <button type="button" className={creationKind === 'video' ? 'is-active' : ''} onClick={() => setCreationKind('video')}>
+              <span className="media-studio__mode-icon is-video"><Video size={18} /></span>
+              <div><strong>Video Studio</strong><small>{comfyWorkflows.filter((workflow) => workflow.kind === 'video').length} workflows</small></div>
+            </button>
+            <div className="media-studio__rail-foot">
+              <span>Output namespace</span>
+              <code>ARCHstudio/{creationKind}s</code>
+              <small>{comfyRejectedCount} incompatible workflow files excluded</small>
             </div>
-          </div>
+          </aside>
 
-          <div className="media-create__workspace">
-            <div className="media-create__kinds" role="tablist" aria-label="Generation type">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={creationKind === 'image'}
-                className={creationKind === 'image' ? 'is-active' : ''}
-                onClick={() => setCreationKind('image')}
-              >
-                <Image size={16} /> Image <span>{comfyWorkflows.filter((workflow) => workflow.kind === 'image').length}</span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={creationKind === 'video'}
-                className={creationKind === 'video' ? 'is-active' : ''}
-                onClick={() => setCreationKind('video')}
-              >
-                <Video size={16} /> Video <span>{comfyWorkflows.filter((workflow) => workflow.kind === 'video').length}</span>
-              </button>
-            </div>
-
-            {comfyError && <div className="media-create__error">{comfyError}</div>}
-
-            {!comfyLoading && creationWorkflows.length === 0 ? (
-              <div className="media-create__empty">No compatible {creationKind} workflows were found.</div>
-            ) : selectedWorkflow ? (
-              <div className="media-create__form">
-                <label className="media-create__field media-create__field--wide">
+          <main className="media-studio__main">
+            <section className="media-composer">
+              <div className="media-composer__eyebrow">
+                <span>{creationKind === 'image' ? 'IMAGE' : 'VIDEO'} / {workflowProvider(selectedWorkflow).toUpperCase()}</span>
+                <span className={comfyHealth?.connected ? 'is-ready' : 'is-offline'}>{comfyHealth?.connected ? 'READY TO CREATE' : 'ENGINE OFFLINE'}</span>
+              </div>
+              <div className="media-composer__heading">
+                <div>
+                  <h3>{creationKind === 'image' ? 'Compose an image' : 'Direct a sequence'}</h3>
+                  <p>Choose a proven workflow, describe the result, then monitor every stage below.</p>
+                </div>
+                <label className="media-composer__workflow">
                   <span>Workflow</span>
-                  <select
-                    value={selectedWorkflow.id}
-                    onChange={(event) => setSelectedWorkflowId(event.target.value)}
-                  >
-                    {creationWorkflows.map((workflow) => (
-                      <option key={workflow.id} value={workflow.id}>{workflow.name}</option>
-                    ))}
+                  <select value={selectedWorkflow?.id ?? ''} onChange={(event) => setSelectedWorkflowId(event.target.value)}>
+                    {creationWorkflows.map((workflow) => <option key={workflow.id} value={workflow.id}>{workflow.name}</option>)}
                   </select>
                 </label>
-
-                <div className="media-create__parameters">
-                  {selectedWorkflow.parameters.map((parameter) => (
-                    <label
-                      key={parameter.id}
-                      className={`media-create__field${parameter.kind === 'text' ? ' media-create__field--wide' : ''}`}
-                    >
-                      <span>{parameter.label}</span>
-                      {parameter.kind === 'text' ? (
-                        <textarea
-                          rows={4}
-                          value={String(workflowValues[parameter.id] ?? '')}
-                          onChange={(event) => setWorkflowValues((values) => ({ ...values, [parameter.id]: event.target.value }))}
-                        />
-                      ) : (
-                        <input
-                          type={['number', 'seed'].includes(parameter.kind) ? 'number' : 'text'}
-                          value={workflowValues[parameter.id] ?? ''}
-                          onChange={(event) => setWorkflowValues((values) => ({
-                            ...values,
-                            [parameter.id]: ['number', 'seed'].includes(parameter.kind)
-                              ? Number(event.target.value)
-                              : event.target.value,
-                          }))}
-                        />
-                      )}
-                    </label>
-                  ))}
-                </div>
-
-                <div className="media-create__actions">
-                  <button
-                    type="button"
-                    className="media-create__run"
-                    disabled={!comfyHealth?.connected || comfySubmitting || !!comfyJob && ['queued', 'running', 'unknown'].includes(comfyJob.state)}
-                    onClick={() => void runComfyWorkflow()}
-                  >
-                    {comfySubmitting ? <Loader2 size={15} className="media-panel__spinner" /> : <Sparkles size={15} />}
-                    Run {creationKind} workflow
-                  </button>
-                  {comfyJob && ['queued', 'running', 'unknown'].includes(comfyJob.state) && (
-                    <button type="button" className="media-create__cancel" onClick={() => void cancelComfyJob()}>
-                      <X size={15} /> Cancel
-                    </button>
-                  )}
-                  {comfyJob && (
-                    <span className={`media-create__job is-${comfyJob.state}`}>
-                      {comfyJob.state} Â· {comfyJob.promptId.slice(0, 8)}
-                    </span>
-                  )}
-                </div>
               </div>
-            ) : null}
-          </div>
 
-          <p className="media-create__note">
-            {comfyRejectedCount > 0 && `${comfyRejectedCount} non-API JSON files were safely excluded. `}
-            App creations are stored under D:\Comfyui\output\ARCHstudio.
-          </p>
+              {comfyError && <div className="media-create__error">{comfyError}</div>}
+              {!comfyLoading && !selectedWorkflow ? (
+                <div className="media-create__empty">No compatible {creationKind} workflows were found.</div>
+              ) : selectedWorkflow ? (
+                <>
+                  {promptParameter && (
+                    <label className="media-prompt-field">
+                      <span>Creative direction</span>
+                      <textarea
+                        rows={6}
+                        placeholder={creationKind === 'image' ? 'Describe the composition, subject, lighting and atmosphere…' : 'Describe the action, camera movement, pacing and atmosphere…'}
+                        value={String(workflowValues[promptParameter.id] ?? '')}
+                        onChange={(event) => setWorkflowValues((values) => ({ ...values, [promptParameter.id]: event.target.value }))}
+                      />
+                    </label>
+                  )}
+                  {essentialParameters.length > 0 && (
+                    <div className="media-essential-grid">
+                      {essentialParameters.map((parameter) => (
+                        <label key={parameter.id} className="media-create__field">
+                          <span>{parameter.label}</span>
+                          {parameter.options?.length ? (
+                            <select value={workflowValues[parameter.id] ?? ''} onChange={(event) => setWorkflowValues((values) => ({ ...values, [parameter.id]: event.target.value }))}>
+                              {parameter.options.map((option) => <option key={option} value={option}>{option}</option>)}
+                            </select>
+                          ) : (
+                            <input value={workflowValues[parameter.id] ?? ''} onChange={(event) => setWorkflowValues((values) => ({ ...values, [parameter.id]: event.target.value }))} />
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {advancedParameters.length > 0 && (
+                    <div className="media-advanced">
+                      <button type="button" onClick={() => setAdvancedOpen((open) => !open)} aria-expanded={advancedOpen}>
+                        <span><Gauge size={14} /> Advanced controls <small>{advancedParameters.length} parameters</small></span>
+                        <ChevronDown size={15} className={advancedOpen ? 'is-open' : ''} />
+                      </button>
+                      {advancedOpen && (
+                        <div className="media-create__parameters">
+                          {advancedParameters.map((parameter) => (
+                            <label key={parameter.id} className="media-create__field">
+                              <span>{parameter.label}</span>
+                              {parameter.options?.length ? (
+                                <select value={workflowValues[parameter.id] ?? ''} onChange={(event) => setWorkflowValues((values) => ({ ...values, [parameter.id]: event.target.value }))}>
+                                  {parameter.options.map((option) => <option key={option} value={option}>{option}</option>)}
+                                </select>
+                              ) : (
+                                <input
+                                  type={['number', 'seed'].includes(parameter.kind) ? 'number' : 'text'}
+                                  value={workflowValues[parameter.id] ?? ''}
+                                  onChange={(event) => setWorkflowValues((values) => ({ ...values, [parameter.id]: ['number', 'seed'].includes(parameter.kind) ? Number(event.target.value) : event.target.value }))}
+                                />
+                              )}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="media-composer__actions">
+                    <button type="button" className="media-create__run" disabled={!comfyHealth?.connected || comfySubmitting || jobActive} onClick={() => void runComfyWorkflow()}>
+                      {comfySubmitting ? <Loader2 size={16} className="media-panel__spinner" /> : <Sparkles size={16} />}
+                      {jobActive ? 'Generation in progress' : `Generate ${creationKind}`}
+                    </button>
+                    <span>{!comfyHealth?.connected ? 'Start ComfyUI to enable generation' : `${workflowProvider(selectedWorkflow)} workflow · outputs stay on D:`}</span>
+                  </div>
+                </>
+              ) : null}
+            </section>
+
+            <section className={`media-live-stage${jobActive ? ' is-active' : ''}${comfyJob?.state === 'failed' ? ' is-failed' : ''}${comfyJob?.state === 'completed' ? ' is-complete' : ''}`}>
+              <div className="media-live-stage__visual">
+                <span className="media-live-stage__orbit"><i /><i /><i /></span>
+                {comfyJob?.state === 'completed' ? <CheckSquare size={28} /> : comfyJob?.state === 'failed' ? <X size={28} /> : <Wand2 size={28} />}
+              </div>
+              <div className="media-live-stage__content">
+                <div className="media-live-stage__topline">
+                  <span>LIVE GENERATION</span>
+                  {comfyJob && <code>{comfyJob.promptId.slice(0, 8)}</code>}
+                </div>
+                <h4>{!comfyJob ? 'No active generation' : comfyJob.state === 'queued' ? 'Waiting for an execution slot' : comfyJob.state === 'running' || comfyJob.state === 'unknown' ? 'ComfyUI is executing your workflow' : comfyJob.state === 'completed' ? 'Creation completed' : 'Generation stopped'}</h4>
+                <p>{comfyJob?.error ?? (comfyJob?.currentNode ? `Current node: ${comfyJob.currentNode}` : jobActive ? `${selectedWorkflow?.name ?? 'Workflow'} is active. Progress updates automatically.` : 'Your next run will appear here with queue, execution and completion state.')}</p>
+                {jobActive && <span className="media-live-stage__progress"><i style={{ width: comfyJob?.progress ? `${comfyJob.progress}%` : '38%' }} /></span>}
+              </div>
+              <div className="media-live-stage__stats">
+                <div><Clock3 size={14} /><span>Elapsed</span><strong>{elapsed}</strong></div>
+                <div><Layers3 size={14} /><span>Stage</span><strong>{comfyJob?.stage ?? comfyJob?.state ?? 'Idle'}</strong></div>
+                {jobActive && <button type="button" onClick={() => void cancelComfyJob()}><X size={14} /> Interrupt</button>}
+                {comfyJob && !jobActive && selectedWorkflow && <button type="button" onClick={() => void runComfyWorkflow()}><RotateCcw size={14} /> Run again</button>}
+              </div>
+            </section>
+
+            <section className="media-recent">
+              <div className="media-recent__header">
+                <div><span>RECENT OUTPUT</span><h4>Your latest creations</h4></div>
+                <button type="button" onClick={() => setCreationTab('library')}>Open full library <ExternalLink size={13} /></button>
+              </div>
+              <div className="media-recent__grid">
+                {recentArtifacts.length === 0 ? <p>No ARCHstudio creations found yet.</p> : recentArtifacts.slice(0, 6).map((item) => {
+                  const Icon = KIND_ICON[item.kind]
+                  return (
+                    <button type="button" key={item.path} className="media-recent-card" onClick={() => open(item)}>
+                      <span className={`media-recent-card__preview is-${item.kind}`}>
+                        {item.kind === 'image' ? <MediaImageThumbnail item={item} /> : <><Icon size={24} /><PlayCircle size={30} className="media-recent-card__play" /></>}
+                      </span>
+                      <strong>{item.name}</strong><small>{item.kind} · {formatSize(item.size)}</small>
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          </main>
         </div>
       ) : (
         <>
