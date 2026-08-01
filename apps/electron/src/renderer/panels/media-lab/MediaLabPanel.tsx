@@ -70,6 +70,25 @@ function isRecentlyGenerated(mtime?: number): boolean {
   return Date.now() - mtime < ONE_HOUR_MS
 }
 
+function MediaImageThumbnail({ item }: { item: MediaItem }) {
+  const [src, setSrc] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setSrc(null)
+    setFailed(false)
+    window.electronAPI.readFilePreviewDataUrl(item.path, 256)
+      .then((value) => { if (!cancelled) setSrc(value) })
+      .catch(() => { if (!cancelled) setFailed(true) })
+    return () => { cancelled = true }
+  }, [item.path])
+
+  if (failed) return <Image size={28} />
+  if (!src) return <Loader2 size={20} className="media-panel__spinner" />
+  return <img src={src} alt={item.name} loading="lazy" />
+}
+
 export function MediaLabPanel() {
   const { onOpenFile } = useAppShellContext()
   const [kindFilter, setKindFilter] = useState<MediaKind | 'all'>('all')
@@ -921,7 +940,7 @@ export function MediaLabPanel() {
                       >
                         <div className={`media-card__preview is-${item.kind}`}>
                           {item.kind === 'image' ? (
-                            <img src={`file://${item.path}`} alt={item.name} loading="lazy" />
+                            <MediaImageThumbnail item={item} />
                           ) : (
                             <Icon size={28} />
                           )}

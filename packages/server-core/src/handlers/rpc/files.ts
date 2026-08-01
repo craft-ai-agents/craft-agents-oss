@@ -30,6 +30,15 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.fs.READ_DIRECTORY,
 ] as const
 
+function getPreviewAllowedDirs(workspaceId?: string | null): string[] {
+  const comfyRoot = process.env.COMFYUI_ROOT?.trim()
+    || (process.platform === 'win32' ? 'D:\\Comfyui' : join(homedir(), 'ComfyUI'))
+  return [
+    ...getWorkspaceAllowedDirs(workspaceId),
+    join(comfyRoot, 'output', 'ARCHstudio'),
+  ]
+}
+
 export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): void {
   // Read a file (with path validation to prevent traversal attacks)
   server.handle(RPC_CHANNELS.file.READ, async (ctx, path: string) => {
@@ -55,7 +64,7 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
   server.handle(RPC_CHANNELS.file.READ_DATA_URL, async (ctx, path: string) => {
     try {
       const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
-      const safePath = await validateFilePath(path, getWorkspaceAllowedDirs(workspaceId))
+      const safePath = await validateFilePath(path, getPreviewAllowedDirs(workspaceId))
       const buffer = await readFile(safePath)
       const ext = safePath.split('.').pop()?.toLowerCase() ?? ''
 
@@ -87,7 +96,7 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
   server.handle(RPC_CHANNELS.file.READ_PREVIEW_DATA_URL, async (ctx, path: string, maxSize = 64) => {
     try {
       const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
-      const safePath = await validateFilePath(path, getWorkspaceAllowedDirs(workspaceId))
+      const safePath = await validateFilePath(path, getPreviewAllowedDirs(workspaceId))
       const size = Number.isFinite(maxSize) ? Math.max(16, Math.min(256, Math.floor(maxSize))) : 64
       const preview = await deps.platform.imageProcessor.process(safePath, {
         resize: { width: size, height: size },

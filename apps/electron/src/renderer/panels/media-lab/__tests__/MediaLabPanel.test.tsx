@@ -192,6 +192,7 @@ const comfyCancel = mock(async () => undefined)
   comfyRun,
   comfyStatus,
   comfyCancel,
+  readFilePreviewDataUrl: async () => 'data:image/png;base64,dGVzdA==',
 }
 
 // -------------------------------------------------------------------------
