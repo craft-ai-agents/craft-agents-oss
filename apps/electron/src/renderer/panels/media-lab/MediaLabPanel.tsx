@@ -13,13 +13,6 @@ import type {
 import { useAppShellContext } from '../../context/AppShellContext'
 import './MediaLabPanel.css'
 
-const EXT: Record<MediaKind, string[]> = {
-  image: ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.avif'],
-  video: ['.mp4', '.mov', '.webm', '.mkv', '.avi'],
-  audio: ['.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac'],
-  doc: ['.pdf', '.docx', '.pptx', '.xlsx', '.csv', '.md'],
-}
-
 const KIND_ICON: Record<MediaKind, typeof Image> = {
   image: Image,
   video: Video,
@@ -793,8 +786,7 @@ export function MediaLabPanel() {
             >
               All <span>{items.length}</span>
             </button>
-            {(Object.keys(EXT) as MediaKind[])
-              .filter((kind) => counts.get(kind))
+            {(['image', 'video', 'audio'] as const)
               .map((kind) => {
                 const Icon = KIND_ICON[kind]
                 return (
