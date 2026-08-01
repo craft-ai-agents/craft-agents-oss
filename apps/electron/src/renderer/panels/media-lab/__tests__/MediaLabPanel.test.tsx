@@ -329,10 +329,10 @@ describe('MediaLabPanel smoke test', () => {
     lastContainer = container
     lastRoot = root
 
-    // After mount, the panel's useEffect has called mediaList (once) and is
-    // awaiting the slow first page. The Create tab is visible — no spinner.
+    // Create does not scan the output directory in the background. Library
+    // performs its first artifact request only when it becomes visible.
     expect(container.querySelector('.media-panel__loading')).toBeNull()
-    expect(mediaListCalls.length).toBe(1)
+    expect(mediaListCalls.length).toBe(0)
 
     // Click Library tab.
     await act(async () => {

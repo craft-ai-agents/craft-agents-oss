@@ -104,7 +104,14 @@ export function MediaLabPanel() {
   const [comfyJob, setComfyJob] = useState<ComfyJobStatus | null>(null)
   const [comfySubmitting, setComfySubmitting] = useState(false)
   const [comfyStarting, setComfyStarting] = useState(false)
+  const [artifactRefreshTick, setArtifactRefreshTick] = useState(0)
   const artifactRefreshKey = comfyJob?.state === 'completed' ? comfyJob.promptId : ''
+
+  useEffect(() => {
+    if (creationTab !== 'library') return
+    const timer = setInterval(() => setArtifactRefreshTick((tick) => tick + 1), 5_000)
+    return () => clearInterval(timer)
+  }, [creationTab])
 
   useEffect(() => {
     let cancelled = false
@@ -354,6 +361,7 @@ export function MediaLabPanel() {
 
   // Reset + initial-page trigger. Runs once per topId OR kindFilter change.
   useEffect(() => {
+    if (creationTab !== 'library') return
     loadRunRef.current += 1
     const runId = loadRunRef.current
     loadAbortRef.current?.abort()
@@ -371,7 +379,7 @@ export function MediaLabPanel() {
     }
     // loadPage / topId+kindFilter is the dependency we intentionally want
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [artifactRefreshKey, kindFilter])
+  }, [creationTab, artifactRefreshKey, artifactRefreshTick, kindFilter])
 
   /** Fetch one server page and merge its classified items into state. */
   async function loadPage(request: MediaListRequest, runId: number, signal: AbortSignal): Promise<void> {
