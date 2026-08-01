@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { SESSION_BACKEND_TOOL_NAMES } from '@craft-agent/session-tools-core';
+import { SESSION_BACKEND_TOOL_NAMES } from '@archstudio/session-tools-core';
 import { PI_BACKEND_SESSION_TOOL_NAMES } from '../../pi-agent.ts';
 
 describe('Pi backend session tool parity', () => {

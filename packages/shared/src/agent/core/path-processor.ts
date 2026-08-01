@@ -31,10 +31,10 @@ export { expandPath, normalizePath, pathStartsWith, toPortablePath };
  */
 const CONFIG_FILE_PATTERNS = [
   // Craft Agent configs
-  /\.craft-agent\/.*\/(config|permissions|theme|guide|labels|statuses)\.json$/,
-  /\.craft-agent\/config\.json$/,
-  /\.craft-agent\/preferences\.json$/,
-  /\.craft-agent\/.*\/SKILL\.md$/,
+  /\.archstudio\/.*\/(config|permissions|theme|guide|labels|statuses)\.json$/,
+  /\.archstudio\/config\.json$/,
+  /\.archstudio\/preferences\.json$/,
+  /\.archstudio\/.*\/SKILL\.md$/,
   // Common config files
   /package\.json$/,
   /tsconfig\.json$/,

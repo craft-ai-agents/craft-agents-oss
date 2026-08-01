@@ -1,6 +1,6 @@
 /**
  * WhatsAppAdapter — out-of-process adapter that spawns the
- * `@craft-agent/messaging-whatsapp-worker` subprocess.
+ * `@archstudio/messaging-whatsapp-worker` subprocess.
  *
  * WhatsApp has no official bot API usable by us. Baileys reimplements the
  * WA multi-device protocol — it runs in a child process so that:
@@ -8,7 +8,7 @@
  *   (b) Baileys can run under Node even when the host runtime is Bun,
  *   (c) memory isolation: auth state, signal ratchets, etc.
  *
- * The worker contract is defined in @craft-agent/messaging-whatsapp-worker.
+ * The worker contract is defined in @archstudio/messaging-whatsapp-worker.
  * This adapter owns the process lifecycle + translates events to the
  * PlatformAdapter interface.
  *
@@ -23,7 +23,7 @@ import {
   parseFrames,
   type WorkerCommand,
   type WorkerEvent,
-} from '@craft-agent/messaging-whatsapp-worker'
+} from '@archstudio/messaging-whatsapp-worker'
 import type {
   PlatformAdapter,
   PlatformConfig,

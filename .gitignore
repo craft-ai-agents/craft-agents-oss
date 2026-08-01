@@ -56,7 +56,7 @@ __pycache__/
 pnpm-lock.yaml
 
 # Craft Agent local data (sessions, credentials, config)
-.craft-agent/
+.archstudio/
 
 # SSH keys and secrets
 *.pem
@@ -91,3 +91,6 @@ apps/electron/resources/session-mcp-server/
 # Packaged Electron build output (electron-builder). Never reviewable.
 apps/electron/release/
 ARCHstudioTEST/
+
+# Dev-server log written by electron:dev
+dev.log

@@ -8,18 +8,18 @@
 #   docker run --rm -p 9100:9100 \
 #     --user $(id -u):$(id -g) \
 #     -e HOME=/home/archstudio \
-#     -e CRAFT_SERVER_TOKEN=<secret> \
+#     -e ARCHSTUDIO_SERVER_TOKEN=<secret> \
 #     archstudio-server
 #
 # Run with TLS + mounted config:
 #   docker run --rm -p 9100:9100 \
 #     --user $(id -u):$(id -g) \
 #     -e HOME=/home/archstudio \
-#     -e CRAFT_SERVER_TOKEN=<secret> \
-#     -e CRAFT_RPC_TLS_CERT=/certs/cert.pem \
-#     -e CRAFT_RPC_TLS_KEY=/certs/key.pem \
+#     -e ARCHSTUDIO_SERVER_TOKEN=<secret> \
+#     -e ARCHSTUDIO_RPC_TLS_CERT=/certs/cert.pem \
+#     -e ARCHSTUDIO_RPC_TLS_KEY=/certs/key.pem \
 #     -v /path/to/certs:/certs:ro \
-#     -v ~/.craft-agent:/home/archstudio/.craft-agent \
+#     -v ~/.archstudio:/home/archstudio/.archstudio \
 #     archstudio-server
 # =============================================================================
 
@@ -159,8 +159,8 @@ COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/bunfig.toml ./bunfig.toml
 
-# Pre-create .craft-agent so Docker named volumes inherit the correct permissions.
-RUN mkdir -p /home/archstudio/.craft-agent
+# Pre-create .archstudio so Docker named volumes inherit the correct permissions.
+RUN mkdir -p /home/archstudio/.archstudio
 
 # Make app world-readable so any --user can run it.
 # Use find to only touch files/dirs missing the read bit — much faster than
@@ -172,16 +172,16 @@ RUN find /app -not -perm -o=r -exec chmod o+r {} + && \
 USER archstudio
 
 ENV NODE_ENV=production
-ENV CRAFT_RPC_HOST=0.0.0.0
-ENV CRAFT_RPC_PORT=9100
-ENV CRAFT_WEBUI_DIR=/app/apps/webui/dist
-ENV CRAFT_BUNDLED_ASSETS_ROOT=/app/apps/electron
+ENV ARCHSTUDIO_RPC_HOST=0.0.0.0
+ENV ARCHSTUDIO_RPC_PORT=9100
+ENV ARCHSTUDIO_WEBUI_DIR=/app/apps/webui/dist
+ENV ARCHSTUDIO_BUNDLED_ASSETS_ROOT=/app/apps/electron
 # WhatsApp worker — Bun cannot run the CJS worker, so we point the adapter at
-# system `node`. If CRAFT_BUNDLED_ASSETS_ROOT changes, update
-# CRAFT_MESSAGING_WA_WORKER to match; the default in packages/server resolves
-# against CRAFT_BUNDLED_ASSETS_ROOT, but the layout above flattens to /app.
-ENV CRAFT_MESSAGING_WA_WORKER=/app/packages/messaging-whatsapp-worker/dist/worker.cjs
-ENV CRAFT_MESSAGING_NODE_BIN=node
+# system `node`. If ARCHSTUDIO_BUNDLED_ASSETS_ROOT changes, update
+# ARCHSTUDIO_MESSAGING_WA_WORKER to match; the default in packages/server resolves
+# against ARCHSTUDIO_BUNDLED_ASSETS_ROOT, but the layout above flattens to /app.
+ENV ARCHSTUDIO_MESSAGING_WA_WORKER=/app/packages/messaging-whatsapp-worker/dist/worker.cjs
+ENV ARCHSTUDIO_MESSAGING_NODE_BIN=node
 
 EXPOSE 9100
 

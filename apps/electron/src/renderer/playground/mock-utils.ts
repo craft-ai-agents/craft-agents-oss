@@ -5,7 +5,7 @@ import type {
   MessagingPlatformRuntimeInfo,
   WhatsAppUiEvent,
 } from '../../shared/types'
-import type { AnyMemory, MemoryQuery } from '@craft-agent/shared/memory/types'
+import type { AnyMemory, MemoryQuery } from '@archstudio/shared/memory/types'
 import type { MessagingBinding } from '../atoms/messaging'
 import type {
   BindingAccess,

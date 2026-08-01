@@ -27,7 +27,7 @@ import {
 } from 'lucide-react'
 import { useAtomValue } from 'jotai'
 import { activeSessionIdAtom, sessionMetaMapAtom } from '../../atoms/sessions'
-import type { CompileOptions, CompileResult } from '@craft-agent/shared/prompts/owner/types'
+import type { CompileOptions, CompileResult } from '@archstudio/shared/prompts/owner/types'
 import { toast } from 'sonner'
 import { diffLines, groupDiffHunks, type DiffLine } from './diffUtils'
 import './PromptStudioPanel.css'

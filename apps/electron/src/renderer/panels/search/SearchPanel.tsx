@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useAtomValue } from 'jotai'
 import { Search, MessageSquare, Loader2, FileText } from 'lucide-react'
-import type { SessionSearchResult } from '@craft-agent/shared/protocol/dto'
+import type { SessionSearchResult } from '@archstudio/shared/protocol/dto'
 import { sessionMetaMapAtom, windowWorkspaceIdAtom } from '../../atoms/sessions'
 import './SearchPanel.css'
 

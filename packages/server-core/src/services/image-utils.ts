@@ -1,5 +1,5 @@
 import type { ImageProcessor } from '../runtime/platform'
-import { IMAGE_LIMITS } from '@craft-agent/shared/utils'
+import { IMAGE_LIMITS } from '@archstudio/shared/utils'
 
 export interface ImageResizeResult {
   /** Resized image buffer */

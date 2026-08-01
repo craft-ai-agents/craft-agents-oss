@@ -10,7 +10,7 @@
 
 import i18n from 'i18next'
 import { toast } from 'sonner'
-import { openExternalUrl } from '@craft-agent/ui'
+import { openExternalUrl } from '@archstudio/ui'
 import { WsRpcClient } from '../../../electron/src/transport/client'
 import { buildClientApi } from '../../../electron/src/transport/build-api'
 import { CHANNEL_MAP } from '../../../electron/src/transport/channel-map'
@@ -92,7 +92,7 @@ export function createWebApi(options: WebApiOptions): {
         if (result.reason === 'dangerous') {
           toast.error(`Blocked unsafe URL (${result.detail})`)
         } else if (result.reason === 'internal-deeplink') {
-          console.warn('[openUrl] craftagents:// deep links require the desktop app')
+          console.warn('[openUrl] archstudio:// deep links require the desktop app')
         } else {
           console.warn('[openUrl] Malformed URL:', url)
         }

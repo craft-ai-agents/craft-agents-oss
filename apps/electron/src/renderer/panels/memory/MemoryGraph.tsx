@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react'
-import type { AnyMemory, MemoryEdge } from '@craft-agent/shared/memory/types'
+import type { AnyMemory, MemoryEdge } from '@archstudio/shared/memory/types'
 import './MemoryGraph.css'
 
 // ── Types ────────────────────────────────────────────────────────────

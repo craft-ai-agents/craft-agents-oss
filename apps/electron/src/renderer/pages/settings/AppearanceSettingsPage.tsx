@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { LANGUAGES, type LanguageCode } from '@craft-agent/shared/i18n'
+import { LANGUAGES, type LanguageCode } from '@archstudio/shared/i18n'
 import type { ColumnDef } from '@tanstack/react-table'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'

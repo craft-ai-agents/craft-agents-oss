@@ -3,7 +3,7 @@
  *
  * CRUD operations for workspaces.
  * Workspaces can be stored anywhere on disk via rootPath.
- * Default location: ~/.craft-agent/workspaces/
+ * Default location: ~/.archstudio/workspaces/
  */
 
 // Namespace imports (not `{ existsSync, ... }` / `{ homedir }` / `{ randomUUID }`):
@@ -38,7 +38,7 @@ const DEFAULT_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces');
 // ============================================================
 
 /**
- * Get the default workspaces directory (~/.craft-agent/workspaces/)
+ * Get the default workspaces directory (~/.archstudio/workspaces/)
  */
 export function getDefaultWorkspacesDir(): string {
   return DEFAULT_WORKSPACES_DIR;
@@ -63,27 +63,41 @@ export function getWorkspacePath(workspaceId: string): string {
 }
 
 /**
+ * Resolve a workspace root that may still be in portable form.
+ *
+ * Workspace roots are persisted via toPortablePath(), so a rootPath read back
+ * from config.json or a session header starts with `~`. Most callers expand it
+ * first, but a root that round-trips through a session header can reach these
+ * helpers unexpanded — join() then treats `~` as a literal directory name and
+ * produces paths like `<cwd>/~/.archstudio/workspaces/...`, which fail ENOENT.
+ * Expanding here makes every workspace path helper safe regardless of caller.
+ */
+function resolveWorkspaceRoot(rootPath: string): string {
+  return expandPath(rootPath);
+}
+
+/**
  * Get path to workspace sources directory
- * @param rootPath - Absolute path to workspace root folder
+ * @param rootPath - Workspace root folder (absolute, or portable `~`-prefixed)
  */
 export function getWorkspaceSourcesPath(rootPath: string): string {
-  return join(rootPath, 'sources');
+  return join(resolveWorkspaceRoot(rootPath), 'sources');
 }
 
 /**
  * Get path to workspace sessions directory
- * @param rootPath - Absolute path to workspace root folder
+ * @param rootPath - Workspace root folder (absolute, or portable `~`-prefixed)
  */
 export function getWorkspaceSessionsPath(rootPath: string): string {
-  return join(rootPath, 'sessions');
+  return join(resolveWorkspaceRoot(rootPath), 'sessions');
 }
 
 /**
  * Get path to workspace skills directory
- * @param rootPath - Absolute path to workspace root folder
+ * @param rootPath - Workspace root folder (absolute, or portable `~`-prefixed)
  */
 export function getWorkspaceSkillsPath(rootPath: string): string {
-  return join(rootPath, 'skills');
+  return join(resolveWorkspaceRoot(rootPath), 'skills');
 }
 
 // ============================================================
@@ -260,7 +274,7 @@ export function generateSlug(name: string): string {
  * E.g., "my-workspace", "my-workspace-2", "my-workspace-3", ...
  *
  * @param name - Display name to derive the slug from
- * @param baseDir - Parent directory where workspace folders live (e.g., ~/.craft-agent/workspaces/)
+ * @param baseDir - Parent directory where workspace folders live (e.g., ~/.archstudio/workspaces/)
  * @returns Full path to a unique, non-existing folder
  */
 export function generateUniqueWorkspacePath(name: string, baseDir: string): string {
@@ -387,7 +401,7 @@ export function renameWorkspaceFolder(rootPath: string, newName: string): boolea
 
 /**
  * Discover workspace folders in the default location that have valid config.json
- * Returns paths to valid workspaces found in ~/.craft-agent/workspaces/
+ * Returns paths to valid workspaces found in ~/.archstudio/workspaces/
  */
 export function discoverWorkspacesInDefaultLocation(): string[] {
   const discovered: string[] = [];
@@ -469,14 +483,14 @@ export function setWorkspaceColorTheme(rootPath: string, themeId: string | undef
 
 /**
  * Check if local (stdio) MCP servers are enabled for a workspace.
- * Resolution order: ENV (CRAFT_LOCAL_MCP_ENABLED) > workspace config > default (true)
+ * Resolution order: ENV (ARCHSTUDIO_LOCAL_MCP_ENABLED) > workspace config > default (true)
  *
  * @param rootPath - Absolute path to workspace root folder
  * @returns true if local MCP servers should be enabled
  */
 export function isLocalMcpEnabled(rootPath: string): boolean {
   // 1. Environment variable override (highest priority)
-  const envValue = process.env.CRAFT_LOCAL_MCP_ENABLED;
+  const envValue = process.env.ARCHSTUDIO_LOCAL_MCP_ENABLED;
   if (envValue !== undefined) {
     return envValue.toLowerCase() === 'true';
   }

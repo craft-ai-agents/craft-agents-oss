@@ -818,7 +818,7 @@ export function validateSkillContent(markdownContent: string, slug: string): Val
         path: 'frontmatter',
         message: `Invalid YAML frontmatter: ${e instanceof Error ? e.message : 'Unknown error'}`,
         severity: 'error',
-        suggestion: 'See ~/.craft-agent/docs/skills.md for SKILL.md format reference',
+        suggestion: 'See ~/.archstudio/docs/skills.md for SKILL.md format reference',
       }],
       warnings: [],
     };
@@ -1548,7 +1548,7 @@ const ThemeDarkOverrideSchema = z.object({
 }).strict();
 
 /**
- * Zod schema for app-level theme override files (~/.craft-agent/theme.json).
+ * Zod schema for app-level theme override files (~/.archstudio/theme.json).
  * Allows partial overrides but rejects unknown keys.
  */
 export const ThemeOverrideSchema = z.object({
@@ -1890,7 +1890,7 @@ export function validateToolIcons(): ValidationResult {
               path: `tools[id=${tool.id}].icon`,
               message: `Icon file '${tool.icon}' not found in tool-icons directory`,
               severity: 'warning',
-              suggestion: `Place '${tool.icon}' in ~/.craft-agent/tool-icons/`,
+              suggestion: `Place '${tool.icon}' in ~/.archstudio/tool-icons/`,
             });
           }
         }
@@ -2037,11 +2037,11 @@ export function detectConfigFileType(filePath: string, workspaceRootPath: string
 
 /**
  * Detect if a file path corresponds to an app-level config file (outside workspace scope).
- * Checks paths relative to CONFIG_DIR (~/.craft-agent/).
+ * Checks paths relative to CONFIG_DIR (~/.archstudio/).
  * Returns null if the path is not a recognized app-level config file.
  *
  * Matches patterns:
- * - ~/.craft-agent/tool-icons/tool-icons.json → tool icon mappings
+ * - ~/.archstudio/tool-icons/tool-icons.json → tool icon mappings
  */
 export function detectAppConfigFileType(filePath: string): ConfigFileDetection | null {
   const normalizedPath = filePath.replace(/\\/g, '/');

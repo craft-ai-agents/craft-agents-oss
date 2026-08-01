@@ -8,7 +8,7 @@
  * Mirrors both sides' logic inline (no Electron/Jotai imports).
  */
 import { describe, it, expect } from 'bun:test'
-import type { Message, ToolDisplayMeta } from '@craft-agent/core'
+import type { Message, ToolDisplayMeta } from '@archstudio/core'
 
 // ============================================================================
 // Event types (mirrored from event-processor/types.ts)

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { SESSION_BACKEND_TOOL_NAMES } from '@craft-agent/session-tools-core';
+import { SESSION_BACKEND_TOOL_NAMES } from '@archstudio/session-tools-core';
 import { CLAUDE_BACKEND_SESSION_TOOL_NAMES } from '../../session-scoped-tools.ts';
 
 describe('Claude backend session tool parity', () => {

@@ -20,7 +20,7 @@ import {
   buildSessionCookie,
   buildLogoutCookie,
 } from './auth'
-import { generateCallbackPage } from '@craft-agent/shared/auth'
+import { generateCallbackPage } from '@archstudio/shared/auth'
 import type { PlatformServices } from '../runtime/platform'
 
 // ---------------------------------------------------------------------------
@@ -121,7 +121,7 @@ export interface OAuthCallbackDeps {
 export interface WebuiHandlerOptions {
   /** Path to built web UI dist/ directory. */
   webuiDir: string
-  /** Secret used to sign JWTs — typically CRAFT_SERVER_TOKEN. */
+  /** Secret used to sign JWTs — typically ARCHSTUDIO_SERVER_TOKEN. */
   secret: string
   /** Optional separate web UI password. Falls back to `secret` for verification. */
   password?: string
@@ -362,7 +362,7 @@ export function createWebuiHandler(options: WebuiHandlerOptions): WebuiHandler {
       if (!configSession) {
         return Response.json({ error: 'Unauthorized' }, { status: 401 })
       }
-      const { getActiveWorkspace } = await import('@craft-agent/shared/config/storage')
+      const { getActiveWorkspace } = await import('@archstudio/shared/config/storage')
       const active = getActiveWorkspace()
       return Response.json({
         defaultWorkspaceId: active?.id ?? null,

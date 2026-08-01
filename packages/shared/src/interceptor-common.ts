@@ -24,13 +24,13 @@ export const IS_PACKAGED = process.argv.some(arg => arg.includes('app.asar'));
 export const INTERCEPTOR_LOGGING_ENABLED = !IS_PACKAGED;
 
 export const DEBUG = INTERCEPTOR_LOGGING_ENABLED &&
-  (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1');
+  (process.argv.includes('--debug') || process.env.ARCHSTUDIO_DEBUG === '1');
 
 /** Config file path for reading settings in the SDK subprocess */
 export const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
 /** Session directory — set by env var (subprocess) or setSessionDir() (main process) */
-let _sessionDir: string | null = process.env.CRAFT_SESSION_DIR || null;
+let _sessionDir: string | null = process.env.ARCHSTUDIO_SESSION_DIR || null;
 
 // ============================================================================
 // LOGGING
@@ -255,7 +255,7 @@ export interface ToolMetadata {
  * - Survives subprocess restarts (session resume) via file persistence
  *
  * The session directory is determined by:
- * - SDK subprocess: CRAFT_SESSION_DIR env var (set by main process before spawn)
+ * - SDK subprocess: ARCHSTUDIO_SESSION_DIR env var (set by main process before spawn)
  * - Main process: toolMetadataStore.setSessionDir(path) called during agent creation
  *
  * IMPORTANT: Multiple sessions can run concurrently in the main process (parallel chats,

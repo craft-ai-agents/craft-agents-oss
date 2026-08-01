@@ -52,7 +52,7 @@ import { PromptStudioPanel } from '../panels/prompts'
 import { ProvidersPanel } from '../panels/ProvidersPanel'
 import { ThumbnailHoverPreview } from '../components/right-sidebar/ThumbnailHoverPreview'
 import { ShikiDiffViewer } from '../components/shiki'
-import { HighlightedDiffViewer, type DiffViewMode } from '@craft-agent/ui'
+import { HighlightedDiffViewer, type DiffViewMode } from '@archstudio/ui'
 import { HomeHero } from '../home'
 import { sessionMetaMapAtom, activeSessionIdAtom, sessionAtomFamily } from '../atoms/sessions'
 import { CodeWorkspacePanel, CanvasWorkspacePanel, PreviewWorkspacePanel, TasksWorkspacePanel, type WorkspaceArtifact } from './WorkspaceTabPanels'
@@ -63,8 +63,8 @@ import type { GitFileEntry, GitStatusData, ShellSessionContext } from './types'
 import { buildTreeTooltip, TreeTooltipContent, type TooltipData } from './treeTooltip'
 import { useOptionalTheme } from '../context/ThemeContext'
 import { navigate, routes } from '../lib/navigate'
-import { shouldGateManualExpand, trimExpandedByCount } from '@craft-agent/ui'
-import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
+import { shouldGateManualExpand, trimExpandedByCount } from '@archstudio/ui'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@archstudio/ui'
 import './LayoutShell.css'
 
 export type ShellView =
@@ -102,7 +102,7 @@ const RAIL_TABS: { id: RailTab; label: string }[] = [
 const navItems = [
   { id: 'command' as ShellView, label: 'Command', icon: Command },
   // Label only — the `runs` id is a wire-level deep-link route
-  // (`craftagents://runs/...`, see shared/route-parser.ts) and must not change.
+  // (`archstudio://runs/...`, see shared/route-parser.ts) and must not change.
   // "Activity" is the honest name: these are sessions with status and spend,
   // not discrete job executions.
   { id: 'runs' as ShellView, label: 'Activity', icon: Activity },
@@ -226,6 +226,8 @@ type LayoutShellProps = {
    */
   maxOpenDirs?: number
   children?: React.ReactNode
+  /** Called when the sidebar toggle button is clicked (e.g. from TopBar) */
+  onToggleSidebar?: () => void
 }
 
 // What the context rail can honestly report about the active session.
@@ -671,6 +673,7 @@ function LayoutShell({
   sessionContext,
   maxOpenDirs,
   children,
+  onToggleSidebar,
 }: LayoutShellProps) {
   // Theme wiring.
   //
@@ -1565,7 +1568,7 @@ const DEPTH_POPOVER_OPTIONS = [
     }
 
     // Delegate to the shared pure helper — same count-cap contract
-    // available to every tree consumer via @craft-agent/ui.
+    // available to every tree consumer via @archstudio/ui.
     const { keep, dropped } = trimExpandedByCount(expandedPaths, wdRootPath, openDirCap, pinnedPathsRef.current)
     expandedPathsRef.current = keep
     setExpandedPaths(keep)
@@ -2528,7 +2531,10 @@ const DEPTH_POPOVER_OPTIONS = [
           <button
             type="button"
             className="layout-sidebar__toggle"
-            onClick={() => setSidebarCollapsed((v) => !v)}
+            onClick={() => {
+              setSidebarCollapsed((v) => !v)
+              onToggleSidebar?.()
+            }}
             aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >

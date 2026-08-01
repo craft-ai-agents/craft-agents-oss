@@ -1837,7 +1837,7 @@
 }
 
 /* ── Styled tree-row tooltip (replaces native `title=` HTML tooltip) ─────────
-   Used inside the Radix TooltipContent from @craft-agent/ui.  LayoutShell
+   Used inside the Radix TooltipContent from @archstudio/ui.  LayoutShell
    wraps each wd-files-item button in
      <Tooltip delayDuration={400}>
        <TooltipTrigger asChild>{button}</TooltipTrigger>
@@ -2477,7 +2477,7 @@
    the theme's design tokens so they follow light/dark/scenic themes.
 
    Moved to packages/ui/src/components/code-viewer/HighlightedDiffViewer.css
-   so the web viewer and any other consumer of @craft-agent/ui picks up
+   so the web viewer and any other consumer of @archstudio/ui picks up
    the syntax colours for free. The component self-imports its own
    stylesheet — no consumer wiring is required. */
 

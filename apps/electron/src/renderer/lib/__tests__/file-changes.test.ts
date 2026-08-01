@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import type { ActivityItem } from '@craft-agent/ui'
+import type { ActivityItem } from '@archstudio/ui'
 import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } from '../file-changes'
 
 function activity(overrides: Partial<ActivityItem>): ActivityItem {

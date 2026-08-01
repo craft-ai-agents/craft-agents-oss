@@ -1,8 +1,8 @@
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
-import type { MemoryQuery, MemorySearchResult } from '@craft-agent/shared/memory/types.ts';
-import type { MemoryRepository } from '@craft-agent/shared/memory/repository.ts';
+import type { MemoryQuery, MemorySearchResult } from '@archstudio/shared/memory/types.ts';
+import type { MemoryRepository } from '@archstudio/shared/memory/repository.ts';
 import { MemorySearchSchema } from './memory-schemas.ts';
 
 /**

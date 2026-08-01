@@ -20,7 +20,7 @@ import {
   ContextMenuTrigger,
   StyledContextMenuContent,
 } from '@/components/ui/styled-context-menu'
-import type { LoadedProject } from '@craft-agent/shared/projects/types'
+import type { LoadedProject } from '@archstudio/shared/projects/types'
 
 export interface ProjectsListPanelProps {
   projects: LoadedProject[]

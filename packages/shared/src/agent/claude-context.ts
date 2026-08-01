@@ -25,7 +25,7 @@ import type {
   ApiTestResult,
   SourceConfig,
   DeveloperFeedback,
-} from '@craft-agent/session-tools-core';
+} from '@archstudio/session-tools-core';
 import {
   validateConfig,
   validateSource,
@@ -67,7 +67,7 @@ import { openMemoryDatabase, bootstrapStorage } from '../memory/database.ts';
 import { MemoryRepository } from '../memory/repository.ts';
 
 // Re-export types that may be needed by consumers
-export type { SessionToolContext, SessionToolCallbacks } from '@craft-agent/session-tools-core';
+export type { SessionToolContext, SessionToolCallbacks } from '@archstudio/session-tools-core';
 
 /**
  * Options for creating a Claude context

@@ -142,7 +142,7 @@ export const RPC_CHANNELS = {
   system: {
     VERSIONS: 'system:versions',
     HOME_DIR: 'system:homeDir',
-    /** Resolved CONFIG_DIR (honors CRAFT_CONFIG_DIR). Never derive this from HOME_DIR. */
+    /** Resolved CONFIG_DIR (honors ARCHSTUDIO_CONFIG_DIR). Never derive this from HOME_DIR. */
     CONFIG_DIR: 'system:configDir',
     IS_DEBUG_MODE: 'system:isDebugMode',
   },

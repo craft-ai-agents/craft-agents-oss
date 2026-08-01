@@ -16,9 +16,9 @@ import {
   Palette,
   Keyboard,
 } from 'lucide-react'
-import { THINKING_LEVEL_IDS, type ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
-import type { NetworkProxySettings } from '@craft-agent/shared/config'
-import type { ServerStatus } from '@craft-agent/shared/config/server-config'
+import { THINKING_LEVEL_IDS, type ThinkingLevel } from '@archstudio/shared/agent/thinking-levels'
+import type { NetworkProxySettings } from '@archstudio/shared/config'
+import type { ServerStatus } from '@archstudio/shared/config/server-config'
 import { actionsByCategory, useActionLabel, type ActionId } from '@/actions'
 import { isMac } from '@/lib/platform'
 import './SettingsPanel.css'

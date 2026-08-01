@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it, mock, afterEach } from 'bun:test'
 import { mkdtempSync, writeFileSync, rmSync, existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import type { RpcServer } from '@archstudio/server-core/transport'
 
 // ── Mock electron before any handler imports ──────────────────────
 
@@ -50,7 +50,7 @@ mock.module('electron', () => ({
   session: {},
 }))
 
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { RPC_CHANNELS } from '@archstudio/shared/protocol'
 import type { HandlerDeps } from '../handler-deps'
 
 // ── Helpers ───────────────────────────────────────────────────────

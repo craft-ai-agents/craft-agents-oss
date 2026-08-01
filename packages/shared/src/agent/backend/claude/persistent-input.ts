@@ -19,7 +19,7 @@
  * Single source of truth for the WS2 keep-alive flag, so `ClaudeAgent` and
  * `SessionManager` can never drift.
  *
- * `CRAFT_KEEP_BG_AGENTS_ALIVE`:
+ * `ARCHSTUDIO_KEEP_BG_AGENTS_ALIVE`:
  *   - `'1'` / `'true'`  → ON  (persistent streaming-input query)
  *   - `'0'` / `'false'` → OFF (per-turn query — kill-switch)
  *   - unset             → the DEFAULT below
@@ -28,14 +28,14 @@
  * the renderer keep-alive signal (`complete.backgroundTasksAlive`), and idle
  * completion-surfacing have all landed, so background sub-agents genuinely survive
  * across turns and `list_background_tasks` stays honest. Set
- * `CRAFT_KEEP_BG_AGENTS_ALIVE=0` to fall back to the per-turn kill-switch.
+ * `ARCHSTUDIO_KEEP_BG_AGENTS_ALIVE=0` to fall back to the per-turn kill-switch.
  */
 const DEFAULT_KEEP_ALIVE = true;
 
 export function resolveKeepBackgroundTasksAlive(
   env: Record<string, string | undefined> = process.env,
 ): boolean {
-  const raw = env.CRAFT_KEEP_BG_AGENTS_ALIVE;
+  const raw = env.ARCHSTUDIO_KEEP_BG_AGENTS_ALIVE;
   if (raw === '1' || raw === 'true') return true;
   if (raw === '0' || raw === 'false') return false;
   return DEFAULT_KEEP_ALIVE;

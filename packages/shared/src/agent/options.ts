@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from
 import { debug } from "../utils/debug";
 import { getProxyEnvVars } from "../config/proxy-env.ts";
 
-declare const CRAFT_AGENT_CLI_VERSION: string | undefined;
+declare const ARCHSTUDIO_AGENT_CLI_VERSION: string | undefined;
 
 let customPathToClaudeCodeExecutable: string | null = null;
 let claudeConfigChecked = false;
@@ -190,7 +190,7 @@ export function buildClaudeSubprocessEnv(
         ...getProxyEnvVars(),
         ...envOverrides,
         // Propagate debug mode from argv flag OR existing env var
-        CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
+        ARCHSTUDIO_DEBUG: (process.argv.includes('--debug') || process.env.ARCHSTUDIO_DEBUG === '1') ? '1' : '0',
     };
 
     // Bedrock must never be routed through the Claude SDK path.
@@ -225,8 +225,8 @@ export function getDefaultOptions(envOverrides?: Record<string, string>): Partia
 
     // Standalone CLI distribution (`scripts/install.sh`) lays the per-version
     // SDK out at ~/.local/share/craft/versions/<version>/claude-agent-sdk/<binary>
-    if (typeof CRAFT_AGENT_CLI_VERSION !== 'undefined' && CRAFT_AGENT_CLI_VERSION != null) {
-        const baseDir = join(homedir(), '.local', 'share', 'craft', 'versions', CRAFT_AGENT_CLI_VERSION);
+    if (typeof ARCHSTUDIO_AGENT_CLI_VERSION !== 'undefined' && ARCHSTUDIO_AGENT_CLI_VERSION != null) {
+        const baseDir = join(homedir(), '.local', 'share', 'craft', 'versions', ARCHSTUDIO_AGENT_CLI_VERSION);
         return {
             pathToClaudeCodeExecutable: join(baseDir, 'claude-agent-sdk', nativeBinaryName()),
             env,

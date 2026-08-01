@@ -9,7 +9,7 @@ export type CreateTaskArgs = CreateTaskInput;
  * orchestrator session) WITHOUT running it. All spec building (slug
  * derivation, node synthesis, schema validation) happens behind the injected
  * ctx.createTask callback where the task/schema primitives live — this
- * package must stay dependency-free of @craft-agent/shared.
+ * package must stay dependency-free of @archstudio/shared.
  */
 export async function handleCreateTask(
   ctx: SessionToolContext,

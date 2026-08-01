@@ -66,7 +66,7 @@ ALLOW=(
   'SearchCraftAgents'
   # GitHub issue/PR refs in comments (e.g., craft-agents-oss#782)
   'craft-ai-agents/craft-agents'
-  # i18n translation keys (menu.aboutCraftAgents etc.)
+  # i18n translation keys (menu.aboutARCHstudio etc.)
   'menu\.(about|hide|quit)CraftAgents'
   # Feature flag function names
   'isCraftAgents[Cc]li'
@@ -77,19 +77,19 @@ ALLOW=(
   # Internal variable names in test files
   'mockCraftAgents[Cc]li'
   # deep-link protocol scheme
-  'craftagents://'
+  'archstudio://'
   # internal config dir
-  '\.craft-agent[/"]'
-  # CRAFT_* env var names
-  'CRAFT_[A-Z_]+'
-  # @craft-agent/ npm scope
-  '@craft-agent/'
+  '\.archstudio[/"]'
+  # ARCHSTUDIO_* env var names
+  'ARCHSTUDIO_[A-Z_]+'
+  # @archstudio/ npm scope
+  '@archstudio/'
   # Old upstream repo URL
   'lukilabs/craft-agents-oss'
   # Old upstream CLI URL
   'anthropics/craft-agents'
   # Internal function names
-  'parseInternalCraftAgents'
+  'parseInternalARCHstudio'
 )
 
 # Build single grep -E pattern

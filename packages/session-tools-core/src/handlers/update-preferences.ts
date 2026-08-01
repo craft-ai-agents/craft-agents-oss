@@ -2,7 +2,7 @@
  * Update User Preferences Handler
  *
  * Updates stored user preferences (name, timezone, location, notes).
- * Uses an injected updatePreferences callback to avoid depending on @craft-agent/shared.
+ * Uses an injected updatePreferences callback to avoid depending on @archstudio/shared.
  *
  * Note: UI language is NOT user-editable here — it mirrors Appearance → Language
  * and is maintained internally by the main-process i18n IPC handler.

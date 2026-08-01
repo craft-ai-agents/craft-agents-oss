@@ -16,7 +16,7 @@ import {
   isErrorCode,
   type ErrorCode,
   type MessageEnvelope,
-} from '@craft-agent/shared/protocol'
+} from '@archstudio/shared/protocol'
 import type { RpcClient } from './types'
 import { serializeEnvelope, deserializeEnvelope } from './codec'
 

@@ -32,7 +32,7 @@ import { useAppShellContext } from '@/context/AppShellContext'
 import { getFileManagerName } from '@/lib/platform'
 import { restoreSessionFileWatch } from './session-files-watch'
 import { ThumbnailHoverPreview } from './ThumbnailHoverPreview'
-import { shouldGateManualExpand, trimExpandedByCount, Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
+import { shouldGateManualExpand, trimExpandedByCount, Tooltip, TooltipTrigger, TooltipContent } from '@archstudio/ui'
 import { toast } from 'sonner'
 
 /**
@@ -299,7 +299,7 @@ function FileTreeItem({
 
   // Compute whether this directory's forward-expansion would be gated
   // by the shared depth-cap contract.  Uses the same helper as the
-  // Working Directory tree (shouldGateManualExpand from @craft-agent/ui).
+  // Working Directory tree (shouldGateManualExpand from @archstudio/ui).
   const isGated = isDirectory
     && hasChildren
     && !isExpanded
@@ -924,7 +924,7 @@ export function SessionFilesSection({ sessionId, className, sessionFolderPath, h
           <div className="flex items-center gap-2">
             {/* Depth selector — mirrors the Working Directory tree's
                 "depth=N means N levels" contract.  Shared helper:
-                shouldGateManualExpand from @craft-agent/ui. */}
+                shouldGateManualExpand from @archstudio/ui. */}
             {sessionFolderPath && (
               <span className="inline-flex items-center rounded bg-sidebar-surface px-0.5 py-px text-[10px] text-muted-foreground gap-px">
                 {([1, 2, 3, Infinity] as const).map((d) => (

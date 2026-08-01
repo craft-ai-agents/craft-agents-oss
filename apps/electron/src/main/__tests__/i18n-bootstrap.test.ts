@@ -12,7 +12,7 @@
  * thing that broke title generation across restarts.
  *
  * `CONFIG_DIR` is captured at module-load, so each scenario runs in a
- * subprocess with `CRAFT_CONFIG_DIR` set in its env (same pattern as
+ * subprocess with `ARCHSTUDIO_CONFIG_DIR` set in its env (same pattern as
  * `packages/shared/src/config/__tests__/storage-startup-migration.test.ts`).
  */
 import { describe, it, expect } from 'bun:test'
@@ -28,7 +28,7 @@ interface RunResult {
 
 function runScript(configDir: string, script: string): RunResult {
   const result = Bun.spawnSync([process.execPath, '--eval', script], {
-    env: { ...process.env, CRAFT_CONFIG_DIR: configDir },
+    env: { ...process.env, ARCHSTUDIO_CONFIG_DIR: configDir },
     stdout: 'pipe',
     stderr: 'pipe',
   })
@@ -46,8 +46,8 @@ describe('main-process i18n bootstrap', () => {
       const r = runScript(
         configDir,
         `
-          import { setupI18n, i18n } from '@craft-agent/shared/i18n';
-          import { setPersistedUiLanguage, getPersistedUiLanguage } from '@craft-agent/shared/config';
+          import { setupI18n, i18n } from '@archstudio/shared/i18n';
+          import { setPersistedUiLanguage, getPersistedUiLanguage } from '@archstudio/shared/config';
           setupI18n();
           setPersistedUiLanguage('hu');
           const persisted = getPersistedUiLanguage();
@@ -69,8 +69,8 @@ describe('main-process i18n bootstrap', () => {
       const r = runScript(
         configDir,
         `
-          import { setupI18n, i18n } from '@craft-agent/shared/i18n';
-          import { getPersistedUiLanguage } from '@craft-agent/shared/config';
+          import { setupI18n, i18n } from '@archstudio/shared/i18n';
+          import { getPersistedUiLanguage } from '@archstudio/shared/config';
           setupI18n();
           const persisted = getPersistedUiLanguage();
           console.log(JSON.stringify({ persisted: persisted ?? null, resolved: i18n.resolvedLanguage }));
@@ -98,7 +98,7 @@ describe('main-process i18n bootstrap', () => {
       const r = runScript(
         configDir,
         `
-          import { getPersistedUiLanguage } from '@craft-agent/shared/config';
+          import { getPersistedUiLanguage } from '@archstudio/shared/config';
           console.log(JSON.stringify({ value: getPersistedUiLanguage() ?? null }));
         `,
       )

@@ -4,7 +4,7 @@ import { Activity, Clock, Square, CheckCircle2, XCircle, Loader2, Coins, Downloa
 import { toast } from 'sonner'
 import { sessionMetaMapAtom, type SessionMeta } from '../../atoms/sessions'
 import { useAppShellContext } from '../../context/AppShellContext'
-import type { AnyMemory } from '@craft-agent/shared/memory/types'
+import type { AnyMemory } from '@archstudio/shared/memory/types'
 import './RunsPanel.css'
 
 type RunStatus = 'running' | 'completed' | 'failed' | 'idle'

@@ -222,38 +222,38 @@ export function cleanEnv(): Record<string, string> {
 const PAYLOAD_SKIP_KEYS = new Set(['sessionId', 'sessionName', 'workspaceId', 'timestamp']);
 
 /**
- * Build the base CRAFT_* environment variables shared by both prompt and webhook actions.
+ * Build the base ARCHSTUDIO_* environment variables shared by both prompt and webhook actions.
  * Contains event info, session metadata, scheduler time, and payload fields (unsanitized).
  */
 function buildBaseEventEnv(event: AutomationEvent, payload: BaseEventPayload): Record<string, string> {
   const env: Record<string, string> = {
-    CRAFT_EVENT: event,
-    CRAFT_EVENT_DATA: JSON.stringify(payload),
+    ARCHSTUDIO_EVENT: event,
+    ARCHSTUDIO_EVENT_DATA: JSON.stringify(payload),
   };
 
-  if (payload.sessionId) env.CRAFT_SESSION_ID = payload.sessionId;
-  if (payload.sessionName) env.CRAFT_SESSION_NAME = payload.sessionName;
-  if (payload.workspaceId) env.CRAFT_WORKSPACE_ID = payload.workspaceId;
+  if (payload.sessionId) env.ARCHSTUDIO_SESSION_ID = payload.sessionId;
+  if (payload.sessionName) env.ARCHSTUDIO_SESSION_NAME = payload.sessionName;
+  if (payload.workspaceId) env.ARCHSTUDIO_WORKSPACE_ID = payload.workspaceId;
 
   // Session metadata as JSON
   const sessionMetadata: Record<string, string> = {};
   if (payload.sessionId) sessionMetadata.id = payload.sessionId;
   if (payload.sessionName) sessionMetadata.name = payload.sessionName;
   if (Object.keys(sessionMetadata).length > 0) {
-    env.CRAFT_SESSION_METADATA = JSON.stringify(sessionMetadata);
+    env.ARCHSTUDIO_SESSION_METADATA = JSON.stringify(sessionMetadata);
   }
 
   // Local time for scheduler events
   if (event === 'SchedulerTick') {
     const now = new Date();
-    env.CRAFT_LOCAL_TIME = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
-    env.CRAFT_LOCAL_DATE = now.toISOString().split('T')[0]!;
+    env.ARCHSTUDIO_LOCAL_TIME = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+    env.ARCHSTUDIO_LOCAL_DATE = now.toISOString().split('T')[0]!;
   }
 
-  // Payload fields as CRAFT_ vars (raw — callers apply sanitization if needed)
+  // Payload fields as ARCHSTUDIO_ vars (raw — callers apply sanitization if needed)
   for (const [key, value] of Object.entries(payload)) {
     if (PAYLOAD_SKIP_KEYS.has(key)) continue;
-    const envKey = `CRAFT_${toSnakeCase(key).toUpperCase()}`;
+    const envKey = `ARCHSTUDIO_${toSnakeCase(key).toUpperCase()}`;
     env[envKey] = typeof value === 'string' ? value : String(value);
   }
 
@@ -269,12 +269,12 @@ export function buildEnvFromPayload(event: AutomationEvent, payload: BaseEventPa
   const env: Record<string, string> = { ...cleanEnv(), ...base };
 
   // Sanitize session name for shell context
-  if (payload.sessionName) env.CRAFT_SESSION_NAME = sanitizeForShell(payload.sessionName);
+  if (payload.sessionName) env.ARCHSTUDIO_SESSION_NAME = sanitizeForShell(payload.sessionName);
 
   // Sanitize payload field values for shell context
   for (const [key, value] of Object.entries(payload)) {
     if (PAYLOAD_SKIP_KEYS.has(key)) continue;
-    const envKey = `CRAFT_${toSnakeCase(key).toUpperCase()}`;
+    const envKey = `ARCHSTUDIO_${toSnakeCase(key).toUpperCase()}`;
     env[envKey] = typeof value === 'string' ? sanitizeForShell(value) : String(value);
   }
 
@@ -287,23 +287,23 @@ export function buildEnvFromPayload(event: AutomationEvent, payload: BaseEventPa
  * Unlike buildEnvFromPayload (used by prompt actions), this:
  * - Does NOT spread process.env (no secret leakage)
  * - Does NOT apply shell sanitization (irrelevant for HTTP context)
- * - Only injects CRAFT_WH_* user-defined vars from process.env (webhook secrets)
- * - Includes CRAFT_* system vars derived from the event payload
+ * - Only injects ARCHSTUDIO_WH_* user-defined vars from process.env (webhook secrets)
+ * - Includes ARCHSTUDIO_* system vars derived from the event payload
  *
  * Users set webhook secrets in their shell profile:
- *   export CRAFT_WH_SLACK_URL="https://hooks.slack.com/services/T.../B.../xxx"
- *   export CRAFT_WH_DISCORD_TOKEN="abc123"
+ *   export ARCHSTUDIO_WH_SLACK_URL="https://hooks.slack.com/services/T.../B.../xxx"
+ *   export ARCHSTUDIO_WH_DISCORD_TOKEN="abc123"
  *
  * Then reference them in automations.json:
- *   "url": "${CRAFT_WH_SLACK_URL}"
- *   "headers": { "Authorization": "Bearer ${CRAFT_WH_DISCORD_TOKEN}" }
+ *   "url": "${ARCHSTUDIO_WH_SLACK_URL}"
+ *   "headers": { "Authorization": "Bearer ${ARCHSTUDIO_WH_DISCORD_TOKEN}" }
  */
 export function buildWebhookEnv(event: AutomationEvent, payload: BaseEventPayload): Record<string, string> {
   const env = buildBaseEventEnv(event, payload);
 
-  // User-defined webhook secrets: only CRAFT_WH_* from process.env
+  // User-defined webhook secrets: only ARCHSTUDIO_WH_* from process.env
   for (const [key, value] of Object.entries(process.env)) {
-    if (key.startsWith('CRAFT_WH_') && value !== undefined) {
+    if (key.startsWith('ARCHSTUDIO_WH_') && value !== undefined) {
       env[key] = value;
     }
   }

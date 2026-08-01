@@ -1,4 +1,4 @@
-import type { OwnerProfile } from '@craft-agent/core';
+import type { OwnerProfile } from '@archstudio/core';
 import type { UserPreferences } from '../config/preferences.ts';
 import { DEFAULT_OWNER_PROFILE } from './schema.ts';
 

@@ -6,7 +6,7 @@
  * (`mcp__session__browser_tool`).
  */
 
-import { normalizeCanonicalBrowserToolName } from '@craft-agent/shared/agent'
+import { normalizeCanonicalBrowserToolName } from '@archstudio/shared/agent'
 
 const BROWSER_TOOL_OVERLAY_EXCLUDED_COMMANDS = new Set([
   '--help',

@@ -13,7 +13,7 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { WsRpcServer } from '../server'
 import { WsRpcClient } from '../client'
 import { CLIENT_BROWSER_INVOKE } from '../capabilities'
-import { CodedError } from '@craft-agent/shared/protocol'
+import { CodedError } from '@archstudio/shared/protocol'
 
 const TEST_TOKEN = 'test-token-with-enough-entropy-to-pass'
 

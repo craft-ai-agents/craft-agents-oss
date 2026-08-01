@@ -6,7 +6,7 @@
  * Adding a new LlmProviderType without registering a fetcher → compile error.
  */
 
-import type { ModelFetcherMap } from '@craft-agent/shared/config'
+import type { ModelFetcherMap } from '@archstudio/shared/config'
 import { AnthropicModelFetcher } from './anthropic'
 import { PiModelFetcher } from './pi'
 

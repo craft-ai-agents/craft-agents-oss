@@ -21,7 +21,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'bun:test'
 import { mkdtempSync, rmSync, mkdirSync, existsSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { PromptCompiler } from '@craft-agent/shared/prompts/owner/compiler'
+import { PromptCompiler } from '@archstudio/shared/prompts/owner/compiler'
 import { PermissionManager } from '../permission-manager.ts'
 import { initializeModeState, cleanupModeState } from '../../mode-manager.ts'
 

@@ -8,9 +8,9 @@
  * Imports groupMessagesByTurn (pure function) from turn-utils.
  */
 import { describe, it, expect, beforeEach } from 'bun:test'
-import { groupMessagesByTurn, type AssistantTurn } from '@craft-agent/ui/chat/turn-utils'
-import { messageToStored, storedToMessage } from '@craft-agent/core'
-import type { Message, MessageRole } from '@craft-agent/core'
+import { groupMessagesByTurn, type AssistantTurn } from '@archstudio/ui/chat/turn-utils'
+import { messageToStored, storedToMessage } from '@archstudio/core'
+import type { Message, MessageRole } from '@archstudio/core'
 
 // ============================================================================
 // Mirror: persistence pipeline (two-stage filter)

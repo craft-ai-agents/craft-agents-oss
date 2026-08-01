@@ -7,10 +7,10 @@
  * can render a colour-coded grid.
  */
 
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import { RPC_CHANNELS } from '@archstudio/shared/protocol'
+import type { RpcServer } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
-import { Database } from '@craft-agent/shared/memory/database-compat'
+import { Database } from '@archstudio/shared/memory/database-compat'
 import { join } from 'path'
 import { app } from 'electron'
 

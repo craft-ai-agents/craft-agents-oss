@@ -19,7 +19,7 @@ import {
   StyledDropdownMenuItem,
   StyledDropdownMenuSeparator,
 } from './styled-dropdown'
-import { type DocFeature, getDocUrl } from '@craft-agent/shared/docs/doc-links'
+import { type DocFeature, getDocUrl } from '@archstudio/shared/docs/doc-links'
 
 interface HeaderMenuProps {
   /** Route string for Open in New Window action */
@@ -34,7 +34,7 @@ export function HeaderMenu({ route, children, helpFeature }: HeaderMenuProps) {
   const { t } = useTranslation()
   const handleOpenInNewWindow = async () => {
     const separator = route.includes('?') ? '&' : '?'
-    const url = `craftagents://${route}${separator}window=focused`
+    const url = `archstudio://${route}${separator}window=focused`
     try {
       await window.electronAPI?.openUrl(url)
     } catch (error) {

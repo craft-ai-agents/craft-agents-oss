@@ -5,7 +5,7 @@
  * enforces types at compile time — this proxy provides runtime dispatch.
  */
 
-import type { RpcClient } from '@craft-agent/server-core/transport'
+import type { RpcClient } from '@archstudio/server-core/transport'
 import type { ElectronAPI } from '../shared/types'
 
 // ---------------------------------------------------------------------------

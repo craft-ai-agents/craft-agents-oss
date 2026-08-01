@@ -11,7 +11,7 @@ const AUTOMATIONS_CONFIG_FILE = 'automations.json';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
-import { CONFIG_DIR } from '@craft-agent/shared/config/paths.ts';
+import { CONFIG_DIR } from '@archstudio/shared/config/paths.ts';
 import {
   formatValidationResult,
   validateJsonFileHasFields,

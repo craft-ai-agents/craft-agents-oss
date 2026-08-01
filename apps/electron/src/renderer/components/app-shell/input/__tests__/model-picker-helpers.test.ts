@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect } from 'bun:test'
-import type { LlmConnection } from '@craft-agent/shared/config/llm-connections'
+import type { LlmConnection } from '@archstudio/shared/config/llm-connections'
 import {
   formatTokenCount,
   groupConnectionsByProvider,

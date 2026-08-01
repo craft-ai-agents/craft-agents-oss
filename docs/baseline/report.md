@@ -21,7 +21,7 @@
 | Renderer connected to RPC | PASS |
 | Visible native window | PASS — owner confirmed the application is open and running |
 | Configured provider authentication | PASS |
-| Real model response | PASS — Ollama Cloud `glm-5.2`, HTTP 200, exact response `CRAFT_BASELINE_OK` |
+| Real model response | PASS — Ollama Cloud `glm-5.2`, HTTP 200, exact response `ARCHSTUDIO_BASELINE_OK` |
 | Shared targeted tests | PASS — 108 passed, 0 failed |
 | Full validation | BASELINE FAILURES — detailed below |
 
@@ -56,7 +56,7 @@ A live chat-completions request returned:
 ```text
 HTTP 200
 MODEL glm-5.2
-RESPONSE CRAFT_BASELINE_OK
+RESPONSE ARCHSTUDIO_BASELINE_OK
 ```
 
 No credential was printed or written to this repository.

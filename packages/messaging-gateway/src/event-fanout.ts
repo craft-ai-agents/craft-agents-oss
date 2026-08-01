@@ -6,7 +6,7 @@
  *
  * Usage in bootstrap:
  * ```ts
- * import { createFanOutSink } from '@craft-agent/messaging-gateway'
+ * import { createFanOutSink } from '@archstudio/messaging-gateway'
  *
  * setSessionEventSink: (sm, sink) => {
  *   const fanOut = createFanOutSink(sink, gateway.onSessionEvent.bind(gateway))
@@ -15,7 +15,7 @@
  * ```
  */
 
-import type { PushTarget } from '@craft-agent/shared/protocol'
+import type { PushTarget } from '@archstudio/shared/protocol'
 
 export type EventSinkFn = (channel: string, target: PushTarget, ...args: any[]) => void
 

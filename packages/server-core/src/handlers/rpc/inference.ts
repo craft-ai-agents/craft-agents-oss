@@ -6,12 +6,12 @@
  *
  * This handler lives in server-core so that remote-server deployments and
  * local Electron instances use the same code path. The `inferenceStore`
- * is a process-wide singleton from `@craft-agent/shared/agent/core`.
+ * is a process-wide singleton from `@archstudio/shared/agent/core`.
  */
 
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { inferenceStore } from '@craft-agent/shared/agent/core'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import { RPC_CHANNELS } from '@archstudio/shared/protocol'
+import { inferenceStore } from '@archstudio/shared/agent/core'
+import type { RpcServer } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
 export const CORE_HANDLED_CHANNELS = [

@@ -4,7 +4,7 @@
  * Imports the shared UI theme and adds viewer-specific styles.
  */
 
-@import "@craft-agent/ui/styles";
+@import "@archstudio/ui/styles";
 
 /* Scan this app's source files for Tailwind classes */
 @source "../src/**/*.{tsx,ts}";

@@ -95,23 +95,23 @@ function runEslintOnFixture(
 // ---------------------------------------------------------------------------
 
 describe('ESLint no-restricted-imports', () => {
-  it('blocks @craft-agent/core with the expected message', () => {
+  it('blocks @archstudio/core with the expected message', () => {
     const { exitCode, output } = runEslintOnFixture(
-      `import type {} from '@craft-agent/core'\n`,
+      `import type {} from '@archstudio/core'\n`,
       'blocked-core',
     )
     expect(exitCode).toBe(1)
-    expect(output).toContain('@craft-agent/core')
+    expect(output).toContain('@archstudio/core')
     expect(output).toContain('no-restricted-imports')
   })
 
-  it('blocks @craft-agent/ui with the expected message', () => {
+  it('blocks @archstudio/ui with the expected message', () => {
     const { exitCode, output } = runEslintOnFixture(
-      `import type {} from '@craft-agent/ui'\n`,
+      `import type {} from '@archstudio/ui'\n`,
       'blocked-ui',
     )
     expect(exitCode).toBe(1)
-    expect(output).toContain('@craft-agent/ui')
+    expect(output).toContain('@archstudio/ui')
     expect(output).toContain('no-restricted-imports')
   })
 
@@ -144,7 +144,7 @@ describe('ESLint no-restricted-imports', () => {
     const combinedContent = [
       `import { z } from 'zod'`,
       `import type { Context } from '../context.ts'`,
-      `import type {} from '@craft-agent/shared'`,
+      `import type {} from '@archstudio/shared'`,
       `import { parse } from 'path'`,
     ].join('\n') + '\n'
 

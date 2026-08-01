@@ -387,8 +387,8 @@ Create regression scenarios such as:
 - `packages/shared/src/memory/__tests__/`
 
 Preserve the repository's native durable sources rather than replacing them:
-- global profile: `~/.craft-agent/preferences.json` through `packages/shared/src/config/preferences.ts`
-- project memory: `~/.craft-agent/workspaces/{workspace}/projects/{project}/MEMORY.md` through `packages/shared/src/projects/storage.ts`
+- global profile: `~/.archstudio/preferences.json` through `packages/shared/src/config/preferences.ts`
+- project memory: `~/.archstudio/workspaces/{workspace}/projects/{project}/MEMORY.md` through `packages/shared/src/projects/storage.ts`
 - sessions: `{workspace}/sessions/{sessionId}/session.jsonl` through `packages/shared/src/sessions/storage.ts`, `jsonl.ts`, and `persistence-queue.ts`
 - skills: global/workspace/project `SKILL.md` precedence through `packages/shared/src/skills/storage.ts`
 
@@ -814,7 +814,7 @@ Use Hermes delegation initially. Show each child agent as a run node with task, 
 - Scrub logs and exported sessions.
 - Add tests for renderer IPC boundaries and credential leakage.
 - Migrate the existing plaintext `remoteServer.token` path in `packages/shared/src/config/storage.ts` into `CredentialManager`.
-- Migrate automation webhook `auth` fields out of `{workspace}/automations.json`; store only credential references and prefer `CRAFT_WH_*` environment variables for existing automation compatibility.
+- Migrate automation webhook `auth` fields out of `{workspace}/automations.json`; store only credential references and prefer `ARCHSTUDIO_WH_*` environment variables for existing automation compatibility.
 - Preserve `packages/shared/src/credentials/backends/secure-storage.ts` as the encrypted source of truth; never store secrets in preferences, `MEMORY.md`, skills, prompts, session JSONL, guides, or automation history.
 
 ---

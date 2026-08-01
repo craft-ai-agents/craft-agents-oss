@@ -1,5 +1,5 @@
 /**
- * Markdown component exports for @craft-agent/ui
+ * Markdown component exports for @archstudio/ui
  */
 
 export { Markdown, MemoizedMarkdown, type MarkdownProps, type RenderMode, type DisablablePreviewBlock } from './Markdown'

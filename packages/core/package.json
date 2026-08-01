@@ -1,5 +1,5 @@
 {
-  "name": "@craft-agent/core",
+  "name": "@archstudio/core",
   "version": "0.11.2",
   "license": "Apache-2.0",
   "description": "Core types, storage, and agent logic for ARCHstudio",

@@ -1,5 +1,5 @@
 {
-  "name": "@craft-agent/messaging-whatsapp-worker",
+  "name": "@archstudio/messaging-whatsapp-worker",
   "version": "0.11.2",
   "license": "Apache-2.0",
   "description": "WhatsApp worker subprocess for Craft Agent (Baileys-based, unofficial API)",

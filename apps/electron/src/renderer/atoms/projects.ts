@@ -5,6 +5,6 @@
  */
 
 import { atom } from 'jotai'
-import type { LoadedProject } from '@craft-agent/shared/projects/types'
+import type { LoadedProject } from '@archstudio/shared/projects/types'
 
 export const projectsAtom = atom<LoadedProject[]>([])

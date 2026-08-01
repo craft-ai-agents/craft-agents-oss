@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, X, Search } from 'lucide-react'
 
-import { Icon_Home, Icon_Folder } from '@craft-agent/ui'
+import { Icon_Home, Icon_Folder } from '@archstudio/ui'
 import {
   Drawer,
   DrawerContent,

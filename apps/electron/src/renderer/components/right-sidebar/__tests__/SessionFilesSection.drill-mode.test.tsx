@@ -71,8 +71,8 @@ gs.customElements = {
 //    markdown components that import pdfjs-dist).
 //
 // IMPORTANT: this MUST run BEFORE the inline Tooltip primitives block
-// below.  That block does `await import('@craft-agent/ui')` to capture
-// the real module before mocking it; `@craft-agent/ui` transitively
+// below.  That block does `await import('@archstudio/ui')` to capture
+// the real module before mocking it; `@archstudio/ui` transitively
 // imports pdfjs-dist, so if pdfjs isn't mocked first, the import chain
 // fails with "Missing 'default' export in module ... pdf.worker.min.mjs".
 // -------------------------------------------------------------------------
@@ -115,19 +115,19 @@ mock.module('pdfjs-dist', () => ({
 // test (we only probe forceMount semantics), but if a future test
 // needs Radix's open-state behaviour it should mock Radix directly.
 //
-// We capture the real `@craft-agent/ui` module BEFORE registering
+// We capture the real `@archstudio/ui` module BEFORE registering
 // the mock so we can spread its real exports (shouldGateManualExpand,
 // trimExpandedByCount, cn, FileTypeIcon, markdown, etc.) into the
 // mock object.  Only the four tooltip primitives are overridden;
 // everything else uses the real implementation.
 // -------------------------------------------------------------------------
-const realUiModule = await import('@craft-agent/ui')
+const realUiModule = await import('@archstudio/ui')
 
 // Smoke-assert the capture succeeded.  This is a defensive guard: the
 // inline Tooltip shim layer above depends on `realUiModule` spreading
 // real exports (shouldGateManualExpand, trimExpandedByCount, cn, etc.)
-// into the mocked @craft-agent/ui.  If a transitive import of
-// `@craft-agent/ui` ever fails before our mocks register (e.g. a new
+// into the mocked @archstudio/ui.  If a transitive import of
+// `@archstudio/ui` ever fails before our mocks register (e.g. a new
 // markdown/highlighter dep that's not in the mock list yet), this
 // fails fast with a clear hint instead of discovering the breakage
 // three tests later.
@@ -136,9 +136,9 @@ if (
   typeof realUiModule.trimExpandedByCount !== 'function'
 ) {
   throw new Error(
-    'realUiModule capture broken — a transitive @craft-agent/ui import ' +
+    'realUiModule capture broken — a transitive @archstudio/ui import ' +
     'likely needs mocking before this block. The drill-mode mock layer ' +
-    'spreads realUiModule.exports into @craft-agent/ui to keep ' +
+    'spreads realUiModule.exports into @archstudio/ui to keep ' +
     'shouldGateManualExpand/trimExpandedByCount/cn working.',
   )
 }
@@ -203,7 +203,7 @@ const InlineTooltipContent = React.forwardRef<HTMLDivElement, any>(
   },
 )
 
-mock.module('@craft-agent/ui', () => ({
+mock.module('@archstudio/ui', () => ({
   ...realUiModule,
   Tooltip: InlineTooltip,
   TooltipTrigger: InlineTooltipTrigger,
@@ -434,7 +434,7 @@ function buildTreeFixture() {
 // 13. Import component (AFTER the mocks are registered).
 // -------------------------------------------------------------------------
 const { SessionFilesSection } = await import('../SessionFilesSection')
-const { TooltipProvider } = await import('@craft-agent/ui')
+const { TooltipProvider } = await import('@archstudio/ui')
 
 // -------------------------------------------------------------------------
 // 14. Helpers.

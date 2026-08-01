@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { RPC_CHANNELS } from '@archstudio/shared/protocol'
 import { SessionManager } from './SessionManager.ts'
 
 // Locks the session_created emit primitive used by createSession's default announcement.

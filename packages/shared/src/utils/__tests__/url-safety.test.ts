@@ -40,8 +40,8 @@ describe('classifyExternalUrl — safe external (custom app schemes)', () => {
 })
 
 describe('classifyExternalUrl — internal deep links', () => {
-  it('classifies craftagents:// as internal-deeplink', () => {
-    expect(classifyExternalUrl('craftagents://settings').kind).toBe('internal-deeplink')
+  it('classifies archstudio:// as internal-deeplink', () => {
+    expect(classifyExternalUrl('archstudio://settings').kind).toBe('internal-deeplink')
   })
 
   it('is case-insensitive for the scheme', () => {
@@ -128,7 +128,7 @@ describe('formatBlockedUrlError', () => {
 
   it('returns an empty string for non-dangerous classifications', () => {
     expect(formatBlockedUrlError(classifyExternalUrl('https://example.com'))).toBe('')
-    expect(formatBlockedUrlError(classifyExternalUrl('craftagents://settings'))).toBe('')
+    expect(formatBlockedUrlError(classifyExternalUrl('archstudio://settings'))).toBe('')
   })
 })
 
@@ -144,7 +144,7 @@ describe('isSafeExternalUrl', () => {
   })
 
   it('returns false for internal deep links', () => {
-    expect(isSafeExternalUrl('craftagents://settings')).toBe(false)
+    expect(isSafeExternalUrl('archstudio://settings')).toBe(false)
   })
 
   it('returns false for dangerous schemes', () => {

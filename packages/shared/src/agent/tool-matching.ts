@@ -14,7 +14,7 @@
  * Together these eliminate the need for FIFO matching, parent stacks, and orphan recovery.
  */
 
-import type { AgentEvent } from '@craft-agent/core/types';
+import type { AgentEvent } from '@archstudio/core/types';
 import { toolMetadataStore } from '../interceptor-common.ts';
 import { createLogger } from '../utils/debug.ts';
 import { isParentTaskTool } from '../utils/toolNames.ts';

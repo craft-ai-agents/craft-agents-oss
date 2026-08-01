@@ -23,12 +23,12 @@
     "noPropertyAccessFromIndexSignature": false,
     "baseUrl": ".",
     "paths": {
-      "@craft-agent/core": ["../core/src/index.ts"],
-      "@craft-agent/core/*": ["../core/src/*"],
-      "@craft-agent/shared": ["./src/index.ts"],
-      "@craft-agent/shared/*": ["./src/*"],
-      "@craft-agent/session-tools-core": ["../session-tools-core/src/index.ts"],
-      "@craft-agent/session-tools-core/*": ["../session-tools-core/src/*"]
+      "@archstudio/core": ["../core/src/index.ts"],
+      "@archstudio/core/*": ["../core/src/*"],
+      "@archstudio/shared": ["./src/index.ts"],
+      "@archstudio/shared/*": ["./src/*"],
+      "@archstudio/session-tools-core": ["../session-tools-core/src/index.ts"],
+      "@archstudio/session-tools-core/*": ["../session-tools-core/src/*"]
     }
   },
   "include": ["src/**/*"],

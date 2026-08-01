@@ -4,8 +4,8 @@
  * task.yaml + orchestrator parent session + reserved TASK label + spec sources.
  * Never starts a run — running is tasks:run / TaskRunner.
  */
-import { saveTaskSpec, type TaskSpec } from '@craft-agent/shared/tasks'
-import { createLogger } from '@craft-agent/shared/utils'
+import { saveTaskSpec, type TaskSpec } from '@archstudio/shared/tasks'
+import { createLogger } from '@archstudio/shared/utils'
 import type { ISessionManager } from '../handlers/session-manager-interface'
 
 const log = createLogger('tasks-create')

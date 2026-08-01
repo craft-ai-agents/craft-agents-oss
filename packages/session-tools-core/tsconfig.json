@@ -17,22 +17,22 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@craft-agent/shared": [
+      "@archstudio/shared": [
         "../shared/src/index.ts"
       ],
-      "@craft-agent/shared/*": [
+      "@archstudio/shared/*": [
         "../shared/src/*"
       ],
-      "@craft-agent/server-core": [
+      "@archstudio/server-core": [
         "../server-core/src/index.ts"
       ],
-      "@craft-agent/server-core/*": [
+      "@archstudio/server-core/*": [
         "../server-core/src/*"
       ],
-      "@craft-agent/core": [
+      "@archstudio/core": [
         "../core/src/index.ts"
       ],
-      "@craft-agent/core/*": [
+      "@archstudio/core/*": [
         "../core/src/*"
       ]
     }

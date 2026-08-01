@@ -5,14 +5,14 @@
  * No dependency on ipcMain, sessionManager, credential manager, or file I/O.
  */
 
-import type { ModelDefinition } from '@craft-agent/shared/config/models'
+import type { ModelDefinition } from '@archstudio/shared/config/models'
 import {
   type LlmConnection,
   type CustomEndpointApi,
   getDefaultModelsForConnection,
   getDefaultModelForConnection,
   defaultMidStreamBehavior,
-} from '@craft-agent/shared/config'
+} from '@archstudio/shared/config'
 
 // ============================================================
 // Error Parsing

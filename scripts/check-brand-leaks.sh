@@ -25,45 +25,28 @@ PATTERN='Craft Agents|CraftAgents|craft-ai-agents'
 
 # ── Allowlist: internal code identifiers that can't be renamed ──────────────
 # Each pattern has a comment explaining why it's excluded.
+# Everything here is a name owned by someone else — an upstream repo, a
+# third-party MCP server, a registered bot handle. Renaming them would break
+# a real integration or falsify a link, so they stay.
+#
+# Internal identifiers are NOT allowlisted. They were renamed to ARCHstudio
+# outright; if one reappears, the gate should fail rather than excuse it.
 ALLOW_PATTERNS=(
-  # npm workspace package name (can't rename without monorepo-wide rename)
+  # Upstream repo (lukilabs/craft-agents-oss) in comments and links
   'craft-agents-oss'
-  # MCP server slug — hardcoded in protocol, tool definitions, and config
-  'craft-agents-docs'
-  # MCP tool name — SearchCraftAgents is a protocol-level identifier
-  'SearchCraftAgents'
-  # GitHub issue/PR refs (e.g., craft-agents-oss#782) in comments
   'craft-agents-oss#[0-9]'
-  # i18n translation keys (menu.aboutCraftAgents etc.) — the KEY contains
-  # the old brand but the VALUE is the translated user-facing string
-  'menu\.(about|hide|quit)CraftAgents'
-  # Feature flag function names (isCraftAgentsCliEnabled etc.)
-  'isCraftAgents[Cc]li'
-  # Telegram bot handle — can't rename without re-registering
-  '@CraftAgentsBot'
-  # package name in node_modules resolution paths
-  'packages/craft-agents-commands'
-  # Internal variable names in test files
-  'mockCraftAgents[Cc]li'
-  # deep-link protocol scheme
-  'craftagents://'
-  # internal config dir
-  '\.craft-agent[/"]'
-  # CRAFT_* env var names (CRAFT_RPC_HOST etc.)
-  'CRAFT_[A-Z_]+'
-  # @craft-agent/ npm scope — the workspace scope can't change without
-  # renaming every internal package
-  '@craft-agent/'
-  # Old upstream repo URL used in comments/links (lukilabs/craft-agents-oss)
   'lukilabs/craft-agents-oss'
+  # Repo owner org in issue/PR links
+  'craft-ai-agents/craft-agents-oss'
+  'craft-ai-agents/craft-agents'
   # Old upstream CLI URL in docs (anthropics/craft-agents)
   'anthropics/craft-agents'
-  # Repo owner org (craft-ai-agents) in issue links
-  'craft-ai-agents/craft-agents-oss'
-  # Internal function names (parseInternalCraftAgentsDeepLink etc.)
-  'parseInternalCraftAgents'
-  # craft-ai-agents org in GitHub PR links (release notes, comments)
-  'craft-ai-agents/craft-agents'
+  # Third-party MCP server slug — hardcoded in protocol and tool definitions
+  'craft-agents-docs'
+  # Third-party MCP tool name — protocol-level identifier
+  'SearchCraftAgents'
+  # Telegram bot handle — can't rename without re-registering
+  '@CraftAgentsBot'
 )
 
 # ── File-level exclusions: docs and tooling that contain old brand ─────────
@@ -74,7 +57,7 @@ ALLOW_PATTERNS=(
 #     ("Craft Agents -> ARCHstudio"); rewriting it would misrepresent history.
 #   scripts/split-commits\.sh — a fixed manifest of files staged during the
 #     8-branch split, captured at the time it ran; some listed paths (e.g.
-#     the old CraftAgentsLogo/Symbol icon files) were renamed by that same
+#     the old ARCHstudioLogo/Symbol icon files) were renamed by that same
 #     migration, so the manifest is a historical record, not live code.
 #   scripts/check-brand-leaks\.sh / tools/check-branding-leaks\.sh — these
 #     files ARE the gate; they must contain the old-brand pattern string and

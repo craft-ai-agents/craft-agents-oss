@@ -4,7 +4,7 @@ let resolveAdapterNameFromPiApiHint: typeof import('../unified-network-intercept
 
 describe('unified-network-interceptor Pi API hint mapping', () => {
   beforeAll(async () => {
-    process.env.CRAFT_INTERCEPTOR_DISABLE_AUTO_INSTALL = '1';
+    process.env.ARCHSTUDIO_INTERCEPTOR_DISABLE_AUTO_INSTALL = '1';
     ({ resolveAdapterNameFromPiApiHint } = await import('../unified-network-interceptor.ts'));
   });
 

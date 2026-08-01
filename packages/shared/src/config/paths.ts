@@ -1,9 +1,9 @@
 /**
  * Centralized path configuration for ARCHstudio.
  *
- * Supports multi-instance development via CRAFT_CONFIG_DIR environment variable.
+ * Supports multi-instance development via ARCHSTUDIO_CONFIG_DIR environment variable.
  * When running from a numbered folder (e.g., craft-tui-agent-1), the detect-instance.sh
- * script sets CRAFT_CONFIG_DIR to ~/.archstudio-1, allowing multiple instances to run
+ * script sets ARCHSTUDIO_CONFIG_DIR to ~/.archstudio-1, allowing multiple instances to run
  * simultaneously with separate configurations.
  *
  * Default (non-numbered folders): ~/.archstudio/
@@ -22,9 +22,17 @@ import { join } from 'path';
 
 // Allow override via environment variable for multi-instance dev
 // Falls back to default ~/.archstudio/ for production and non-numbered dev folders
+//
+// ARCHSTUDIO_CONFIG_DIR is the supported name. CRAFT_CONFIG_DIR is still read
+// as a fallback so existing shells, launch scripts, and CI jobs that predate
+// the rename keep working; it can be dropped once those are updated.
 function resolveConfigDir(): string {
   try {
-    return process.env.CRAFT_CONFIG_DIR || join(os.homedir(), '.archstudio');
+    return (
+      process.env.ARCHSTUDIO_CONFIG_DIR ||
+      process.env.CRAFT_CONFIG_DIR ||
+      join(os.homedir(), '.archstudio')
+    );
   } catch {
     return '';
   }

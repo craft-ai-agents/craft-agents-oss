@@ -13,7 +13,7 @@ import { readFileSync } from 'fs'
 import { mainLog } from './logger'
 import { RPC_CHANNELS } from '../shared/types'
 import type { WindowManager } from './window-manager'
-import type { EventSink } from '@craft-agent/server-core/transport'
+import type { EventSink } from '@archstudio/server-core/transport'
 
 type ClientResolver = (webContentsId: number) => string | undefined
 

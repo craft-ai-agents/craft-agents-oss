@@ -11,9 +11,9 @@
  */
 
 import type { WsRpcClient, TransportConnectionState } from './client'
-import type { RpcClient } from '@craft-agent/server-core/transport'
-import type { RemoteServerConfig } from '@craft-agent/core/types'
-import { isLocalOnly, RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import type { RpcClient } from '@archstudio/server-core/transport'
+import type { RemoteServerConfig } from '@archstudio/core/types'
+import { isLocalOnly, RPC_CHANNELS } from '@archstudio/shared/protocol'
 
 /**
  * Duck-typed AbortSignal detection for the routed-client's argument-extraction

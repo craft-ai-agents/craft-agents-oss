@@ -1,11 +1,11 @@
 import { unlink } from 'fs/promises'
 import { join } from 'path'
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getCredentialManager } from '@craft-agent/shared/credentials'
-import { CONFIG_DIR } from '@craft-agent/shared/config/paths.ts'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import { RPC_CHANNELS } from '@archstudio/shared/protocol'
+import { getCredentialManager } from '@archstudio/shared/credentials'
+import { CONFIG_DIR } from '@archstudio/shared/config/paths.ts'
+import type { RpcServer } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
-import { requestClientConfirmDialog } from '@craft-agent/server-core/transport'
+import { requestClientConfirmDialog } from '@archstudio/server-core/transport'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.auth.LOGOUT,

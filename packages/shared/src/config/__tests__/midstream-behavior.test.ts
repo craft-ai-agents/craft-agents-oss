@@ -95,7 +95,7 @@ function setupConfig(llmConnections: LlmConnection[]) {
       '--eval',
       `import { updateLlmConnection } from '${STORAGE_MODULE_PATH}'; const ok = updateLlmConnection(${JSON.stringify(slug)}, ${updatesJson}); process.exit(ok ? 0 : 1);`,
     ], {
-      env: { ...process.env, CRAFT_CONFIG_DIR: configDir },
+      env: { ...process.env, ARCHSTUDIO_CONFIG_DIR: configDir },
       stdout: 'pipe',
       stderr: 'pipe',
     })

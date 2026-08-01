@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactDOM from 'react-dom/client'
-import { BrowserEmptyStateCard } from '@craft-agent/ui'
+import { BrowserEmptyStateCard } from '@archstudio/ui'
 import { routes } from '../shared/routes'
 import { EMPTY_STATE_PROMPT_SAMPLES } from './components/browser/empty-state-prompts'
 import './index.css'

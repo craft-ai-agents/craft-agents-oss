@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSetAtom } from 'jotai'
 import { projectsAtom } from '@/atoms/projects'
-import type { LoadedProject } from '@craft-agent/shared/projects/types'
+import type { LoadedProject } from '@archstudio/shared/projects/types'
 
 export interface UseProjectsResult {
   projects: LoadedProject[]

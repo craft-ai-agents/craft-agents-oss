@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { OwnerProfile } from '@craft-agent/core';
+import type { OwnerProfile } from '@archstudio/core';
 
 export const OwnerProfileIdentitySchema = z.object({
   name: z.string().min(1),

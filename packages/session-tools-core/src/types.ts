@@ -5,7 +5,7 @@
  * Claude (in-process) and Codex (subprocess) implementations.
  */
 
-import type { SourceConnectionStatus } from '@craft-agent/shared/sources/types';
+import type { SourceConnectionStatus } from '@archstudio/shared/sources/types';
 export type { SourceConnectionStatus };
 
 // ============================================================

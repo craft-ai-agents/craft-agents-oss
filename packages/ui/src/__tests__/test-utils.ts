@@ -1,5 +1,5 @@
 /**
- * Shared test utilities for `@craft-agent/ui` tests.
+ * Shared test utilities for `@archstudio/ui` tests.
  *
  * The main export is `setupModuleMocks()` — a function that registers
  * `mock.module()` calls for transitive dependencies that would otherwise

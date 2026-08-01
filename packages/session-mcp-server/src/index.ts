@@ -3,7 +3,7 @@
  * Session MCP Server
  *
  * This MCP server provides session-scoped tools to Codex via stdio transport.
- * It uses the shared handlers from @craft-agent/session-tools-core to ensure
+ * It uses the shared handlers from @archstudio/session-tools-core to ensure
  * feature parity with Claude's session-scoped tools.
  *
  * Callback Communication:
@@ -17,7 +17,7 @@
  *
  * Arguments:
  *   --session-id: Unique session identifier
- *   --workspace-root: Path to workspace folder (~/.craft-agent/workspaces/{id})
+ *   --workspace-root: Path to workspace folder (~/.archstudio/workspaces/{id})
  *   --plans-folder: Path to session's plans folder
  */
 
@@ -32,7 +32,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { isDeveloperFeedbackEnabled } from '@craft-agent/shared/feature-flags';
+import { isDeveloperFeedbackEnabled } from '@archstudio/shared/feature-flags';
 // Import from session-tools-core
 import {
   type SessionToolContext,
@@ -48,7 +48,7 @@ import {
   // Helpers
   loadSourceConfig as loadSourceConfigFromHelpers,
   errorResponse,
-} from '@craft-agent/session-tools-core';
+} from '@archstudio/session-tools-core';
 
 // ============================================================
 // Types
@@ -189,11 +189,11 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
       });
     },
     getMemoryRepository: (() => {
-      let repo: import('@craft-agent/shared/memory/repository').MemoryRepository | null = null;
+      let repo: import('@archstudio/shared/memory/repository').MemoryRepository | null = null;
       return async () => {
         if (!repo) {
-          const { openMemoryDatabase, bootstrapStorage } = await import('@craft-agent/shared/memory/database');
-          const { MemoryRepository } = await import('@craft-agent/shared/memory/repository');
+          const { openMemoryDatabase, bootstrapStorage } = await import('@archstudio/shared/memory/database');
+          const { MemoryRepository } = await import('@archstudio/shared/memory/repository');
           const memoryDbDir = join(workspaceRootPath, 'memory');
           mkdirSync(memoryDbDir, { recursive: true });
           const db = openMemoryDatabase(memoryDbDir);
@@ -233,8 +233,8 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
     // Preferences: write directly to preferences.json
     updatePreferences: (updates: Record<string, unknown>) => {
       // Resolve preferences path from config dir (parent of workspaces dir)
-      // workspaceRootPath = ~/.craft-agent/workspaces/{id}
-      // preferencesPath = ~/.craft-agent/preferences.json
+      // workspaceRootPath = ~/.archstudio/workspaces/{id}
+      // preferencesPath = ~/.archstudio/preferences.json
       const configDir = join(workspaceRootPath, '..', '..');
       const prefsPath = join(configDir, 'preferences.json');
       try {
@@ -258,7 +258,7 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
 
     // Developer feedback: write one JSON file per entry to {configDir}/feedback/
     submitFeedback: (feedback) => {
-      const configDir = process.env.CRAFT_CONFIG_DIR || join(workspaceRootPath, '..', '..');
+      const configDir = process.env.ARCHSTUDIO_CONFIG_DIR || join(workspaceRootPath, '..', '..');
       const feedbackDir = join(configDir, 'feedback');
       mkdirSync(feedbackDir, { recursive: true });
       const filePath = join(feedbackDir, `${feedback.id}.json`);
@@ -381,7 +381,7 @@ async function handleCallLlm(
   }
 
   // Fallback path: HTTP callback to agent (for Copilot where PreToolUse doesn't fire for MCP tools).
-  // Uses callbackPort from CLI arg (--callback-port) or env var (CRAFT_LLM_CALLBACK_PORT).
+  // Uses callbackPort from CLI arg (--callback-port) or env var (ARCHSTUDIO_LLM_CALLBACK_PORT).
   if (config.callbackPort) {
     try {
       const resp = await fetch(`http://127.0.0.1:${config.callbackPort}/call-llm`, {
@@ -404,7 +404,7 @@ async function handleCallLlm(
 
   return errorResponse(
     'call_llm requires either PreToolUse intercept (_precomputedResult) or ' +
-    'HTTP callback (CRAFT_LLM_CALLBACK_PORT). Neither is available.'
+    'HTTP callback (ARCHSTUDIO_LLM_CALLBACK_PORT). Neither is available.'
   );
 }
 
@@ -457,7 +457,7 @@ async function handleSpawnSession(
 
   return errorResponse(
     'spawn_session requires either PreToolUse intercept (_precomputedResult) or ' +
-    'HTTP callback (CRAFT_LLM_CALLBACK_PORT). Neither is available.'
+    'HTTP callback (ARCHSTUDIO_LLM_CALLBACK_PORT). Neither is available.'
   );
 }
 
@@ -515,7 +515,7 @@ async function main() {
     workspaceRootPath,
     plansFolderPath,
     // CLI arg takes priority, env var as fallback (Copilot CLI may not forward env to subprocesses)
-    callbackPort: callbackPort || process.env.CRAFT_LLM_CALLBACK_PORT,
+    callbackPort: callbackPort || process.env.ARCHSTUDIO_LLM_CALLBACK_PORT,
   };
 
   // Create the Codex context

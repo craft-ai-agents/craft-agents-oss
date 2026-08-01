@@ -4,7 +4,7 @@ import {
   normalizeBrowserToolName,
   getBrowserToolCommandVerb,
   shouldActivateBrowserOverlay,
-} from '@craft-agent/server-core/domain'
+} from '@archstudio/server-core/domain'
 
 describe('browser-tool-detection', () => {
   describe('normalizeBrowserToolName', () => {

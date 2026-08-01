@@ -38,8 +38,8 @@ The code is Apache-2.0 licensed, but the upstream `TRADEMARK.md` explicitly rese
 
 Replace rather than recolour:
 
-- `apps/electron/src/renderer/components/icons/CraftAgentsSymbol.tsx`
-- `apps/electron/src/renderer/components/icons/CraftAgentsLogo.tsx`
+- `apps/electron/src/renderer/components/icons/ARCHstudioSymbol.tsx`
+- `apps/electron/src/renderer/components/icons/ARCHstudioLogo.tsx`
 - packaged icons under Electron resources/build assets
 - tool icon entries labelled Craft Agent
 
@@ -58,9 +58,9 @@ The old symbols may remain only in upstream history or explicit third-party attr
 
 Do not mass-rename these during the visual redesign:
 
-- `@craft-agent/*` package names
-- `~/.craft-agent` data directory
-- `CRAFT_*` environment variables
+- `@archstudio/*` package names
+- `~/.archstudio` data directory
+- `ARCHSTUDIO_*` environment variables
 - protocol field names and storage schema IDs
 
 They have compatibility and migration consequences. Rename them later behind aliases and explicit data migrations after the new UI/runtime is stable.

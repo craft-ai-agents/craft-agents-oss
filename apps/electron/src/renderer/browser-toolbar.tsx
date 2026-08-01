@@ -10,9 +10,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import ReactDOM from 'react-dom/client'
 import { useTranslation, initReactI18next } from 'react-i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
-import { setupI18n } from '@craft-agent/shared/i18n'
+import { setupI18n } from '@archstudio/shared/i18n'
 import { EyeOff, X, XCircle } from 'lucide-react'
-import { BrowserControls } from '@craft-agent/ui'
+import { BrowserControls } from '@archstudio/ui'
 import { HeaderIconButton } from '@/components/ui/HeaderIconButton'
 import {
   DropdownMenu,

@@ -64,7 +64,7 @@ export default defineConfig({
       'node:path': resolve(__dirname, 'src/renderer/shims/path-browser.ts'),
       'path/posix': resolve(__dirname, 'src/renderer/shims/path-browser.ts'),
       // Force all React imports to use the root node_modules React
-      // Bun hoists deps to root. This prevents "multiple React copies" error from @craft-agent/ui
+      // Bun hoists deps to root. This prevents "multiple React copies" error from @archstudio/ui
       'react': resolve(__dirname, '../../node_modules/react'),
       'react-dom': resolve(__dirname, '../../node_modules/react-dom'),
     },
@@ -72,7 +72,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'jotai', 'pdfjs-dist'],
-    exclude: ['@craft-agent/ui', '@anthropic-ai/claude-agent-sdk'],
+    exclude: ['@archstudio/ui', '@anthropic-ai/claude-agent-sdk'],
     esbuildOptions: {
       supported: { 'top-level-await': true },
       target: 'esnext'

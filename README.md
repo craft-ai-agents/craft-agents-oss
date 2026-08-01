@@ -163,14 +163,14 @@ From the monorepo root:
 
 ```bash
 # Generate a token and start the server
-CRAFT_SERVER_TOKEN=$(openssl rand -hex 32) bun run packages/server/src/index.ts
+ARCHSTUDIO_SERVER_TOKEN=$(openssl rand -hex 32) bun run packages/server/src/index.ts
 ```
 
 The server prints the connection details on startup:
 
 ```
-CRAFT_SERVER_URL=ws://203.0.113.5:9100
-CRAFT_SERVER_TOKEN=<generated-token>
+ARCHSTUDIO_SERVER_URL=ws://203.0.113.5:9100
+ARCHSTUDIO_SERVER_TOKEN=<generated-token>
 ```
 
 Copy these values and use them to connect the desktop app.
@@ -180,7 +180,7 @@ Copy these values and use them to connect the desktop app.
 Launch the Electron app in thin-client mode by passing the server URL and token:
 
 ```bash
-CRAFT_SERVER_URL=wss://203.0.113.5:9100 CRAFT_SERVER_TOKEN=<token> bun run electron:start
+ARCHSTUDIO_SERVER_URL=wss://203.0.113.5:9100 ARCHSTUDIO_SERVER_TOKEN=<token> bun run electron:start
 ```
 
 In thin-client mode, the desktop app renders the UI but all session logic, tool execution, and LLM calls run on the remote server.
@@ -189,13 +189,13 @@ In thin-client mode, the desktop app renders the UI but all session logic, tool 
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `CRAFT_SERVER_TOKEN` | Yes | — | Bearer token for client authentication |
-| `CRAFT_RPC_HOST` | No | `127.0.0.1` | Bind address (`0.0.0.0` for remote access) |
-| `CRAFT_RPC_PORT` | No | `9100` | Bind port |
-| `CRAFT_RPC_TLS_CERT` | No | — | Path to PEM certificate file (enables `wss://`) |
-| `CRAFT_RPC_TLS_KEY` | No | — | Path to PEM private key file (required with cert) |
-| `CRAFT_RPC_TLS_CA` | No | — | Path to PEM CA chain file (optional, for client cert verification) |
-| `CRAFT_DEBUG` | No | `false` | Enable debug logging |
+| `ARCHSTUDIO_SERVER_TOKEN` | Yes | — | Bearer token for client authentication |
+| `ARCHSTUDIO_RPC_HOST` | No | `127.0.0.1` | Bind address (`0.0.0.0` for remote access) |
+| `ARCHSTUDIO_RPC_PORT` | No | `9100` | Bind port |
+| `ARCHSTUDIO_RPC_TLS_CERT` | No | — | Path to PEM certificate file (enables `wss://`) |
+| `ARCHSTUDIO_RPC_TLS_KEY` | No | — | Path to PEM private key file (required with cert) |
+| `ARCHSTUDIO_RPC_TLS_CA` | No | — | Path to PEM CA chain file (optional, for client cert verification) |
+| `ARCHSTUDIO_DEBUG` | No | `false` | Enable debug logging |
 
 ### TLS (Recommended for Remote Access)
 
@@ -211,14 +211,14 @@ When exposing the server over the network, TLS encrypts the WebSocket connection
 **Start the server with TLS:**
 
 ```bash
-CRAFT_SERVER_TOKEN=<token> \
-CRAFT_RPC_HOST=0.0.0.0 \
-CRAFT_RPC_TLS_CERT=certs/cert.pem \
-CRAFT_RPC_TLS_KEY=certs/key.pem \
+ARCHSTUDIO_SERVER_TOKEN=<token> \
+ARCHSTUDIO_RPC_HOST=0.0.0.0 \
+ARCHSTUDIO_RPC_TLS_CERT=certs/cert.pem \
+ARCHSTUDIO_RPC_TLS_KEY=certs/key.pem \
 bun run packages/server/src/index.ts
 ```
 
-The server will print `CRAFT_SERVER_URL=wss://<your-public-ip>:9100`.
+The server will print `ARCHSTUDIO_SERVER_URL=wss://<your-public-ip>:9100`.
 
 **For production**, use certificates from a trusted CA (e.g., Let's Encrypt) or place the server behind a reverse proxy (nginx, Caddy) that terminates TLS.
 
@@ -227,9 +227,9 @@ The server will print `CRAFT_SERVER_URL=wss://<your-public-ip>:9100`.
 ```bash
 docker run -d \
   -p 9100:9100 \
-  -e CRAFT_SERVER_TOKEN=<token> \
-  -e CRAFT_RPC_HOST=0.0.0.0 \
-  -v craft-data:/root/.craft-agent \
+  -e ARCHSTUDIO_SERVER_TOKEN=<token> \
+  -e ARCHSTUDIO_RPC_HOST=0.0.0.0 \
+  -v craft-data:/root/.archstudio \
   craft-agents-server
 ```
 
@@ -238,12 +238,12 @@ To enable TLS in Docker, mount your certificates and set the env vars:
 ```bash
 docker run -d \
   -p 9100:9100 \
-  -e CRAFT_SERVER_TOKEN=<token> \
-  -e CRAFT_RPC_HOST=0.0.0.0 \
-  -e CRAFT_RPC_TLS_CERT=/certs/cert.pem \
-  -e CRAFT_RPC_TLS_KEY=/certs/key.pem \
+  -e ARCHSTUDIO_SERVER_TOKEN=<token> \
+  -e ARCHSTUDIO_RPC_HOST=0.0.0.0 \
+  -e ARCHSTUDIO_RPC_TLS_CERT=/certs/cert.pem \
+  -e ARCHSTUDIO_RPC_TLS_KEY=/certs/key.pem \
   -v ./certs:/certs:ro \
-  -v craft-data:/root/.craft-agent \
+  -v craft-data:/root/.archstudio \
   craft-agents-server
 ```
 
@@ -267,8 +267,8 @@ The CLI reads connection details from flags or environment variables:
 
 ```bash
 # Via environment (set once)
-export CRAFT_SERVER_URL=ws://127.0.0.1:9100
-export CRAFT_SERVER_TOKEN=<your-token>
+export ARCHSTUDIO_SERVER_URL=ws://127.0.0.1:9100
+export ARCHSTUDIO_SERVER_TOKEN=<your-token>
 
 # Or via flags
 craft-cli --url ws://127.0.0.1:9100 --token <token> ping
@@ -382,7 +382,7 @@ bun run electron:start
 # Type checking
 bun run typecheck:all
 
-# Debug logging (writes to ~/Library/Logs/@craft-agent/electron/)
+# Debug logging (writes to ~/Library/Logs/@archstudio/electron/)
 # Logs are automatically enabled in development
 ```
 
@@ -491,10 +491,10 @@ ARCHstudio uses two agent backends:
 
 ## Configuration
 
-Configuration is stored at `~/.craft-agent/`:
+Configuration is stored at `~/.archstudio/`:
 
 ```
-~/.craft-agent/
+~/.archstudio/
 ├── config.json              # Main config (workspaces, LLM connections)
 ├── credentials.enc          # Encrypted credentials (AES-256-GCM)
 ├── preferences.json         # User preferences
@@ -520,7 +520,7 @@ Automations let you automate workflows by triggering actions when events happen 
 - "Track permission mode changes and summarise them"
 - "Every Friday at 5pm, summarise this week's completed tasks"
 
-Or configure manually in `~/.craft-agent/workspaces/{id}/automations.json`:
+Or configure manually in `~/.archstudio/workspaces/{id}/automations.json`:
 
 ```json
 {
@@ -548,7 +548,7 @@ Or configure manually in `~/.craft-agent/workspaces/{id}/automations.json`:
 }
 ```
 
-**Prompt actions** create a new agent session with a prompt. They support `@mentions` for sources and skills, and environment variables like `$CRAFT_LABEL` and `$CRAFT_SESSION_ID` are expanded automatically.
+**Prompt actions** create a new agent session with a prompt. They support `@mentions` for sources and skills, and environment variables like `$ARCHSTUDIO_LABEL` and `$ARCHSTUDIO_SESSION_ID` are expanded automatically.
 
 **Supported events:** `LabelAdd`, `LabelRemove`, `PermissionModeChange`, `FlagChange`, `SessionStatusChange`, `SchedulerTick`, `PreToolUse`, `PostToolUse`, `SessionStart`, `SessionEnd`, and more.
 
@@ -562,14 +562,14 @@ Tool responses exceeding ~60KB are automatically summarized using Claude Haiku w
 
 ### Deep Linking
 
-External apps can navigate using `craftagents://` URLs:
+External apps can navigate using `archstudio://` URLs:
 
 ```
-craftagents://allSessions                      # All sessions view
-craftagents://allSessions/session/session123   # Specific session
-craftagents://settings                         # Settings
-craftagents://sources/source/github            # Source info
-craftagents://action/new-chat                  # Create new session
+archstudio://allSessions                      # All sessions view
+archstudio://allSessions/session/session123   # Specific session
+archstudio://settings                         # Settings
+archstudio://sources/source/github            # Source info
+archstudio://action/new-chat                  # Create new session
 ```
 
 ## Tech Stack
@@ -606,9 +606,9 @@ To launch the packaged app with verbose logging enabled, use `-- --debug` (note 
 ```
 
 Logs are written to:
-- **macOS:** `~/Library/Logs/@craft-agent/electron/main.log`
+- **macOS:** `~/Library/Logs/@archstudio/electron/main.log`
 - **Windows:** `%APPDATA%\@craft-agent\electron\logs\main.log`
-- **Linux:** `~/.config/@craft-agent/electron/logs/main.log`
+- **Linux:** `~/.config/@archstudio/electron/logs/main.log`
 
 ## License
 

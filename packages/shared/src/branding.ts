@@ -14,7 +14,7 @@
 /** Human-readable product name (title case) — used in window titles, menus, about dialog */
 export const APP_NAME = 'ARCHstudio' as const;
 
-/** SCREAMING_SNAKE version — for env vars like CRAFT_APP_NAME, ARCHSTUDIO_* */
+/** SCREAMING_SNAKE version — for env vars like ARCHSTUDIO_APP_NAME, ARCHSTUDIO_* */
 export const APP_NAME_UPPER = 'ARCHSTUDIO' as const;
 
 /** Reverse-domain app ID — used by electron-builder, macOS bundle, Windows installer */
@@ -29,19 +29,19 @@ export const EXECUTABLE = 'ARCHstudio' as const;
 // ── Environment ──────────────────────────────────────────────────────────
 
 /** Env var that overrides the app name at runtime (e.g., "ARCHstudio [1]") */
-export const ENV_APP_NAME = 'CRAFT_APP_NAME' as const;
+export const ENV_APP_NAME = 'ARCHSTUDIO_APP_NAME' as const;
 
 /** Env var prefix for all app-specific env vars */
 export const ENV_PREFIX = 'CRAFT' as const;
 
 /** Env var for the server token */
-export const ENV_SERVER_TOKEN = 'CRAFT_SERVER_TOKEN' as const;
+export const ENV_SERVER_TOKEN = 'ARCHSTUDIO_SERVER_TOKEN' as const;
 
 /** Env var for the RPC host */
-export const ENV_RPC_HOST = 'CRAFT_RPC_HOST' as const;
+export const ENV_RPC_HOST = 'ARCHSTUDIO_RPC_HOST' as const;
 
 /** Env var for the RPC port */
-export const ENV_RPC_PORT = 'CRAFT_RPC_PORT' as const;
+export const ENV_RPC_PORT = 'ARCHSTUDIO_RPC_PORT' as const;
 
 // ── Repository ───────────────────────────────────────────────────────────
 
@@ -83,7 +83,7 @@ export const VIEWER_URL = 'https://agents.craft.do' as const;
 
 // ── Logo ─────────────────────────────────────────────────────────────────
 
-export const CRAFT_LOGO = [
+export const ARCHSTUDIO_LOGO = [
   '  ████████ █████████    ██████   ██████████ ██████████',
   '██████████ ██████████ ██████████ █████████  ██████████',
   '██████     ██████████ ██████████ ████████   ██████████',
@@ -92,4 +92,4 @@ export const CRAFT_LOGO = [
 ] as const;
 
 /** Logo as a single string for HTML templates */
-export const CRAFT_LOGO_HTML = CRAFT_LOGO.map((line) => line.trimEnd()).join('\n');
+export const ARCHSTUDIO_LOGO_HTML = ARCHSTUDIO_LOGO.map((line) => line.trimEnd()).join('\n');

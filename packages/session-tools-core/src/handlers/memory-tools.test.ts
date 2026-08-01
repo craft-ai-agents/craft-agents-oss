@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { openMemoryDatabase, bootstrapStorage } from '@craft-agent/shared/memory/database.ts';
-import { MemoryRepository } from '@craft-agent/shared/memory/repository.ts';
-import type { AnyMemory } from '@craft-agent/shared/memory/types.ts';
+import { openMemoryDatabase, bootstrapStorage } from '@archstudio/shared/memory/database.ts';
+import { MemoryRepository } from '@archstudio/shared/memory/repository.ts';
+import type { AnyMemory } from '@archstudio/shared/memory/types.ts';
 import type { SessionToolContext } from '../context.ts';
 import { handleMemorySearch } from './memory-search.ts';
 import { handleMemoryRecall } from './memory-recall.ts';

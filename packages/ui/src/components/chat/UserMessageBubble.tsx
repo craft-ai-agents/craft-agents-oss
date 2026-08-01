@@ -13,8 +13,8 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Clock } from 'lucide-react'
-import type { StoredAttachment, ContentBadge } from '@craft-agent/core'
-import { normalizePath } from '@craft-agent/core/utils'
+import type { StoredAttachment, ContentBadge } from '@archstudio/core'
+import { normalizePath } from '@archstudio/core/utils'
 import { cn } from '../../lib/utils'
 import { Markdown } from '../markdown'
 import { FileTypeIcon } from './attachment-helpers'
@@ -127,7 +127,7 @@ function FileBadgeIcon({ badge }: { badge: ContentBadge }) {
 
 function InlineFileBadge({ badge, onFileClick }: { badge: ContentBadge; onFileClick?: (path: string) => void }) {
   const rawPath = badge.filePath || badge.label
-  const tooltipPath = normalizePath(rawPath).replace(/^.*\.craft-agent\/workspaces\/[^/]+\/(sessions\/[^/]+\/)?/, '')
+  const tooltipPath = normalizePath(rawPath).replace(/^.*\.archstudio\/workspaces\/[^/]+\/(sessions\/[^/]+\/)?/, '')
   const isClickable = !!badge.filePath && !!onFileClick
   const badgeContent = (
     <span

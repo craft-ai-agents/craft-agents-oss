@@ -13,7 +13,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react'
-import type { StoredAttachment } from '@craft-agent/core'
+import type { StoredAttachment } from '@archstudio/core'
 import { cn } from '../../lib/utils'
 import { FileTypeIcon, getFileTypeLabel } from './attachment-helpers'
 import { useTranslation } from 'react-i18next'

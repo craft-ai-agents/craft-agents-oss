@@ -2,7 +2,7 @@ import React from 'react'
 import { useAtomValue } from 'jotai'
 import { backgroundTasksAtomFamily, type BackgroundTask } from '../atoms/sessions'
 import { AlertCircle, CheckCircle2, Code2, ExternalLink, FileText, Image, Loader2, Play, Plus, RefreshCw, Save, Square, Trash2, XCircle } from 'lucide-react'
-import { classifyFile } from '@craft-agent/ui'
+import { classifyFile } from '@archstudio/ui'
 import { toast } from 'sonner'
 import './WorkspaceTabPanels.css'
 

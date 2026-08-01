@@ -7,7 +7,7 @@
 
 import { forwardRef, useEffect, useState, type ButtonHTMLAttributes } from 'react'
 import * as Icons from 'lucide-react'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@archstudio/ui'
 import type { BrowserInstanceInfo } from '../../../shared/types'
 import { getHostname, getThemeLuminance } from './utils'
 

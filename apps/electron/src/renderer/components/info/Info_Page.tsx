@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { AlertCircle } from 'lucide-react'
 import { PanelHeader, type PanelHeaderProps } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@archstudio/ui'
 import { cn } from '@/lib/utils'
 import { CHAT_LAYOUT } from '@/config/layout'
 

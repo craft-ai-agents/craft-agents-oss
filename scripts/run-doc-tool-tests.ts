@@ -31,7 +31,7 @@ const bundledUv = resolve(
   `${process.platform}-${process.arch}`,
   uvName,
 )
-const uv = process.env.CRAFT_UV?.trim() || (existsSync(bundledUv) ? bundledUv : 'uv')
+const uv = process.env.ARCHSTUDIO_UV?.trim() || (existsSync(bundledUv) ? bundledUv : 'uv')
 const env = stripPythonInterpreterEnvironment(process.env)
 
 const probe = spawnSync(uv, ['--version'], {

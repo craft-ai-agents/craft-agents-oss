@@ -3,7 +3,7 @@
  *
  * NOTE: the kanban TaskEditor keeps its own `slugify` copy in
  * `apps/electron/.../kanban/task-spec-form.ts` — the renderer deliberately does
- * not import `@craft-agent/shared/tasks` because this barrel re-exports Node
+ * not import `@archstudio/shared/tasks` because this barrel re-exports Node
  * (fs) code from storage.ts. Keep the two implementations byte-identical.
  */
 

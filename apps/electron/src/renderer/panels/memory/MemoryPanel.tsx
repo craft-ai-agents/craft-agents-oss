@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Brain, Search, Plus, Download, Filter, Network, FileText, Tag, Calendar, Link2, MoreHorizontal, Loader2, BarChart3, Database, RefreshCw } from 'lucide-react'
-import type { AnyMemory, MemoryEdge, MemoryQuery, MemorySearchResult } from '@craft-agent/shared/memory/types'
+import type { AnyMemory, MemoryEdge, MemoryQuery, MemorySearchResult } from '@archstudio/shared/memory/types'
 import { MemoryGraph } from './MemoryGraph'
 import './MemoryPanel.css'
 

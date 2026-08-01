@@ -1,8 +1,8 @@
 import { writeFileSync, existsSync, mkdirSync } from 'fs'
-import { readJsonFileSync } from '@craft-agent/shared/utils/files'
+import { readJsonFileSync } from '@archstudio/shared/utils/files'
 import { mainLog } from './logger'
 import { join } from 'path'
-import { CONFIG_DIR } from '@craft-agent/shared/config/paths.ts'
+import { CONFIG_DIR } from '@archstudio/shared/config/paths.ts'
 
 export interface WindowBounds {
   x: number

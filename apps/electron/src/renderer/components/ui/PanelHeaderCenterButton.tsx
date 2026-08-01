@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { forwardRef } from 'react'
-import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@archstudio/ui'
 import { cn } from '@/lib/utils'
 
 interface PanelHeaderCenterButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {

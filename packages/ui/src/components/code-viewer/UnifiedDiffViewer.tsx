@@ -40,7 +40,7 @@ export interface UnifiedDiffViewerProps {
   /** Theme mode */
   theme?: 'light' | 'dark'
   /** Shiki theme name (e.g., 'dracula', 'github-dark'). When provided, uses the matching
-   *  Shiki theme natively. Falls back to craft-dark/craft-light (transparent bg) if not set. */
+   *  Shiki theme natively. Falls back to archstudio-dark/archstudio-light (transparent bg) if not set. */
   shikiTheme?: string
   /** Disable background highlighting on changed lines */
   disableBackground?: boolean
@@ -113,8 +113,8 @@ export function UnifiedDiffViewer({
   }, [unifiedDiff, filePath])
 
   // Diff options - use the app's Shiki theme if available, otherwise fall back
-  // to craft-dark/craft-light which have transparent bg for CSS variable theming
-  const resolvedThemeName = shikiTheme || (theme === 'dark' ? 'craft-dark' : 'craft-light')
+  // to archstudio-dark/archstudio-light which have transparent bg for CSS variable theming
+  const resolvedThemeName = shikiTheme || (theme === 'dark' ? 'archstudio-dark' : 'archstudio-light')
 
   // When onFileHeaderClick is provided, inject CSS to make the header look clickable
   const unsafeCSS = onFileHeaderClick

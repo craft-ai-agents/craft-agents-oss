@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { appendFile, mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { Logger } from '../runtime/platform'
-import { CONFIG_DIR } from '@craft-agent/shared/config/paths.ts'
+import { CONFIG_DIR } from '@archstudio/shared/config/paths.ts'
 
 export interface PrivilegedExecutionRequest {
   requestId: string

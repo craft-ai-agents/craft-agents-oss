@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { getSessionFilePath } from '@craft-agent/shared/sessions/storage'
+import { getSessionFilePath } from '@archstudio/shared/sessions/storage'
 import { SessionManager, createManagedSession } from './SessionManager.ts'
 
 // Regression test for the High-severity finding in eb81086e:

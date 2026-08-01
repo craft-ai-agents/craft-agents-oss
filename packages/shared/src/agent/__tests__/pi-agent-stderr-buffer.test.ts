@@ -2,7 +2,7 @@
  * Regression test for the PiAgent stderr ring buffer.
  *
  * When an LLM connection test times out we have historically had zero context:
- * stderr was routed only to this.debug() which requires CRAFT_DEBUG=1.
+ * stderr was routed only to this.debug() which requires ARCHSTUDIO_DEBUG=1.
  * The ring buffer exposes the most recent stderr chunks unconditionally so
  * callers (factory.ts testBackendConnection timeout path) can surface them.
  */
@@ -16,11 +16,11 @@ function createConfig(): BackendConfig {
     workspace: {
       id: 'ws-test',
       name: 'Test Workspace',
-      rootPath: '/tmp/craft-agent-test',
+      rootPath: '/tmp/archstudio-test',
     } as any,
     session: {
       id: 'session-test',
-      workspaceRootPath: '/tmp/craft-agent-test',
+      workspaceRootPath: '/tmp/archstudio-test',
       createdAt: Date.now(),
       lastUsedAt: Date.now(),
     } as any,

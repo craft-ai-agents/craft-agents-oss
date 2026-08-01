@@ -6,7 +6,7 @@ import { DEFAULT_OWNER_PROFILE } from '../schema.ts';
 // Set the override before importing modules that capture CONFIG_DIR at load time.
 // These tests must never read, delete, or restore a developer's real profile.
 const TEST_CONFIG_DIR = mkdtempSync(join(process.cwd(), '.owner-profile-test-'));
-process.env.CRAFT_CONFIG_DIR = TEST_CONFIG_DIR;
+process.env.ARCHSTUDIO_CONFIG_DIR = TEST_CONFIG_DIR;
 
 const { CONFIG_DIR } = await import('../../config/paths.ts');
 const { loadOwnerProfile, saveOwnerProfile, updateOwnerProfile, getOwnerProfilePath } =
@@ -27,7 +27,7 @@ describe('owner profile storage and migration', () => {
 
   afterAll(() => {
     rmSync(TEST_CONFIG_DIR, { recursive: true, force: true });
-    delete process.env.CRAFT_CONFIG_DIR;
+    delete process.env.ARCHSTUDIO_CONFIG_DIR;
   });
 
   function readFileSyncSafe(path: string): string {

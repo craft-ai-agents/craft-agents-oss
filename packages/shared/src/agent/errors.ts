@@ -4,12 +4,12 @@
  * These error types map HTTP status codes and error patterns to
  * actionable error information that can be displayed to users.
  *
- * The `ErrorCode` union is owned by `@craft-agent/core` so the wire
+ * The `ErrorCode` union is owned by `@archstudio/core` so the wire
  * format (which crosses package boundaries) stays in one place; this
  * file owns the user-facing text and recovery actions for each code.
  */
 
-import type { ErrorCode } from '@craft-agent/core/types';
+import type { ErrorCode } from '@archstudio/core/types';
 import { getProviderMetadata } from '../config/provider-metadata.ts';
 
 export type { ErrorCode };

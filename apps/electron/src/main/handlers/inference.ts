@@ -6,9 +6,9 @@
  * ProvidersPanel sparkline display.
  */
 
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { inferenceStore } from '@craft-agent/shared/agent/core'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import { RPC_CHANNELS } from '@archstudio/shared/protocol'
+import { inferenceStore } from '@archstudio/shared/agent/core'
+import type { RpcServer } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
 
 export const CORE_HANDLED_CHANNELS = [

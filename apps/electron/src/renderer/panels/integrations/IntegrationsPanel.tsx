@@ -22,7 +22,7 @@ import {
   UserCheck,
   type LucideIcon,
 } from 'lucide-react'
-import type { SourceConnectionStatus } from '@craft-agent/shared/sources/types'
+import type { SourceConnectionStatus } from '@archstudio/shared/sources/types'
 import type { MessagingPlatformRuntimeInfo } from '../../../shared/types'
 import { sourcesAtom } from '../../atoms/sources'
 import './IntegrationsPanel.css'

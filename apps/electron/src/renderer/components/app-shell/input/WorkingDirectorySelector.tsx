@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Command as CommandPrimitive } from 'cmdk'
 import { Check, X } from 'lucide-react'
-import { Icon_Folder } from '@craft-agent/ui'
+import { Icon_Folder } from '@archstudio/ui'
 
 import { ServerDirectoryBrowser } from '@/components/ServerDirectoryBrowser'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'

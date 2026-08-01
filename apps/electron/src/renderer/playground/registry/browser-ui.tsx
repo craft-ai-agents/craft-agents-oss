@@ -7,7 +7,7 @@ import {
   TurnCard,
   type ActivityItem,
   type ResponseContent,
-} from '@craft-agent/ui'
+} from '@archstudio/ui'
 import { AnimatePresence, motion } from 'motion/react'
 import { BrowserTabStrip } from '@/components/browser/BrowserTabStrip'
 import { EMPTY_STATE_PROMPT_SAMPLES } from '@/components/browser/empty-state-prompts'
@@ -223,7 +223,7 @@ function BrowserAgentEmptyState({
 }) {
   const handlePromptSelect = useCallback(async (prompt: string) => {
     const deepLinkRoute = routes.action.newSession({ input: prompt, send: true })
-    const deepLinkUrl = `craftagents://${deepLinkRoute}`
+    const deepLinkUrl = `archstudio://${deepLinkRoute}`
 
     try {
       if (typeof window !== 'undefined' && window.electronAPI?.openUrl) {

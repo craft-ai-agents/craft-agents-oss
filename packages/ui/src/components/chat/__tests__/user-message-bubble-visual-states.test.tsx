@@ -22,7 +22,7 @@ import { Window } from 'happy-dom'
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { StoredAttachment, ContentBadge } from '@craft-agent/core'
+import type { StoredAttachment, ContentBadge } from '@archstudio/core'
 import { setupModuleMocks } from '../../../__tests__/test-utils'
 
 // ---------------------------------------------------------------------------

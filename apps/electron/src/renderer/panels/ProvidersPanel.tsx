@@ -36,14 +36,14 @@ import {
 import { createPortal } from 'react-dom'
 import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
-import type { LlmConnectionWithStatus, LlmProviderType } from '@craft-agent/shared/config'
-// Import the direct subpath, not the '@craft-agent/shared/config' barrel: the
+import type { LlmConnectionWithStatus, LlmProviderType } from '@archstudio/shared/config'
+// Import the direct subpath, not the '@archstudio/shared/config' barrel: the
 // barrel re-exports config/storage.ts, which pulls sessions/jsonl.ts and `fs`
 // into the renderer bundle and blanks the window at module init.
-import { providerLabel } from '@craft-agent/shared/config/provider-labels'
+import { providerLabel } from '@archstudio/shared/config/provider-labels'
 // Type-only — erased at build time, so no Node code reaches the renderer bundle.
-import type { InferenceHistoryResult } from '@craft-agent/shared/agent/core/index'
-import { FullscreenOverlayBase } from '@craft-agent/ui'
+import type { InferenceHistoryResult } from '@archstudio/shared/agent/core/index'
+import { FullscreenOverlayBase } from '@archstudio/ui'
 import type { CustomEndpointApi } from '@config/llm-connections'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
 // `useOnboarding` itself only imports types from the onboarding barrel, so it
@@ -54,7 +54,7 @@ import './ProvidersPanel.css'
 
 /**
  * The wizard is loaded on demand. A static import would drag the whole
- * onboarding tree — and through it the `@craft-agent/ui` barrel — into every
+ * onboarding tree — and through it the `@archstudio/ui` barrel — into every
  * module graph that reaches this panel, which is both dead weight for a panel
  * that usually never opens it and enough to break non-Vite consumers (the UI
  * barrel has a `?url` worker import).

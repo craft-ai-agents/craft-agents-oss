@@ -349,7 +349,7 @@ describe('resource-bundle', () => {
           actions: [{
             type: 'webhook',
             url: 'https://api.example.com/hook',
-            headers: { 'Authorization': 'Bearer $CRAFT_WH_TOKEN' },
+            headers: { 'Authorization': 'Bearer $ARCHSTUDIO_WH_TOKEN' },
           }],
         }],
       })
@@ -358,7 +358,7 @@ describe('resource-bundle', () => {
 
       const action = bundle.resources.automations![0]!.matcher.actions[0] as any
       // Templated Authorization should be preserved
-      expect(action.headers?.['Authorization']).toBe('Bearer $CRAFT_WH_TOKEN')
+      expect(action.headers?.['Authorization']).toBe('Bearer $ARCHSTUDIO_WH_TOKEN')
     })
 
     it('automations: true is backward-compatible with "all"', () => {

@@ -1,6 +1,6 @@
 import { existsSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import type { OwnerProfile } from '@craft-agent/core';
+import type { OwnerProfile } from '@archstudio/core';
 import { CONFIG_DIR } from '../config/paths.ts';
 import { readJsonFileSync } from '../utils/files.ts';
 import { loadPreferences } from '../config/preferences.ts';

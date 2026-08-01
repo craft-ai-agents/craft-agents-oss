@@ -5,7 +5,7 @@
  * Catches race conditions between IPC lazy-load and streaming events.
  */
 import { describe, it, expect } from 'bun:test'
-import type { Message } from '@craft-agent/core'
+import type { Message } from '@archstudio/core'
 
 // ============================================================================
 // Mirror: merge logic from ensureSessionMessagesLoadedAtom in atoms/sessions.ts

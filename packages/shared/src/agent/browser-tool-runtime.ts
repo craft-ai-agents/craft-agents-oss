@@ -253,7 +253,7 @@ function getOpenVisibilitySettleTimeoutMs(override?: number): number {
   if (typeof override === 'number' && Number.isFinite(override)) {
     return Math.max(100, override);
   }
-  const envValue = Number(process.env.CRAFT_BROWSER_OPEN_SETTLE_TIMEOUT_MS);
+  const envValue = Number(process.env.ARCHSTUDIO_BROWSER_OPEN_SETTLE_TIMEOUT_MS);
   if (Number.isFinite(envValue) && envValue > 0) {
     return Math.max(100, envValue);
   }
@@ -264,7 +264,7 @@ function getOpenVisibilitySettlePollMs(override?: number): number {
   if (typeof override === 'number' && Number.isFinite(override)) {
     return Math.max(25, override);
   }
-  const envValue = Number(process.env.CRAFT_BROWSER_OPEN_SETTLE_POLL_MS);
+  const envValue = Number(process.env.ARCHSTUDIO_BROWSER_OPEN_SETTLE_POLL_MS);
   if (Number.isFinite(envValue) && envValue > 0) {
     return Math.max(25, envValue);
   }

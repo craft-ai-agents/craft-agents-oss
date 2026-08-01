@@ -2,11 +2,11 @@ import {
   isLocalConnection,
   type LlmConnection,
 } from '@config/llm-connections'
-import { GROUP_NAME } from '@craft-agent/shared/branding'
+import { GROUP_NAME } from '@archstudio/shared/branding'
 
-// Direct subpath, not the '@craft-agent/shared/config' barrel — the barrel
+// Direct subpath, not the '@archstudio/shared/config' barrel — the barrel
 // re-exports config/storage.ts (fs) and would break the renderer bundle.
-export { getConnectionDisplayName } from '@craft-agent/shared/config/provider-labels'
+export { getConnectionDisplayName } from '@archstudio/shared/config/provider-labels'
 
 /**
  * Format token count for display (e.g., 1500 -> "1.5k", 200000 -> "200k").

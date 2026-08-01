@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "@craft-agent/shared": "workspace:*",
+    "@archstudio/shared": "workspace:*",
     "beautiful-mermaid": "*",
     "gray-matter": "^4.0.3",
     "zod": "^3.23.0",
@@ -15,7 +15,7 @@
   },
   "license": "Apache-2.0",
   "main": "src/index.ts",
-  "name": "@craft-agent/session-tools-core",
+  "name": "@archstudio/session-tools-core",
   "scripts": {
     "typecheck": "tsc --noEmit"
   },

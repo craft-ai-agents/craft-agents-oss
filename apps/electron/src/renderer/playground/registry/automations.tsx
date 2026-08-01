@@ -221,7 +221,7 @@ const mockAutomations: AutomationListItem[] = [
     name: 'Label Change Logger',
     summary: 'Logs all label additions',
     enabled: true,
-    actions: [{ type: 'prompt', prompt: 'Log the label change: "$CRAFT_LABEL was added" to ~/label-log.txt' }],
+    actions: [{ type: 'prompt', prompt: 'Log the label change: "$ARCHSTUDIO_LABEL was added" to ~/label-log.txt' }],
     permissionMode: 'allow-all',
     lastExecutedAt: now - 3600_000, // 1 hour ago
   },
@@ -291,7 +291,7 @@ const mockAutomations: AutomationListItem[] = [
         ],
       },
     ],
-    actions: [{ type: 'prompt', prompt: 'Session $CRAFT_SESSION_NAME was marked as done. Summarise what was accomplished.' }],
+    actions: [{ type: 'prompt', prompt: 'Session $ARCHSTUDIO_SESSION_NAME was marked as done. Summarise what was accomplished.' }],
     lastExecutedAt: now - 600_000,
   },
   {

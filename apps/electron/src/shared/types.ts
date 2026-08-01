@@ -1,7 +1,7 @@
 // =============================================================================
 // Protocol re-exports (channels, DTOs, events, wire types)
 // =============================================================================
-export * from '@craft-agent/shared/protocol'
+export * from '@archstudio/shared/protocol'
 
 // =============================================================================
 // Package re-exports (convenience for renderer imports)
@@ -10,7 +10,7 @@ export * from '@craft-agent/shared/protocol'
 // `GitFileDiffResult` is a protocol DTO, not a core type. The `export *` above
 // re-exports it publicly but does not bring it into this module's scope, so the
 // local annotation below needs an explicit import.
-import type { GitFileDiffResult } from '@craft-agent/shared/protocol'
+import type { GitFileDiffResult } from '@archstudio/shared/protocol'
 
 // Core types
 import type {
@@ -25,17 +25,17 @@ import type {
   ContentBadge,
   ToolDisplayMeta,
   AnnotationV1,
-} from '@craft-agent/core/types';
+} from '@archstudio/core/types';
 
 // Mode types from dedicated subpath export (avoids pulling in SDK)
-import type { PermissionMode } from '@craft-agent/shared/agent/modes';
+import type { PermissionMode } from '@archstudio/shared/agent/modes';
 export type { PermissionMode };
-export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
+export { PERMISSION_MODE_CONFIG } from '@archstudio/shared/agent/modes';
 
 // Thinking level types
-import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels';
+import type { ThinkingLevel } from '@archstudio/shared/agent/thinking-levels';
 export type { ThinkingLevel };
-export { THINKING_LEVELS, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels';
+export { THINKING_LEVELS, DEFAULT_THINKING_LEVEL } from '@archstudio/shared/agent/thinking-levels';
 
 export type {
   CoreMessage as Message,
@@ -52,28 +52,28 @@ export type {
 };
 
 // Auth types for onboarding
-import type { AuthState, SetupNeeds } from '@craft-agent/shared/auth/types';
-import type { AuthType } from '@craft-agent/shared/config/types';
+import type { AuthState, SetupNeeds } from '@archstudio/shared/auth/types';
+import type { AuthType } from '@archstudio/shared/config/types';
 export type { AuthState, SetupNeeds, AuthType };
 
 // Credential health types
-import type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType } from '@craft-agent/shared/credentials/types';
+import type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType } from '@archstudio/shared/credentials/types';
 export type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType };
 
 // Source types for session source selection
-import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@craft-agent/shared/sources/types';
+import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@archstudio/shared/sources/types';
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 
 // Skill types
-import type { LoadedSkill, SkillMetadata } from '@craft-agent/shared/skills/types';
+import type { LoadedSkill, SkillMetadata } from '@archstudio/shared/skills/types';
 export type { LoadedSkill, SkillMetadata };
 
 // Resource bundle types (cross-workspace export/import)
-import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
+import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@archstudio/shared/resources';
 export type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult };
 
 // LLM connection types
-import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, NetworkProxySettings } from '@craft-agent/shared/config';
+import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, NetworkProxySettings } from '@archstudio/shared/config';
 export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, NetworkProxySettings };
 
 // =============================================================================
@@ -178,7 +178,7 @@ export interface TransportConnectionState {
 // =============================================================================
 
 // Re-import types for ElectronAPI
-import type { WorkspaceInfo, Workspace, SessionMetadata, StoredAttachment as StoredAttachmentType } from '@craft-agent/core/types';
+import type { WorkspaceInfo, Workspace, SessionMetadata, StoredAttachment as StoredAttachmentType } from '@archstudio/core/types';
 
 // Import protocol types used by ElectronAPI (they come through the `export *` above,
 // but we need them in scope for the interface definition)
@@ -231,7 +231,7 @@ import type {
   ReadDirectoryResult,
   RemoteSessionTransferPayload,
   ImportRemoteSessionTransferResult,
-} from '@craft-agent/shared/protocol'
+} from '@archstudio/shared/protocol'
 
 export interface ElectronAPI {
   // Session management
@@ -270,9 +270,9 @@ export interface ElectronAPI {
   getServerHomeDir(): Promise<string>
 
   // Server mode configuration
-  getServerConfig(): Promise<import('@craft-agent/shared/config/server-config').ServerConfig>
-  setServerConfig(config: import('@craft-agent/shared/config/server-config').ServerConfig): Promise<void>
-  getServerStatus(): Promise<import('@craft-agent/shared/config/server-config').ServerStatus>
+  getServerConfig(): Promise<import('@archstudio/shared/config/server-config').ServerConfig>
+  setServerConfig(config: import('@archstudio/shared/config/server-config').ServerConfig): Promise<void>
+  getServerStatus(): Promise<import('@archstudio/shared/config/server-config').ServerStatus>
 
   // App lifecycle
   relaunchApp(): Promise<void>
@@ -379,7 +379,7 @@ export interface ElectronAPI {
   getRuntimeEnvironment(): 'electron' | 'web'
   getHomeDir(): Promise<string>
   /**
-   * Resolved app config directory (honors CRAFT_CONFIG_DIR). Use this for any
+   * Resolved app config directory (honors ARCHSTUDIO_CONFIG_DIR). Use this for any
    * path under the app's data root — never build one from getHomeDir().
    */
   getConfigDir(): Promise<string>
@@ -424,7 +424,7 @@ export interface ElectronAPI {
   onMenuToggleFocusMode(callback: () => void): () => void
   onMenuToggleSidebar(callback: () => void): () => void
 
-  // Deep link navigation listener (for external craftagents:// URLs)
+  // Deep link navigation listener (for external archstudio:// URLs)
   onDeepLinkNavigate(callback: (nav: DeepLinkNavigation) => void): () => void
 
   // Auth
@@ -490,10 +490,10 @@ export interface ElectronAPI {
   writePreferences(content: string): Promise<{ success: boolean; error?: string }>
 
   // Session Drafts (persisted composer state — text + attachment refs)
-  getDraft(sessionId: string): Promise<import('@craft-agent/shared/config').SessionDraft | null>
-  setDraft(sessionId: string, draft: import('@craft-agent/shared/config').SessionDraft): Promise<void>
+  getDraft(sessionId: string): Promise<import('@archstudio/shared/config').SessionDraft | null>
+  setDraft(sessionId: string, draft: import('@archstudio/shared/config').SessionDraft): Promise<void>
   deleteDraft(sessionId: string): Promise<void>
-  getAllDrafts(): Promise<Record<string, import('@craft-agent/shared/config').SessionDraft>>
+  getAllDrafts(): Promise<Record<string, import('@archstudio/shared/config').SessionDraft>>
 
   // Session Info Panel
   /**
@@ -527,9 +527,9 @@ export interface ElectronAPI {
   deleteSource(workspaceId: string, sourceSlug: string): Promise<void>
   startSourceOAuth(workspaceId: string, sourceSlug: string): Promise<{ success: boolean; error?: string }>
   saveSourceCredentials(workspaceId: string, sourceSlug: string, credential: string): Promise<void>
-  getSourcePermissionsConfig(workspaceId: string, sourceSlug: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
-  getWorkspacePermissionsConfig(workspaceId: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
-  getDefaultPermissionsConfig(): Promise<{ config: import('@craft-agent/shared/agent').PermissionsConfigFile | null; path: string }>
+  getSourcePermissionsConfig(workspaceId: string, sourceSlug: string): Promise<import('@archstudio/shared/agent').PermissionsConfigFile | null>
+  getWorkspacePermissionsConfig(workspaceId: string): Promise<import('@archstudio/shared/agent').PermissionsConfigFile | null>
+  getDefaultPermissionsConfig(): Promise<{ config: import('@archstudio/shared/agent').PermissionsConfigFile | null; path: string }>
   getMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
 
   // OAuth (server-owned credentials, client-orchestrated flow)
@@ -556,13 +556,13 @@ export interface ElectronAPI {
   onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void
 
   // Statuses (workspace-scoped)
-  listStatuses(workspaceId: string): Promise<import('@craft-agent/shared/statuses').StatusConfig[]>
+  listStatuses(workspaceId: string): Promise<import('@archstudio/shared/statuses').StatusConfig[]>
   reorderStatuses(workspaceId: string, orderedIds: string[]): Promise<void>
   onStatusesChanged(callback: (workspaceId: string) => void): () => void
 
   // Labels (workspace-scoped)
-  listLabels(workspaceId: string): Promise<import('@craft-agent/shared/labels').LabelConfig[]>
-  createLabel(workspaceId: string, input: import('@craft-agent/shared/labels').CreateLabelInput): Promise<import('@craft-agent/shared/labels').LabelConfig>
+  listLabels(workspaceId: string): Promise<import('@archstudio/shared/labels').LabelConfig[]>
+  createLabel(workspaceId: string, input: import('@archstudio/shared/labels').CreateLabelInput): Promise<import('@archstudio/shared/labels').LabelConfig>
   deleteLabel(workspaceId: string, labelId: string): Promise<{ stripped: number }>
   onLabelsChanged(callback: (workspaceId: string) => void): () => void
 
@@ -570,8 +570,8 @@ export interface ElectronAPI {
   onLlmConnectionsChanged(callback: () => void): () => void
 
   // Views (workspace-scoped, stored in views.json)
-  listViews(workspaceId: string): Promise<import('@craft-agent/shared/views').ViewConfig[]>
-  saveViews(workspaceId: string, views: import('@craft-agent/shared/views').ViewConfig[]): Promise<void>
+  listViews(workspaceId: string): Promise<import('@archstudio/shared/views').ViewConfig[]>
+  saveViews(workspaceId: string, views: import('@archstudio/shared/views').ViewConfig[]): Promise<void>
 
   // Generic workspace image loading/saving
   readWorkspaceImage(workspaceId: string, relativePath: string): Promise<string>
@@ -672,20 +672,20 @@ export interface ElectronAPI {
   killArchCommand(id: string): Promise<{ success: boolean }>
 
   // Memory
-  listMemories(): Promise<import('@craft-agent/shared/memory/types').AnyMemory[]>
-  getMemory(id: string): Promise<import('@craft-agent/shared/memory/types').AnyMemory | null>
-  createMemory(memory: import('@craft-agent/shared/memory/types').AnyMemory): Promise<import('@craft-agent/shared/memory/types').AnyMemory>
-  updateMemory(id: string, patch: Partial<import('@craft-agent/shared/memory/types').AnyMemory>): Promise<import('@craft-agent/shared/memory/types').AnyMemory>
-  archiveMemory(id: string): Promise<import('@craft-agent/shared/memory/types').AnyMemory>
-  restoreMemory(id: string): Promise<import('@craft-agent/shared/memory/types').AnyMemory>
+  listMemories(): Promise<import('@archstudio/shared/memory/types').AnyMemory[]>
+  getMemory(id: string): Promise<import('@archstudio/shared/memory/types').AnyMemory | null>
+  createMemory(memory: import('@archstudio/shared/memory/types').AnyMemory): Promise<import('@archstudio/shared/memory/types').AnyMemory>
+  updateMemory(id: string, patch: Partial<import('@archstudio/shared/memory/types').AnyMemory>): Promise<import('@archstudio/shared/memory/types').AnyMemory>
+  archiveMemory(id: string): Promise<import('@archstudio/shared/memory/types').AnyMemory>
+  restoreMemory(id: string): Promise<import('@archstudio/shared/memory/types').AnyMemory>
   deleteMemory(id: string): Promise<{ success: boolean }>
   /**
    * FTS5 + bm25 search. Empty `query.query` lets the server fall back to a
    * filtered memory list (no FTS overhead). Results are ranked snippets —
    * the panel renders `<mark>` tags from the FTS5 `snippet(...)` call.
    */
-  searchMemories(query: import('@craft-agent/shared/memory/types').MemoryQuery): Promise<import('@craft-agent/shared/memory/types').MemorySearchResult[]>
-  getMemoryGraph(): Promise<import('@craft-agent/shared/memory/types').MemoryGraphData>
+  searchMemories(query: import('@archstudio/shared/memory/types').MemoryQuery): Promise<import('@archstudio/shared/memory/types').MemorySearchResult[]>
+  getMemoryGraph(): Promise<import('@archstudio/shared/memory/types').MemoryGraphData>
   /**
    * Return aggregate statistics about the memory store: class distribution,
    * FTS health (memoriesTable vs ftsIndex row count parity), vault status.
@@ -725,11 +725,11 @@ export interface ElectronAPI {
   /** Get vault watcher status. */
   getVaultWatcherStatus(): Promise<{ active: boolean }>
   /** Create a user-defined edge between two memories. */
-  createMemoryEdge(sourceId: string, targetId: string, type: string, weight?: number): Promise<import('@craft-agent/shared/memory/types').MemoryEdge>
+  createMemoryEdge(sourceId: string, targetId: string, type: string, weight?: number): Promise<import('@archstudio/shared/memory/types').MemoryEdge>
   /** Delete an edge by its ID. */
   deleteMemoryEdge(edgeId: string): Promise<{ success: boolean }>
   /** List all edges involving a given memory. */
-  getMemoryEdges(memoryId: string): Promise<import('@craft-agent/shared/memory/types').MemoryEdge[]>
+  getMemoryEdges(memoryId: string): Promise<import('@archstudio/shared/memory/types').MemoryEdge[]>
 
   // Prompt Compiler
   /**
@@ -737,7 +737,7 @@ export interface ElectronAPI {
    * Fetches memories from the shared MemoryRepository automatically if the
    * memory layer is included and no memories were explicitly supplied.
    */
-  compilePrompt(options: import('@craft-agent/shared/prompts/owner/types').CompileOptions): Promise<import('@craft-agent/shared/prompts/owner/types').CompileResult>
+  compilePrompt(options: import('@archstudio/shared/prompts/owner/types').CompileOptions): Promise<import('@archstudio/shared/prompts/owner/types').CompileResult>
   /**
    * Invalidate the PromptCompiler's internal layer cache. The next
    * `compilePrompt()` call will re-read workspace context files
@@ -809,8 +809,8 @@ export interface ElectronAPI {
   setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>
 
   // LLM Inference history — real request success/failure for ProvidersPanel sparkline
-  getLlmInferenceHistory(slug: string): Promise<import('@craft-agent/shared/agent/core/index').InferenceHistoryResult>
-  getLlmInferenceHistoryAll(): Promise<Record<string, import('@craft-agent/shared/agent/core/index').InferenceHistoryResult>>
+  getLlmInferenceHistory(slug: string): Promise<import('@archstudio/shared/agent/core/index').InferenceHistoryResult>
+  getLlmInferenceHistoryAll(): Promise<Record<string, import('@archstudio/shared/agent/core/index').InferenceHistoryResult>>
   /** Push channel: fired when a new inference event is recorded (turn or tool call). */
   onLlmInferenceChanged: (listener: (payload: { slug: string }) => void) => () => void
 
@@ -822,11 +822,11 @@ export interface ElectronAPI {
   // Projects (workspace-scoped)
   getProjects(workspaceId: string): Promise<unknown>
   getProject(workspaceId: string, projectIdOrSlug: string): Promise<unknown | null>
-  createProject(workspaceId: string, input: import('@craft-agent/shared/projects/types').CreateProjectInput): Promise<import('@craft-agent/shared/projects/types').ProjectConfig>
-  updateProject(workspaceId: string, projectSlug: string, patch: Partial<Omit<import('@craft-agent/shared/projects/types').ProjectConfig, 'id' | 'slug' | 'createdAt'>>): Promise<import('@craft-agent/shared/projects/types').ProjectConfig>
+  createProject(workspaceId: string, input: import('@archstudio/shared/projects/types').CreateProjectInput): Promise<import('@archstudio/shared/projects/types').ProjectConfig>
+  updateProject(workspaceId: string, projectSlug: string, patch: Partial<Omit<import('@archstudio/shared/projects/types').ProjectConfig, 'id' | 'slug' | 'createdAt'>>): Promise<import('@archstudio/shared/projects/types').ProjectConfig>
   deleteProject(workspaceId: string, projectSlug: string): Promise<void>
   listProjectAssets(workspaceId: string, projectSlug: string): Promise<unknown>
-  uploadProjectAsset(workspaceId: string, projectSlug: string, input: { filename: string; base64?: string; text?: string; sourcePath?: string }): Promise<import('@craft-agent/shared/projects/types').ProjectAsset>
+  uploadProjectAsset(workspaceId: string, projectSlug: string, input: { filename: string; base64?: string; text?: string; sourcePath?: string }): Promise<import('@archstudio/shared/projects/types').ProjectAsset>
   deleteProjectAsset(workspaceId: string, projectSlug: string, filename: string): Promise<void>
   onProjectsChanged(callback: (workspaceId: string, projects: unknown) => void): () => void
 
@@ -911,7 +911,7 @@ export interface MessagingPlatformRuntimeInfo {
 
 /**
  * Workspace-level access policy for a messaging platform.
- * Mirrors the canonical type in `@craft-agent/messaging-gateway`.
+ * Mirrors the canonical type in `@archstudio/messaging-gateway`.
  */
 export type MessagingPlatformAccessMode = 'open' | 'owner-only'
 

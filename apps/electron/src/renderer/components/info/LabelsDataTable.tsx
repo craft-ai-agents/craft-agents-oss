@@ -14,11 +14,11 @@ import type { ColumnDef, Row } from '@tanstack/react-table'
 import { ChevronRight, Maximize2 } from 'lucide-react'
 import { Info_DataTable, SortableHeader } from './Info_DataTable'
 import { Info_Badge } from './Info_Badge'
-import { DataTableOverlay } from '@craft-agent/ui'
+import { DataTableOverlay } from '@archstudio/ui'
 import { LabelIcon } from '@/components/ui/label-icon'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/hooks/useTheme'
-import type { LabelConfig } from '@craft-agent/shared/labels'
+import type { LabelConfig } from '@archstudio/shared/labels'
 
 interface LabelsDataTableProps {
   /** Label tree (root-level nodes with nested children) */

@@ -4,7 +4,7 @@
  * Captures the HTML for the gated-row affordance in the Working Directory
  * tree: the `data-gated="true"` attribute on the row, the dimmed chevron
  * (CSS opacity dimmed < 1, verified via getComputedStyle), and the banner
- * text inside the TooltipContent (which renders inline via the @craft-agent/ui
+ * text inside the TooltipContent (which renders inline via the @archstudio/ui
  * mock so it appears in the snapshot without requiring pointer events).
  *
  * NOTE: This is NOT a Playwright screenshot test — it uses bun:test's
@@ -145,17 +145,17 @@ const { Provider, createStore } = await import('jotai')
 const { activeSessionIdAtom } = await import('../../atoms/sessions')
 
 // -------------------------------------------------------------------------
-// 5. Capture real @craft-agent/ui, then mock only the 4 tooltip primitives.
+// 5. Capture real @archstudio/ui, then mock only the 4 tooltip primitives.
 // -------------------------------------------------------------------------
 
-const realUiModule = await import('@craft-agent/ui')
+const realUiModule = await import('@archstudio/ui')
 
 if (
   typeof realUiModule.shouldGateManualExpand !== 'function' ||
   typeof realUiModule.trimExpandedByCount !== 'function'
 ) {
   throw new Error(
-    'realUiModule capture broken — a transitive @craft-agent/ui import ' +
+    'realUiModule capture broken — a transitive @archstudio/ui import ' +
       'likely needs mocking before this block.',
   )
 }
@@ -188,7 +188,7 @@ const InlineTooltipContent = React.forwardRef<HTMLDivElement, Record<string, any
   },
 )
 
-mock.module('@craft-agent/ui', () => ({
+mock.module('@archstudio/ui', () => ({
   ...realUiModule,
   Tooltip: InlineTooltip,
   TooltipTrigger: InlineTooltipTrigger,
@@ -225,7 +225,7 @@ mock.module('../../context/AppShellContext', () => ({
 }))
 
 const { default: LayoutShell } = await import('../LayoutShell')
-const { TooltipProvider } = await import('@craft-agent/ui')
+const { TooltipProvider } = await import('@archstudio/ui')
 
 // -------------------------------------------------------------------------
 // 7. Helpers

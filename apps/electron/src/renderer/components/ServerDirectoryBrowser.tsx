@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { useRegisterModal } from '@/context/ModalContext'
 import type { DirectoryListingResult } from '../../shared/types'
 import { FolderIcon, FolderSymlinkIcon, ChevronRightIcon } from 'lucide-react'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@archstudio/ui'
 
 /**
  * Detect paths that are clearly from the wrong platform.

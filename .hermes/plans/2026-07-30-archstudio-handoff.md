@@ -182,7 +182,7 @@ disabled stub. Playground is a separate Vite entry (`bun run playground:dev`), n
 reachable in-app.
 
 > Note: `craftAgentsCli` defaults **off**, so the CLI surface repaired this session is
-> invisible until `CRAFT_FEATURE_CRAFT_AGENTS_CLI=1` is set.
+> invisible until `ARCHSTUDIO_FEATURE_ARCHSTUDIO_AGENTS_CLI=1` is set.
 
 ---
 
@@ -194,7 +194,7 @@ Both previously-failing gates now pass with no bypass. What was fixed:
 
 1. **`install-app.sh` was a real functional bug, not just a lint miss.** It looked for
    build artifacts named `Craft-Agents-*.AppImage` / `"Craft Agents.app"` and bundle id
-   `com.lukilabs.craft-agent` — none of which match what `electron-builder.yml` actually
+   `com.lukilabs.archstudio` — none of which match what `electron-builder.yml` actually
    produces (`ARCHstudio-${arch}.${ext}`, appId `com.skobez.archstudio`). A user running
    this script against a real release would have hit "No .app found in ZIP" or a
    checksum/filename mismatch. Fixed every runtime reference. **Left the download domain
@@ -253,9 +253,9 @@ error somewhere in the OAuth-completion path.
 - No `location.reload()` / `location.href` on the OAuth path
 - Renderer routing uses soft `history.pushState`, not hard navigation
 - `requestSingleInstanceLock` + `second-instance` handler are correctly in place
-- OAuth uses a localhost callback server + `craftagents://auth-callback` deep link
+- OAuth uses a localhost callback server + `archstudio://auth-callback` deep link
 
-**Blocker:** `%APPDATA%/@craft-agent/electron/logs/main.log` contains **zero** error
+**Blocker:** `%APPDATA%/@archstudio/electron/logs/main.log` contains **zero** error
 entries because the `[renderer-console]` bridge has a recursion bug — each log line
 re-wraps every prior line, producing a 3.8 MB file of exponentially nested text with no
 usable stack traces.
@@ -358,7 +358,7 @@ Craft Agents.lnk -> %LOCALAPPDATA%\Programs\@craft-agentelectron\Craft Agents.ex
 
 The installed build predates `productName: ARCHstudio` in `electron-builder.yml`, so
 it produced `Craft Agents.exe` and installed to `@craft-agentelectron` (the mangled
-`@craft-agent/electron` package name). A later step created an ARCHstudio-named
+`@archstudio/electron` package name). A later step created an ARCHstudio-named
 shortcut pointing at an exe that build never emitted. **There is no desktop shortcut
 at all.** A fresh `bun run electron:dist:win` installs correctly to
 `...\Programs\ARCHstudio\ARCHstudio.exe`, but nothing reconciles an existing
@@ -370,12 +370,12 @@ old-brand install — every user upgrading across the rebrand hits this.
    ever implemented as uninstall-then-install, this wipes the Electron userData dir.
    Verify what it actually removes before shipping any migration path.
 2. **Four stale Electron userData dirs** exist side by side under `%APPDATA%`:
-   `@craft-agent/electron`, `ARCHstudio`, `archstudio`, `Craft Agents`.
+   `@archstudio/electron`, `ARCHstudio`, `archstudio`, `Craft Agents`.
 3. **Credentials are still in the OLD brand directory, and it is hardcoded.**
    `packages/shared/src/credentials/backends/secure-storage.ts:44` pins
-   `CREDENTIALS_DIR = join(homedir(), '.craft-agent')` — it does **not** use
+   `CREDENTIALS_DIR = join(homedir(), '.archstudio')` — it does **not** use
    `CONFIG_DIR`, which `paths.ts:27` already moved to `~/.archstudio`. Real
-   credentials live at `~/.craft-agent/credentials.enc`; the app works today only
+   credentials live at `~/.archstudio/credentials.enc`; the app works today only
    because of that hardcode.
    > **Do not "finish the rebrand" by editing that constant.** Changing it without a
    > migration silently orphans every stored credential — the file simply won't be
@@ -383,7 +383,7 @@ old-brand install — every user upgrading across the rebrand hits this.
    > success.
 4. **`clearAllConfig()` deletes the wrong file.** `config/storage.ts:677` removes
    `join(CONFIG_DIR, 'credentials.enc')` = `~/.archstudio/credentials.enc`, which does
-   not exist, while the real file sits in `~/.craft-agent`. Latent today (the function
+   not exist, while the real file sits in `~/.archstudio`. Latent today (the function
    has **no callers**), but it is a "reset everything" path that would leave encrypted
    credentials on disk. Fix alongside item 3.
 
@@ -520,7 +520,7 @@ from Phase 3 will already exist by then.
 **Running the app** (no project skill exists for this; consider `/run-skill-generator`):
 
 ```bash
-CRAFT_DEBUG=true ./node_modules/electron/dist/electron.exe --remote-debugging-port=9222 apps/electron
+ARCHSTUDIO_DEBUG=true ./node_modules/electron/dist/electron.exe --remote-debugging-port=9222 apps/electron
 ```
 
 Then drive it over CDP — **no Playwright install needed**. `apps/electron/playwright.config.ts`

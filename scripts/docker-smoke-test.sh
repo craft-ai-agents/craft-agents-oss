@@ -40,9 +40,9 @@ echo "[1/3] Starting container..."
 docker run -d \
   --name "$CONTAINER_NAME" \
   -p "$PORT:9100" \
-  -e "CRAFT_SERVER_TOKEN=$TOKEN" \
-  -e "CRAFT_RPC_HOST=0.0.0.0" \
-  -e "CRAFT_RPC_PORT=9100" \
+  -e "ARCHSTUDIO_SERVER_TOKEN=$TOKEN" \
+  -e "ARCHSTUDIO_RPC_HOST=0.0.0.0" \
+  -e "ARCHSTUDIO_RPC_PORT=9100" \
   "$IMAGE"
 
 # --- Wait for server ready ---
@@ -59,7 +59,7 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
   fi
 
   # Check for the ready indicator in logs
-  if docker logs "$CONTAINER_NAME" 2>&1 | grep -q "CRAFT_SERVER_URL="; then
+  if docker logs "$CONTAINER_NAME" 2>&1 | grep -q "ARCHSTUDIO_SERVER_URL="; then
     READY=true
     break
   fi

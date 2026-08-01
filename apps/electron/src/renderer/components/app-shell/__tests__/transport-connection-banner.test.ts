@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { setupI18n } from '@craft-agent/shared/i18n/setupI18n'
+import { setupI18n } from '@archstudio/shared/i18n/setupI18n'
 
 // Bootstrap i18next with bundled English resources before importing the
 // component-under-test so its top-level i18n.t() calls return real strings.
@@ -52,7 +52,7 @@ describe('getTransportBannerCopy', () => {
     }))
 
     expect(copy.title).toContain('Cannot connect')
-    expect(copy.description).toContain('CRAFT_SERVER_TOKEN')
+    expect(copy.description).toContain('ARCHSTUDIO_SERVER_TOKEN')
     expect(copy.showRetry).toBe(true)
     expect(copy.tone).toBe('error')
   })

@@ -23,7 +23,7 @@ interface AddWorkspaceStep_CreateNewProps {
  *
  * Fields:
  * - Workspace name (required)
- * - Location: Default (~/.craft-agent/workspaces/) or Custom
+ * - Location: Default (~/.archstudio/workspaces/) or Custom
  */
 export function AddWorkspaceStep_CreateNew({
   onBack,

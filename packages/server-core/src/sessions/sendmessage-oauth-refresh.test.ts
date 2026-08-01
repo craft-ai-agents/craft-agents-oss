@@ -121,8 +121,8 @@ describe('sendMessage OAuth refresh ordering (#710)', () => {
 
     // Reload source list the same way sendMessage does and verify the failed
     // source is no longer usable.
-    const { getSourcesBySlugs } = await import('@craft-agent/shared/sources')
-    const { isSourceUsable } = await import('@craft-agent/shared/sources/storage')
+    const { getSourcesBySlugs } = await import('@archstudio/shared/sources')
+    const { isSourceUsable } = await import('@archstudio/shared/sources/storage')
     const reloaded = getSourcesBySlugs(tmpRoot, ['failing-mcp'])
     // In-memory mutation happened on the source instance passed to refreshSources;
     // disk wasn't touched in this stub, so reloaded copy still says authenticated.

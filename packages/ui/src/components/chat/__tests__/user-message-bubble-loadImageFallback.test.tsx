@@ -91,7 +91,7 @@ setupModuleMocks()
 // 3. Import AFTER mocks are registered.
 // ---------------------------------------------------------------------------
 const { UserMessageBubble } = await import('../UserMessageBubble')
-import type { StoredAttachment } from '@craft-agent/core'
+import type { StoredAttachment } from '@archstudio/core'
 
 // ---------------------------------------------------------------------------
 // 4. Fixtures

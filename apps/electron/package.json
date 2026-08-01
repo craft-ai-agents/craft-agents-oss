@@ -1,5 +1,5 @@
 {
-  "name": "@craft-agent/electron",
+  "name": "@archstudio/electron",
   "version": "0.11.2",
   "description": "Electron desktop app for ARCHstudio",
   "main": "dist/main.cjs",
@@ -42,11 +42,11 @@
     "lint:fix": "eslint src/ --fix"
   },
   "dependencies": {
-    "@craft-agent/core": "workspace:*",
-    "@craft-agent/messaging-gateway": "workspace:*",
-    "@craft-agent/server-core": "workspace:*",
-    "@craft-agent/shared": "workspace:*",
-    "@craft-agent/ui": "workspace:*",
+    "@archstudio/core": "workspace:*",
+    "@archstudio/messaging-gateway": "workspace:*",
+    "@archstudio/server-core": "workspace:*",
+    "@archstudio/shared": "workspace:*",
+    "@archstudio/ui": "workspace:*",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",

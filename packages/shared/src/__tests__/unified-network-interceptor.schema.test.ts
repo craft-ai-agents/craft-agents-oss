@@ -10,7 +10,7 @@ let _resetConfigCacheForTesting: typeof import('../interceptor-common.ts')._rese
 
 describe('unified-network-interceptor schema metadata injection', () => {
   beforeAll(async () => {
-    process.env.CRAFT_INTERCEPTOR_DISABLE_AUTO_INSTALL = '1';
+    process.env.ARCHSTUDIO_INTERCEPTOR_DISABLE_AUTO_INSTALL = '1';
     ({ injectMetadataIntoToolSchema, sanitizeEmptyTextCacheControl, upgradePromptCacheTtl } = await import('../unified-network-interceptor.ts'));
     ({ _resetConfigCacheForTesting } = await import('../interceptor-common.ts'));
   });
@@ -123,7 +123,7 @@ describe('sanitizeEmptyTextCacheControl', () => {
 });
 
 describe('upgradePromptCacheTtl', () => {
-  const configFile = join(homedir(), '.craft-agent', 'config.json');
+  const configFile = join(homedir(), '.archstudio', 'config.json');
   let originalConfig: string | null = null;
 
   beforeEach(() => {
@@ -146,7 +146,7 @@ describe('upgradePromptCacheTtl', () => {
   });
 
   function enableExtendedCache() {
-    const dir = join(homedir(), '.craft-agent');
+    const dir = join(homedir(), '.archstudio');
     mkdirSync(dir, { recursive: true });
     const existing = originalConfig ? JSON.parse(originalConfig) : {};
     writeFileSync(configFile, JSON.stringify({ ...existing, extendedPromptCache: true }));
@@ -154,7 +154,7 @@ describe('upgradePromptCacheTtl', () => {
   }
 
   function disableExtendedCache() {
-    const dir = join(homedir(), '.craft-agent');
+    const dir = join(homedir(), '.archstudio');
     mkdirSync(dir, { recursive: true });
     const existing = originalConfig ? JSON.parse(originalConfig) : {};
     writeFileSync(configFile, JSON.stringify({ ...existing, extendedPromptCache: false }));

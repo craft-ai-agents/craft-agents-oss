@@ -17,8 +17,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { CredentialManager } from '@craft-agent/shared/credentials'
-import type { ISessionManager } from '@craft-agent/server-core/handlers'
+import type { CredentialManager } from '@archstudio/shared/credentials'
+import type { ISessionManager } from '@archstudio/server-core/handlers'
 import { MessagingGatewayRegistry } from '../registry'
 
 let dir: string

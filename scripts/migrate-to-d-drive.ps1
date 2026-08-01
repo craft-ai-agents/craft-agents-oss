@@ -12,7 +12,7 @@
 
 $ErrorActionPreference = "Stop"
 
-$SourceCraftAgent = "C:\Users\skobe\.craft-agent"
+$SourceCraftAgent = "C:\Users\skobe\.archstudio"
 $SourceArchstudio = "C:\Users\skobe\.archstudio"
 $SourceAppData    = "$env:APPDATA\ARCHstudio"
 $DestDir          = "D:\AI\archstudio"
@@ -31,17 +31,17 @@ if (-not (Test-Path $DestDir)) {
     Write-Host "[OK] Created $DestDir" -ForegroundColor Green
 }
 
-# Step 1: Copy .craft-agent (primary data — workspaces, credentials, docs, etc.)
+# Step 1: Copy .archstudio (primary data — workspaces, credentials, docs, etc.)
 if (Test-Path $SourceCraftAgent) {
-    Write-Host "[1/4] Copying .craft-agent → D:\AI\archstudio ..." -ForegroundColor Yellow
+    Write-Host "[1/4] Copying .archstudio → D:\AI\archstudio ..." -ForegroundColor Yellow
     robocopy $SourceCraftAgent $DestDir /E /COPY:DAT /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
-    Write-Host "[OK] Copied .craft-agent data" -ForegroundColor Green
+    Write-Host "[OK] Copied .archstudio data" -ForegroundColor Green
 } else {
-    Write-Host "[SKIP] .craft-agent not found at $SourceCraftAgent" -ForegroundColor DarkGray
+    Write-Host "[SKIP] .archstudio not found at $SourceCraftAgent" -ForegroundColor DarkGray
 }
 
 # Step 2: Copy .archstudio (merge — config.json, preferences, themes from split-brain)
-# Only copy files that don't already exist (prefer .craft-agent versions)
+# Only copy files that don't already exist (prefer .archstudio versions)
 if (Test-Path $SourceArchstudio) {
     Write-Host "[2/4] Merging .archstudio → D:\AI\archstudio (non-overwrite) ..." -ForegroundColor Yellow
     robocopy $SourceArchstudio $DestDir /E /XO /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
@@ -80,14 +80,14 @@ if (Test-Path $ConfigFile) {
 
 # Step 5: Set system environment variable (requires admin)
 Write-Host ""
-Write-Host "[5/5] Setting CRAFT_CONFIG_DIR system environment variable ..." -ForegroundColor Yellow
+Write-Host "[5/5] Setting ARCHSTUDIO_CONFIG_DIR system environment variable ..." -ForegroundColor Yellow
 try {
-    [Environment]::SetEnvironmentVariable("CRAFT_CONFIG_DIR", $DestDir, "Machine")
-    Write-Host "[OK] CRAFT_CONFIG_DIR=$DestDir set as system env var" -ForegroundColor Green
+    [Environment]::SetEnvironmentVariable("ARCHSTUDIO_CONFIG_DIR", $DestDir, "Machine")
+    Write-Host "[OK] ARCHSTUDIO_CONFIG_DIR=$DestDir set as system env var" -ForegroundColor Green
 } catch {
     Write-Host "[WARN] Could not set system env var (need admin). Setting user-level instead." -ForegroundColor DarkYellow
-    [Environment]::SetEnvironmentVariable("CRAFT_CONFIG_DIR", $DestDir, "User")
-    Write-Host "[OK] CRAFT_CONFIG_DIR=$DestDir set as user env var" -ForegroundColor Green
+    [Environment]::SetEnvironmentVariable("ARCHSTUDIO_CONFIG_DIR", $DestDir, "User")
+    Write-Host "[OK] ARCHSTUDIO_CONFIG_DIR=$DestDir set as user env var" -ForegroundColor Green
 }
 
 # Done
@@ -101,12 +101,12 @@ Write-Host "  1. Rebuild the app:  cd D:\ARCHstudio && bun run build" -Foregroun
 Write-Host "  2. Launch ARCHstudio" -ForegroundColor Gray
 Write-Host "  3. Verify workspaces, memory, and vault load from D:" -ForegroundColor Gray
 Write-Host "  4. If everything works, delete old C: data:" -ForegroundColor Gray
-Write-Host "     - C:\Users\skobe\.craft-agent\" -ForegroundColor DarkGray
+Write-Host "     - C:\Users\skobe\.archstudio\" -ForegroundColor DarkGray
 Write-Host "     - C:\Users\skobe\.archstudio\" -ForegroundColor DarkGray
 Write-Host "     - %APPDATA%\ARCHstudio\" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "Data layout on D:" -ForegroundColor White
-Write-Host "  D:\AI\archstudio\          ← CRAFT_CONFIG_DIR (all app data)" -ForegroundColor Gray
+Write-Host "  D:\AI\archstudio\          ← ARCHSTUDIO_CONFIG_DIR (all app data)" -ForegroundColor Gray
 Write-Host "    config.json" -ForegroundColor DarkGray
 Write-Host "    workspaces\" -ForegroundColor DarkGray
 Write-Host "    credentials.enc" -ForegroundColor DarkGray

@@ -110,8 +110,8 @@ apps/electron/src/renderer/components/app-menu/DesktopAppMenu.tsx
 apps/electron/src/renderer/components/app-menu/MobileAppMenu.tsx
 apps/electron/src/renderer/components/app-shell/input/InputContainer.tsx
 apps/electron/src/renderer/components/app-shell/input/__tests__/model-picker-helpers.test.ts
-apps/electron/src/renderer/components/icons/CraftAgentsLogo.tsx
-apps/electron/src/renderer/components/icons/CraftAgentsSymbol.tsx
+apps/electron/src/renderer/components/icons/ARCHstudioLogo.tsx
+apps/electron/src/renderer/components/icons/ARCHstudioSymbol.tsx
 apps/electron/src/renderer/components/onboarding/CompletionScene.tsx
 apps/electron/src/renderer/components/onboarding/CompletionStep.tsx
 apps/electron/src/renderer/components/onboarding/LocalModelStep.tsx

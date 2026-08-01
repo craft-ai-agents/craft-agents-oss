@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'bun:test'
 import { createHash } from 'node:crypto'
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { RPC_CHANNELS } from '@archstudio/shared/protocol'
 import type { HandlerFn, RequestContext, RpcServer } from '../../transport/types'
 import {
   __resetTransferStateForTests,
@@ -65,7 +65,7 @@ function encodeParts(value: unknown, splitAt?: number) {
 }
 
 afterEach(() => {
-  delete process.env.CRAFT_TRANSFER_TTL_MS
+  delete process.env.ARCHSTUDIO_TRANSFER_TTL_MS
   __resetTransferStateForTests()
 })
 
@@ -164,7 +164,7 @@ describe('chunked transfer handlers', () => {
   })
 
   it('refreshes TTL as chunks arrive so slow healthy uploads survive', async () => {
-    process.env.CRAFT_TRANSFER_TTL_MS = '40'
+    process.env.ARCHSTUDIO_TRANSFER_TTL_MS = '40'
 
     const { start, chunk, commit } = createHarness()
     const payload = encodeParts({ hello: 'world', slow: true }, 8)

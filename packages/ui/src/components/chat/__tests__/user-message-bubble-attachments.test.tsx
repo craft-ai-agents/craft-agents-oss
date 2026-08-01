@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { StoredAttachment } from '@craft-agent/core'
+import type { StoredAttachment } from '@archstudio/core'
 
 // ---------------------------------------------------------------------------
 // Module-level mocks — must run before any import that resolves these

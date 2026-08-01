@@ -60,7 +60,7 @@ interface ConnectionTestResult {
 /**
  * Translate this tool's internal probe vocabulary (`ConnectionStatus`) into the
  * canonical status persisted on `SourceConfig.connectionStatus`
- * (`SourceConnectionStatus` in @craft-agent/shared).
+ * (`SourceConnectionStatus` in @archstudio/shared).
  *
  * The two enums are NOT the same set. Writing 'error' / 'disconnected' /
  * 'unknown' straight through — which is what used to happen — put values on

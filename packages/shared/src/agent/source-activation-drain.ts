@@ -31,7 +31,7 @@
  *     `shouldFireBeforeEvent()` before yielding each event.
  */
 
-import type { AgentEvent } from '@craft-agent/core/types';
+import type { AgentEvent } from '@archstudio/core/types';
 
 export interface PendingActivationRestart {
   sourceSlug: string;

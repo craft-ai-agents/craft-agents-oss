@@ -53,13 +53,13 @@ describe('parseArgs', () => {
   })
 
   it('falls back to env vars for url and token', () => {
-    const prevUrl = process.env.CRAFT_SERVER_URL
-    const prevToken = process.env.CRAFT_SERVER_TOKEN
-    const prevCa = process.env.CRAFT_TLS_CA
+    const prevUrl = process.env.ARCHSTUDIO_SERVER_URL
+    const prevToken = process.env.ARCHSTUDIO_SERVER_TOKEN
+    const prevCa = process.env.ARCHSTUDIO_TLS_CA
 
-    process.env.CRAFT_SERVER_URL = 'ws://env-server:8080'
-    process.env.CRAFT_SERVER_TOKEN = 'env-token'
-    process.env.CRAFT_TLS_CA = '/env/ca.pem'
+    process.env.ARCHSTUDIO_SERVER_URL = 'ws://env-server:8080'
+    process.env.ARCHSTUDIO_SERVER_TOKEN = 'env-token'
+    process.env.ARCHSTUDIO_TLS_CA = '/env/ca.pem'
 
     try {
       const args = parseArgs(['bun', 'index.ts', 'ping'])
@@ -67,25 +67,25 @@ describe('parseArgs', () => {
       expect(args.token).toBe('env-token')
       expect(args.tlsCa).toBe('/env/ca.pem')
     } finally {
-      if (prevUrl === undefined) delete process.env.CRAFT_SERVER_URL
-      else process.env.CRAFT_SERVER_URL = prevUrl
-      if (prevToken === undefined) delete process.env.CRAFT_SERVER_TOKEN
-      else process.env.CRAFT_SERVER_TOKEN = prevToken
-      if (prevCa === undefined) delete process.env.CRAFT_TLS_CA
-      else process.env.CRAFT_TLS_CA = prevCa
+      if (prevUrl === undefined) delete process.env.ARCHSTUDIO_SERVER_URL
+      else process.env.ARCHSTUDIO_SERVER_URL = prevUrl
+      if (prevToken === undefined) delete process.env.ARCHSTUDIO_SERVER_TOKEN
+      else process.env.ARCHSTUDIO_SERVER_TOKEN = prevToken
+      if (prevCa === undefined) delete process.env.ARCHSTUDIO_TLS_CA
+      else process.env.ARCHSTUDIO_TLS_CA = prevCa
     }
   })
 
   it('explicit flags override env vars', () => {
-    const prevUrl = process.env.CRAFT_SERVER_URL
-    process.env.CRAFT_SERVER_URL = 'ws://env-server:8080'
+    const prevUrl = process.env.ARCHSTUDIO_SERVER_URL
+    process.env.ARCHSTUDIO_SERVER_URL = 'ws://env-server:8080'
 
     try {
       const args = parseArgs(['bun', 'index.ts', '--url', 'ws://flag-server:9090', 'ping'])
       expect(args.url).toBe('ws://flag-server:9090')
     } finally {
-      if (prevUrl === undefined) delete process.env.CRAFT_SERVER_URL
-      else process.env.CRAFT_SERVER_URL = prevUrl
+      if (prevUrl === undefined) delete process.env.ARCHSTUDIO_SERVER_URL
+      else process.env.ARCHSTUDIO_SERVER_URL = prevUrl
     }
   })
 

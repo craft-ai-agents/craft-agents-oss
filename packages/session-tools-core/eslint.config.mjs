@@ -34,17 +34,17 @@ export default [
       'no-restricted-imports': ['error', {
         paths: [
           {
-            name: '@craft-agent/core',
+            name: '@archstudio/core',
             message:
               'session-tools-core is a pure backend package — ' +
-              '@craft-agent/core has Node host assumptions that may not ' +
+              '@archstudio/core has Node host assumptions that may not ' +
               'match the session-tools runtime.',
           },
           {
-            name: '@craft-agent/ui',
+            name: '@archstudio/ui',
             message:
               'session-tools-core is a pure backend package — ' +
-              '@craft-agent/ui is a renderer dependency.',
+              '@archstudio/ui is a renderer dependency.',
           },
         ],
         patterns: [

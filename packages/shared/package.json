@@ -1,7 +1,7 @@
 {
   "dependencies": {
-    "@craft-agent/core": "workspace:*",
-    "@craft-agent/session-tools-core": "workspace:*",
+    "@archstudio/core": "workspace:*",
+    "@archstudio/session-tools-core": "workspace:*",
     "@earendil-works/pi-agent-core": "0.80.6",
     "@earendil-works/pi-ai": "0.80.6",
     "@earendil-works/pi-coding-agent": "0.80.6",
@@ -89,7 +89,7 @@
   },
   "license": "Apache-2.0",
   "main": "src/index.ts",
-  "name": "@craft-agent/shared",
+  "name": "@archstudio/shared",
   "peerDependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.197",
     "@modelcontextprotocol/sdk": ">=1.29.0",

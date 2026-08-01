@@ -11,7 +11,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Maximize2 } from 'lucide-react'
 import { Markdown } from '@/components/markdown'
-import { DocumentFormattedMarkdownOverlay } from '@craft-agent/ui'
+import { DocumentFormattedMarkdownOverlay } from '@archstudio/ui'
 import { cn } from '@/lib/utils'
 
 export interface Info_MarkdownProps {

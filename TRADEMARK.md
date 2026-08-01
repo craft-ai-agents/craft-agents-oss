@@ -42,7 +42,7 @@ If you create a fork or derivative work, you **must**:
 
 - Choose a different name that does not include "Craft"
 - Remove or replace all Craft logos and icons
-- Update the bundle identifier (e.g., `com.lukilabs.craft-agent`) to your own
+- Update the bundle identifier (e.g., `com.lukilabs.archstudio`) to your own
 - Remove references to `craft.do` domains unless connecting to official Craft services
 
 ### Imply Official Endorsement

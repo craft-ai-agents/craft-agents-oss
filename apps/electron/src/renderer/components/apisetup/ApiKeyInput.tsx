@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/styled-dropdown"
 import { cn } from "@/lib/utils"
 import { Check, ChevronDown, Eye, EyeOff, Loader2 } from "lucide-react"
-import { GROUP_NAME } from '@craft-agent/shared/branding'
+import { GROUP_NAME } from '@archstudio/shared/branding'
 import { pickTierDefaults, resolveTierModels, type PiModelInfo } from "./tier-models"
 import {
   resolveCustomEndpointPayload,

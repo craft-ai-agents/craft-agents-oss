@@ -1,5 +1,5 @@
 // Renderer-local mapping for per-node run-state pills in the Results panel.
-// Kept out of @craft-agent/shared (Node-only) — the renderer can't import it.
+// Kept out of @archstudio/shared (Node-only) — the renderer can't import it.
 // Keys are 1:1 with the NodeRunState literals the runner emits
 // (packages/shared/src/tasks/storage.ts): pending | running | done | failed | cancelled | skipped.
 

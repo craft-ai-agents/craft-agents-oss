@@ -39,11 +39,11 @@ ANTHROPIC_API_KEY=sk-... bun run apps/cli/src/index.ts run "Hello, world!"
 
 | Flag | Env var | Default | Description |
 |------|---------|---------|-------------|
-| `--url <ws[s]://...>` | `CRAFT_SERVER_URL` | — | Server WebSocket URL |
-| `--token <secret>` | `CRAFT_SERVER_TOKEN` | — | Authentication token |
+| `--url <ws[s]://...>` | `ARCHSTUDIO_SERVER_URL` | — | Server WebSocket URL |
+| `--token <secret>` | `ARCHSTUDIO_SERVER_TOKEN` | — | Authentication token |
 | `--workspace <id>` | — | auto-detect | Workspace ID |
 | `--timeout <ms>` | — | `10000` | Request timeout |
-| `--tls-ca <path>` | `CRAFT_TLS_CA` | — | Custom CA cert for self-signed TLS |
+| `--tls-ca <path>` | `ARCHSTUDIO_TLS_CA` | — | Custom CA cert for self-signed TLS |
 | `--json` | — | `false` | Raw JSON output for scripting |
 | `--send-timeout <ms>` | — | `300000` | Timeout for `send` command (5 min) |
 
@@ -227,14 +227,14 @@ craft-cli --url wss://server.example.com:9100 ping
 craft-cli --url wss://server.example.com:9100 --tls-ca /path/to/ca.pem ping
 ```
 
-The `--tls-ca` flag sets `NODE_EXTRA_CA_CERTS` before connecting. You can also set `CRAFT_TLS_CA` in your environment.
+The `--tls-ca` flag sets `NODE_EXTRA_CA_CERTS` before connecting. You can also set `ARCHSTUDIO_TLS_CA` in your environment.
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | `Connection timeout` | Server not running or unreachable | Check server is started, verify URL |
-| `AUTH_FAILED` | Wrong token | Check `CRAFT_SERVER_TOKEN` matches server |
+| `AUTH_FAILED` | Wrong token | Check `ARCHSTUDIO_SERVER_TOKEN` matches server |
 | `PROTOCOL_VERSION_UNSUPPORTED` | Version mismatch | Update CLI and server to same version |
 | `WebSocket connection error` | Network issue or TLS problem | For self-signed certs, use `--tls-ca` |
 | `No workspace available` | Workspace not yet created | Create one via desktop app or API |

@@ -6,7 +6,7 @@
 # These are valid for 365 days and trusted only locally.
 #
 # To use with the server:
-#   CRAFT_RPC_TLS_CERT=certs/cert.pem CRAFT_RPC_TLS_KEY=certs/key.pem bun run server:dev
+#   ARCHSTUDIO_RPC_TLS_CERT=certs/cert.pem ARCHSTUDIO_RPC_TLS_KEY=certs/key.pem bun run server:dev
 
 set -e
 
@@ -26,4 +26,4 @@ echo "  cert: $OUT_DIR/cert.pem"
 echo "  key:  $OUT_DIR/key.pem"
 echo ""
 echo "Start server with TLS:"
-echo "  CRAFT_RPC_TLS_CERT=$OUT_DIR/cert.pem CRAFT_RPC_TLS_KEY=$OUT_DIR/key.pem bun run server:dev"
+echo "  ARCHSTUDIO_RPC_TLS_CERT=$OUT_DIR/cert.pem ARCHSTUDIO_RPC_TLS_KEY=$OUT_DIR/key.pem bun run server:dev"

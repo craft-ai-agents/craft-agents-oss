@@ -149,7 +149,7 @@ const { createRoot } = await import('react-dom/client')
 const { act } = await import('react')
 const { Provider, createStore } = await import('jotai')
 const { activeSessionIdAtom } = await import('../../atoms/sessions')
-const { TooltipProvider } = await import('@craft-agent/ui')
+const { TooltipProvider } = await import('@archstudio/ui')
 
 const MockAppShellContext = React.createContext<any>(null)
 mock.module('../../context/AppShellContext', () => ({

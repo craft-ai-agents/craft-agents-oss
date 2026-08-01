@@ -75,7 +75,7 @@ function runMigration(configDir: string) {
   ], {
     env: {
       ...process.env,
-      CRAFT_CONFIG_DIR: configDir,
+      ARCHSTUDIO_CONFIG_DIR: configDir,
     },
     stdout: 'pipe',
     stderr: 'pipe',

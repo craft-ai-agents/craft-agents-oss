@@ -1,7 +1,7 @@
 /**
  * Empty shims for Node.js built-in modules.
  *
- * The shared code (@craft-agent/shared) imports Node.js modules for
+ * The shared code (@archstudio/shared) imports Node.js modules for
  * file system operations, but these codepaths are only reached on the server.
  * In the browser, the web API adapter intercepts all calls before they
  * reach server-side code.

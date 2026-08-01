@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { groupMessagesByTurn } from '@craft-agent/ui/chat/turn-utils'
+import { groupMessagesByTurn } from '@archstudio/ui/chat/turn-utils'
 import { handleUserMessage } from '../session'
 import type { SessionState, UserMessageEvent } from '../../types'
 

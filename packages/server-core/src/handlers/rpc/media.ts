@@ -31,14 +31,14 @@
  * rejected by its AbortSignal listener.
  */
 
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import type { RpcServer } from '@archstudio/server-core/transport'
 import {
   RPC_CHANNELS,
   type MediaItem,
   type MediaListPage,
   type MediaListRequest,
   type SessionFile,
-} from '@craft-agent/shared/protocol'
+} from '@archstudio/shared/protocol'
 import type { HandlerDeps } from '../handler-deps'
 import { classifyMedia, makeAbortError, scanSessionDirectory } from './sessions'
 

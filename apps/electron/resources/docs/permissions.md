@@ -12,8 +12,8 @@ Explore mode is a read-only mode that blocks potentially destructive operations.
 Custom permission rules let you allow specific operations that would otherwise be blocked.
 
 Permission files are located at:
-- Workspace: `~/.craft-agent/workspaces/{slug}/permissions.json`
-- Source: `~/.craft-agent/workspaces/{slug}/sources/{source}/permissions.json`
+- Workspace: `~/.archstudio/workspaces/{slug}/permissions.json`
+- Source: `~/.archstudio/workspaces/{slug}/sources/{source}/permissions.json`
 
 ## Auto-Scoping for Source Permissions
 
@@ -50,7 +50,7 @@ The system converts it to `mcp__<sourceSlug>__.*list` internally. This means:
   ],
   "allowedWritePaths": [
     "/tmp/**",
-    "~/.craft-agent/**"
+    "~/.archstudio/**"
   ],
   "blockedCommandHints": [
     {
@@ -144,7 +144,7 @@ Glob patterns for directories where writes are allowed.
 {
   "allowedWritePaths": [
     "/tmp/**",
-    "~/.craft-agent/**",
+    "~/.archstudio/**",
     "/path/to/project/output/**"
   ]
 }

@@ -3,7 +3,7 @@
  * Extracted to a separate file to allow unit testing without importing
  * Electron main process modules.
  */
-import { WS_ID_CHARS } from '@craft-agent/shared/mentions'
+import { WS_ID_CHARS } from '@archstudio/shared/mentions'
 
 /**
  * Sanitize message content for use as session title.

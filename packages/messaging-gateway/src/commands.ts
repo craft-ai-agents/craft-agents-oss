@@ -10,7 +10,7 @@
  * /stop          — abort the current agent run
  */
 
-import type { ISessionManager } from '@craft-agent/server-core/handlers'
+import type { ISessionManager } from '@archstudio/server-core/handlers'
 import {
   evaluatePreBindingAccess,
   executeRejection,

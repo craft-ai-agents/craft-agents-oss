@@ -1,5 +1,5 @@
 {
-  "name": "@craft-agent/ui",
+  "name": "@archstudio/ui",
   "version": "0.11.2",
   "license": "Apache-2.0",
   "description": "Shared React UI components for ARCHstudio - session viewer, chat display, markdown rendering",
@@ -19,8 +19,8 @@
     "./styles": "./src/styles/index.css"
   },
   "dependencies": {
-    "@craft-agent/core": "workspace:*",
-    "@craft-agent/shared": "workspace:*",
+    "@archstudio/core": "workspace:*",
+    "@archstudio/shared": "workspace:*",
     "@paper-design/shaders-react": "^0.0.69",
     "beautiful-mermaid": "*",
     "@types/mdast": "^4.0.0",

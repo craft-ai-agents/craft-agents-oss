@@ -1,2 +1,2 @@
 @echo off
-"%CRAFT_UV%" run --python 3.12 "%CRAFT_SCRIPTS%\pdf_tool.py" %*
+"%ARCHSTUDIO_UV%" run --python 3.12 "%ARCHSTUDIO_SCRIPTS%\pdf_tool.py" %*

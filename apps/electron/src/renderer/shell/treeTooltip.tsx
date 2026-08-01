@@ -182,7 +182,7 @@ export function buildTreeTooltip(
 //
 // Renders a TooltipData as a styled popover body with a path header,
 // optional separator, and 2-column rows (label + value).  Designed to
-// live inside the Radix TooltipContent from @craft-agent/ui — the
+// live inside the Radix TooltipContent from @archstudio/ui — the
 // TooltipContent component provides the backdrop, blur, and animation
 // already.  The plain HTML inside is plain CSS.
 

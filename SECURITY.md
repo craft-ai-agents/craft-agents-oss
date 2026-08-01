@@ -26,7 +26,7 @@ Include the following information:
 
 This policy applies to:
 - The ARCHstudio desktop application
-- The `@craft-agent/*` npm packages
+- The `@archstudio/*` npm packages
 - Official ARCHstudio repositories
 
 ### Out of Scope

@@ -1,14 +1,14 @@
-import type { EventSink, RpcServer } from '@craft-agent/server-core/transport'
-import { CLIENT_BROWSER_INVOKE } from '@craft-agent/server-core/transport'
-import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput } from '@craft-agent/server-core/handlers'
+import type { EventSink, RpcServer } from '@archstudio/server-core/transport'
+import { CLIENT_BROWSER_INVOKE } from '@archstudio/server-core/transport'
+import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput } from '@archstudio/server-core/handlers'
 import { RemoteBrowserPaneManager } from './RemoteBrowserPaneManager'
-import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
-import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
+import { validateFilePath, getWorkspaceAllowedDirs } from '@archstudio/server-core/handlers'
+import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@archstudio/server-core/runtime'
 import { basename, dirname, join } from 'path'
 import { existsSync } from 'fs'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { randomUUID } from 'node:crypto'
-import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns, generateConversationSummary, resolveKeepBackgroundTasksAlive } from '@craft-agent/shared/agent'
+import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns, generateConversationSummary, resolveKeepBackgroundTasksAlive } from '@archstudio/shared/agent'
 import {
   resolveSessionConnection,
   createBackendFromConnection,
@@ -19,13 +19,13 @@ import {
   type AgentBackend,
   type BackendHostRuntimeContext,
   type PostInitResult,
-} from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior, getPersistedUiLanguage, resolveTitleLanguageName } from '@craft-agent/shared/config'
-import type { MidStreamBehavior } from '@craft-agent/shared/config'
-import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
+} from '@archstudio/shared/agent/backend'
+import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior, getPersistedUiLanguage, resolveTitleLanguageName } from '@archstudio/shared/config'
+import type { MidStreamBehavior } from '@archstudio/shared/config'
+import { PrivilegedExecutionBroker } from '@archstudio/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
-import { InitGate } from '@craft-agent/server-core/domain'
-import { i18n } from '@craft-agent/shared/i18n'
+import { InitGate } from '@archstudio/server-core/domain'
+import { i18n } from '@archstudio/shared/i18n'
 import {
   getWorkspaces,
   getWorkspaceByNameOrId,
@@ -37,9 +37,9 @@ import {
   MODEL_REGISTRY,
   type Workspace,
   type WorkspaceInfo,
-} from '@craft-agent/shared/config'
-import type { ActiveSessionInfo, SessionProcessingStatus } from '@craft-agent/core/types'
-import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
+} from '@archstudio/shared/config'
+import type { ActiveSessionInfo, SessionProcessingStatus } from '@archstudio/core/types'
+import { loadWorkspaceConfig } from '@archstudio/shared/workspaces'
 import {
   // Session persistence functions
   listSessions as listStoredSessions,
@@ -72,39 +72,39 @@ import {
   type SessionStatus,
   type SessionHeader,
   pickSessionFields,
-} from '@craft-agent/shared/sessions'
-import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
-import { listTaskSlugs, parseTaskSpec, uniqueTaskSlug } from '@craft-agent/shared/tasks'
+} from '@archstudio/shared/sessions'
+import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@archstudio/shared/sources'
+import { listTaskSlugs, parseTaskSpec, uniqueTaskSlug } from '@archstudio/shared/tasks'
 import { createTaskFromSpec, resolveCreateTaskProjectId } from '../tasks'
-import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config/watcher'
-import { getValidClaudeOAuthToken } from '@craft-agent/shared/auth'
-import { resolveAuthEnvVars } from '@craft-agent/shared/config'
-import { toolMetadataStore, getLastApiError } from '@craft-agent/shared/interceptor'
-import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
-import { restoreFiles } from '@craft-agent/shared/utils/bundle-files'
-import { getCredentialManager } from '@craft-agent/shared/credentials'
-import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
-import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
-import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta, type TokenUsage } from '@craft-agent/core/types'
-import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
-import { loadAllSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
-import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
-import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
-import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
-import type { SummarizeCallback } from '@craft-agent/shared/sources'
-import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
-import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
-import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
-import { extractLabelId, resolveSessionLabels, findTaskItemLabelId } from '@craft-agent/shared/labels'
-import { ensureLabelsExist, ensureTaskItemLabel } from '@craft-agent/shared/labels/crud'
-import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
-import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
+import { ConfigWatcher, type ConfigWatcherCallbacks } from '@archstudio/shared/config/watcher'
+import { getValidClaudeOAuthToken } from '@archstudio/shared/auth'
+import { resolveAuthEnvVars } from '@archstudio/shared/config'
+import { toolMetadataStore, getLastApiError } from '@archstudio/shared/interceptor'
+import { isParentTaskTool } from '@archstudio/shared/utils/toolNames'
+import { restoreFiles } from '@archstudio/shared/utils/bundle-files'
+import { getCredentialManager } from '@archstudio/shared/credentials'
+import { CraftMcpClient, McpClientPool, McpPoolServer } from '@archstudio/shared/mcp'
+import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, RPC_CHANNELS, generateMessageId } from '@archstudio/shared/protocol'
+import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta, type TokenUsage } from '@archstudio/core/types'
+import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@archstudio/shared/utils'
+import { loadAllSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@archstudio/shared/skills'
+import { invalidateContextFileCache } from '@archstudio/shared/prompts/system'
+import { getToolIconsDir, getMiniModel } from '@archstudio/shared/config'
+import { getDefaultSummarizationModel } from '@archstudio/shared/config/models'
+import type { SummarizeCallback } from '@archstudio/shared/sources'
+import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@archstudio/shared/agent/thinking-levels'
+import { evaluateAutoLabels } from '@archstudio/shared/labels/auto'
+import { listLabels, loadLabelConfig } from '@archstudio/shared/labels/storage'
+import { extractLabelId, resolveSessionLabels, findTaskItemLabelId } from '@archstudio/shared/labels'
+import { ensureLabelsExist, ensureTaskItemLabel } from '@archstudio/shared/labels/crud'
+import { loadStatusConfig } from '@archstudio/shared/statuses/storage'
+import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot } from '@archstudio/shared/automations'
 import { buildBackendRuntimeSignature, buildRestartRequiredSignature, filterAttachmentsForModelInput } from './runtime-config'
-import { formatRecalledMemories, retrieveRelevantMemories } from '@craft-agent/shared/memory/live-recall'
+import { formatRecalledMemories, retrieveRelevantMemories } from '@archstudio/shared/memory/live-recall'
 
 // Import from server-core domain utilities
-import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
-import { resizeImageForAPI, resizeIconBuffer } from '@craft-agent/server-core/services'
+import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@archstudio/server-core/domain'
+import { resizeImageForAPI, resizeIconBuffer } from '@archstudio/server-core/services'
 export { sanitizeForTitle }
 
 // Module-level platform ref — set once during init via setSessionPlatform()
@@ -188,7 +188,7 @@ const METADATA_WRITE_GUARD_MS = 5000
  */
 const PLAN_APPROVAL_MESSAGE = 'Plan approved, please execute.'
 
-// validateSpawnAttachmentPath removed — use shared validateFilePath from @craft-agent/server-core/handlers
+// validateSpawnAttachmentPath removed — use shared validateFilePath from @archstudio/server-core/handlers
 
 const PI_TURN_ANCHORS_VERSION = 1
 const PI_TURN_ANCHORS_FILE = 'pi-turn-anchors.json'
@@ -523,7 +523,7 @@ async function applyBridgeUpdates(
   agent: AgentInstance,
   sessionPath: string,
   enabledSources: LoadedSource[],
-  mcpServers: Record<string, import('@craft-agent/shared/agent/backend').SdkMcpServerConfig>,
+  mcpServers: Record<string, import('@archstudio/shared/agent/backend').SdkMcpServerConfig>,
   sessionId: string,
   workspaceRootPath: string,
   context: string,
@@ -561,7 +561,7 @@ async function getBrowserToolIconDataUrl(): Promise<string | undefined> {
   try {
     const iconCandidates = [
       join(getToolIconsDir(), BROWSER_TOOL_ICON_FILENAME),
-      // Dev fallback (before sync to ~/.craft-agent/tool-icons)
+      // Dev fallback (before sync to ~/.archstudio/tool-icons)
       join(process.cwd(), 'apps', 'electron', 'resources', 'tool-icons', BROWSER_TOOL_ICON_FILENAME),
       // Packaged fallback (app resources)
       join(process.resourcesPath, 'tool-icons', BROWSER_TOOL_ICON_FILENAME),
@@ -695,7 +695,7 @@ async function resolveToolDisplayMeta(
 
   // CLI tool icon resolution for Bash commands
   // Parses the command string to detect known tools (git, npm, docker, etc.)
-  // and resolves their brand icon from ~/.craft-agent/tool-icons/
+  // and resolves their brand icon from ~/.archstudio/tool-icons/
   if (toolName === 'Bash' && toolInput?.command) {
     try {
       const toolIconsDir = getToolIconsDir()
@@ -1212,7 +1212,7 @@ export class SessionManager implements ISessionManager {
   // Automation systems for workspace event automations - one per workspace (includes scheduler, diffing, and handlers)
   private automationSystems: Map<string, AutomationSystem> = new Map()
   // Pending credential request resolvers (keyed by requestId)
-  private pendingCredentialResolvers: Map<string, (response: import('@craft-agent/shared/protocol').CredentialResponse) => void> = new Map()
+  private pendingCredentialResolvers: Map<string, (response: import('@archstudio/shared/protocol').CredentialResponse) => void> = new Map()
   // Permission request metadata tracking (keyed by requestId)
   private pendingPermissionRequests: Map<string, {
     sessionId: string
@@ -1240,7 +1240,7 @@ export class SessionManager implements ISessionManager {
   // O(1) index: taskId → sessionId for background task output lookup (avoids O(n) session scan)
   private taskOutputIndex: Map<string, string> = new Map()
   /**
-   * WS2 keep-alive flag (default ON, opt-out via `CRAFT_KEEP_BG_AGENTS_ALIVE=0`).
+   * WS2 keep-alive flag (default ON, opt-out via `ARCHSTUDIO_KEEP_BG_AGENTS_ALIVE=0`).
    * When true, a persistent streaming query keeps the subprocess alive across
    * turns so background sub-agents survive, and orphaning is suppressed. When
    * false (kill-switch), sub-agents are bound to a single turn's subprocess and
@@ -1318,13 +1318,13 @@ export class SessionManager implements ISessionManager {
    * Set once at startup so agent tools and MemoryPanel share the same
    * SQLite connection and FTS5 index.
    */
-  private memoryRepository: import('@craft-agent/shared/memory/repository').MemoryRepository | null = null
+  private memoryRepository: import('@archstudio/shared/memory/repository').MemoryRepository | null = null
 
   setEventSink(sink: EventSink): void {
     this.eventSink = sink
   }
 
-  setMemoryRepository(repo: import('@craft-agent/shared/memory/repository').MemoryRepository): void {
+  setMemoryRepository(repo: import('@archstudio/shared/memory/repository').MemoryRepository): void {
     this.memoryRepository = repo
   }
 
@@ -1650,7 +1650,7 @@ export class SessionManager implements ISessionManager {
       onSkillChange: async (slug, skill) => {
         sessionLog.info(`Skill '${slug}' changed:`, skill ? 'updated' : 'deleted')
         // Broadcast updated list to UI
-        const { loadAllSkills } = await import('@craft-agent/shared/skills')
+        const { loadAllSkills } = await import('@archstudio/shared/skills')
         const skills = loadAllSkills(workspaceRootPath)
         this.broadcastSkillsChanged(workspaceId, skills)
       },
@@ -1815,7 +1815,7 @@ export class SessionManager implements ISessionManager {
     this.eventSink(RPC_CHANNELS.automations.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
   }
 
-  private broadcastAppThemeChanged(theme: import('@craft-agent/shared/config').ThemeOverrides | null): void {
+  private broadcastAppThemeChanged(theme: import('@archstudio/shared/config').ThemeOverrides | null): void {
     if (!this.eventSink) return
     sessionLog.info(`Broadcasting app theme changed`)
     this.eventSink(RPC_CHANNELS.theme.APP_CHANGED, { to: 'all' }, theme)
@@ -1827,7 +1827,7 @@ export class SessionManager implements ISessionManager {
     this.eventSink(RPC_CHANNELS.llmConnections.CHANGED, { to: 'all' })
   }
 
-  private broadcastSkillsChanged(workspaceId: string, skills: import('@craft-agent/shared/skills').LoadedSkill[]): void {
+  private broadcastSkillsChanged(workspaceId: string, skills: import('@archstudio/shared/skills').LoadedSkill[]): void {
     if (!this.eventSink) return
     sessionLog.info(`Broadcasting skills changed (${skills.length} skills)`)
     this.eventSink(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
@@ -2274,7 +2274,7 @@ export class SessionManager implements ISessionManager {
   async handleCredentialInput(
     sessionId: string,
     requestId: string,
-    response: import('@craft-agent/shared/protocol').CredentialResponse
+    response: import('@archstudio/shared/protocol').CredentialResponse
   ): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (!managed?.pendingAuthRequest) {
@@ -2330,7 +2330,7 @@ export class SessionManager implements ISessionManager {
       }
 
       // Update source config to mark as authenticated
-      const { markSourceAuthenticated } = await import('@craft-agent/shared/sources')
+      const { markSourceAuthenticated } = await import('@archstudio/shared/sources')
       markSourceAuthenticated(managed.workspace.rootPath, request.sourceSlug)
 
       // Mark source as unseen so fresh guide is injected on next message
@@ -2600,7 +2600,7 @@ export class SessionManager implements ISessionManager {
 
   async createSession(
     workspaceId: string,
-    options?: import('@craft-agent/shared/protocol').CreateSessionOptions,
+    options?: import('@archstudio/shared/protocol').CreateSessionOptions,
     // Transport concern, deliberately NOT on the wire DTO: by default every created session is
     // announced to the renderer (see notifySessionCreated). Callers that register the session
     // themselves — the `sessions:create` RPC adds it from the return value — pass
@@ -2690,7 +2690,7 @@ export class SessionManager implements ISessionManager {
     const requestedProjectId = options?.projectId ?? inheritedProjectId
     let resolvedProjectId: string | undefined
     if (requestedProjectId) {
-      const { loadProjectById } = await import('@craft-agent/shared/projects')
+      const { loadProjectById } = await import('@archstudio/shared/projects')
       const project = loadProjectById(workspaceRootPath, requestedProjectId)
       if (!project) {
         // An EXPLICIT binding to a missing project is a caller bug; an inherited one
@@ -3387,10 +3387,10 @@ export class SessionManager implements ISessionManager {
       }
 
       // Set session directory for tool metadata cross-process sharing.
-      // The SDK subprocess reads CRAFT_SESSION_DIR to write tool-metadata.json;
+      // The SDK subprocess reads ARCHSTUDIO_SESSION_DIR to write tool-metadata.json;
       // the main process reads it via toolMetadataStore.setSessionDir().
       const sessionDirForMetadata = getSessionStoragePath(managed.workspace.rootPath, managed.id)
-      process.env.CRAFT_SESSION_DIR = sessionDirForMetadata
+      process.env.ARCHSTUDIO_SESSION_DIR = sessionDirForMetadata
       toolMetadataStore.setSessionDir(sessionDirForMetadata)
 
       // Set up agentReady promise so title generation can await agent creation
@@ -3425,7 +3425,7 @@ export class SessionManager implements ISessionManager {
       // Per-session env overrides
       const miniModel = connection ? (getMiniModel(connection) ?? connection.defaultModel) : undefined
       const envOverrides: Record<string, string> = {
-        CRAFT_WORKSPACE_PATH: managed.workspace.rootPath,
+        ARCHSTUDIO_WORKSPACE_PATH: managed.workspace.rootPath,
         // Pass mini model to SDK subprocess so built-in tools like WebFetch
         // use the correct model for summarization (instead of hardcoded Haiku)
         ...(miniModel ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: miniModel } : {}),
@@ -3580,7 +3580,7 @@ export class SessionManager implements ISessionManager {
         automationSystem: this.automationSystems.get(managed.workspace.rootPath),
         systemPromptPreset: managed.systemPromptPreset,
         debugMode: _platform?.isDebugMode ? { enabled: true, logFilePath: _platform.getLogFilePath?.() } : undefined,
-        enable1MContext: await (async () => { const { getEnable1MContext } = await import('@craft-agent/shared/config/storage'); return getEnable1MContext(); })(),
+        enable1MContext: await (async () => { const { getEnable1MContext } = await import('@archstudio/shared/config/storage'); return getEnable1MContext(); })(),
         // Image resize callback — prevents oversized images from entering conversation history
         onImageResize: async (filePath: string, maxSizeBytes: number): Promise<string | null> => {
           try {
@@ -4299,7 +4299,7 @@ export class SessionManager implements ISessionManager {
         },
         // create_task — create a Task (board card + task.yaml + orchestrator session)
         // WITHOUT running it. Spec building happens here (not in session-tools-core,
-        // which must stay dependency-free of @craft-agent/shared); the creation flow
+        // which must stay dependency-free of @archstudio/shared); the creation flow
         // itself is createTaskFromSpec, shared verbatim with the tasks:create RPC.
         createTaskFn: async (input) => {
           const ws = managed.workspace
@@ -4734,7 +4734,7 @@ export class SessionManager implements ISessionManager {
     }
 
     // Validate connection exists
-    const { getLlmConnection } = await import('@craft-agent/shared/config/storage')
+    const { getLlmConnection } = await import('@archstudio/shared/config/storage')
     const connection = getLlmConnection(connectionSlug)
     if (!connection) {
       sessionLog.warn(`setSessionConnection: connection "${connectionSlug}" not found`)
@@ -4851,7 +4851,7 @@ export class SessionManager implements ISessionManager {
    * Share session to the web viewer
    * Uploads session data and returns shareable URL
    */
-  async shareToViewer(sessionId: string): Promise<import('@craft-agent/shared/protocol').ShareResult> {
+  async shareToViewer(sessionId: string): Promise<import('@archstudio/shared/protocol').ShareResult> {
     const managed = this.sessions.get(sessionId)
     if (!managed) {
       return { success: false, error: 'Session not found' }
@@ -4868,7 +4868,7 @@ export class SessionManager implements ISessionManager {
         return { success: false, error: 'Session file not found' }
       }
 
-      const { VIEWER_URL } = await import('@craft-agent/shared/branding')
+      const { VIEWER_URL } = await import('@archstudio/shared/branding')
       const response = await fetch(`${VIEWER_URL}/s/api`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -4912,7 +4912,7 @@ export class SessionManager implements ISessionManager {
    * Update an existing shared session
    * Re-uploads session data to the same URL
    */
-  async updateShare(sessionId: string): Promise<import('@craft-agent/shared/protocol').ShareResult> {
+  async updateShare(sessionId: string): Promise<import('@archstudio/shared/protocol').ShareResult> {
     const managed = this.sessions.get(sessionId)
     if (!managed) {
       return { success: false, error: 'Session not found' }
@@ -4932,7 +4932,7 @@ export class SessionManager implements ISessionManager {
         return { success: false, error: 'Session file not found' }
       }
 
-      const { VIEWER_URL } = await import('@craft-agent/shared/branding')
+      const { VIEWER_URL } = await import('@archstudio/shared/branding')
       const response = await fetch(`${VIEWER_URL}/s/api/${managed.sharedId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -4963,7 +4963,7 @@ export class SessionManager implements ISessionManager {
    * Revoke a shared session
    * Deletes from viewer and clears local shared state
    */
-  async revokeShare(sessionId: string): Promise<import('@craft-agent/shared/protocol').ShareResult> {
+  async revokeShare(sessionId: string): Promise<import('@archstudio/shared/protocol').ShareResult> {
     const managed = this.sessions.get(sessionId)
     if (!managed) {
       return { success: false, error: 'Session not found' }
@@ -4977,7 +4977,7 @@ export class SessionManager implements ISessionManager {
     this.sendEvent({ type: 'async_operation', sessionId, isOngoing: true }, managed.workspace.id)
 
     try {
-      const { VIEWER_URL } = await import('@craft-agent/shared/branding')
+      const { VIEWER_URL } = await import('@archstudio/shared/branding')
       const response = await fetch(
         `${VIEWER_URL}/s/api/${managed.sharedId}`,
         { method: 'DELETE' }
@@ -5723,7 +5723,7 @@ export class SessionManager implements ISessionManager {
     // Revoke share if session was shared (prevent orphaned viewer copies)
     if (managed.sharedId) {
       try {
-        const { VIEWER_URL } = await import('@craft-agent/shared/branding')
+        const { VIEWER_URL } = await import('@archstudio/shared/branding')
         const response = await fetch(
           `${VIEWER_URL}/s/api/${managed.sharedId}`,
           { method: 'DELETE', signal: AbortSignal.timeout(5000) }
@@ -7048,7 +7048,7 @@ export class SessionManager implements ISessionManager {
     requestId: string,
     allowed: boolean,
     alwaysAllow: boolean,
-    options?: import('@craft-agent/shared/protocol').PermissionResponseOptions,
+    options?: import('@archstudio/shared/protocol').PermissionResponseOptions,
   ): boolean {
     const managed = this.sessions.get(sessionId)
     if (managed?.agent) {
@@ -7088,7 +7088,7 @@ export class SessionManager implements ISessionManager {
    * - New unified auth flow (via handleCredentialInput)
    * - Legacy callback flow (via pendingCredentialResolvers)
    */
-  async respondToCredential(sessionId: string, requestId: string, response: import('@craft-agent/shared/protocol').CredentialResponse): Promise<boolean> {
+  async respondToCredential(sessionId: string, requestId: string, response: import('@archstudio/shared/protocol').CredentialResponse): Promise<boolean> {
     // First, check if this is a new unified auth flow request
     const managed = this.sessions.get(sessionId)
     if (managed?.pendingAuthRequest && managed.pendingAuthRequest.requestId === requestId) {
@@ -8699,7 +8699,7 @@ export class SessionManager implements ISessionManager {
       : getDefaultSummarizationModel()
 
     const envOverrides: Record<string, string> = {
-      CRAFT_WORKSPACE_PATH: workspaceRootPath,
+      ARCHSTUDIO_WORKSPACE_PATH: workspaceRootPath,
       ...(miniModel ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: miniModel } : {}),
     }
 

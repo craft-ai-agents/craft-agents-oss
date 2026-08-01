@@ -16,7 +16,7 @@ import type {
   MicrosoftService,
   McpSourceConfig,
 } from './types.ts';
-import type { MemoryRepository } from '@craft-agent/shared/memory/repository.ts';
+import type { MemoryRepository } from '@archstudio/shared/memory/repository.ts';
 
 // ============================================================
 // Source Credential Types
@@ -166,7 +166,7 @@ export interface SessionToolContext {
   /** Unique session identifier */
   sessionId: string;
 
-  /** Absolute path to workspace folder (~/.craft-agent/workspaces/{id}) */
+  /** Absolute path to workspace folder (~/.archstudio/workspaces/{id}) */
   workspacePath: string;
 
   /** Path to sources folder within workspace */
@@ -303,7 +303,7 @@ export interface SessionToolContext {
 
   /**
    * Submit developer feedback. Injected by each backend:
-   * - Claude: writes JSON files to ~/.craft-agent/feedback/
+   * - Claude: writes JSON files to ~/.archstudio/feedback/
    * - Codex/Pi: could send over IPC or write directly
    */
   submitFeedback?(feedback: import('./types.ts').DeveloperFeedback): void;
@@ -435,7 +435,7 @@ export interface ResolvedLabelsResult {
   available: string[];
   /**
    * Optional per-input rejection reason, keyed by the original input string.
-   * Populated by `resolveSessionLabels()` from `@craft-agent/shared/labels`.
+   * Populated by `resolveSessionLabels()` from `@archstudio/shared/labels`.
    * Handlers use this to build clearer errors (e.g. "label X doesn't accept a value").
    */
   reasons?: Record<string, string>;

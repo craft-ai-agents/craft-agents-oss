@@ -1,5 +1,5 @@
 /**
- * @craft-agent/core
+ * @archstudio/core
  *
  * Core types and utilities for Craft Agent.
  *

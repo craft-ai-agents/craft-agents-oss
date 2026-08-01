@@ -110,10 +110,10 @@ export {
   PERMISSION_MODE_ORDER,
   PERMISSION_MODE_CONFIG,
 } from './mode-manager.ts';
-// Documentation is served via local files at ~/.craft-agent/docs/
+// Documentation is served via local files at ~/.archstudio/docs/
 
 // Import and re-export AgentEvent from core (single source of truth)
-import type { AgentEvent } from '@craft-agent/core/types';
+import type { AgentEvent } from '@archstudio/core/types';
 export type { AgentEvent };
 
 // Stateless tool matching — pure functions for SDK message → AgentEvent conversion
@@ -511,8 +511,8 @@ export class ClaudeAgent extends BaseAgent {
    * WS2 keep-alive: when true, use one long-lived streaming-input `query()` per
    * session so background sub-agents survive across turns (instead of a fresh
    * per-turn subprocess that tears them down at turn end). Resolved once from
-   * `CRAFT_KEEP_BG_AGENTS_ALIVE` via the shared resolver. Default is ON (opt-out);
-   * set `CRAFT_KEEP_BG_AGENTS_ALIVE=0` to force the per-turn kill-switch path.
+   * `ARCHSTUDIO_KEEP_BG_AGENTS_ALIVE` via the shared resolver. Default is ON (opt-out);
+   * set `ARCHSTUDIO_KEEP_BG_AGENTS_ALIVE=0` to force the per-turn kill-switch path.
    */
   private readonly keepBackgroundTasksAlive: boolean = resolveKeepBackgroundTasksAlive();
 
@@ -1159,7 +1159,7 @@ export class ClaudeAgent extends BaseAgent {
       // without an explicit opt-in. The betas header only works for API key users;
       // for OAuth the [1m] model suffix is the way. Use the suffix unconditionally
       // since it works for both auth paths. See: anthropics/claude-agent-sdk-typescript#238
-      // Gated by enable1MContext in global config (~/.craft-agent/config.json).
+      // Gated by enable1MContext in global config (~/.archstudio/config.json).
       // The interceptor also reads this to strip the SDK-injected beta header.
       const use1M = this.config.enable1MContext !== false;
       const effectiveModel = use1M && getModelContextWindow(model) === 1_000_000

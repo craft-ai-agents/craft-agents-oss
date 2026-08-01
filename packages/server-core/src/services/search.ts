@@ -7,7 +7,7 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import { existsSync } from 'fs';
-import { resolveBackendHostTooling } from '@craft-agent/shared/agent/backend';
+import { resolveBackendHostTooling } from '@archstudio/shared/agent/backend';
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '../runtime/platform';
 
 /**

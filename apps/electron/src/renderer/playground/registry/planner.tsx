@@ -27,7 +27,7 @@ import {
   StyledDropdownMenuContent,
   StyledDropdownMenuItem,
 } from '@/components/ui/styled-dropdown'
-import { TiptapMarkdownEditor } from '@craft-agent/ui'
+import { TiptapMarkdownEditor } from '@archstudio/ui'
 import { cn } from '@/lib/utils'
 import { getResizeGradientStyle } from '@/hooks/useResizeGradient'
 import {

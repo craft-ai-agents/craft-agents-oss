@@ -36,11 +36,11 @@ async function spawnTestServer(extraEnv?: Record<string, string>): Promise<Spawn
     env: {
       ...parentEnv,
       ...extraEnv,
-      CRAFT_SERVER_TOKEN: token,
-      CRAFT_CONFIG_DIR: configDir,
-      CRAFT_RPC_PORT: '0',
-      CRAFT_RPC_HOST: '127.0.0.1',
-      CRAFT_HEALTH_PORT: '0', // random port
+      ARCHSTUDIO_SERVER_TOKEN: token,
+      ARCHSTUDIO_CONFIG_DIR: configDir,
+      ARCHSTUDIO_RPC_PORT: '0',
+      ARCHSTUDIO_RPC_HOST: '127.0.0.1',
+      ARCHSTUDIO_HEALTH_PORT: '0', // random port
     },
     stdout: 'pipe',
     stderr: 'pipe',
@@ -82,8 +82,8 @@ async function spawnTestServer(extraEnv?: Record<string, string>): Promise<Spawn
       const lines = buffer.split('\n')
       buffer = lines.pop() ?? ''
       for (const line of lines) {
-        if (line.startsWith('CRAFT_SERVER_URL=')) {
-          url = line.slice('CRAFT_SERVER_URL='.length).trim()
+        if (line.startsWith('ARCHSTUDIO_SERVER_URL=')) {
+          url = line.slice('ARCHSTUDIO_SERVER_URL='.length).trim()
         }
         if (url && !settled) {
           settled = true
@@ -123,7 +123,7 @@ async function spawnTestServer(extraEnv?: Record<string, string>): Promise<Spawn
         const exitCode = await proc.exited
         await stderrTask
         rejectOnce(new Error(
-          `Server exited with code ${exitCode} before printing CRAFT_SERVER_URL${stderr ? `\n${stderr}` : ''}`,
+          `Server exited with code ${exitCode} before printing ARCHSTUDIO_SERVER_URL${stderr ? `\n${stderr}` : ''}`,
         ))
       }
     })()
@@ -189,10 +189,10 @@ describe('headless server smoke test', () => {
     const proc = Bun.spawn(['bun', 'run', SERVER_ENTRY], {
       env: {
         ...parentEnv,
-        CRAFT_SERVER_TOKEN: token,
-        CRAFT_CONFIG_DIR: configDir,
-        CRAFT_RPC_PORT: '0',
-        CRAFT_RPC_HOST: '127.0.0.1',
+        ARCHSTUDIO_SERVER_TOKEN: token,
+        ARCHSTUDIO_CONFIG_DIR: configDir,
+        ARCHSTUDIO_RPC_PORT: '0',
+        ARCHSTUDIO_RPC_HOST: '127.0.0.1',
       },
       stdout: 'pipe',
       stderr: 'pipe',

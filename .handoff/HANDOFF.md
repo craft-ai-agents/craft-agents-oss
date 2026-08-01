@@ -33,7 +33,7 @@
 ## Session 2026-07-24
 - RunsPanel now live: reads `sessionMetaMapAtom` (jotai) — real session runs with status (running/failed/completed/idle), duration, message count, token usage/cost. Sorted running-first. Live-count pill + empty state + spinner CSS.
 - Fixed LayoutShell import (`../panels/runs`), `runs` view routed.
-- Fixed pre-existing typecheck errors: MemoryPanel imports `@craft-agent/shared/memory/types`, mocks cast via unknown, source display uses sessionId, exported MemoryPanelProps/CommandPanelProps. `bun run typecheck` clean.
+- Fixed pre-existing typecheck errors: MemoryPanel imports `@archstudio/shared/memory/types`, mocks cast via unknown, source display uses sessionId, exported MemoryPanelProps/CommandPanelProps. `bun run typecheck` clean.
 - CommandPanel now runs real shell commands: new `archCommand` RPC (RUN/KILL) in `main/handlers/system.ts` using `spawn` (shell:true, 200KB output cap, tracked in a Map by run id for kill). Exposed via channel-map as `runArchCommand`/`killArchCommand` on ElectronAPI. Panel shows exit code, duration, stopped-by-user; Stop button kills the live process. CommandPanel rendered under HomeHero on the `command` view.
 
 - ProjectsPanel: card grid from `projectsAtom`; per-project session count / running count / last activity derived from `sessionMetaMapAtom`; search, archived toggle, per-project accent color.

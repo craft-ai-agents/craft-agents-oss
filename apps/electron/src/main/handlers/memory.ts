@@ -1,16 +1,16 @@
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import { RPC_CHANNELS } from '@archstudio/shared/protocol'
+import type { RpcServer } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
-import type { AnyMemory, MemoryEdge, MemoryQuery, MemorySearchResult } from '@craft-agent/shared/memory/types'
+import type { AnyMemory, MemoryEdge, MemoryQuery, MemorySearchResult } from '@archstudio/shared/memory/types'
 import { app, shell } from 'electron'
 import { existsSync } from 'fs'
 import { join } from 'path'
 
-import type { MemoryRepository } from '@craft-agent/shared/memory/repository'
-import type { VaultWatcher } from '@craft-agent/shared/memory/vault-watcher'
+import type { MemoryRepository } from '@archstudio/shared/memory/repository'
+import type { VaultWatcher } from '@archstudio/shared/memory/vault-watcher'
 
 let repoPromise: Promise<MemoryRepository> | null = null
-let vaultPromise: Promise<import('@craft-agent/shared/memory/obsidian-sync').ObsidianVaultSync> | null = null
+let vaultPromise: Promise<import('@archstudio/shared/memory/obsidian-sync').ObsidianVaultSync> | null = null
 let watcherPromise: Promise<VaultWatcher> | null = null
 /** Current vault root path. May be overridden by `memoryVaultPath` in config. */
 let currentVaultRoot: string | null = null
@@ -26,7 +26,7 @@ let currentVaultRoot: string | null = null
 function getVaultRoot(): string {
   if (currentVaultRoot) return currentVaultRoot
   try {
-    const { loadStoredConfig } = require('@craft-agent/shared/config/storage')
+    const { loadStoredConfig } = require('@archstudio/shared/config/storage')
     const config = loadStoredConfig()
     if (config?.memoryVaultPath) {
       const customPath = config.memoryVaultPath
@@ -47,7 +47,7 @@ function getVaultRoot(): string {
  */
 function isCustomVaultPath(): boolean {
   try {
-    const { loadStoredConfig } = require('@craft-agent/shared/config/storage')
+    const { loadStoredConfig } = require('@archstudio/shared/config/storage')
     const config = loadStoredConfig()
     return !!config?.memoryVaultPath
   } catch {
@@ -64,8 +64,8 @@ function isCustomVaultPath(): boolean {
 export async function getMemoryRepository(): Promise<MemoryRepository> {
   if (!repoPromise) {
     repoPromise = (async () => {
-      const { openMemoryDatabase, bootstrapStorage } = await import('@craft-agent/shared/memory/database')
-      const { MemoryRepository } = await import('@craft-agent/shared/memory/repository')
+      const { openMemoryDatabase, bootstrapStorage } = await import('@archstudio/shared/memory/database')
+      const { MemoryRepository } = await import('@archstudio/shared/memory/repository')
       const dbPath = app.getPath('userData')
       const db = openMemoryDatabase(dbPath)
       bootstrapStorage(db)
@@ -94,7 +94,7 @@ export async function closeMemoryRepository(): Promise<void> {
 export async function getVaultSync() {
   if (!vaultPromise) {
     vaultPromise = (async () => {
-      const { ObsidianVaultSync } = await import('@craft-agent/shared/memory/obsidian-sync')
+      const { ObsidianVaultSync } = await import('@archstudio/shared/memory/obsidian-sync')
       return ObsidianVaultSync.createSync(getVaultRoot())
     })()
   }
@@ -109,7 +109,7 @@ export async function getVaultSync() {
 export async function getVaultWatcher(): Promise<VaultWatcher> {
   if (!watcherPromise) {
     watcherPromise = (async () => {
-      const { VaultWatcher } = await import('@craft-agent/shared/memory/vault-watcher')
+      const { VaultWatcher } = await import('@archstudio/shared/memory/vault-watcher')
       const repo = await getMemoryRepository()
       const vault = await getVaultSync()
       const watcher = new VaultWatcher(getVaultRoot(), repo, vault)
@@ -300,7 +300,7 @@ export function registerMemoryHandlers(server: RpcServer, _deps: HandlerDeps): v
 
   server.handle(RPC_CHANNELS.memory.VAULT_SET, async (_ctx, path: string) => {
     // Persist to config
-    const { loadStoredConfig, saveConfig } = await import('@craft-agent/shared/config/storage')
+    const { loadStoredConfig, saveConfig } = await import('@archstudio/shared/config/storage')
     const config = loadStoredConfig()
     if (config) {
       config.memoryVaultPath = path

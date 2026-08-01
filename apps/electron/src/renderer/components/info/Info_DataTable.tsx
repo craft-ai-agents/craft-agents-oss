@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next"
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTable, SortableHeader } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@archstudio/ui'
 import { cn } from '@/lib/utils'
 
 export interface Info_DataTableProps<TData, TValue> {

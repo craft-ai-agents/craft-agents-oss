@@ -47,7 +47,7 @@ import { isMac } from "@/lib/platform"
 import { Button } from "@/components/ui/button"
 import { HeaderIconButton } from "@/components/ui/HeaderIconButton"
 import { Separator } from "@/components/ui/separator"
-import { Tooltip, TooltipTrigger, TooltipContent, DocumentFormattedMarkdownOverlay } from "@craft-agent/ui"
+import { Tooltip, TooltipTrigger, TooltipContent, DocumentFormattedMarkdownOverlay } from "@archstudio/ui"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -84,8 +84,8 @@ import { useSession } from "@/hooks/useSession"
 import { ensureSessionMessagesLoadedAtom } from "@/atoms/sessions"
 import { AppShellProvider, type AppShellContextType } from "@/context/AppShellContext"
 import { LayoutShell, type ShellSessionContext } from "@/shell"
-import { PERMISSION_MODE_CONFIG } from "@craft-agent/shared/agent/modes"
-import { getThinkingLevelNameKey } from "@craft-agent/shared/agent/thinking-levels"
+import { PERMISSION_MODE_CONFIG } from "@archstudio/shared/agent/modes"
+import { getThinkingLevelNameKey } from "@archstudio/shared/agent/thinking-levels"
 import { getModelShortName } from "@config/models"
 import { getConnectionDisplayName } from "@config/provider-labels"
 import { defaultSessionOptions } from "@/hooks/useSessionOptions"
@@ -110,9 +110,9 @@ import { useContainerWidth } from "@/hooks/useContainerWidth"
 import { LabelIcon, LabelValueTypeIcon } from "@/components/ui/label-icon"
 import { filterSessionStatuses as filterLabelMenuStates } from "@/components/ui/label-menu"
 import { createLabelMenuItems, filterItems as filterLabelMenuItems, type LabelMenuItem } from "@/components/ui/label-menu-utils"
-import { buildLabelTree, getDescendantIds, getLabelDisplayName, flattenLabels, extractLabelId, findLabelById, sortLabelsForDisplay, matchesLabelFilter } from "@craft-agent/shared/labels"
-import type { LabelConfig, LabelTreeNode } from "@craft-agent/shared/labels"
-import { resolveEntityColor } from "@craft-agent/shared/colors"
+import { buildLabelTree, getDescendantIds, getLabelDisplayName, flattenLabels, extractLabelId, findLabelById, sortLabelsForDisplay, matchesLabelFilter } from "@archstudio/shared/labels"
+import type { LabelConfig, LabelTreeNode } from "@archstudio/shared/labels"
+import { resolveEntityColor } from "@archstudio/shared/colors"
 import * as storage from "@/lib/local-storage"
 import { toast } from "sonner"
 import { navigate, routes } from "@/lib/navigate"
@@ -2455,6 +2455,7 @@ function ChatSessionAreaContent({
         onNewChat={openNewChat ? () => { void openNewChat() } : undefined}
         sessionContext={shellSessionContext}
         maxOpenDirs={maxOpenDirs}
+        onToggleSidebar={handleToggleSidebar}
       >
         {/* === TOP BAR === */}
         {!isFocusedMode && <TopBar
