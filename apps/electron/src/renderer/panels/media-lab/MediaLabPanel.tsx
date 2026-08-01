@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { VariableSizeGrid, type VariableSizeGrid as VariableSizeGridType } from 'react-window'
-import { Clapperboard, Image, Music, Video, FileText, Loader2, ExternalLink, Sparkles, Wand2, Download, EyeOff, X, CheckSquare, FolderOpen, Power, Cpu, Gauge, Clock3, Layers3, ChevronDown, RotateCcw, PlayCircle } from 'lucide-react'
+import { Clapperboard, Image, Music, Video, FileText, Loader2, ExternalLink, Sparkles, Wand2, Download, EyeOff, X, CheckSquare, FolderOpen, Power, Cpu, Gauge, Clock3, Layers3, ChevronDown, RotateCcw, PlayCircle, Pause, Volume2, VolumeX, Maximize2, SkipBack } from 'lucide-react'
 import type {
   ComfyHealth,
   ComfyJobStatus,
@@ -82,6 +82,13 @@ function isRecentlyGenerated(mtime?: number): boolean {
 function MediaVideoPlayer({ item, onClose }: { item: MediaItem; onClose: () => void }) {
   const [src, setSrc] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [playing, setPlaying] = useState(false)
+  const [muted, setMuted] = useState(false)
+  const [volume, setVolume] = useState(1)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const stageRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     let objectUrl: string | null = null
@@ -116,12 +123,54 @@ function MediaVideoPlayer({ item, onClose }: { item: MediaItem; onClose: () => v
           <div><span>MEDIA LAB / VIDEO</span><strong>{item.name}</strong></div>
           <button type="button" onClick={onClose} aria-label="Close video"><X size={17} /></button>
         </div>
-        <div className="media-video-overlay__stage">
-          {error ? <div className="media-panel__error">{error}</div> : src ? <video src={src} controls autoPlay playsInline /> : <Loader2 size={24} className="media-panel__spinner" />}
+        <div ref={stageRef} className="media-video-overlay__stage">
+          {error ? <div className="media-panel__error">{error}</div> : src ? (
+            <video
+              ref={videoRef}
+              src={src}
+              autoPlay
+              playsInline
+              muted={muted}
+              onClick={() => playing ? videoRef.current?.pause() : void videoRef.current?.play()}
+              onPlay={() => setPlaying(true)}
+              onPause={() => setPlaying(false)}
+              onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
+              onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+            />
+          ) : <Loader2 size={24} className="media-panel__spinner" />}
+          {src && (
+            <div className="media-video-controls">
+              <input
+                className="media-video-controls__timeline"
+                type="range"
+                min={0}
+                max={duration || 0}
+                step={0.01}
+                value={currentTime}
+                aria-label="Video position"
+                style={{ '--media-progress': `${duration ? currentTime / duration * 100 : 0}%` } as React.CSSProperties}
+                onChange={(event) => {
+                  const value = Number(event.target.value)
+                  if (videoRef.current) videoRef.current.currentTime = value
+                  setCurrentTime(value)
+                }}
+              />
+              <div className="media-video-controls__row">
+                <button type="button" onClick={() => { if (videoRef.current) videoRef.current.currentTime = 0 }} aria-label="Restart video"><SkipBack size={16} /></button>
+                <button type="button" className="is-primary" onClick={() => playing ? videoRef.current?.pause() : void videoRef.current?.play()} aria-label={playing ? 'Pause' : 'Play'}>{playing ? <Pause size={18} /> : <PlayCircle size={18} />}</button>
+                <button type="button" onClick={() => { const next = !muted; setMuted(next); if (videoRef.current) videoRef.current.muted = next }} aria-label={muted ? 'Unmute' : 'Mute'}>{muted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}</button>
+                <input type="range" min={0} max={1} step={0.05} value={volume} aria-label="Volume" onChange={(event) => { const value = Number(event.target.value); setVolume(value); setMuted(value === 0); if (videoRef.current) { videoRef.current.volume = value; videoRef.current.muted = value === 0 } }} />
+                <span className="media-video-controls__time">{formatElapsed(currentTime * 1000)} <i>/</i> {formatElapsed(duration * 1000)}</span>
+                <span className="media-video-controls__spacer" />
+                <span className="media-video-controls__badge">MP4</span>
+                <button type="button" onClick={() => void stageRef.current?.requestFullscreen()} aria-label="Fullscreen"><Maximize2 size={16} /></button>
+              </div>
+            </div>
+          )}
         </div>
         <div className="media-video-overlay__footer">
-          <span>{formatSize(item.size)} · {item.sessionTitle}</span>
-          <button type="button" onClick={() => window.electronAPI.showInFolder(item.path)}><FolderOpen size={14} /> Show in folder</button>
+          <div><span>LOCAL CREATION</span><strong>{formatSize(item.size)} · {item.sessionTitle}</strong></div>
+          <button type="button" onClick={() => window.electronAPI.showInFolder(item.path)}><FolderOpen size={14} /> Reveal output</button>
         </div>
       </div>
     </div>
