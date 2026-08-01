@@ -794,6 +794,7 @@
   margin-bottom: 12px;
   color: var(--destructive);
   border: 1px solid color-mix(in oklch, var(--destructive) 30%, transparent);
+  white-space: pre-line;
 }
 
 @media (max-width: 760px) {

@@ -15,8 +15,14 @@ import {
   type MediaListRequest,
 } from '@archstudio/shared/protocol'
 import type { HandlerDeps } from '../handler-deps'
-import { ComfyUIClient } from '../../integrations/comfyui/client'
-import { applyWorkflowParameters, discoverComfyWorkflows, namespaceWorkflowOutputs } from '../../integrations/comfyui/workflow'
+import { ComfyClientError, ComfyUIClient } from '../../integrations/comfyui/client'
+import {
+  applyMissingNodeDefaults,
+  applyWorkflowParameters,
+  discoverComfyWorkflows,
+  namespaceWorkflowOutputs,
+  parseComfyWorkflow,
+} from '../../integrations/comfyui/workflow'
 import { classifyMedia } from './sessions'
 
 export const HANDLED_CHANNELS = [
@@ -66,6 +72,28 @@ async function readHealth(client: ComfyUIClient): Promise<ComfyHealth> {
 
 function queueContains(entries: unknown[], promptId: string): boolean {
   return entries.some((entry) => Array.isArray(entry) && entry.some((value) => value === promptId))
+}
+
+function formatPromptValidationError(error: ComfyClientError): string {
+  const detail = error.detail
+  if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return error.message
+  const nodeErrors = (detail as Record<string, unknown>).node_errors
+  if (!nodeErrors || typeof nodeErrors !== 'object' || Array.isArray(nodeErrors)) return error.message
+  const messages: string[] = []
+  for (const [nodeId, rawNode] of Object.entries(nodeErrors as Record<string, unknown>)) {
+    if (!rawNode || typeof rawNode !== 'object' || Array.isArray(rawNode)) continue
+    const classType = (rawNode as Record<string, unknown>).class_type
+    const errors = (rawNode as Record<string, unknown>).errors
+    if (!Array.isArray(errors)) continue
+    for (const raw of errors) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue
+      const item = raw as Record<string, unknown>
+      const message = typeof item.message === 'string' ? item.message : 'Validation failed'
+      const details = typeof item.details === 'string' && item.details ? `: ${item.details}` : ''
+      messages.push(`${typeof classType === 'string' ? classType : 'Node'} ${nodeId} — ${message}${details}`)
+    }
+  }
+  return messages.length > 0 ? messages.join('\n') : error.message
 }
 
 function historyEntry(history: Record<string, unknown>, promptId: string): Record<string, unknown> | undefined {
@@ -170,29 +198,50 @@ export function registerComfyUIHandlers(server: RpcServer, deps: HandlerDeps): v
   })
 
   server.handle(RPC_CHANNELS.media.COMFY_WORKFLOWS, async (): Promise<ComfyWorkflowList> => {
-    const result = await discoverComfyWorkflows(configuredWorkflowRoot())
+    const [result, objectInfo] = await Promise.all([
+      discoverComfyWorkflows(configuredWorkflowRoot()),
+      client.getObjectInfo(),
+    ])
     return {
-      workflows: result.workflows.map((workflow) => ({
-        id: workflow.id,
-        name: workflow.name,
-        kind: workflow.kind,
-        nodeClasses: workflow.nodeClasses,
-        parameters: workflow.parameters.map(({ id, label, kind, value, options }) => ({ id, label, kind, value, options })),
-      })),
+      workflows: result.workflows.map((workflow) => {
+        const hydrated = parseComfyWorkflow(
+          applyMissingNodeDefaults(workflow.workflow, objectInfo),
+          { path: workflow.path, id: workflow.id, name: workflow.name },
+        )
+        return {
+          id: hydrated.id,
+          name: hydrated.name,
+          kind: hydrated.kind,
+          nodeClasses: hydrated.nodeClasses,
+          parameters: hydrated.parameters.map(({ id, label, kind, value, options }) => ({ id, label, kind, value, options })),
+        }
+      }),
       rejectedCount: result.rejected.length,
     }
   })
 
   server.handle(RPC_CHANNELS.media.COMFY_RUN, async (ctx, request: ComfyRunRequest): Promise<ComfyRunResult> => {
     if (!request?.workflowId) throw new Error('workflowId is required')
-    const result = await discoverComfyWorkflows(configuredWorkflowRoot())
-    const definition = result.workflows.find((workflow) => workflow.id === request.workflowId)
-    if (!definition) throw new Error(`Unknown ComfyUI workflow: ${request.workflowId}`)
+    const [result, objectInfo] = await Promise.all([
+      discoverComfyWorkflows(configuredWorkflowRoot()),
+      client.getObjectInfo(ctx.signal),
+    ])
+    const discovered = result.workflows.find((workflow) => workflow.id === request.workflowId)
+    if (!discovered) throw new Error(`Unknown ComfyUI workflow: ${request.workflowId}`)
+    const definition = parseComfyWorkflow(
+      applyMissingNodeDefaults(discovered.workflow, objectInfo),
+      { path: discovered.path, id: discovered.id, name: discovered.name },
+    )
     const parameterized = applyWorkflowParameters(definition, request.parameters ?? {})
     const workflow = namespaceWorkflowOutputs(parameterized, definition.kind)
-    const queued = await client.queuePrompt(workflow, `archstudio-${ctx.clientId}`, ctx.signal)
-    deps.platform.logger.info('Queued ComfyUI workflow', { workflowId: request.workflowId, promptId: queued.prompt_id })
-    return { promptId: queued.prompt_id, queueNumber: queued.number }
+    try {
+      const queued = await client.queuePrompt(workflow, `archstudio-${ctx.clientId}`, ctx.signal)
+      deps.platform.logger.info('Queued ComfyUI workflow', { workflowId: request.workflowId, promptId: queued.prompt_id })
+      return { promptId: queued.prompt_id, queueNumber: queued.number }
+    } catch (error) {
+      if (error instanceof ComfyClientError) throw new Error(formatPromptValidationError(error))
+      throw error
+    }
   })
 
   server.handle(RPC_CHANNELS.media.COMFY_STATUS, async (ctx, request: ComfyJobStatusRequest): Promise<ComfyJobStatus> => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { applyWorkflowParameters, ComfyWorkflowError, namespaceWorkflowOutputs, parseComfyWorkflow } from './workflow'
+import { applyMissingNodeDefaults, applyWorkflowParameters, ComfyWorkflowError, namespaceWorkflowOutputs, parseComfyWorkflow } from './workflow'
 
 const agnesVideo = {
   disable_random_seed: true,
@@ -75,6 +75,22 @@ describe('ComfyUI workflow parser', () => {
     expect(next['2']?.inputs.seed).toBe(999)
     expect(definition.workflow['2']?.inputs.prompt).toBe('A cinematic camera move')
     expect(definition.workflow['2']?.inputs.duration).toBe(5)
+  })
+
+  it('hydrates newly required node inputs from the live schema', () => {
+    const definition = parseComfyWorkflow(agnesVideo, { path: 'agnes.json' })
+    const hydrated = applyMissingNodeDefaults(definition.workflow, {
+      AgnesVideo: {
+        input: {
+          required: {
+            model: [['agnes-video-v2.0'], { default: 'agnes-video-v2.0' }],
+          },
+        },
+      },
+    })
+
+    expect(hydrated['2']?.inputs.model).toBe('agnes-video-v2.0')
+    expect(definition.workflow['2']?.inputs.model).toBeUndefined()
   })
 
   it('namespaces app-submitted outputs without mutating saved workflows', () => {

@@ -121,6 +121,33 @@ export function parseComfyWorkflow(value: unknown, options: { path: string; id?:
   }
 }
 
+export function applyMissingNodeDefaults(
+  workflow: Record<string, ComfyWorkflowNode>,
+  objectInfo: Record<string, unknown>,
+): Record<string, ComfyWorkflowNode> {
+  const next = structuredClone(workflow)
+  for (const node of Object.values(next)) {
+    const schema = objectInfo[node.class_type]
+    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) continue
+    const input = (schema as Record<string, unknown>).input
+    if (!input || typeof input !== 'object' || Array.isArray(input)) continue
+    const required = (input as Record<string, unknown>).required
+    if (!required || typeof required !== 'object' || Array.isArray(required)) continue
+
+    for (const [name, rawSpec] of Object.entries(required as Record<string, unknown>)) {
+      if (name in node.inputs || !Array.isArray(rawSpec)) continue
+      const metadata = rawSpec[1]
+      if (metadata && typeof metadata === 'object' && !Array.isArray(metadata) && 'default' in metadata) {
+        node.inputs[name] = (metadata as Record<string, unknown>).default
+        continue
+      }
+      const choices = rawSpec[0]
+      if (Array.isArray(choices) && choices.length > 0) node.inputs[name] = choices[0]
+    }
+  }
+  return next
+}
+
 export function namespaceWorkflowOutputs(
   workflow: Record<string, ComfyWorkflowNode>,
   kind: ComfyWorkflowKind,
