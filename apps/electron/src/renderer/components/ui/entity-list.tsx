@@ -63,6 +63,8 @@ export interface EntityListProps<T> {
   viewportRef?: React.RefObject<HTMLDivElement>
   /** Additional ScrollArea class */
   scrollAreaClassName?: string
+  /** Optional visual treatment. `ledger` is used by the Sessions surface. */
+  appearance?: 'default' | 'ledger'
   className?: string
   /** Set of collapsed group keys (for collapsible groups) */
   collapsedGroups?: Set<string>
@@ -78,12 +80,19 @@ export interface EntityListProps<T> {
 // Section Header
 // ============================================================================
 
-function SectionHeader({ label }: { label: string }) {
+function SectionHeader({ label, ledger = false }: { label: string; ledger?: boolean }) {
   return (
-    <div className="px-4 py-2">
-      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+    <div className={cn(
+      "px-4 py-2",
+      ledger && "sticky top-0 z-10 flex items-center gap-3 bg-background/90 backdrop-blur-sm",
+    )}>
+      <span className={cn(
+        "text-[11px] font-medium text-muted-foreground uppercase tracking-wider",
+        ledger && "text-[10px] tracking-[0.14em] text-foreground/45 whitespace-nowrap",
+      )}>
         {label}
       </span>
+      {ledger && <span className="h-px flex-1 bg-border/45" aria-hidden />}
     </div>
   )
 }
@@ -96,6 +105,7 @@ function CollapsibleGroupHeader({
   onToggle,
   onCollapseAll,
   onExpandAll,
+  ledger = false,
 }: {
   label: string
   isCollapsed: boolean
@@ -103,13 +113,17 @@ function CollapsibleGroupHeader({
   onToggle: () => void
   onCollapseAll?: () => void
   onExpandAll?: () => void
+  ledger?: boolean
 }) {
   return (
     <ContextMenu modal>
       <ContextMenuTrigger asChild>
         <button
           onClick={onToggle}
-          className="w-full py-2 px-4 flex items-center gap-1.5 cursor-pointer group/header relative"
+          className={cn(
+            "w-full py-2 px-4 flex items-center gap-1.5 cursor-pointer group/header relative",
+            ledger && "sticky top-0 z-10 bg-background/90 backdrop-blur-sm",
+          )}
         >
           <div className="absolute inset-y-0.5 left-2 right-2 rounded-[6px] group-hover/header:bg-foreground/2 transition-colors pointer-events-none" />
           <ChevronRight
@@ -118,9 +132,13 @@ function CollapsibleGroupHeader({
               !isCollapsed && "rotate-90"
             )}
           />
-          <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground relative">
-            {label}{isCollapsed && <> · <span className="text-muted-foreground/50">{itemCount}</span></>}
+          <span className={cn(
+            "text-[11px] font-medium uppercase tracking-wider text-muted-foreground relative",
+            ledger && "text-[10px] tracking-[0.14em] text-foreground/45",
+          )}>
+            {label}{isCollapsed && <> · <span className="text-muted-foreground/50 tabular-nums">{itemCount}</span></>}
           </span>
+          {ledger && <span className="h-px flex-1 bg-border/45 relative" aria-hidden />}
         </button>
       </ContextMenuTrigger>
       <StyledContextMenuContent>
@@ -155,6 +173,7 @@ export function EntityList<T>({
   containerProps,
   viewportRef,
   scrollAreaClassName,
+  appearance = 'default',
   className,
   collapsedGroups,
   onToggleCollapse,
@@ -200,9 +219,10 @@ export function EntityList<T>({
                           onToggle={() => onToggleCollapse(group.key)}
                           onCollapseAll={onCollapseAll}
                           onExpandAll={onExpandAll}
+                          ledger={appearance === 'ledger'}
                         />
                       ) : (
-                        <SectionHeader label={group.label} />
+                        <SectionHeader label={group.label} ledger={appearance === 'ledger'} />
                       )}
                       {group.items.map((item, indexInGroup) =>
                         <React.Fragment key={getKey(item)}>

@@ -76,6 +76,7 @@ import {
 import { SessionList, type ChatGroupingMode } from "../components/app-shell/SessionList"
 import { MainContentPanel } from "../components/app-shell/MainContentPanel"
 import { BoardListToggle } from "../components/app-shell/kanban/BoardListToggle"
+import { KanbanBoardContainer } from "../components/app-shell/kanban/KanbanBoardContainer"
 import { PanelStackContainer } from "../components/app-shell/PanelStackContainer"
 import { CompactSessionListFilter } from "../components/app-shell/CompactSessionListFilter"
 import type { ChatDisplayHandle } from "../components/app-shell/ChatDisplay"
@@ -2461,7 +2462,7 @@ function ChatSessionAreaContent({
   // Session list for the "Sessions" rail tab: the PanelHeader + SessionList
   // that previously lived in the standalone navigator column. Rendered by
   // LayoutShell in the main content area when the Sessions nav tab is active.
-  const sessionListNode = (
+  const renderSessionListNode = (onViewChange: (view: 'list' | 'board') => void) => (
     <div className="h-full flex flex-col min-w-0">
             <div
               style={{ width: isAutoCompact ? '100%' : sessionListWidth }}
@@ -2489,9 +2490,7 @@ function ChatSessionAreaContent({
                   {!isAutoCompact && isSessionsNavigation(navState) && (
                     <BoardListToggle
                       value="list"
-                      onChange={view => {
-                        if (view === 'board') navigate(routes.view.board())
-                      }}
+                      onChange={onViewChange}
                     />
                   )}
                   {/* Filter dropdown - available in ALL chat views.
@@ -3366,7 +3365,9 @@ function ChatSessionAreaContent({
         sessionContext={shellSessionContext}
         maxOpenDirs={maxOpenDirs}
         onToggleSidebar={handleToggleSidebar}
-        sessionListSlot={sessionListNode}
+        sessionListSlot={(view, onViewChange) => view === 'board'
+          ? <KanbanBoardContainer onViewChange={onViewChange} />
+          : renderSessionListNode(onViewChange)}
         sidebarCollapsed={archSidebarCollapsed}
       >
         {/* === TOP BAR === */}

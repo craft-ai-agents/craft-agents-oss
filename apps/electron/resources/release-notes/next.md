@@ -12,6 +12,8 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Improvements
 
+- **Sessions workflow workspace** — the Sessions tab now opens directly on its own Kanban board, keeps Board/List switching isolated from the chat workspace, and adds a denser signal-ledger list with clearer activity, unread, approval, preview, grouping, search, and selection states.
+
 - **Animated ARCHstudio sidebar branding** — replaces the static app tile beside the sidebar control with the animated ARCHstudio symbol and wordmark for a clearer, more consistent identity.
 
 - **Relevant memory recall in live chats** — ordinary user turns now retrieve a bounded set of relevant long-term memories using session, project, and workspace visibility rules, while excluding secret or superseded records. ARCHstudio also follows a conservative capture policy: explicit “remember this” requests may be saved directly, while inferred durable facts require confirmation and credentials are never stored.

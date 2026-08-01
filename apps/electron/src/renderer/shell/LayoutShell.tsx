@@ -64,6 +64,7 @@ import type { GitFileEntry, GitStatusData, ShellSessionContext } from './types'
 import { buildTreeTooltip, TreeTooltipContent, type TooltipData } from './treeTooltip'
 import { useOptionalTheme } from '../context/ThemeContext'
 import { navigate, routes } from '../lib/navigate'
+import { getInitialSessionsView } from './shell-navigation'
 import { shouldGateManualExpand, trimExpandedByCount } from '@archstudio/ui'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@archstudio/ui'
 import './LayoutShell.css'
@@ -236,7 +237,7 @@ type LayoutShellProps = {
    * the nav items and above the footer. Optional so the playground/tests can
    * mount the shell without session plumbing.
    */
-  sessionListSlot?: React.ReactNode
+  sessionListSlot?: React.ReactNode | ((view: 'list' | 'board', onViewChange: (view: 'list' | 'board') => void) => React.ReactNode)
   /**
    * Controlled collapse state for the brand rail. When provided, it drives the
    * `layout-sidebar--collapsed` class and toggle icon, and the toggle button
@@ -715,6 +716,7 @@ function LayoutShell({
   )
 
   const [activeView, setActiveView] = useState<ShellView>(initialView)
+  const [sessionsView, setSessionsView] = useState<'list' | 'board'>(getInitialSessionsView)
   const [sidebarCollapsedLocal, setSidebarCollapsed] = useState(false)
   // Controlled when the parent supplies `sidebarCollapsed`; otherwise local.
   const sidebarCollapsed = sidebarCollapsedProp ?? sidebarCollapsedLocal
@@ -2686,7 +2688,11 @@ const DEPTH_POPOVER_OPTIONS = [
 
         <main className="layout-content" role="main">
           {activeView === 'sessions' ? (
-            <div className="layout-sessions-view">{sessionListSlot}</div>
+            <div className="layout-sessions-view">
+              {typeof sessionListSlot === 'function'
+                ? sessionListSlot(sessionsView, setSessionsView)
+                : sessionListSlot}
+            </div>
           ) : activeView === 'memory' ? (
             <MemoryPanel />
           ) : activeView === 'runs' ? (

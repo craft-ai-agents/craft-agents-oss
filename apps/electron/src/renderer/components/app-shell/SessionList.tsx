@@ -4,7 +4,7 @@ import { useSetAtom } from "jotai"
 import { isToday, isYesterday, format, startOfDay } from "date-fns"
 import { getDateLocale } from "@archstudio/shared/i18n"
 import { useAction } from "@/actions"
-import { Inbox, Archive } from "lucide-react"
+import { Inbox, Archive, SearchX } from "lucide-react"
 
 import { getSessionStatus } from "@/utils/session"
 import * as storage from "@/lib/local-storage"
@@ -805,7 +805,7 @@ export function SessionList({
               />
             )}
             {isSearchMode && matchingFilterItems.length === 0 && otherResultItems.length > 0 && (
-              <div className="px-4 py-3 text-sm text-muted-foreground">
+              <div className="mx-3 my-2 rounded-[8px] border border-border/45 bg-foreground/[0.018] px-3 py-2 text-[11px] text-foreground/52">
                 {t("session.noResultsInFilter")}
               </div>
             )}
@@ -813,14 +813,17 @@ export function SessionList({
         }
         emptyState={
           isSearchMode && !isSearchingContent ? (
-            <div className="flex flex-col items-center justify-center py-12 px-4">
-              <p className="text-sm text-muted-foreground">{t("session.noSessionsFound")}</p>
-              <p className="text-xs text-muted-foreground/60 mt-0.5">
+            <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-[10px] border border-border/50 bg-foreground/[0.018]">
+                <SearchX className="h-4 w-4 text-foreground/40" />
+              </div>
+              <p className="text-[13px] font-medium text-foreground/80">{t("session.noSessionsFound")}</p>
+              <p className="text-[11px] leading-5 text-muted-foreground/60 mt-0.5 max-w-[240px]">
                 {t("session.noSessionsFoundDesc")}
               </p>
               <button
                 onClick={() => onSearchChange?.('')}
-                className="text-xs text-foreground hover:underline mt-2"
+                className="mt-3 inline-flex h-7 items-center rounded-[7px] border border-border/55 bg-background px-2.5 text-[11px] font-medium text-foreground/75 shadow-minimal transition-colors hover:bg-foreground/[0.035] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 {t("session.clearSearch")}
               </button>
@@ -843,6 +846,7 @@ export function SessionList({
           'aria-label': 'Sessions',
         }}
         scrollAreaClassName="select-none mask-fade-top-short"
+        appearance="ledger"
         collapsedGroups={collapsedGroups}
         onToggleCollapse={toggleGroupCollapse}
         onCollapseAll={collapseAllGroups}

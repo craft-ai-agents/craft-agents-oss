@@ -93,7 +93,7 @@ function buildModelCatalog(connections: LlmConnectionWithStatus[]): {
  * persisted `kanbanColumn`, falling back to the session status' default column;
  * the status badge is independent from the column.
  */
-export function KanbanBoardContainer() {
+export function KanbanBoardContainer({ onViewChange }: { onViewChange?: (view: 'list' | 'board') => void } = {}) {
   const { activeWorkspaceId, llmConnections, sessionStatuses, onCreateSession, onSendMessage, onJumpToTaskSessions } =
     useAppShellContext()
   const { t } = useTranslation()
@@ -582,7 +582,8 @@ export function KanbanBoardContainer() {
           <BoardListToggle
             value="board"
             onChange={view => {
-              if (view === 'list') navigate(routes.view.allSessions())
+              if (onViewChange) onViewChange(view)
+              else if (view === 'list') navigate(routes.view.allSessions())
             }}
           />
         </div>
