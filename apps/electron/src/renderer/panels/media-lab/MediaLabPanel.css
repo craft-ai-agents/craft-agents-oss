@@ -559,6 +559,22 @@
   color: var(--media-text);
 }
 
+.media-tab:disabled {
+  cursor: default;
+}
+
+.media-tab--service {
+  margin-right: 4px;
+  border-color: var(--media-border);
+  background: var(--media-fill-soft);
+}
+
+.media-tab--service.is-online {
+  border-color: color-mix(in oklch, var(--brand-lime) 38%, var(--media-border));
+  color: var(--brand-lime);
+  background: color-mix(in oklch, var(--brand-lime) 8%, transparent);
+}
+
 .media-create {
   /* Per-tool accents for the Create cards. Declared here (not inline in the
      TSX as literals) so they stay theme-derived; the TSX only names them.

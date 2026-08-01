@@ -146,7 +146,15 @@ const mediaList = mock(
   },
 )
 
+let comfyConnected = true
 const comfyHealth = mock(async () => ({
+  connected: comfyConnected,
+  baseUrl: 'http://127.0.0.1:8188',
+  version: comfyConnected ? '0.28.3' : undefined,
+  device: comfyConnected ? 'NVIDIA GeForce RTX 5070 Ti' : undefined,
+  error: comfyConnected ? undefined : 'ComfyUI is offline',
+}))
+const comfyStart = mock(async () => ({
   connected: true,
   baseUrl: 'http://127.0.0.1:8188',
   version: '0.28.3',
@@ -175,7 +183,7 @@ const comfyRun = mock(async () => ({ promptId: 'prompt-12345678' }))
 const comfyStatus = mock(async (request: { promptId: string }) => ({ promptId: request.promptId, state: 'completed' }))
 const comfyCancel = mock(async () => undefined)
 
-;(win as any).electronAPI = { mediaList, comfyHealth, comfyWorkflows, comfyRun, comfyStatus, comfyCancel }
+;(win as any).electronAPI = { mediaList, comfyHealth, comfyStart, comfyWorkflows, comfyRun, comfyStatus, comfyCancel }
 
 // -------------------------------------------------------------------------
 // 4. Mock the AppShellContext module — the panel calls `useAppShellContext`
@@ -262,7 +270,9 @@ describe('MediaLabPanel smoke test', () => {
     callIndex = 0
     pendingFirstPage = null
     lastOnItemsRendered = null
+    comfyConnected = true
     comfyHealth.mockClear()
+    comfyStart.mockClear()
     comfyWorkflows.mockClear()
     comfyRun.mockClear()
     comfyStatus.mockClear()
@@ -317,8 +327,10 @@ describe('MediaLabPanel smoke test', () => {
     // Click Library tab.
     await act(async () => {
       const buttons = container.querySelectorAll('button.media-tab')
-      expect(buttons.length).toBe(2)
-      const libraryButton = buttons[1] as unknown as HTMLButtonElement
+      expect(buttons.length).toBe(3)
+      const libraryButton = Array.from(buttons).find(
+        (button: any) => button.textContent?.includes('Library'),
+      ) as HTMLButtonElement
       libraryButton.click()
     })
 
@@ -394,5 +406,32 @@ describe('MediaLabPanel smoke test', () => {
       parameters: { '1.prompt': 'Studio portrait' },
     })
     expect(container.textContent).toContain('prompt-1')
+  })
+
+  it('starts an offline ComfyUI service from the header and refreshes workflows', async () => {
+    comfyConnected = false
+    const { container, root } = await renderPanel()
+    lastContainer = container
+    lastRoot = root
+
+    await act(async () => {
+      await flush()
+      await flush()
+    })
+
+    const startButton = Array.from(container.querySelectorAll('button')).find(
+      (button: any) => button.textContent?.includes('Start ComfyUI'),
+    ) as HTMLButtonElement
+    expect(startButton).toBeTruthy()
+
+    await act(async () => {
+      startButton.click()
+      await flush()
+      await flush()
+    })
+
+    expect(comfyStart).toHaveBeenCalledTimes(1)
+    expect(comfyWorkflows).toHaveBeenCalledTimes(2)
+    expect(container.textContent).toContain('ComfyUI Online')
   })
 })

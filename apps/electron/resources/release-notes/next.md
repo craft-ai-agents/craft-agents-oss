@@ -4,7 +4,7 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Features
 
-- **ComfyUI-powered Media Lab** — connects the Image and Video creation surfaces to the local ComfyUI service, discovers API-format workflows including installed Agnes nodes, exposes safe typed parameters, and supports submission, live job polling, and cancellation without moving models or outputs off the D drive.
+- **ComfyUI-powered Media Lab** — connects the Image and Video creation surfaces to the local ComfyUI service, can start the existing D-drive installation directly from the header, discovers API-format workflows including installed Agnes nodes, exposes safe typed parameters, and supports submission, live job polling, and cancellation without moving models or outputs off the D drive.
 
 - **Save to Memory from Activity cards** — each activity card in the Activities panel now has a "Memory" button that opens a review dialog pre-filled with a session summary (task, outcome, message count, duration). Users can edit the title and content, choose the memory class (episodic, semantic, procedural, or profile), and save to the persistent memory store. Duplicate detection warns when a similar memory already exists.
 

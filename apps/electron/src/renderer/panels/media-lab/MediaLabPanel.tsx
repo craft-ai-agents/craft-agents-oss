@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAtomValue } from 'jotai'
 import { VariableSizeGrid, type VariableSizeGrid as VariableSizeGridType } from 'react-window'
-import { Clapperboard, Image, Music, Video, FileText, Loader2, ExternalLink, Sparkles, Wand2, Download, EyeOff, Check, X, CheckSquare, FolderOpen } from 'lucide-react'
+import { Clapperboard, Image, Music, Video, FileText, Loader2, ExternalLink, Sparkles, Wand2, Download, EyeOff, Check, X, CheckSquare, FolderOpen, Power } from 'lucide-react'
 import type {
   ComfyHealth,
   ComfyJobStatus,
@@ -87,6 +87,7 @@ export function MediaLabPanel() {
   const [comfyError, setComfyError] = useState<string | null>(null)
   const [comfyJob, setComfyJob] = useState<ComfyJobStatus | null>(null)
   const [comfySubmitting, setComfySubmitting] = useState(false)
+  const [comfyStarting, setComfyStarting] = useState(false)
 
   /**
    * `topId` — renderer's coarse "the most recent session has changed"
@@ -195,6 +196,23 @@ export function MediaLabPanel() {
       setComfyError(cancelError instanceof Error ? cancelError.message : String(cancelError))
     }
   }, [comfyJob])
+
+  const startComfyUI = useCallback(async () => {
+    if (comfyStarting || comfyHealth?.connected) return
+    setComfyStarting(true)
+    setComfyError(null)
+    try {
+      const health = await window.electronAPI.comfyStart()
+      setComfyHealth(health)
+      const workflowList = await window.electronAPI.comfyWorkflows()
+      setComfyWorkflows(workflowList.workflows)
+      setComfyRejectedCount(workflowList.rejectedCount)
+    } catch (startError) {
+      setComfyError(startError instanceof Error ? startError.message : String(startError))
+    } finally {
+      setComfyStarting(false)
+    }
+  }, [comfyHealth?.connected, comfyStarting])
 
   // ---------- Virtualization plumbing (unchanged from prior refactor) ----------
 
@@ -616,6 +634,16 @@ export function MediaLabPanel() {
           )}
         </div>
         <div className="media-panel__tabs">
+          <button
+            type="button"
+            className={`media-tab media-tab--service${comfyHealth?.connected ? ' is-online' : ''}`}
+            disabled={comfyStarting || comfyHealth?.connected}
+            onClick={() => void startComfyUI()}
+            title={comfyHealth?.connected ? 'ComfyUI is running' : 'Start local ComfyUI'}
+          >
+            {comfyStarting ? <Loader2 size={14} className="media-panel__spinner" /> : <Power size={14} />}
+            {comfyStarting ? 'Starting…' : comfyHealth?.connected ? 'ComfyUI Online' : 'Start ComfyUI'}
+          </button>
           <button
             type="button"
             className={`media-tab${creationTab === 'create' ? ' is-active' : ''}`}

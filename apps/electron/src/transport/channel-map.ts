@@ -228,6 +228,7 @@ export const CHANNEL_MAP = {
   // typed request only carries {kind, cursor, limit}.
   mediaList: invoke(RPC_CHANNELS.media.LIST),
   comfyHealth: invoke(RPC_CHANNELS.media.COMFY_HEALTH),
+  comfyStart: invoke(RPC_CHANNELS.media.COMFY_START),
   comfyWorkflows: invoke(RPC_CHANNELS.media.COMFY_WORKFLOWS),
   comfyRun: invoke(RPC_CHANNELS.media.COMFY_RUN),
   comfyStatus: invoke(RPC_CHANNELS.media.COMFY_STATUS),
