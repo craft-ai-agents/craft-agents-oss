@@ -1,10 +1,11 @@
 import { BrowserWindow, shell, nativeTheme, Menu, app } from 'electron'
 import { windowLog } from './logger'
 import { join, resolve, sep } from 'path'
-import { existsSync, readFileSync } from 'fs'
+import { existsSync } from 'fs'
 import { release } from 'os'
 import { fileURLToPath } from 'url'
 import { getWorkspaceByNameOrId } from '@archstudio/shared/config'
+import { loadPreferences } from '@archstudio/shared/config/preferences.ts'
 import { classifyExternalUrl, formatBlockedUrlError } from '@archstudio/shared/utils/url-safety'
 import { RPC_CHANNELS, type WindowCloseRequestSource } from '../shared/types'
 import type { SavedWindow } from './window-state'
@@ -469,18 +470,19 @@ export class WindowManager {
 
       // Check the confirm-before-exit preference. If false, close directly
       // without querying the renderer for confirmation.
+      //
+      // Use loadPreferences() rather than rebuilding the path here: preferences
+      // live at CONFIG_DIR/preferences.json, and a hand-rolled
+      // CONFIG_DIR/config/preferences.json never existed, so this opt-out was
+      // silently dead and every close took the confirmation path.
       try {
-        const prefsPath = join(CONFIG_DIR, 'config', 'preferences.json')
-        if (existsSync(prefsPath)) {
-          const raw = readFileSync(prefsPath, 'utf-8')
-          const prefs = JSON.parse(raw)
-          if (prefs.confirmBeforeExit === false) {
-            // User opted out of confirmation — allow default close behavior
-            return
-          }
+        const prefs = loadPreferences()
+        if (prefs.confirmBeforeExit === false) {
+          // User opted out of confirmation — allow default close behavior
+          return
         }
       } catch {
-        // preferences file may not exist — proceed with confirmation flow
+        // preferences unreadable — proceed with confirmation flow
       }
 
       // Check if renderer is ready (mainFrame exists) - if not, allow close directly
