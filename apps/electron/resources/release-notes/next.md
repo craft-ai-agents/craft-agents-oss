@@ -24,6 +24,8 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Bug Fixes
 
+- **Functional Settings surface** — removes disabled placeholder controls for unsupported models, pets, tools, integrations, privacy, and experimental options so every visible Settings control now performs a real persisted action.
+
 - **Focused shell window alignment** — removes the obsolete hidden-TopBar inset that left a wide empty band beneath the Windows frame, and uses the active workspace name instead of duplicating ARCHstudio branding in the native caption.
 
 - **Described dialogs and drawers** — command palettes, rename and project dialogs, fullscreen previews, and compact selectors now expose clear purpose text to screen readers without repeated missing-description warnings.

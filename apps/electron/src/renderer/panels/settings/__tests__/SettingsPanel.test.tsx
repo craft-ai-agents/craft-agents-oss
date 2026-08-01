@@ -121,7 +121,7 @@ describe('Settings panel', () => {
     container = null
   })
 
-  it('loads and renders persisted settings, server posture, and unfinished-state labels', async () => {
+  it('loads and renders persisted settings and server posture without dead controls', async () => {
     const rendered = await renderPanel()
     root = rendered.root
     container = rendered.container
@@ -138,7 +138,10 @@ describe('Settings panel', () => {
     expect(container.textContent).toContain('https://studio.local:4242')
     expect(container.textContent).toContain('TLS')
     expect(checkboxFor(container, 'Confirm before exit').checked).toBe(true)
-    expect(container.querySelectorAll('.settings-soon').length).toBeGreaterThan(0)
+    expect(container.querySelectorAll('.settings-soon').length).toBe(0)
+    expect(container.textContent).not.toContain('Coming soon')
+    expect(container.textContent).not.toContain('Enable agent pets')
+    expect(container.textContent).not.toContain('Experimental media generation')
   })
 
   it('persists primary toggles, reasoning, proxy, compact UI, export, and import', async () => {

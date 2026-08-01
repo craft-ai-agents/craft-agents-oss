@@ -8,10 +8,6 @@ import {
   ShieldAlert,
   Check,
   User,
-  Bot,
-  Wrench,
-  Puzzle,
-  Lock,
   SlidersHorizontal,
   Palette,
   Keyboard,
@@ -33,10 +29,6 @@ const THINKING_LABELS: Record<ThinkingLevel, string> = {
 }
 
 type SaveState = 'idle' | 'saving' | 'saved'
-
-function SoonBadge() {
-  return <span className="settings-soon">Coming soon</span>
-}
 
 export function SettingsPanel() {
   const [thinking, setThinking] = useState<ThinkingLevel | null>(null)
@@ -424,143 +416,6 @@ export function SettingsPanel() {
               onChange={(e) => void changeCompactUI(e.target.checked)}
             />
           </label>
-        </section>
-
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <Brain size={16} />
-            <h3>Models</h3>
-          </div>
-          <p className="settings-section__lead">Default model and provider preferences.</p>
-          <div className="settings-row">
-            <div>
-              <span className="settings-row__label">Default model</span>
-              <span className="settings-row__hint">Model used for new sessions.</span>
-            </div>
-            <SoonBadge />
-            <select className="settings-select" disabled>
-              <option>Auto-select</option>
-              <option>GPT-4.1</option>
-              <option>Claude 3.7 Sonnet</option>
-              <option>Claude 3.5 Haiku</option>
-            </select>
-          </div>
-        </section>
-
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <Bot size={16} />
-            <h3>Agents</h3>
-          </div>
-          <p className="settings-section__lead">Agent personas, pets, and companion behaviour.</p>
-          <div className="settings-row">
-            <div>
-              <span className="settings-row__label">Enable agent pets</span>
-              <span className="settings-row__hint">Show a small companion avatar in the session view.</span>
-            </div>
-            <SoonBadge />
-            <input type="checkbox" className="settings-switch" disabled />
-          </div>
-          <div className="settings-row">
-            <div>
-              <span className="settings-row__label">Pet style</span>
-              <span className="settings-row__hint">Choose your companion appearance.</span>
-            </div>
-            <SoonBadge />
-            <select className="settings-select" disabled>
-              <option>ARCH Orb</option>
-              <option>Classic Dot</option>
-              <option>Minimal</option>
-            </select>
-          </div>
-        </section>
-
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <Wrench size={16} />
-            <h3>Tools</h3>
-          </div>
-          <p className="settings-section__lead">Default tool permissions and timeouts.</p>
-          <div className="settings-row">
-            <div>
-              <span className="settings-row__label">Allow code execution</span>
-              <span className="settings-row__hint">Agents can run code in sandboxed terminals.</span>
-            </div>
-            <SoonBadge />
-            <input type="checkbox" className="settings-switch" defaultChecked disabled />
-          </div>
-        </section>
-
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <Puzzle size={16} />
-            <h3>Integrations</h3>
-          </div>
-          <p className="settings-section__lead">Connected providers and third-party services.</p>
-          <div className="settings-row">
-            <div>
-              <span className="settings-row__label">GitHub</span>
-              <span className="settings-row__hint">Connect repositories and issue trackers.</span>
-            </div>
-            <SoonBadge />
-            <button type="button" className="settings-button" disabled>Connect</button>
-          </div>
-          <div className="settings-row">
-            <div>
-              <span className="settings-row__label">Figma</span>
-              <span className="settings-row__hint">Import designs and comments.</span>
-            </div>
-            <SoonBadge />
-            <button type="button" className="settings-button" disabled>Connect</button>
-          </div>
-        </section>
-
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <Lock size={16} />
-            <h3>Privacy</h3>
-          </div>
-          <p className="settings-section__lead">Data retention and telemetry controls.</p>
-          <div className="settings-row">
-            <div>
-              <span className="settings-row__label">Telemetry</span>
-              <span className="settings-row__hint">Share anonymous usage data to improve the product.</span>
-            </div>
-            <SoonBadge />
-            <input type="checkbox" className="settings-switch" defaultChecked disabled />
-          </div>
-          <div className="settings-row">
-            <div>
-              <span className="settings-row__label">Retain session history</span>
-              <span className="settings-row__hint">Keep chat history locally until manually deleted.</span>
-            </div>
-            <SoonBadge />
-            <input type="checkbox" className="settings-switch" defaultChecked disabled />
-          </div>
-        </section>
-
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <SlidersHorizontal size={16} />
-            <h3>Advanced</h3>
-          </div>
-          <p className="settings-section__lead">Experimental features and developer options.</p>
-          <div className="settings-row">
-            <div>
-              <span className="settings-row__label">Developer mode</span>
-              <span className="settings-row__hint">Expose internal debug panels and logging.</span>
-            </div>
-            <SoonBadge />
-            <input type="checkbox" className="settings-switch" disabled />
-          </div>
-          <div className="settings-row">
-            <div>
-              <span className="settings-row__label">Experimental media generation</span>
-              <span className="settings-row__hint">Enable early image, video and music creation tools.</span>
-            </div>
-            <SoonBadge />
-            <input type="checkbox" className="settings-switch" disabled />
-          </div>
         </section>
 
         <section className="settings-section">
