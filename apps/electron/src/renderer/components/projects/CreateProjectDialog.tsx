@@ -12,6 +12,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -54,6 +55,9 @@ export function CreateProjectDialog({ open, onCancel, onSubmit }: CreateProjectD
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{t('projectsList.createDialogTitle')}</DialogTitle>
+          <DialogDescription className="sr-only">
+            Enter a name for the new project.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="pt-2">

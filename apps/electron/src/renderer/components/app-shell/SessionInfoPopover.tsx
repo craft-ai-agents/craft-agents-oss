@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer'
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer'
 import { Input } from '@/components/ui/input'
 import { useAppShellContext, useSession } from '@/context/AppShellContext'
 import { cn } from '@/lib/utils'
@@ -66,6 +66,9 @@ export function SessionInfoPopover({
         >
           <DrawerHeader className="border-b border-border/50 px-4 py-3 group-data-[vaul-drawer-direction=bottom]/drawer-content:text-left">
             <DrawerTitle className="text-sm font-medium">{t('chat.sessionInfo')}</DrawerTitle>
+            <DrawerDescription className="sr-only">
+              Review files and details for this session.
+            </DrawerDescription>
           </DrawerHeader>
           <div className="flex-1 min-h-0 overflow-hidden">
             <SessionInfoPopoverContent sessionId={sessionId} sessionFolderPath={sessionFolderPath} />

@@ -4,6 +4,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog"
 import { useRegisterModal } from "@/context/ModalContext"
 import { isMac } from "@/lib/platform"
@@ -155,6 +156,9 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
       <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("shortcuts.title")}</DialogTitle>
+          <DialogDescription className="sr-only">
+            Browse the keyboard shortcuts available throughout ARCHstudio.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-6 py-2">
           {/* Registry-driven sections */}

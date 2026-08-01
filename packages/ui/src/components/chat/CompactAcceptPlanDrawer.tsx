@@ -7,6 +7,7 @@ import {
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
+  DrawerDescription,
   DrawerClose,
 } from '../ui/drawer'
 import { cn } from '../../lib/utils'
@@ -75,6 +76,9 @@ export function CompactAcceptPlanDrawer({
       <DrawerContent>
         <DrawerHeader>
           <DrawerTitle>{t('plan.acceptPlan')}</DrawerTitle>
+          <DrawerDescription className="sr-only">
+            Choose how to accept and execute this plan.
+          </DrawerDescription>
         </DrawerHeader>
 
         <div className="px-4 pb-6 flex flex-col gap-1">

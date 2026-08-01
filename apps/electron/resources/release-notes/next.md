@@ -24,6 +24,8 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Bug Fixes
 
+- **Described dialogs and drawers** — command palettes, rename and project dialogs, fullscreen previews, and compact selectors now expose clear purpose text to screen readers without repeated missing-description warnings.
+
 - **Accessible rail controls** — Prompt Studio’s project-context actions and the Command workspace file tree now use valid sibling controls instead of nested buttons, improving keyboard, focus, and screen-reader behavior.
 
 - **Reliable file-tree depth limits** — reducing the Command workspace file-tree depth now immediately collapses and re-gates deeper directories, even when a queued drill expansion finishes during the same UI update.

@@ -8,6 +8,7 @@ import {
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
+  DrawerDescription,
   DrawerClose,
 } from '@/components/ui/drawer'
 import { FreeFormInputContextBadge } from '../app-shell/input/FreeFormInputContextBadge'
@@ -117,6 +118,9 @@ export function CompactWorkingDirectorySelector({
         <DrawerContent>
           <DrawerHeader>
             <DrawerTitle>{t('chat.workingDirectory')}</DrawerTitle>
+            <DrawerDescription className="sr-only">
+              Choose the working directory used by this session.
+            </DrawerDescription>
           </DrawerHeader>
 
           {showFilter && (

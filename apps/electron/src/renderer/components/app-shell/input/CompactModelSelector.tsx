@@ -15,6 +15,7 @@ import {
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
+  DrawerDescription,
   DrawerClose,
 } from '@/components/ui/drawer'
 import { cn } from '@/lib/utils'
@@ -205,6 +206,9 @@ export function CompactModelSelector({
       <DrawerContent>
         <DrawerHeader>
           <DrawerTitle>{t('common.model')}</DrawerTitle>
+          <DrawerDescription className="sr-only">
+            Choose the model and connection used by this session.
+          </DrawerDescription>
         </DrawerHeader>
 
         <div className="px-2 pb-4 flex flex-col gap-0.5 max-h-[55vh] overflow-y-auto">

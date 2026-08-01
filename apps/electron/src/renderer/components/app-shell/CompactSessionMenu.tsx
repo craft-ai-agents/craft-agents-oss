@@ -58,6 +58,7 @@ import {
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
+  DrawerDescription,
 } from '@/components/ui/drawer'
 import { LabelIcon } from '@/components/ui/label-icon'
 import {
@@ -284,6 +285,9 @@ export function CompactSessionMenu({
             </button>
           )}
           <DrawerTitle className="flex-1 min-w-0 truncate">{headerTitle}</DrawerTitle>
+          <DrawerDescription className="sr-only">
+            Manage this session and its status, labels, sharing, and connections.
+          </DrawerDescription>
         </DrawerHeader>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-6">

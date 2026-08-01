@@ -5,6 +5,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -294,6 +295,9 @@ export function ServerDirectoryBrowser({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{t("settings.server.selectDirectory")}</DialogTitle>
+          <DialogDescription className="sr-only">
+            Browse the remote server filesystem and choose a working directory.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-2">

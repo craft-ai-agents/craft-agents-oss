@@ -9,6 +9,7 @@ import {
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
+  DrawerDescription,
 } from '@/components/ui/drawer'
 import type { LoadedSource } from '../../../shared/types'
 
@@ -54,6 +55,9 @@ export function CompactSourceSelector({
       <DrawerContent>
         <DrawerHeader>
           <DrawerTitle>{t('chat.sourcesTooltip')}</DrawerTitle>
+          <DrawerDescription className="sr-only">
+            Enable or disable sources for this session.
+          </DrawerDescription>
         </DrawerHeader>
 
         {sources.length > 0 && (
