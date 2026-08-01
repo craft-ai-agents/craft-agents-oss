@@ -1513,10 +1513,7 @@ export default function App() {
           <WindowCloseHandler />
 
           {/* Main UI */}
-          <div
-            className="h-full flex flex-col text-foreground"
-            style={{ paddingTop: 'var(--topbar-height)' }}
-          >
+          <div className="h-full flex flex-col text-foreground">
             {showTransportConnectionBanner && connectionState && (
               <TransportConnectionBanner
                 state={connectionState}

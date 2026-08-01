@@ -163,22 +163,24 @@ export class WindowManager {
 
   /**
    * Apply the window-title policy across all managed windows:
-   *   1 window  → app name ("ARCHstudio") on the lone window
-   *   ≥2 windows → workspace name on each window, app-name fallback when the
-   *                workspace can't be resolved (e.g. onboarding window).
+   *   workspace window → workspace name
+   *   unresolved/onboarding window → app name fallback
+   *
+   * The workspace name is useful context even when only one window is open;
+   * repeating the app brand in the native frame adds no information because
+   * the shell already carries ARCHstudio branding.
    *
    * Called after createWindow() registers a new window and after the closed
-   * handler removes one, so titles always reflect the current window count.
-   * Renderer-driven page-title-updated events are suppressed in createWindow
-   * so these setTitle() calls aren't clobbered by the static <title> tag.
+   * handler removes one. Renderer-driven page-title-updated events are
+   * suppressed in createWindow so these setTitle() calls aren't clobbered by
+   * the static <title> tag.
    */
   private refreshWindowTitles(): void {
     const defaultTitle = app.getName()
-    const showWorkspaceName = this.windows.size > 1
     for (const { window, workspaceId } of this.windows.values()) {
       if (window.isDestroyed()) continue
       let title = defaultTitle
-      if (showWorkspaceName && workspaceId) {
+      if (workspaceId) {
         try {
           const ws = getWorkspaceByNameOrId(workspaceId)
           if (ws?.name) title = ws.name
