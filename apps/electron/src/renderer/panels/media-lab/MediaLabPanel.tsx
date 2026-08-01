@@ -79,6 +79,55 @@ function isRecentlyGenerated(mtime?: number): boolean {
   return Date.now() - mtime < ONE_HOUR_MS
 }
 
+function MediaVideoPlayer({ item, onClose }: { item: MediaItem; onClose: () => void }) {
+  const [src, setSrc] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let objectUrl: string | null = null
+    let cancelled = false
+    window.electronAPI.readFileBinary(item.path)
+      .then((data) => {
+        if (cancelled) return
+        const bytes = new Uint8Array(data.byteLength)
+        bytes.set(data)
+        objectUrl = URL.createObjectURL(new Blob([bytes.buffer], { type: 'video/mp4' }))
+        setSrc(objectUrl)
+      })
+      .catch((loadError) => {
+        if (!cancelled) setError(loadError instanceof Error ? loadError.message : String(loadError))
+      })
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [item.path])
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [onClose])
+
+  return (
+    <div className="media-video-overlay" role="dialog" aria-modal="true" aria-label={`Playing ${item.name}`} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+      <div className="media-video-overlay__panel">
+        <div className="media-video-overlay__header">
+          <div><span>MEDIA LAB / VIDEO</span><strong>{item.name}</strong></div>
+          <button type="button" onClick={onClose} aria-label="Close video"><X size={17} /></button>
+        </div>
+        <div className="media-video-overlay__stage">
+          {error ? <div className="media-panel__error">{error}</div> : src ? <video src={src} controls autoPlay playsInline /> : <Loader2 size={24} className="media-panel__spinner" />}
+        </div>
+        <div className="media-video-overlay__footer">
+          <span>{formatSize(item.size)} Â· {item.sessionTitle}</span>
+          <button type="button" onClick={() => window.electronAPI.showInFolder(item.path)}><FolderOpen size={14} /> Show in folder</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function MediaImageThumbnail({ item }: { item: MediaItem }) {
   const [src, setSrc] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
@@ -101,6 +150,7 @@ function MediaImageThumbnail({ item }: { item: MediaItem }) {
 export function MediaLabPanel() {
   const { onOpenFile } = useAppShellContext()
   const [kindFilter, setKindFilter] = useState<MediaKind | 'all'>('all')
+  const [previewVideo, setPreviewVideo] = useState<MediaItem | null>(null)
   const [creationTab, setCreationTab] = useState<'create' | 'library'>('create')
   const [comfyHealth, setComfyHealth] = useState<ComfyHealth | null>(null)
   const [comfyWorkflows, setComfyWorkflows] = useState<ComfyWorkflowSummary[]>([])
@@ -334,6 +384,10 @@ export function MediaLabPanel() {
   // Declared before the selection callbacks below, whose dependency arrays are
   // evaluated during render and would otherwise read `open` in its TDZ.
   const open = useCallback((item: MediaItem) => {
+    if (item.kind === 'video') {
+      setPreviewVideo(item)
+      return
+    }
     onOpenFile(item.path)
   }, [onOpenFile])
 
@@ -685,6 +739,7 @@ export function MediaLabPanel() {
 
   return (
     <div className="media-panel">
+      {previewVideo && <MediaVideoPlayer item={previewVideo} onClose={() => setPreviewVideo(null)} />}
       <div className="media-console-header">
         <div className="media-console-header__identity">
           <span className="media-console-header__mark"><Clapperboard size={18} /></span>
@@ -780,7 +835,7 @@ export function MediaLabPanel() {
                       <span>Creative direction</span>
                       <textarea
                         rows={6}
-                        placeholder={creationKind === 'image' ? 'Describe the composition, subject, lighting and atmosphere…' : 'Describe the action, camera movement, pacing and atmosphere…'}
+                        placeholder={creationKind === 'image' ? 'Describe the composition, subject, lighting and atmosphereï¿½' : 'Describe the action, camera movement, pacing and atmosphereï¿½'}
                         value={String(workflowValues[promptParameter.id] ?? '')}
                         onChange={(event) => setWorkflowValues((values) => ({ ...values, [promptParameter.id]: event.target.value }))}
                       />
@@ -835,7 +890,7 @@ export function MediaLabPanel() {
                       {comfySubmitting ? <Loader2 size={16} className="media-panel__spinner" /> : <Sparkles size={16} />}
                       {jobActive ? 'Generation in progress' : `Generate ${creationKind}`}
                     </button>
-                    <span>{!comfyHealth?.connected ? 'Start ComfyUI to enable generation' : `${workflowProvider(selectedWorkflow)} workflow · outputs stay on D:`}</span>
+                    <span>{!comfyHealth?.connected ? 'Start ComfyUI to enable generation' : `${workflowProvider(selectedWorkflow)} workflow ï¿½ outputs stay on D:`}</span>
                   </div>
                 </>
               ) : null}
@@ -876,7 +931,7 @@ export function MediaLabPanel() {
                       <span className={`media-recent-card__preview is-${item.kind}`}>
                         {item.kind === 'image' ? <MediaImageThumbnail item={item} /> : <><Icon size={24} /><PlayCircle size={30} className="media-recent-card__play" /></>}
                       </span>
-                      <strong>{item.name}</strong><small>{item.kind} · {formatSize(item.size)}</small>
+                      <strong>{item.name}</strong><small>{item.kind} ï¿½ {formatSize(item.size)}</small>
                     </button>
                   )
                 })}

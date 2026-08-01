@@ -991,6 +991,61 @@
   .media-console-header .media-panel__tabs { grid-column: 2; grid-row: 1; }
   .media-recent__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+.media-video-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--ds-z-modal, 1000);
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: color-mix(in oklch, var(--ds-shadow-color) 78%, transparent);
+  backdrop-filter: blur(14px);
+  animation: media-context-fade var(--ds-duration-fast) var(--ds-ease-decelerate);
+}
+.media-video-overlay__panel {
+  width: min(1080px, 94vw);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--media-select-border);
+  border-radius: 15px;
+  background: color-mix(in oklch, var(--background) 96%, var(--foreground));
+  box-shadow: 0 30px 100px color-mix(in oklch, var(--ds-shadow-color) 75%, transparent), 0 0 40px var(--media-select-glow);
+  overflow: hidden;
+}
+.media-video-overlay__header, .media-video-overlay__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--media-border);
+}
+.media-video-overlay__header > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.media-video-overlay__header span { color: var(--media-select-text); font-size: 8px; font-weight: 750; letter-spacing: .12em; }
+.media-video-overlay__header strong { overflow: hidden; font-size: 12px; white-space: nowrap; text-overflow: ellipsis; }
+.media-video-overlay__header button, .media-video-overlay__footer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 1px solid var(--media-border);
+  border-radius: 8px;
+  background: var(--media-fill-soft);
+  color: var(--media-text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+}
+.media-video-overlay__stage {
+  min-height: 260px;
+  display: grid;
+  place-items: center;
+  background: #050506;
+  overflow: hidden;
+}
+.media-video-overlay__stage video { display: block; width: 100%; max-height: calc(92vh - 104px); object-fit: contain; background: #000; }
+.media-video-overlay__footer { border-top: 1px solid var(--media-border); border-bottom: 0; color: var(--media-text-muted); font-size: 10px; }
+
 @media (max-width: 760px) {
   .media-studio { grid-template-columns: 1fr; }
   .media-studio__rail { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--media-border); }

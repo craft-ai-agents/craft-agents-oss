@@ -111,12 +111,14 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
     }
   })
 
-  // Read a file as raw binary (Uint8Array) for react-pdf.
+  // Read a previewable file as raw binary (Uint8Array) for react-pdf and
+  // scoped in-app media playback. ComfyUI access remains restricted to the
+  // ARCHstudio output namespace via getPreviewAllowedDirs().
   // The WS transport codec preserves Uint8Array payloads over JSON envelopes.
   server.handle(RPC_CHANNELS.file.READ_BINARY, async (ctx, path: string) => {
     try {
       const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
-      const safePath = await validateFilePath(path, getWorkspaceAllowedDirs(workspaceId))
+      const safePath = await validateFilePath(path, getPreviewAllowedDirs(workspaceId))
       const buffer = await readFile(safePath)
       // Return as Uint8Array (serializes to ArrayBuffer over IPC)
       return new Uint8Array(buffer)
