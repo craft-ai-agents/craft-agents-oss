@@ -37,6 +37,7 @@ export function SettingsPanel() {
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null)
   const [launchAtLogin, setLaunchAtLogin] = useState<boolean | null>(null)
   const [confirmBeforeExit, setConfirmBeforeExit] = useState<boolean | null>(null)
+  const [userName, setUserName] = useState<string | null>(null)
   const [compactUI, setCompactUI] = useState<boolean>(
     () => {
       try {
@@ -71,6 +72,17 @@ export function SettingsPanel() {
         setServerStatus(status)
         setLaunchAtLogin(launchCfg)
         setConfirmBeforeExit(exitCfg)
+
+        // Try to get git user name from global config for personalizing settings header
+        try {
+          const gitName = await window.electronAPI.getGitUserName?.()
+          if (!cancelled && gitName) {
+            setUserName(gitName)
+          }
+        } catch {
+          // Silently fail if git user name unavailable
+          if (!cancelled) setUserName(null)
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err))
       }
@@ -217,7 +229,7 @@ export function SettingsPanel() {
       <div className="settings-panel__header">
         <div className="settings-panel__title">
           <SettingsIcon size={20} />
-          <h2>Settings</h2>
+          <h2>Settings{userName && <span className="settings-panel__username">— {userName}</span>}</h2>
         </div>
         {saved !== 'idle' && (
           <span className={`settings-panel__saved${saved === 'saved' ? ' is-done' : ''}`}>

@@ -715,6 +715,7 @@ function LayoutShell({
   )
 
   const [activeView, setActiveView] = useState<ShellView>(initialView)
+  const [previousView, setPreviousView] = useState<ShellView>('sessions')
   const [sessionsView, setSessionsView] = useState<'list' | 'board'>(getInitialSessionsView)
   const [sidebarCollapsedLocal, setSidebarCollapsed] = useState(false)
   // Controlled when the parent supplies `sidebarCollapsed`; otherwise local.
@@ -2270,8 +2271,18 @@ const DEPTH_POPOVER_OPTIONS = [
     [...navItems, settingsNavItem].find((item) => item.id === activeView)?.label ?? activeView
 
   const handleNavigate = (view: ShellView) => {
-    setActiveView(view)
-    onNavigate?.(view)
+    if (activeView === view && view === 'settings') {
+      // Settings is a toggle: clicking again closes it and returns to previous view
+      setActiveView(previousView)
+      onNavigate?.(previousView)
+    } else {
+      // Save current view before switching away from settings
+      if (activeView !== 'settings' && activeView !== view) {
+        setPreviousView(activeView)
+      }
+      setActiveView(view)
+      onNavigate?.(view)
+    }
   }
 
   // ── Context menu for git status file items ─────────────────────────

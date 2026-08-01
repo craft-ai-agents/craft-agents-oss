@@ -29,6 +29,7 @@ export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.releaseNotes.GET,
   RPC_CHANNELS.releaseNotes.GET_LATEST_VERSION,
   RPC_CHANNELS.git.GET_BRANCH,
+  RPC_CHANNELS.git.GET_USER_NAME,
   RPC_CHANNELS.gitbash.CHECK,
   RPC_CHANNELS.gitbash.BROWSE,
   RPC_CHANNELS.gitbash.SET_PATH,
@@ -125,6 +126,20 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
         timeout: 5000,
       }).trim()
       return branch || null
+    } catch {
+      return null
+    }
+  })
+
+  // Get git user name from global config (for personalizing UI)
+  server.handle(RPC_CHANNELS.git.GET_USER_NAME, async () => {
+    try {
+      const userName = execSync('git config --global user.name', {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 5000,
+      }).trim()
+      return userName || null
     } catch {
       return null
     }

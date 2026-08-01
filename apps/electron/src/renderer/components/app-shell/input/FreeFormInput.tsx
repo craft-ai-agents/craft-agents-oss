@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useTranslation } from "react-i18next"
 import { AnimatePresence, motion } from 'motion/react'
 import {
-  Paperclip,
+  Plus,
   ArrowUp,
   Square,
   Check,
@@ -1827,7 +1827,7 @@ export function FreeFormInput({
             />
           )}
           <FreeFormInputContextBadge
-            icon={<Paperclip className="h-4 w-4" />}
+            icon={<Plus className="h-4 w-4" />}
             label={attachments.length > 0
               ? t("chat.filesCount", { count: attachments.length })
               : t("chat.attach")
@@ -1927,7 +1927,7 @@ export function FreeFormInput({
           <div className="flex items-center gap-1 min-w-32 shrink overflow-hidden">
           {/* 1. Attach Files Badge */}
           <FreeFormInputContextBadge
-            icon={<Paperclip className="h-4 w-4" />}
+            icon={<Plus className="h-4 w-4" />}
             label={attachments.length > 0
               ? t("chat.filesCount", { count: attachments.length })
               : t("chat.attachFiles")

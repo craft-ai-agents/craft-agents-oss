@@ -366,6 +366,7 @@ export const RPC_CHANNELS = {
   },
   git: {
     GET_BRANCH: 'git:getBranch',
+    GET_USER_NAME: 'git:getUserName',
     STATUS: 'git:status',
     FILE_DIFF: 'git:fileDiff',
   },

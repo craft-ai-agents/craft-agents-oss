@@ -23,6 +23,15 @@
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-panel__username {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--ds-text-muted);
 }
 
 .settings-panel__saved {
