@@ -344,15 +344,9 @@ export function SettingsPanel() {
       <div className="settings-panel__body">
         {error && <div className="settings-error">{error}</div>}
 
-        {/* Reasoning */}
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <Brain size={16} />
-            <h3>Reasoning</h3>
-          </div>
-          <p className="settings-section__lead">
-            Default thinking level for new sessions. Higher levels reason longer and cost more tokens.
-          </p>
+        {/* Thinking levels */}
+        <div className="settings-group">
+          <label className="settings-group__label">Reasoning level</label>
           <div className="settings-levels">
             {THINKING_LEVEL_IDS.map((level) => (
               <button
@@ -366,255 +360,172 @@ export function SettingsPanel() {
               </button>
             ))}
           </div>
-        </section>
+        </div>
 
-        {/* Power */}
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <Coffee size={16} />
-            <h3>Power</h3>
+        {/* Simple toggles list */}
+        <label className="settings-row">
+          <div>
+            <span className="settings-row__label">Keep awake while running</span>
           </div>
-          <label className="settings-row">
-            <div>
-              <span className="settings-row__label">Keep awake while running</span>
-              <span className="settings-row__hint">
-                Prevents sleep while an agent session is active.
-              </span>
-            </div>
-            <input
-              type="checkbox"
-              className="settings-switch"
-              checked={keepAwake ?? false}
-              disabled={keepAwake === null}
-              onChange={(e) => void changeKeepAwake(e.target.checked)}
-            />
-          </label>
-        </section>
+          <input
+            type="checkbox"
+            className="settings-switch"
+            checked={keepAwake ?? false}
+            disabled={keepAwake === null}
+            onChange={(e) => void changeKeepAwake(e.target.checked)}
+          />
+        </label>
 
-        {/* Notifications */}
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <BellRing size={16} />
-            <h3>Notifications</h3>
+        <label className="settings-row">
+          <div>
+            <span className="settings-row__label">Desktop notifications</span>
           </div>
-          <label className="settings-row">
-            <div>
-              <span className="settings-row__label">Desktop notifications</span>
-              <span className="settings-row__hint">
-                Alert you when sessions complete or require attention.
-              </span>
-            </div>
-            <input
-              type="checkbox"
-              className="settings-switch"
-              checked={notificationsEnabled ?? false}
-              disabled={notificationsEnabled === null}
-              onChange={(e) => void changeNotifications(e.target.checked)}
-            />
-          </label>
-        </section>
+          <input
+            type="checkbox"
+            className="settings-switch"
+            checked={notificationsEnabled ?? false}
+            disabled={notificationsEnabled === null}
+            onChange={(e) => void changeNotifications(e.target.checked)}
+          />
+        </label>
 
-        {/* Input Behavior */}
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <Keyboard size={16} />
-            <h3>Input Behavior</h3>
+        <label className="settings-row">
+          <div>
+            <span className="settings-row__label">Auto-capitalisation</span>
           </div>
-          <label className="settings-row">
-            <div>
-              <span className="settings-row__label">Auto-capitalisation</span>
-              <span className="settings-row__hint">
-                Automatically capitalise the first letter of sentences.
-              </span>
-            </div>
-            <input
-              type="checkbox"
-              className="settings-switch"
-              checked={autoCapitalisation ?? false}
-              disabled={autoCapitalisation === null}
-              onChange={(e) => void changeAutoCapitalisation(e.target.checked)}
-            />
-          </label>
-          <label className="settings-row">
-            <div>
-              <span className="settings-row__label">Spell check</span>
-              <span className="settings-row__hint">
-                Enable spell checking in text inputs.
-              </span>
-            </div>
-            <input
-              type="checkbox"
-              className="settings-switch"
-              checked={spellCheck ?? false}
-              disabled={spellCheck === null}
-              onChange={(e) => void changeSpellCheck(e.target.checked)}
-            />
-          </label>
-          <div className="settings-field">
-            <span>Send message with</span>
-            <select
-              className="settings-select"
-              value={sendMessageKey ?? 'enter'}
-              disabled={sendMessageKey === null}
-              onChange={(e) => void changeSendMessageKey(e.target.value)}
-            >
-              <option value="enter">Enter</option>
-              <option value="cmd-enter">{isMac ? 'Cmd' : 'Ctrl'} + Enter</option>
-            </select>
-          </div>
-        </section>
+          <input
+            type="checkbox"
+            className="settings-switch"
+            checked={autoCapitalisation ?? false}
+            disabled={autoCapitalisation === null}
+            onChange={(e) => void changeAutoCapitalisation(e.target.checked)}
+          />
+        </label>
 
-        {/* Tools */}
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <Zap size={16} />
-            <h3>Tools & Features</h3>
+        <label className="settings-row">
+          <div>
+            <span className="settings-row__label">Spell check</span>
           </div>
-          <label className="settings-row">
-            <div>
-              <span className="settings-row__label">Browser tool</span>
-              <span className="settings-row__hint">
-                Enable web browsing capabilities in agent sessions.
-              </span>
-            </div>
-            <input
-              type="checkbox"
-              className="settings-switch"
-              checked={browserToolEnabled ?? false}
-              disabled={browserToolEnabled === null}
-              onChange={(e) => void changeBrowserTool(e.target.checked)}
-            />
-          </label>
-          <label className="settings-row">
-            <div>
-              <span className="settings-row__label">Local MCP servers</span>
-              <span className="settings-row__hint">
-                Enable Model Context Protocol servers running on your machine.
-              </span>
-            </div>
-            <input
-              type="checkbox"
-              className="settings-switch"
-              checked={localMcpEnabled ?? false}
-              disabled={localMcpEnabled === null}
-              onChange={(e) => void changeLocalMcp(e.target.checked)}
-            />
-          </label>
-          <label className="settings-row">
-            <div>
-              <span className="settings-row__label">Rich tool descriptions</span>
-              <span className="settings-row__hint">
-                Show formatted descriptions and examples for available tools.
-              </span>
-            </div>
-            <input
-              type="checkbox"
-              className="settings-switch"
-              checked={richToolDescriptions ?? false}
-              disabled={richToolDescriptions === null}
-              onChange={(e) => void changeRichToolDesc(e.target.checked)}
-            />
-          </label>
-        </section>
+          <input
+            type="checkbox"
+            className="settings-switch"
+            checked={spellCheck ?? false}
+            disabled={spellCheck === null}
+            onChange={(e) => void changeSpellCheck(e.target.checked)}
+          />
+        </label>
 
-        {/* Performance */}
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <Radio size={16} />
-            <h3>Performance</h3>
-          </div>
-          <label className="settings-row">
-            <div>
-              <span className="settings-row__label">Extended prompt cache</span>
-              <span className="settings-row__hint">
-                Use Claude's prompt caching to reduce latency on repeated requests (when supported).
-              </span>
-            </div>
-            <input
-              type="checkbox"
-              className="settings-switch"
-              checked={extendedPromptCache ?? false}
-              disabled={extendedPromptCache === null}
-              onChange={(e) => void changeExtendedCache(e.target.checked)}
-            />
-          </label>
-        </section>
+        <div className="settings-row settings-row--select">
+          <span className="settings-row__label">Send message with</span>
+          <select
+            className="settings-select"
+            value={sendMessageKey ?? 'enter'}
+            disabled={sendMessageKey === null}
+            onChange={(e) => void changeSendMessageKey(e.target.value)}
+          >
+            <option value="enter">Enter</option>
+            <option value="cmd-enter">{isMac ? 'Cmd' : 'Ctrl'} + Enter</option>
+          </select>
+        </div>
 
-        {/* Security */}
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <Globe size={16} />
-            <h3>Security</h3>
+        <label className="settings-row">
+          <div>
+            <span className="settings-row__label">Browser tool</span>
           </div>
-          <label className="settings-row">
-            <div>
-              <span className="settings-row__label">Allow remote evaluate</span>
-              <span className="settings-row__hint">
-                Allow remote agents to execute arbitrary JavaScript expressions via browser_tool.
-              </span>
-            </div>
-            <input
-              type="checkbox"
-              className="settings-switch"
-              checked={allowRemoteEvaluate ?? false}
-              disabled={allowRemoteEvaluate === null}
-              onChange={(e) => void changeAllowRemoteEval(e.target.checked)}
-            />
-          </label>
-        </section>
+          <input
+            type="checkbox"
+            className="settings-switch"
+            checked={browserToolEnabled ?? false}
+            disabled={browserToolEnabled === null}
+            onChange={(e) => void changeBrowserTool(e.target.checked)}
+          />
+        </label>
 
-        {/* Appearance */}
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <Palette size={16} />
-            <h3>Appearance</h3>
+        <label className="settings-row">
+          <div>
+            <span className="settings-row__label">Local MCP servers</span>
           </div>
-          <p className="settings-section__lead">Theme, accent colour, and interface density.</p>
-          <label className="settings-row">
-            <div>
-              <span className="settings-row__label">Compact UI</span>
-              <span className="settings-row__hint">Reduce padding and font size throughout the app.</span>
-            </div>
-            <input
-              type="checkbox"
-              className="settings-switch"
-              checked={compactUI}
-              onChange={(e) => void changeCompactUI(e.target.checked)}
-            />
-          </label>
-        </section>
+          <input
+            type="checkbox"
+            className="settings-switch"
+            checked={localMcpEnabled ?? false}
+            disabled={localMcpEnabled === null}
+            onChange={(e) => void changeLocalMcp(e.target.checked)}
+          />
+        </label>
+
+        <label className="settings-row">
+          <div>
+            <span className="settings-row__label">Rich tool descriptions</span>
+          </div>
+          <input
+            type="checkbox"
+            className="settings-switch"
+            checked={richToolDescriptions ?? false}
+            disabled={richToolDescriptions === null}
+            onChange={(e) => void changeRichToolDesc(e.target.checked)}
+          />
+        </label>
+
+        <label className="settings-row">
+          <div>
+            <span className="settings-row__label">Extended prompt cache</span>
+          </div>
+          <input
+            type="checkbox"
+            className="settings-switch"
+            checked={extendedPromptCache ?? false}
+            disabled={extendedPromptCache === null}
+            onChange={(e) => void changeExtendedCache(e.target.checked)}
+          />
+        </label>
+
+        <label className="settings-row">
+          <div>
+            <span className="settings-row__label">Allow remote evaluate</span>
+          </div>
+          <input
+            type="checkbox"
+            className="settings-switch"
+            checked={allowRemoteEvaluate ?? false}
+            disabled={allowRemoteEvaluate === null}
+            onChange={(e) => void changeAllowRemoteEval(e.target.checked)}
+          />
+        </label>
+
+        <label className="settings-row">
+          <div>
+            <span className="settings-row__label">Compact UI</span>
+          </div>
+          <input
+            type="checkbox"
+            className="settings-switch"
+            checked={compactUI}
+            onChange={(e) => void changeCompactUI(e.target.checked)}
+          />
+        </label>
 
         {/* Export / Import */}
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <SlidersHorizontal size={16} />
-            <h3>Export / Import</h3>
+        <div className="settings-export-row">
+          <div className="settings-export-actions">
+            <button
+              type="button"
+              className="settings-button settings-button--primary"
+              onClick={() => void handleExportSettings()}
+            >
+              Export Settings
+            </button>
+            <button
+              type="button"
+              className="settings-button"
+              onClick={() => void handleImportSettings()}
+            >
+              Import Settings
+            </button>
           </div>
-          <p className="settings-section__lead">
-            Backup your settings or restore from a previous export. This includes
-            config, LLM connections, preferences, and custom themes.
-          </p>
-          <div className="settings-export-row">
-            <div className="settings-export-actions">
-              <button
-                type="button"
-                className="settings-button settings-button--primary"
-                onClick={() => void handleExportSettings()}
-              >
-                Export Settings
-              </button>
-              <button
-                type="button"
-                className="settings-button"
-                onClick={() => void handleImportSettings()}
-              >
-                Import Settings
-              </button>
-            </div>
-            {exportMsg && <span className="settings-export-msg">{exportMsg}</span>}
-            {importMsg && <span className="settings-export-msg settings-export-msg--import">{importMsg}</span>}
-          </div>
-        </section>
+          {exportMsg && <span className="settings-export-msg">{exportMsg}</span>}
+          {importMsg && <span className="settings-export-msg settings-export-msg--import">{importMsg}</span>}
+        </div>
       </div>
     </div>
   )
