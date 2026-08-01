@@ -2,9 +2,8 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '@/hooks/useTheme'
 import type { ThemeOverrides } from '@config/theme'
-import { useSetAtom, useStore, useAtomValue, useAtom } from 'jotai'
-import type { Session, Workspace, SessionEvent, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, SessionStatus, NewChatActionParams, ContentBadge, LlmConnectionWithStatus, PermissionModeState } from '../shared/types'
-import type { SessionDraft, DraftAttachmentRef } from '@archstudio/shared/config'
+import { useSetAtom, useStore, useAtomValue } from 'jotai'
+import type { Session, SessionEvent, Message, FileAttachment, StoredAttachment, SetupNeeds, NewChatActionParams, ContentBadge, PermissionModeState } from '../shared/types'
 import type { SessionOptions, SessionOptionUpdates } from './hooks/useSessionOptions'
 import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOptions'
 import { generateMessageId } from '../shared/types'
@@ -26,11 +25,15 @@ import { useSession } from '@/hooks/useSession'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { NavigationProvider } from '@/contexts/NavigationContext'
 import { navigate, routes } from './lib/navigate'
-import { attachmentFromContentRef, toDraftRef } from './lib/drafts'
 import { stripMarkdown } from './utils/text'
 import { coerceInputText } from './lib/input-text'
+import { useSessionDrafts } from './hooks/useSessionDrafts'
+import { useWorkspaceController } from './hooks/useWorkspaceController'
+import { useSessionController } from './hooks/useSessionController'
+import { useAppSessionActions } from './hooks/useAppSessionActions'
+import { useApprovalRequests } from './hooks/useApprovalRequests'
+import { useLlmConnections } from './hooks/useLlmConnections'
 import { getSessionsToRefreshAfterStaleReconnect } from './lib/reconnect-recovery'
-import { formatSessionLoadFailure, shouldTreatSessionLoadFailureAsTransportFallback } from './lib/session-load'
 import { extractWorkspaceSlugFromPath } from '@archstudio/shared/utils/workspace-slug'
 import { DEFAULT_THINKING_LEVEL } from '@archstudio/shared/agent/thinking-levels'
 import { initRendererPerf } from './lib/perf'
@@ -40,16 +43,12 @@ import {
   removeSessionAtom,
   updateSessionAtom,
   replaceLoadedSessionAtom,
-  refreshSessionsMetadataAtom,
   sessionAtomFamily,
   sessionMetaMapAtom,
   sessionIdsAtom,
-  loadedSessionsAtom,
   forceSessionMessagesReloadAtom,
   backgroundTasksAtomFamily,
   extractSessionMeta,
-  windowWorkspaceIdAtom,
-  type SessionMeta,
   type BackgroundTask,
 } from '@/atoms/sessions'
 import { sourcesAtom } from '@/atoms/sources'
@@ -73,14 +72,12 @@ import {
 } from '@archstudio/ui'
 import { useLinkInterceptor, type FilePreviewState } from '@/hooks/useLinkInterceptor'
 import { useTransportConnectionState } from '@/hooks/useTransportConnectionState'
-import { useStaleSessionRecovery } from '@/hooks/useStaleSessionRecovery'
 import { TransportConnectionBanner, shouldShowTransportConnectionBanner } from '@/components/app-shell/TransportConnectionBanner'
 import {
   markBackgroundTaskSignal,
   markLiveBackgroundTasksOrphaned,
 } from '@/components/app-shell/background-task-chip-state'
 import { getFileManagerName } from '@/lib/platform'
-import { rendererLog } from '@/lib/logger'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
 
@@ -88,32 +85,6 @@ type AppState = 'loading' | 'onboarding' | 'reauth' | 'workspace-picker' | 'read
 
 /** Type for the Jotai store returned by useStore() */
 type JotaiStore = ReturnType<typeof getDefaultStore>
-
-type SessionListRefreshOptions = {
-  removeMissing?: boolean
-  reason?: string
-  selectedSessionId?: string | null
-}
-
-const SESSION_REFRESH_LOG_ID_LIMIT = 25
-
-function summarizeIds(ids: Iterable<string>, limit = SESSION_REFRESH_LOG_ID_LIMIT) {
-  const all = Array.from(ids)
-  return {
-    count: all.length,
-    ids: all.slice(0, limit),
-    truncated: all.length > limit,
-  }
-}
-
-function workspaceDistribution(sessions: Iterable<{ workspaceId?: string }>): Record<string, number> {
-  const distribution: Record<string, number> = {}
-  for (const session of sessions) {
-    const key = session.workspaceId || '(missing)'
-    distribution[key] = (distribution[key] ?? 0) + 1
-  }
-  return distribution
-}
 
 /**
  * Helper to handle background task events from the agent.
@@ -315,16 +286,17 @@ export default function App() {
     })
   }, [updateSessionDirect])
 
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
-  // Window's workspace ID — shared atom so Root/ThemeProvider stays in sync on switch
-  const [windowWorkspaceId, setWindowWorkspaceId] = useAtom(windowWorkspaceIdAtom)
-
-  // Derive workspace slug for SDK skill qualification
-  const windowWorkspaceSlug = useMemo(() => {
-    if (!windowWorkspaceId) return null
-    const workspace = workspaces.find(w => w.id === windowWorkspaceId)
-    return workspace?.slug ?? windowWorkspaceId
-  }, [windowWorkspaceId, workspaces])
+  const {
+    activeWorkspaceId: windowWorkspaceId,
+    activeWorkspaceSlug: windowWorkspaceSlug,
+    refreshWorkspaces,
+    remoteWorkspaceId: windowRemoteWorkspaceId,
+    selectWorkspace,
+    selectWorkspaceBySlug,
+    setActiveWorkspaceId: setWindowWorkspaceId,
+    setWorkspaces,
+    workspaces,
+  } = useWorkspaceController()
 
   // Get initial sessionId and focused mode from URL params (for "Open in New Window" feature)
   const { initialSessionId, isFocusedMode } = useMemo(() => {
@@ -335,35 +307,32 @@ export default function App() {
     }
   }, [])
 
-  // Derive remote workspace ID for session matching in NavigationContext
-  const windowRemoteWorkspaceId = useMemo(() => {
-    if (!windowWorkspaceId) return null
-    const workspace = workspaces.find(w => w.id === windowWorkspaceId)
-    return workspace?.remoteServer?.remoteWorkspaceId ?? null
-  }, [windowWorkspaceId, workspaces])
-
-  // LLM connections with authentication status (for provider selection)
-  const [llmConnections, setLlmConnections] = useState<LlmConnectionWithStatus[]>([])
-  // Workspace default LLM connection (for new sessions)
-  const [workspaceDefaultLlmConnection, setWorkspaceDefaultLlmConnection] = useState<string | undefined>()
-  // Global default LLM connection slug (from app config)
-  const [defaultLlmConnectionSlug, setDefaultLlmConnectionSlug] = useState<string | undefined>()
-
-  // Derive connection default model override from the default LLM connection
-  const defaultConnection = useMemo(() => {
-    return llmConnections.find(c => c.slug === defaultLlmConnectionSlug) ?? null
-  }, [llmConnections, defaultLlmConnectionSlug])
+  const {
+    connections: llmConnections,
+    refreshConnections: refreshLlmConnections,
+    workspaceDefaultConnection: workspaceDefaultLlmConnection,
+  } = useLlmConnections(windowWorkspaceId, appState === 'ready')
 
   const [menuNewChatTrigger, setMenuNewChatTrigger] = useState(0)
-  // Permission requests per session (queue to handle multiple concurrent requests)
-  const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest[]>>(new Map())
-  // Credential requests per session (queue to handle multiple concurrent requests)
-  const [pendingCredentials, setPendingCredentials] = useState<Map<string, CredentialRequest[]>>(new Map())
-  // Draft composer state per session (text + attachment refs), preserved across mode
-  // switches, conversation changes, and app restarts. Using a ref avoids re-renders
-  // during typing; attachments are stored as lightweight refs (path + name) and
-  // hydrated via readFileAttachment() on session switch.
-  const sessionDraftsRef = useRef<Map<string, SessionDraft>>(new Map())
+  const {
+    clearAllRequests,
+    clearSessionRequests,
+    enqueueCredential,
+    enqueuePermission,
+    pendingCredentials,
+    pendingPermissions,
+    respondToCredential: handleRespondToCredential,
+    respondToPermission: handleRespondToPermission,
+  } = useApprovalRequests()
+  const {
+    clearDrafts,
+    getDraft,
+    getDraftAttachmentRefs,
+    handleAttachmentsChange,
+    handleInputChange,
+    hydrateDraftAttachments,
+    replaceDrafts,
+  } = useSessionDrafts()
   // Unified session options for all session-scoped settings
   const [sessionOptions, setSessionOptions] = useState<Map<string, SessionOptions>>(new Map())
 
@@ -374,11 +343,6 @@ export default function App() {
 
   // Auto-update state
   const updateChecker = useUpdateChecker()
-
-  // Session readiness — gates route restoration in NavigationProvider so the
-  // shell never navigates against a half-loaded session list.
-  const [sessionsLoaded, setSessionsLoaded] = useState(false)
-  const [sessionLoadError, setSessionLoadError] = useState<string | null>(null)
 
   // Notifications enabled state (from app settings)
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
@@ -478,171 +442,25 @@ export default function App() {
     })
   }, [])
 
-  const refreshSessionFromServer = useCallback(async (sessionId: string): Promise<'refreshed' | 'preserved_stale_messages' | 'failed'> => {
-    try {
-      const fresh = await window.electronAPI.getSessionMessages(sessionId)
-      if (!fresh) return 'failed'
-
-      const prevSession = store.get(sessionAtomFamily(sessionId))
-      const preservedStaleMessages = !!prevSession && prevSession.messages.length > 0 && (!fresh.messages || fresh.messages.length === 0)
-      const nextSession = preservedStaleMessages
-        ? { ...fresh, messages: prevSession.messages }
-        : fresh
-
-      clearStreamingState(sessionId)
-      replaceLoadedSession(nextSession)
-      syncSessionOptionsFromSession(nextSession)
-      void reconcilePermissionModeState(sessionId)
-      return preservedStaleMessages ? 'preserved_stale_messages' : 'refreshed'
-    } catch (err) {
-      console.error(`[App] Failed to refresh session ${sessionId}:`, err)
-      return 'failed'
-    }
-  }, [clearStreamingState, replaceLoadedSession, syncSessionOptionsFromSession, reconcilePermissionModeState, store])
-
-  const loadSessionsFromServer = useCallback(async () => {
-    setSessionLoadError(null)
-
-    try {
-      const loadedSessions = await window.electronAPI.getSessions()
-
-      // Initialize per-session atoms and metadata map
-      // NOTE: No sessionsAtom used - sessions are only in per-session atoms
-      initializeSessions(loadedSessions)
-
-      // Initialize unified sessionOptions from session data
-      const optionsMap = new Map<string, SessionOptions>()
-      for (const s of loadedSessions) {
-        const hasNonDefaultMode = s.permissionMode && s.permissionMode !== 'ask'
-        const hasNonDefaultThinking = s.thinkingLevel && s.thinkingLevel !== DEFAULT_THINKING_LEVEL
-        if (hasNonDefaultMode || hasNonDefaultThinking) {
-          optionsMap.set(s.id, {
-            permissionMode: s.permissionMode ?? 'ask',
-            thinkingLevel: s.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
-          })
-        }
-      }
-      setSessionOptions(optionsMap)
-
-      await Promise.allSettled(
-        loadedSessions.map((s) => reconcilePermissionModeState(s.id))
-      )
-
-      setSessionsLoaded(true)
-
-      if (initialSessionId && windowWorkspaceId) {
-        const session = loadedSessions.find(s => s.id === initialSessionId)
-        if (session) {
-          navigate(routes.view.allSessions(session.id))
-        }
-      }
-    } catch (err) {
-      console.error('[App] Failed to load sessions:', err)
-      const transportState = await window.electronAPI.getTransportConnectionState().catch(() => null)
-
-      if (shouldTreatSessionLoadFailureAsTransportFallback(transportState)) {
-        console.error('[App] Treating session load failure as transport fallback:', transportState)
-        setSessionsLoaded(true)
-        setSessionLoadError(null)
-        return
-      }
-
-      setSessionLoadError(formatSessionLoadFailure(err))
-      setSessionsLoaded(true)
-    }
-  }, [initializeSessions, initialSessionId, reconcilePermissionModeState, windowWorkspaceId])
-
-  const refreshSessionListMetadataFromServer = useCallback(async (options: SessionListRefreshOptions = {}): Promise<Map<string, SessionMeta> | null> => {
-    const {
-      removeMissing = true,
-      reason = 'manual-or-authoritative',
-      selectedSessionId = null,
-    } = options
-    const beforeMetaMap = store.get(sessionMetaMapAtom)
-    const beforeIds = new Set(beforeMetaMap.keys())
-    const transportState = await window.electronAPI.getTransportConnectionState().catch(() => null)
-
-    try {
-      const sessions = await window.electronAPI.getSessions()
-      const returnedIds = new Set(sessions.map(s => s.id))
-      const missingIds = Array.from(beforeIds).filter(id => !returnedIds.has(id))
-      const addedIds = sessions.map(s => s.id).filter(id => !beforeIds.has(id))
-      const logPayload = {
-        reason,
-        removeMissing,
-        windowWorkspaceId,
-        windowRemoteWorkspaceId,
-        selectedSessionId,
-        beforeCount: beforeIds.size,
-        returnedCount: sessions.length,
-        beforeIds: summarizeIds(beforeIds),
-        returnedIds: summarizeIds(returnedIds),
-        missingIds: summarizeIds(missingIds),
-        addedIds: summarizeIds(addedIds),
-        beforeWorkspaceIds: workspaceDistribution(beforeMetaMap.values()),
-        returnedWorkspaceIds: workspaceDistribution(sessions),
-        transportState,
-      }
-
-      rendererLog.info('[App] Session list metadata refresh result', logPayload)
-      if (!removeMissing && missingIds.length > 0) {
-        rendererLog.warn('[App] Non-destructive refresh preserved sessions omitted by getSessions(); this indicates a partial backend response or workspace-context mismatch', logPayload)
-      }
-
-      const loadedSessionIds = store.get(loadedSessionsAtom)
-
-      // Single transactional atom write — all cross-atom mutations happen
-      // inside one Jotai write function so React subscribers see one
-      // consistent update instead of intermediate states.
-      const nextMetaMap = store.set(refreshSessionsMetadataAtom, { sessions, loadedSessionIds, removeMissing })
-
-      // Sync app-level state (React hooks / non-atom concerns) after the atom transaction
-      for (const session of sessions) {
-        syncSessionOptionsFromSession(session)
-      }
-      await Promise.allSettled(sessions.map(s => reconcilePermissionModeState(s.id)))
-
-      return nextMetaMap
-    } catch (err) {
-      rendererLog.error('[App] Failed to refresh session list metadata after reconnect:', {
-        reason,
-        removeMissing,
-        windowWorkspaceId,
-        windowRemoteWorkspaceId,
-        selectedSessionId,
-        beforeCount: beforeIds.size,
-        beforeIds: summarizeIds(beforeIds),
-        beforeWorkspaceIds: workspaceDistribution(beforeMetaMap.values()),
-        transportState,
-        error: err,
-      })
-      return null
-    }
-  }, [store, syncSessionOptionsFromSession, reconcilePermissionModeState, windowWorkspaceId, windowRemoteWorkspaceId])
-
-  // Stale session watchdog — catches stuck sessions that the reconnect protocol misses
-  const { trackSessionActivity } = useStaleSessionRecovery({
-    store,
+  const {
+    loadSessionsFromServer,
     refreshSessionFromServer,
+    refreshSessionListMetadataFromServer,
+    sessionLoadError,
+    sessionsLoaded,
+    trackSessionActivity,
+  } = useSessionController({
+    store,
+    initializeSessions,
+    replaceLoadedSession,
+    clearStreamingState,
+    syncSessionOptionsFromSession,
+    reconcilePermissionModeState,
+    setSessionOptions,
+    initialSessionId,
+    workspaceId: windowWorkspaceId,
+    remoteWorkspaceId: windowRemoteWorkspaceId,
   })
-
-  const DRAFT_SAVE_DEBOUNCE_MS = 500
-
-  const resolveDefaultConnectionSlug = useCallback((connections: LlmConnectionWithStatus[]) => {
-    return connections.find(c => c.isDefault)?.slug ?? connections[0]?.slug
-  }, [])
-
-  // Refresh LLM connections from config (called on workspace change and after connection updates)
-  const refreshLlmConnections = useCallback(async () => {
-    const connections = await window.electronAPI.listLlmConnectionsWithStatus()
-    setLlmConnections(connections)
-    setDefaultLlmConnectionSlug(resolveDefaultConnectionSlug(connections))
-    // Also refresh workspace default
-    if (windowWorkspaceId) {
-      const settings = await window.electronAPI.getWorkspaceSettings(windowWorkspaceId)
-      setWorkspaceDefaultLlmConnection(settings?.defaultLlmConnection)
-    }
-  }, [resolveDefaultConnectionSlug, windowWorkspaceId])
 
   // Handle onboarding completion
   const handleOnboardingComplete = useCallback(async () => {
@@ -760,22 +578,15 @@ export default function App() {
       }
     }).catch(() => { /* non-fatal startup check */ })
     void loadSessionsFromServer()
-    // Load LLM connections with authentication status
-    window.electronAPI.listLlmConnectionsWithStatus().then((connections) => {
-      setLlmConnections(connections)
-      setDefaultLlmConnectionSlug(resolveDefaultConnectionSlug(connections))
-    })
     // Load persisted input drafts into ref (no re-render needed).
     // Attachment files are not read here — hydration happens lazily when the session
     // is opened so app startup isn't delayed by reading potentially large files.
     window.electronAPI.getAllDrafts().then((drafts) => {
-      if (Object.keys(drafts).length > 0) {
-        sessionDraftsRef.current = new Map(Object.entries(drafts))
-      }
+      if (Object.keys(drafts).length > 0) replaceDrafts(drafts)
     })
     // Load app-level theme
     window.electronAPI.getAppTheme().then(setAppTheme)
-  }, [appState, loadSessionsFromServer, resolveDefaultConnectionSlug])
+  }, [appState, loadSessionsFromServer])
 
   // Subscribe to theme change events (live updates when theme.json changes)
   useEffect(() => {
@@ -786,21 +597,6 @@ export default function App() {
       cleanupApp()
     }
   }, [])
-
-  // Subscribe to LLM connections change events (live updates when models are fetched)
-  useEffect(() => {
-    const cleanup = window.electronAPI.onLlmConnectionsChanged(() => {
-      refreshLlmConnections()
-    })
-    return () => { cleanup() }
-  }, [refreshLlmConnections])
-
-  // Refresh LLM connections and workspace default when workspace changes
-  useEffect(() => {
-    if (windowWorkspaceId) {
-      refreshLlmConnections()
-    }
-  }, [windowWorkspaceId, refreshLlmConnections])
 
   // Listen for session events - uses centralized event processor for consistent state transitions
   //
@@ -824,12 +620,7 @@ export default function App() {
       for (const effect of effects) {
         switch (effect.type) {
           case 'permission_request': {
-            setPendingPermissions(prevPerms => {
-              const next = new Map(prevPerms)
-              const existingQueue = next.get(sessionId) || []
-              next.set(sessionId, [...existingQueue, effect.request])
-              return next
-            })
+            enqueuePermission(sessionId, effect.request)
 
             // Native notification for approval-required pauses (same gating as completion notifications)
             const notifySession = store.get(sessionAtomFamily(sessionId))
@@ -863,19 +654,13 @@ export default function App() {
             break
           }
           case 'credential_request': {
-            setPendingCredentials(prevCreds => {
-              const next = new Map(prevCreds)
-              const existingQueue = next.get(sessionId) || []
-              next.set(sessionId, [...existingQueue, effect.request])
-              return next
-            })
+            enqueueCredential(sessionId, effect.request)
             break
           }
           case 'restore_input': {
             // Queued messages were removed from chat on abort — restore their text to the input field.
             // Append to existing draft (user may have started typing) rather than overwrite.
-            const existingDraft = sessionDraftsRef.current.get(sessionId)
-            const existingText = coerceInputText(existingDraft?.text)
+            const existingText = getDraft(sessionId)
             const restoredText = coerceInputText(effect.text)
             const restored = existingText
               ? `${existingText}\n\n${restoredText}`
@@ -896,24 +681,7 @@ export default function App() {
       }
 
       // Clear pending permissions and credentials on complete
-      if (eventType === 'complete') {
-        setPendingPermissions(prevPerms => {
-          if (prevPerms.has(sessionId)) {
-            const next = new Map(prevPerms)
-            next.delete(sessionId)
-            return next
-          }
-          return prevPerms
-        })
-        setPendingCredentials(prevCreds => {
-          if (prevCreds.has(sessionId)) {
-            const next = new Map(prevCreds)
-            next.delete(sessionId)
-            return next
-          }
-          return prevCreds
-        })
-      }
+      if (eventType === 'complete') clearSessionRequests(sessionId)
     }
 
     const cleanup = window.electronAPI.onSessionEvent((event: SessionEvent) => {
@@ -1144,108 +912,29 @@ export default function App() {
     }
   }, [])
 
-  const handleCreateSession = useCallback(async (workspaceId: string, options?: import('../shared/types').CreateSessionOptions): Promise<Session> => {
-    const session = await window.electronAPI.createSession(workspaceId, options)
-    // Add to per-session atom and metadata map (no sessionsAtom)
-    addSession(session)
-    syncSessionOptionsFromSession(session)
-
-    return session
-  }, [addSession, syncSessionOptionsFromSession])
+  const {
+    archiveSession: handleArchiveSession,
+    autoDeleteEmptySession: handleAutoDeleteEmptySession,
+    changeSessionStatus: handleSessionStatusChange,
+    createSession: handleCreateSession,
+    deleteSession: handleDeleteSession,
+    flagSession: handleFlagSession,
+    markSessionRead: handleMarkSessionRead,
+    markSessionUnread: handleMarkSessionUnread,
+    renameSession: handleRenameSession,
+    setActiveViewingSession: handleSetActiveViewingSession,
+    unarchiveSession: handleUnarchiveSession,
+    unflagSession: handleUnflagSession,
+  } = useAppSessionActions({
+    store,
+    activeWorkspaceId: windowWorkspaceId,
+    addSession,
+    removeSession,
+    updateSession: updateSessionById,
+    syncSessionOptions: syncSessionOptionsFromSession,
+  })
 
   // Deep link navigation is initialized later after handleInputChange is defined
-
-  const handleDeleteSession = useCallback(async (sessionId: string, skipConfirmation = false): Promise<boolean> => {
-    // Show confirmation dialog before deleting (unless skipped or session is empty)
-    if (!skipConfirmation) {
-      // Check if session has any messages using session metadata from Jotai store
-      // We use store.get() instead of closing over sessions to prevent memory leaks
-      // (closures would retain the full sessions array with all messages)
-      const metaMap = store.get(sessionMetaMapAtom)
-      const meta = metaMap.get(sessionId)
-      // Session is empty if it has no lastFinalMessageId (no assistant responses) and no name (set on first user message)
-      const isEmpty = !meta || (!meta.lastFinalMessageId && !meta.name)
-
-      if (!isEmpty) {
-        const confirmed = await window.electronAPI.showDeleteSessionConfirmation(meta?.name || 'Untitled')
-        if (!confirmed) return false
-      }
-    }
-
-    await window.electronAPI.deleteSession(sessionId)
-    // Remove from per-session atom and metadata map (no sessionsAtom)
-    removeSession(sessionId)
-    return true
-  }, [store, removeSession])
-
-  // Auto-delete handler for empty sessions (fire-and-forget, no confirmation)
-  const handleAutoDeleteEmptySession = useCallback((sessionId: string) => {
-    window.electronAPI.deleteSession(sessionId)
-    removeSession(sessionId)
-  }, [removeSession])
-
-  const handleFlagSession = useCallback((sessionId: string) => {
-    updateSessionById(sessionId, { isFlagged: true })
-    window.electronAPI.sessionCommand(sessionId, { type: 'flag' })
-  }, [updateSessionById])
-
-  const handleUnflagSession = useCallback((sessionId: string) => {
-    updateSessionById(sessionId, { isFlagged: false })
-    window.electronAPI.sessionCommand(sessionId, { type: 'unflag' })
-  }, [updateSessionById])
-
-  const handleArchiveSession = useCallback((sessionId: string) => {
-    updateSessionById(sessionId, { isArchived: true, archivedAt: Date.now() })
-    window.electronAPI.sessionCommand(sessionId, { type: 'archive' })
-  }, [updateSessionById])
-
-  const handleUnarchiveSession = useCallback((sessionId: string) => {
-    updateSessionById(sessionId, { isArchived: false, archivedAt: undefined })
-    window.electronAPI.sessionCommand(sessionId, { type: 'unarchive' })
-  }, [updateSessionById])
-
-  /**
-   * Set which session user is actively viewing (for unread state machine).
-   * Called when user navigates to a session. Main process uses this to determine
-   * whether to mark new assistant messages as unread.
-   */
-  const handleSetActiveViewingSession = useCallback((sessionId: string) => {
-    // Optimistic UI update: clear hasUnread immediately
-    updateSessionById(sessionId, { hasUnread: false })
-    // Tell main process user is viewing this session
-    window.electronAPI.sessionCommand(sessionId, { type: 'setActiveViewing', workspaceId: windowWorkspaceId ?? '' })
-  }, [updateSessionById, windowWorkspaceId])
-
-  const handleMarkSessionRead = useCallback((sessionId: string) => {
-    // Update hasUnread flag (primary source of truth for NEW badge)
-    // Also update lastReadMessageId for backwards compatibility
-    updateSessionById(sessionId, (s) => {
-      const lastFinalId = s.messages.findLast(
-        m => (m.role === 'assistant' || m.role === 'plan') && !m.isIntermediate
-      )?.id
-      return {
-        hasUnread: false,
-        ...(lastFinalId ? { lastReadMessageId: lastFinalId } : {}),
-      }
-    })
-    window.electronAPI.sessionCommand(sessionId, { type: 'markRead' })
-  }, [updateSessionById])
-
-  const handleMarkSessionUnread = useCallback((sessionId: string) => {
-    // Set hasUnread flag (primary source of truth for NEW badge)
-    updateSessionById(sessionId, { hasUnread: true, lastReadMessageId: undefined })
-    window.electronAPI.sessionCommand(sessionId, { type: 'markUnread' })
-  }, [updateSessionById])
-
-  const handleSessionStatusChange = useCallback((sessionId: string, state: SessionStatus) => {
-    updateSessionById(sessionId, { sessionStatus: state })
-    window.electronAPI.sessionCommand(sessionId, { type: 'setSessionStatus', state })
-  }, [updateSessionById])
-
-  const handleRenameSession = useCallback((sessionId: string, name: string) => {
-    updateSessionById(sessionId, { name })
-    window.electronAPI.sessionCommand(sessionId, { type: 'rename', name })
-  }, [updateSessionById])
 
   const handleSendMessage = useCallback(async (sessionId: string, message: string, attachments?: FileAttachment[], skillSlugs?: string[], externalBadges?: ContentBadge[]) => {
     try {
@@ -1436,120 +1125,6 @@ export default function App() {
     }
   }, [sessionOptions])
 
-  // Handle input draft changes per session with debounced persistence
-  const draftSaveTimeoutRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
-
-  // Cleanup draft save timers on unmount to prevent memory leaks
-  useEffect(() => {
-    return () => {
-      draftSaveTimeoutRef.current.forEach(clearTimeout)
-      draftSaveTimeoutRef.current.clear()
-    }
-  }, [])
-
-  // Getter for draft text - reads from ref without triggering re-renders
-  const getDraft = useCallback((sessionId: string): string => {
-    const draft = sessionDraftsRef.current.get(sessionId) as unknown
-    const text = draft && typeof draft === 'object'
-      ? (draft as { text?: unknown }).text
-      : draft
-    return coerceInputText(text)
-  }, [])
-
-  // Getter for persisted attachment refs (path + name only — not hydrated files).
-  // Consumers that need FileAttachment objects should call hydrateDraftAttachments.
-  const getDraftAttachmentRefs = useCallback((sessionId: string): DraftAttachmentRef[] => {
-    const attachments = sessionDraftsRef.current.get(sessionId)?.attachments
-    return Array.isArray(attachments) ? attachments : []
-  }, [])
-
-  // Hydrate persisted attachment refs into full FileAttachment objects.
-  //  - Track C (ref.content set): reconstruct directly from the inlined bytes.
-  //  - Track P (path-only): re-read from disk via the readUserAttachment RPC.
-  // Missing/moved files on Track P are silently dropped with a console warn — same
-  // UX as any other editor draft restore when the backing file is gone.
-  const hydrateDraftAttachments = useCallback(async (sessionId: string): Promise<FileAttachment[]> => {
-    const attachments = sessionDraftsRef.current.get(sessionId)?.attachments
-    const refs = Array.isArray(attachments) ? attachments : []
-    if (refs.length === 0) return []
-    const results = await Promise.all(
-      refs.map(async (ref) => {
-        if (ref.content) {
-          return attachmentFromContentRef(ref)
-        }
-        try {
-          const attachment = await window.electronAPI.readUserAttachment(ref.path)
-          if (!attachment) {
-            console.warn('[drafts] Attachment missing on restore, dropping:', ref.path)
-            return null
-          }
-          return attachment
-        } catch (err) {
-          console.warn('[drafts] Failed to restore attachment, dropping:', ref.path, err)
-          return null
-        }
-      })
-    )
-    return results.filter((a): a is FileAttachment => a !== null)
-  }, [])
-
-  // Write a debounced snapshot of the current ref entry to disk.
-  const schedulePersistDraft = useCallback((sessionId: string) => {
-    const existingTimeout = draftSaveTimeoutRef.current.get(sessionId)
-    if (existingTimeout) {
-      clearTimeout(existingTimeout)
-    }
-    const timeout = setTimeout(() => {
-      const draft = sessionDraftsRef.current.get(sessionId) ?? { text: '' }
-      window.electronAPI.setDraft(sessionId, draft)
-      draftSaveTimeoutRef.current.delete(sessionId)
-    }, DRAFT_SAVE_DEBOUNCE_MS)
-    draftSaveTimeoutRef.current.set(sessionId, timeout)
-  }, [])
-
-  const handleInputChange = useCallback((sessionId: string, value: string) => {
-    const text = coerceInputText(value)
-    const existing = sessionDraftsRef.current.get(sessionId)
-    const existingAttachments = Array.isArray(existing?.attachments) ? existing.attachments : []
-    const nextDraft: SessionDraft = {
-      text,
-      ...(existingAttachments.length > 0
-        ? { attachments: existingAttachments }
-        : {}),
-    }
-    const isEmpty = !nextDraft.text && (!nextDraft.attachments || nextDraft.attachments.length === 0)
-    if (isEmpty) {
-      sessionDraftsRef.current.delete(sessionId)
-    } else {
-      sessionDraftsRef.current.set(sessionId, nextDraft)
-    }
-    schedulePersistDraft(sessionId)
-  }, [schedulePersistDraft])
-
-  const handleAttachmentsChange = useCallback((sessionId: string, attachments: FileAttachment[]) => {
-    const existing = sessionDraftsRef.current.get(sessionId)
-    const refs: DraftAttachmentRef[] = []
-    for (const a of attachments) {
-      const ref = toDraftRef(a)
-      if (ref) {
-        refs.push(ref)
-      } else {
-        console.warn('[drafts] attachment exceeds per-draft size cap, not persisted:', a.name, a.size)
-      }
-    }
-    const nextDraft: SessionDraft = {
-      text: coerceInputText(existing?.text),
-      ...(refs.length > 0 ? { attachments: refs } : {}),
-    }
-    const isEmpty = !nextDraft.text && (!nextDraft.attachments || nextDraft.attachments.length === 0)
-    if (isEmpty) {
-      sessionDraftsRef.current.delete(sessionId)
-    } else {
-      sessionDraftsRef.current.set(sessionId, nextDraft)
-    }
-    schedulePersistDraft(sessionId)
-  }, [schedulePersistDraft])
-
   // Open new chat - creates session and selects it
   // Used by components via AppShellContext and for programmatic navigation
   const openNewChat = useCallback(async (params: NewChatActionParams = {}) => {
@@ -1572,80 +1147,6 @@ export default function App() {
       setTimeout(() => handleInputChange(session.id, params.input!), 100)
     }
   }, [windowWorkspaceId, handleCreateSession, handleInputChange])
-
-  const handleRespondToPermission = useCallback(async (
-    sessionId: string,
-    requestId: string,
-    allowed: boolean,
-    alwaysAllow: boolean,
-    options?: import('../shared/types').PermissionResponseOptions,
-  ) => {
-    const success = await window.electronAPI.respondToPermission(sessionId, requestId, allowed, alwaysAllow, options)
-
-    if (success) {
-      // Remove only the first permission from the queue (the one we just responded to)
-      setPendingPermissions(prev => {
-        const next = new Map(prev)
-        const queue = next.get(sessionId) || []
-        const remainingQueue = queue.slice(1) // Remove first item
-        if (remainingQueue.length === 0) {
-          next.delete(sessionId)
-        } else {
-          next.set(sessionId, remainingQueue)
-        }
-        return next
-      })
-      // Note: No need to force session refresh - per-session atoms update automatically
-    } else {
-      // Response failed (agent/session gone) - clear the permission anyway
-      // to avoid UI being stuck with stale permission
-      setPendingPermissions(prev => {
-        const next = new Map(prev)
-        const queue = next.get(sessionId) || []
-        const remainingQueue = queue.slice(1)
-        if (remainingQueue.length === 0) {
-          next.delete(sessionId)
-        } else {
-          next.set(sessionId, remainingQueue)
-        }
-        return next
-      })
-    }
-  }, [])
-
-  const handleRespondToCredential = useCallback(async (sessionId: string, requestId: string, response: CredentialResponse) => {
-    const success = await window.electronAPI.respondToCredential(sessionId, requestId, response)
-
-    if (success) {
-      // Remove only the first credential from the queue (the one we just responded to)
-      setPendingCredentials(prev => {
-        const next = new Map(prev)
-        const queue = next.get(sessionId) || []
-        const remainingQueue = queue.slice(1) // Remove first item
-        if (remainingQueue.length === 0) {
-          next.delete(sessionId)
-        } else {
-          next.set(sessionId, remainingQueue)
-        }
-        return next
-      })
-      // Note: No need to force session refresh - per-session atoms update automatically
-    } else {
-      // Response failed (agent/session gone) - clear the credential anyway
-      // to avoid UI being stuck with stale credential request
-      setPendingCredentials(prev => {
-        const next = new Map(prev)
-        const queue = next.get(sessionId) || []
-        const remainingQueue = queue.slice(1)
-        if (remainingQueue.length === 0) {
-          next.delete(sessionId)
-        } else {
-          next.set(sessionId, remainingQueue)
-        }
-        return next
-      })
-    }
-  }, [])
 
   // Centralized link interceptor: classifies file types and decides whether to
   // show an in-app preview overlay or open externally. Replaces the old
@@ -1753,68 +1254,31 @@ export default function App() {
   // Handle workspace selection
   // - Default: switch workspace in same window (in-window switching)
   // - With openInNewWindow=true: open in new window (or focus existing)
+  const resetWorkspaceScopedState = useCallback(() => {
+    setSession({ selected: null })
+    clearAllRequests()
+    setSessionOptions(new Map())
+    clearDrafts()
+    store.set(sourcesAtom, [])
+    store.set(skillsAtom, [])
+    store.set(sessionMetaMapAtom, new Map())
+    store.set(sessionIdsAtom, [])
+  }, [clearDrafts, setSession, store])
+
   const handleSelectWorkspace = useCallback(async (workspaceId: string, openInNewWindow = false) => {
-    // If selecting current workspace, do nothing
-    if (workspaceId === windowWorkspaceId) return
+    await selectWorkspace(workspaceId, {
+      openInNewWindow,
+      onCurrentWindowSwitch: resetWorkspaceScopedState,
+    })
+  }, [resetWorkspaceScopedState, selectWorkspace])
 
-    if (openInNewWindow) {
-      // Open (or focus) the window for the selected workspace
-      window.electronAPI.openWorkspace(workspaceId)
-    } else {
-      // Switch workspace in current window
-      // 1. Update the main process's window-workspace mapping
-      await window.electronAPI.switchWorkspace(workspaceId)
-
-      // 2. Update React state to trigger re-renders
-      setWindowWorkspaceId(workspaceId)
-
-      // 3. Clear selected session - the old session belongs to the previous workspace
-      // and should not remain selected when switching to a new workspace.
-      // This prevents showing stale session data from the wrong workspace.
-      setSession({ selected: null })
-
-      // 4. Clear pending permissions/credentials (not relevant to new workspace)
-      setPendingPermissions(new Map())
-      setPendingCredentials(new Map())
-
-      // 5. Clear session options from previous workspace
-      // (session IDs are unique UUIDs, but clearing prevents unbounded memory growth
-      // and ensures no stale state from old workspace persists)
-      setSessionOptions(new Map())
-
-      // 6. Clear message drafts from previous workspace
-      // (prevents memory growth on repeated workspace switches)
-      sessionDraftsRef.current.clear()
-
-      // 7. Reset sources and skills atoms to empty
-      // (prevents stale data flash during workspace switch - AppShell will reload)
-      store.set(sourcesAtom, [])
-      store.set(skillsAtom, [])
-
-      // 8. Clear session atoms BEFORE workspace switch
-      // This prevents stale session data from the previous workspace being visible.
-      store.set(sessionMetaMapAtom, new Map())
-      store.set(sessionIdsAtom, [])
-
-      // Note: NavigationContext detects the workspaceId change and handles
-      // panel restoration from the stored workspace URL (or defaults to allSessions).
-      // Sessions and theme will reload automatically due to windowWorkspaceId dependency
-      // in useEffect hooks.
-    }
-  }, [windowWorkspaceId, setSession, store])
-
-  // Handle workspace switch by slug (called by NavigationContext on popstate when ?ws= changes)
   const handleSwitchWorkspaceBySlug = useCallback((slug: string) => {
-    const target = workspaces.find(w => w.slug === slug)
-    if (target) {
-      handleSelectWorkspace(target.id)
-    }
-  }, [workspaces, handleSelectWorkspace])
+    selectWorkspaceBySlug(slug, resetWorkspaceScopedState)
+  }, [resetWorkspaceScopedState, selectWorkspaceBySlug])
 
-  // Handle workspace refresh (e.g., after icon upload)
   const handleRefreshWorkspaces = useCallback(() => {
-    window.electronAPI.getWorkspaces().then(setWorkspaces)
-  }, [])
+    void refreshWorkspaces()
+  }, [refreshWorkspaces])
 
   // Handle cancel during onboarding
   const handleOnboardingCancel = useCallback(() => {
