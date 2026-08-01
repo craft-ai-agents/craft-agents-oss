@@ -65,7 +65,7 @@ import { buildTreeTooltip, TreeTooltipContent, type TooltipData } from './treeTo
 import { useOptionalTheme } from '../context/ThemeContext'
 import { navigate, routes } from '../lib/navigate'
 import { getInitialSessionsView } from './shell-navigation'
-import { shouldGateManualExpand, trimExpandedByCount } from '@archstudio/ui'
+import { computeDepthFromRoot, shouldGateManualExpand, trimExpandedByCount } from '@archstudio/ui'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@archstudio/ui'
 import './LayoutShell.css'
 
@@ -1355,6 +1355,32 @@ const DEPTH_POPOVER_OPTIONS = [
     // capped — confusing UX.
     setExpansionCapped(false)
   }, [runDepthBFS, expandDepth, expandedPaths, wdRootPath])
+
+  // Enforce the depth cap as a state invariant, not only inside the selector
+  // click handler. Expansion writes can be queued by drill/collapse gestures
+  // in the same React scheduling window as a manual shrink; whichever write
+  // lands last must still respect the newly selected cap. Without this guard,
+  // a directory at depth === cap can remain in `expandedPaths`, so it renders
+  // expanded and bypasses `gate-forward` even though the selector shows the
+  // smaller depth. Growing the cap is unaffected, and Infinity remains the
+  // explicit unrestricted mode.
+  useEffect(() => {
+    if (!wdRootPath || !Number.isFinite(expandDepth)) return
+
+    let violatesCap = false
+    const next = new Set<string>()
+    for (const path of expandedPaths) {
+      if (computeDepthFromRoot(wdRootPath, path) >= expandDepth) {
+        violatesCap = true
+      } else {
+        next.add(path)
+      }
+    }
+    if (!violatesCap) return
+
+    expandedPathsRef.current = next
+    setExpandedPaths(next)
+  }, [expandDepth, expandedPaths, wdRootPath])
 
   // Stable ref for handleDepthPick so the global keydown listener
   // (installed once, never re-registered) always dispatches to the

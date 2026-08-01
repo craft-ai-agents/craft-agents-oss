@@ -334,13 +334,17 @@ describe('LayoutShell toggleExpand ref-gate', () => {
     // No IPC, no BFS, no async — just a deterministic state derivation.
     const depthTrigger = container.querySelector('.wd-depth-popover__trigger')
     expect(depthTrigger).not.toBeNull()
+    expect(depthTrigger!.textContent).toContain('3')
     await act(async () => { depthTrigger!.click(); await flush() })
     const depth2Btn = container.querySelector('[data-depth-value="2"]')
     expect(depth2Btn).not.toBeNull()
     await act(async () => { depth2Btn!.click(); await flush() })
 
-    // nested is now beyond the depth-2 cap → gated.
+    // nested is now at the depth-2 cap: visible through its expanded
+    // parent, but itself collapsed and gated against forward expansion.
+    expect(container.querySelector('.wd-depth-popover__trigger')!.textContent).toContain('2')
     const nestedAfter = findTreeButton(container, 'nested')!
+    expect(nestedAfter.getAttribute('aria-expanded')).toBe('false')
     expect(nestedAfter.getAttribute('data-gated')).toBe('true')
   })
 

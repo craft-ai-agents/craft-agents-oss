@@ -24,6 +24,8 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Bug Fixes
 
+- **Reliable file-tree depth limits** — reducing the Command workspace file-tree depth now immediately collapses and re-gates deeper directories, even when a queued drill expansion finishes during the same UI update.
+
 - **Installed Memory database support** — packages the native SQLite runtime required by the Memory repository in desktop installers, restoring Memory loading along with vault sync, graph, relationships, and related-search features.
 
 - **Reliable renderer console logging** — explicitly enables electron-log's renderer console spy and removes the duplicate WindowManager forwarding path, preserving renderer diagnostics without writing each console event twice.
