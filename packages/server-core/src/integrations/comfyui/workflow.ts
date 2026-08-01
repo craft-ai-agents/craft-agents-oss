@@ -121,6 +121,22 @@ export function parseComfyWorkflow(value: unknown, options: { path: string; id?:
   }
 }
 
+export function namespaceWorkflowOutputs(
+  workflow: Record<string, ComfyWorkflowNode>,
+  kind: ComfyWorkflowKind,
+): Record<string, ComfyWorkflowNode> {
+  const next = structuredClone(workflow)
+  const folder = kind === 'video' ? 'videos' : kind === 'audio' ? 'audio' : 'images'
+  for (const node of Object.values(next)) {
+    if (!/^Save(Image|Video|Audio)$/i.test(node.class_type)) continue
+    const current = typeof node.inputs.filename_prefix === 'string'
+      ? node.inputs.filename_prefix.split(/[\\/]/).filter(Boolean).pop()
+      : undefined
+    node.inputs.filename_prefix = `ARCHstudio/${folder}/${current || 'generation'}`
+  }
+  return next
+}
+
 export function applyWorkflowParameters(
   definition: ComfyWorkflowDefinition,
   values: Record<string, string | number>,

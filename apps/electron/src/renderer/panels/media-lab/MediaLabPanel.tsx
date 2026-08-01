@@ -636,7 +636,7 @@ export function MediaLabPanel() {
             className={`media-tab${creationTab === 'library' ? ' is-active' : ''}`}
             onClick={() => setCreationTab('library')}
           >
-            <FileText size={14} /> Library
+            <Video size={14} /> Library
           </button>
         </div>
       </div>
@@ -753,7 +753,7 @@ export function MediaLabPanel() {
 
           <p className="media-create__note">
             {comfyRejectedCount > 0 && `${comfyRejectedCount} non-API JSON files were safely excluded. `}
-            Outputs remain under D:\Comfyui\output.
+            App creations are stored under D:\Comfyui\output\ARCHstudio.
           </p>
         </div>
       ) : (
@@ -863,7 +863,7 @@ export function MediaLabPanel() {
               <div className="media-panel__empty">
                 <Clapperboard size={48} />
                 <p>No ComfyUI creations found</p>
-                <span>Images, video, and audio generated into D:\Comfyui\output appear here.</span>
+                <span>Creations generated through this app appear under D:\Comfyui\output\ARCHstudio.</span>
               </div>
             ) : containerSize.width > 0 && containerSize.height > 0 ? (
               <VariableSizeGrid

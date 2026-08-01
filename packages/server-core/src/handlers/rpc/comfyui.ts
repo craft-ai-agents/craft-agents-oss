@@ -16,7 +16,7 @@ import {
 } from '@archstudio/shared/protocol'
 import type { HandlerDeps } from '../handler-deps'
 import { ComfyUIClient } from '../../integrations/comfyui/client'
-import { applyWorkflowParameters, discoverComfyWorkflows } from '../../integrations/comfyui/workflow'
+import { applyWorkflowParameters, discoverComfyWorkflows, namespaceWorkflowOutputs } from '../../integrations/comfyui/workflow'
 import { classifyMedia } from './sessions'
 
 export const HANDLED_CHANNELS = [
@@ -121,8 +121,13 @@ export function registerComfyUIHandlers(server: RpcServer, deps: HandlerDeps): v
   })
 
   server.handle(RPC_CHANNELS.media.COMFY_ARTIFACTS, async (ctx, request: MediaListRequest = {}): Promise<MediaListPage> => {
-    const outputRoot = join(configuredRoot(), 'output')
+    const outputRoot = join(configuredRoot(), 'output', 'ARCHstudio')
     const artifacts: MediaItem[] = []
+    try {
+      await access(outputRoot)
+    } catch {
+      return { items: [], hasMore: false, nextCursor: null }
+    }
 
     async function walk(directory: string): Promise<void> {
       if (ctx.signal.aborted) throw new Error('ComfyUI output scan was cancelled')
@@ -183,7 +188,8 @@ export function registerComfyUIHandlers(server: RpcServer, deps: HandlerDeps): v
     const result = await discoverComfyWorkflows(configuredWorkflowRoot())
     const definition = result.workflows.find((workflow) => workflow.id === request.workflowId)
     if (!definition) throw new Error(`Unknown ComfyUI workflow: ${request.workflowId}`)
-    const workflow = applyWorkflowParameters(definition, request.parameters ?? {})
+    const parameterized = applyWorkflowParameters(definition, request.parameters ?? {})
+    const workflow = namespaceWorkflowOutputs(parameterized, definition.kind)
     const queued = await client.queuePrompt(workflow, `archstudio-${ctx.clientId}`, ctx.signal)
     deps.platform.logger.info('Queued ComfyUI workflow', { workflowId: request.workflowId, promptId: queued.prompt_id })
     return { promptId: queued.prompt_id, queueNumber: queued.number }

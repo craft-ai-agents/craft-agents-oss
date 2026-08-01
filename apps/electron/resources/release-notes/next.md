@@ -4,7 +4,7 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Features
 
-- **ComfyUI-powered Media Lab** — connects Image and Video creation to the local ComfyUI service, can start the existing D-drive installation from the header, discovers API-format workflows including installed Agnes nodes, exposes safe typed parameters, supports submission, polling, and cancellation, and dedicates Library to all image/video/audio artifacts under `D:\Comfyui\output`.
+- **ComfyUI-powered Media Lab** — connects Image and Video creation to the local ComfyUI service, can start the existing D-drive installation from the header, discovers API-format workflows including installed Agnes nodes, exposes safe typed parameters, supports submission, polling, and cancellation, and isolates app-submitted creations in `D:\Comfyui\output\ARCHstudio` for a dedicated Library without changing saved workflows or direct ComfyUI output behavior.
 
 - **Save to Memory from Activity cards** — each activity card in the Activities panel now has a "Memory" button that opens a review dialog pre-filled with a session summary (task, outcome, message count, duration). Users can edit the title and content, choose the memory class (episodic, semantic, procedural, or profile), and save to the persistent memory store. Duplicate detection warns when a similar memory already exists.
 

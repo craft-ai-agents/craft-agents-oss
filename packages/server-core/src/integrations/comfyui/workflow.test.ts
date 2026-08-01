@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { applyWorkflowParameters, ComfyWorkflowError, parseComfyWorkflow } from './workflow'
+import { applyWorkflowParameters, ComfyWorkflowError, namespaceWorkflowOutputs, parseComfyWorkflow } from './workflow'
 
 const agnesVideo = {
   disable_random_seed: true,
@@ -75,6 +75,14 @@ describe('ComfyUI workflow parser', () => {
     expect(next['2']?.inputs.seed).toBe(999)
     expect(definition.workflow['2']?.inputs.prompt).toBe('A cinematic camera move')
     expect(definition.workflow['2']?.inputs.duration).toBe(5)
+  })
+
+  it('namespaces app-submitted outputs without mutating saved workflows', () => {
+    const definition = parseComfyWorkflow(agnesVideo, { path: 'agnes.json' })
+    const namespaced = namespaceWorkflowOutputs(definition.workflow, definition.kind)
+
+    expect(namespaced['3']?.inputs.filename_prefix).toBe('ARCHstudio/videos/output')
+    expect(definition.workflow['3']?.inputs.filename_prefix).toBe('agnes/output')
   })
 
   it('rejects unknown parameter injection', () => {
