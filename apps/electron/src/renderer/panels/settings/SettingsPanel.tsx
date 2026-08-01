@@ -3,19 +3,11 @@ import {
   Settings as SettingsIcon,
   Brain,
   Coffee,
-  Globe,
-  Server,
-  ShieldAlert,
   Check,
-  User,
   SlidersHorizontal,
   Palette,
-  Keyboard,
 } from 'lucide-react'
 import { THINKING_LEVEL_IDS, type ThinkingLevel } from '@archstudio/shared/agent/thinking-levels'
-import type { NetworkProxySettings } from '@archstudio/shared/config'
-import type { ServerStatus } from '@archstudio/shared/config/server-config'
-import { actionsByCategory, useActionLabel, type ActionId } from '@/actions'
 import { isMac } from '@/lib/platform'
 import './SettingsPanel.css'
 
@@ -33,10 +25,6 @@ type SaveState = 'idle' | 'saving' | 'saved'
 export function SettingsPanel() {
   const [thinking, setThinking] = useState<ThinkingLevel | null>(null)
   const [keepAwake, setKeepAwake] = useState<boolean | null>(null)
-  const [proxy, setProxy] = useState<NetworkProxySettings | null>(null)
-  const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null)
-  const [launchAtLogin, setLaunchAtLogin] = useState<boolean | null>(null)
-  const [confirmBeforeExit, setConfirmBeforeExit] = useState<boolean | null>(null)
   const [userName, setUserName] = useState<string | null>(null)
   const [compactUI, setCompactUI] = useState<boolean>(
     () => {
@@ -57,21 +45,13 @@ export function SettingsPanel() {
     let cancelled = false
     const load = async () => {
       try {
-        const [level, awake, proxyCfg, status, launchCfg, exitCfg] = await Promise.all([
+        const [level, awake] = await Promise.all([
           window.electronAPI.getDefaultThinkingLevel(),
           window.electronAPI.getKeepAwakeWhileRunning(),
-          window.electronAPI.getNetworkProxySettings(),
-          window.electronAPI.getServerStatus(),
-          window.electronAPI.getLaunchAtLogin(),
-          window.electronAPI.getConfirmBeforeExit(),
         ])
         if (cancelled) return
         setThinking(level)
         setKeepAwake(awake)
-        setProxy(proxyCfg ?? { enabled: false })
-        setServerStatus(status)
-        setLaunchAtLogin(launchCfg)
-        setConfirmBeforeExit(exitCfg)
 
         // Try to get git user name from global config for personalizing settings header
         try {
@@ -121,46 +101,6 @@ export function SettingsPanel() {
       flashSaved()
     } catch (err) {
       setKeepAwake(previous)
-      setSaved('idle')
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  const commitProxy = async (next: NetworkProxySettings) => {
-    setProxy(next)
-    setSaved('saving')
-    try {
-      await window.electronAPI.setNetworkProxySettings(next)
-      flashSaved()
-    } catch (err) {
-      setSaved('idle')
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  const changeLaunchAtLogin = async (value: boolean) => {
-    const previous = launchAtLogin
-    setLaunchAtLogin(value)
-    setSaved('saving')
-    try {
-      await window.electronAPI.setLaunchAtLogin(value)
-      flashSaved()
-    } catch (err) {
-      setLaunchAtLogin(previous)
-      setSaved('idle')
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  const changeConfirmBeforeExit = async (value: boolean) => {
-    const previous = confirmBeforeExit
-    setConfirmBeforeExit(value)
-    setSaved('saving')
-    try {
-      await window.electronAPI.setConfirmBeforeExit(value)
-      flashSaved()
-    } catch (err) {
-      setConfirmBeforeExit(previous)
       setSaved('idle')
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -292,126 +232,6 @@ export function SettingsPanel() {
 
         <section className="settings-section">
           <div className="settings-section__head">
-            <Globe size={16} />
-            <h3>Network proxy</h3>
-          </div>
-          <label className="settings-row">
-            <div>
-              <span className="settings-row__label">Route traffic through a proxy</span>
-              <span className="settings-row__hint">Applies to model and integration requests.</span>
-            </div>
-            <input
-              type="checkbox"
-              className="settings-switch"
-              checked={proxy?.enabled ?? false}
-              disabled={proxy === null}
-              onChange={(e) => void commitProxy({ ...(proxy ?? {}), enabled: e.target.checked })}
-            />
-          </label>
-
-          {proxy?.enabled && (
-            <div className="settings-fields">
-              <label className="settings-field">
-                <span>HTTP proxy</span>
-                <input
-                  type="text"
-                  placeholder="http://proxy.local:8080"
-                  value={proxy.httpProxy ?? ''}
-                  onChange={(e) => setProxy({ ...proxy, httpProxy: e.target.value })}
-                  onBlur={() => void commitProxy(proxy)}
-                />
-              </label>
-              <label className="settings-field">
-                <span>HTTPS proxy</span>
-                <input
-                  type="text"
-                  placeholder="http://proxy.local:8080"
-                  value={proxy.httpsProxy ?? ''}
-                  onChange={(e) => setProxy({ ...proxy, httpsProxy: e.target.value })}
-                  onBlur={() => void commitProxy(proxy)}
-                />
-              </label>
-              <label className="settings-field">
-                <span>No proxy for</span>
-                <input
-                  type="text"
-                  placeholder="localhost, 127.0.0.1, .internal"
-                  value={proxy.noProxy ?? ''}
-                  onChange={(e) => setProxy({ ...proxy, noProxy: e.target.value })}
-                  onBlur={() => void commitProxy(proxy)}
-                />
-              </label>
-            </div>
-          )}
-        </section>
-
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <Server size={16} />
-            <h3>Remote server</h3>
-          </div>
-          {serverStatus === null ? (
-            <p className="settings-section__lead">Loading server status…</p>
-          ) : (
-            <>
-              <div className="settings-status">
-                <span className={`settings-dot${serverStatus.running ? ' is-on' : ''}`} />
-                <span>{serverStatus.running ? 'Running' : 'Stopped'}</span>
-                {serverStatus.running && <code>{serverStatus.url}</code>}
-                {serverStatus.tls && <span className="settings-tag">TLS</span>}
-              </div>
-              {serverStatus.insecureWarning && (
-                <div className="settings-warn">
-                  <ShieldAlert size={14} />
-                  Bound to a network address without TLS — traffic is unencrypted.
-                </div>
-              )}
-              {serverStatus.needsRestart && (
-                <div className="settings-warn">
-                  <ShieldAlert size={14} />
-                  Saved config differs from the running server. Restart to apply.
-                </div>
-              )}
-            </>
-          )}
-        </section>
-
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <User size={16} />
-            <h3>General</h3>
-          </div>
-          <p className="settings-section__lead">Application-wide defaults and behaviours.</p>
-          <label className="settings-row">
-            <div>
-              <span className="settings-row__label">Launch at login</span>
-              <span className="settings-row__hint">Start ARCHstudio automatically when you sign in.</span>
-            </div>
-            <input
-              type="checkbox"
-              className="settings-switch"
-              checked={launchAtLogin ?? false}
-              disabled={launchAtLogin === null}
-              onChange={(e) => void changeLaunchAtLogin(e.target.checked)}
-            />
-          </label>
-          <label className="settings-row">
-            <div>
-              <span className="settings-row__label">Confirm before exit</span>
-              <span className="settings-row__hint">Show a confirmation dialog when closing the app.</span>
-            </div>
-            <input
-              type="checkbox"
-              className="settings-switch"
-              checked={confirmBeforeExit ?? false}
-              disabled={confirmBeforeExit === null}
-              onChange={(e) => void changeConfirmBeforeExit(e.target.checked)}
-            />
-          </label>
-        </section>
-
-        <section className="settings-section">
-          <div className="settings-section__head">
             <Palette size={16} />
             <h3>Appearance</h3>
           </div>
@@ -460,49 +280,6 @@ export function SettingsPanel() {
             {importMsg && <span className="settings-export-msg settings-export-msg--import">{importMsg}</span>}
           </div>
         </section>
-
-        <section className="settings-section">
-          <div className="settings-section__head">
-            <Keyboard size={16} />
-            <h3>Keyboard Shortcuts</h3>
-          </div>
-          <p className="settings-section__lead">Global shortcuts and quick actions available throughout the app.</p>
-          <div className="settings-shortcuts">
-            {Object.entries(actionsByCategory).map(([category, actions]) => (
-              <div key={category} className="settings-shortcuts__group">
-                <span className="settings-shortcuts__category">{category}</span>
-                {actions.map(action => (
-                  <ShortcutRow key={action.id} actionId={action.id as ActionId} />
-                ))}
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-    </div>
-  )
-}
-
-function ShortcutRow({ actionId }: { actionId: ActionId }) {
-  const { label, description, hotkey } = useActionLabel(actionId)
-  if (!hotkey) return null
-
-  const keys = isMac
-    ? hotkey.match(/[⌘⇧⌥←→]|Tab|Esc|./g) || []
-    : hotkey.split('+')
-
-  return (
-    <div className="settings-shortcut-row">
-      <div>
-        <div className="settings-shortcut-row__label">{label}</div>
-        {description && (
-          <div className="settings-shortcut-row__desc">{description}</div>
-        )}
-      </div>
-      <div className="settings-shortcut-row__keys">
-        {keys.map((key, i) => (
-          <kbd key={i} className="settings-shortcut-kbd">{key}</kbd>
-        ))}
       </div>
     </div>
   )
