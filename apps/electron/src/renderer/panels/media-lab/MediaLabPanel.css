@@ -597,59 +597,194 @@
   max-width: 420px;
 }
 
-.media-create__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 14px;
-  margin-bottom: var(--ds-space-5);
-}
-
-.media-create__card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 18px;
-  border-radius: var(--ds-radius-lg);
+.media-create__health {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 4px;
+  padding: 5px 10px;
   border: 1px solid var(--media-border);
-  background: var(--media-surface);
-  color: var(--media-text-secondary);
-  text-align: left;
-  cursor: not-allowed;
-  transition:
-    border-color var(--ds-duration-fast) var(--ds-ease-standard),
-    transform var(--ds-duration-fast) var(--ds-ease-standard);
-}
-
-/* --media-tool-accent is set per card from the TSX; it deliberately does NOT
-   reuse the global --accent theme variable, which setting inline would
-   override for everything nested inside the card. */
-.media-create__card:hover {
-  border-color: var(--media-tool-accent, var(--media-border));
-}
-
-.media-create__card strong {
-  color: var(--media-text);
-  font-size: 14px;
-}
-
-.media-create__prompt {
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-/* "Coming soon" marker — feature itself is untouched, just themed. */
-.media-create__soon {
-  margin-top: auto;
-  padding: 3px 9px;
   border-radius: var(--ds-radius-pill);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--media-text-muted);
   background: var(--media-fill-soft);
+  font-size: 11px;
+}
+
+.media-create__health > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--destructive);
+  box-shadow: 0 0 8px color-mix(in oklch, var(--destructive) 45%, transparent);
+}
+
+.media-create__health.is-online > span {
+  background: var(--brand-lime);
+  box-shadow: 0 0 9px color-mix(in oklch, var(--brand-lime) 55%, transparent);
+}
+
+.media-create__workspace {
+  max-width: 920px;
+  margin: 0 auto var(--ds-space-5);
+  padding: 18px;
   border: 1px solid var(--media-border);
+  border-radius: var(--ds-radius-xl);
+  background: color-mix(in oklch, var(--media-surface) 94%, transparent);
+  box-shadow: var(--ds-elevation-1);
+}
+
+.media-create__kinds {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.media-create__kinds button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius-md);
+  color: var(--media-text-secondary);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.media-create__kinds button span {
+  color: var(--media-text-muted);
+  font-size: 10px;
+}
+
+.media-create__kinds button.is-active {
+  border-color: color-mix(in oklch, var(--brand-purple) 44%, var(--media-border));
+  color: var(--media-text);
+  background: color-mix(in oklch, var(--brand-purple) 12%, transparent);
+}
+
+.media-create__form,
+.media-create__parameters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.media-create__parameters {
+  grid-column: 1 / -1;
+}
+
+.media-create__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.media-create__field--wide {
+  grid-column: 1 / -1;
+}
+
+.media-create__field > span {
+  color: var(--media-text-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.media-create__field input,
+.media-create__field select,
+.media-create__field textarea {
+  width: 100%;
+  border: 1px solid var(--media-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--media-fill-soft);
+  color: var(--media-text);
+  padding: 9px 10px;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  resize: vertical;
+}
+
+.media-create__field input:focus,
+.media-create__field select:focus,
+.media-create__field textarea:focus {
+  border-color: color-mix(in oklch, var(--brand-purple) 58%, var(--media-border));
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--brand-purple) 12%, transparent);
+}
+
+.media-create__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-top: 4px;
+}
+
+.media-create__run,
+.media-create__cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 13px;
+  border-radius: var(--ds-radius-md);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.media-create__run {
+  border: 1px solid color-mix(in oklch, var(--brand-purple) 52%, var(--media-border));
+  background: color-mix(in oklch, var(--brand-purple) 18%, var(--media-surface));
+  color: var(--media-text);
+}
+
+.media-create__run:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.media-create__cancel {
+  border: 1px solid var(--media-border);
+  background: transparent;
+  color: var(--media-text-secondary);
+}
+
+.media-create__job {
+  margin-left: auto;
+  color: var(--media-text-muted);
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+.media-create__job.is-running,
+.media-create__job.is-completed {
+  color: var(--brand-lime);
+}
+
+.media-create__error,
+.media-create__empty {
+  padding: 12px;
+  border-radius: var(--ds-radius-md);
+  color: var(--media-text-secondary);
+  background: var(--media-fill-soft);
+  font-size: 12px;
+}
+
+.media-create__error {
+  margin-bottom: 12px;
+  color: var(--destructive);
+  border: 1px solid color-mix(in oklch, var(--destructive) 30%, transparent);
+}
+
+@media (max-width: 760px) {
+  .media-create__form,
+  .media-create__parameters {
+    grid-template-columns: 1fr;
+  }
 }
 
 .media-context-menu {

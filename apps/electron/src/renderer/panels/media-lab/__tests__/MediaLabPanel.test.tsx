@@ -146,7 +146,36 @@ const mediaList = mock(
   },
 )
 
-;(win as any).electronAPI = { mediaList }
+const comfyHealth = mock(async () => ({
+  connected: true,
+  baseUrl: 'http://127.0.0.1:8188',
+  version: '0.28.3',
+  device: 'NVIDIA GeForce RTX 5070 Ti',
+}))
+const comfyWorkflows = mock(async () => ({
+  rejectedCount: 2,
+  workflows: [
+    {
+      id: 'agnes-image',
+      name: 'Agnes Image',
+      kind: 'image',
+      nodeClasses: ['AgnesImage', 'SaveImage'],
+      parameters: [{ id: '1.prompt', label: 'Prompt', kind: 'text', value: 'Studio portrait' }],
+    },
+    {
+      id: 'agnes-video',
+      name: 'Agnes Video',
+      kind: 'video',
+      nodeClasses: ['AgnesVideo', 'SaveVideo'],
+      parameters: [{ id: '2.prompt', label: 'Prompt', kind: 'text', value: 'Slow camera move' }],
+    },
+  ],
+}))
+const comfyRun = mock(async () => ({ promptId: 'prompt-12345678' }))
+const comfyStatus = mock(async (request: { promptId: string }) => ({ promptId: request.promptId, state: 'completed' }))
+const comfyCancel = mock(async () => undefined)
+
+;(win as any).electronAPI = { mediaList, comfyHealth, comfyWorkflows, comfyRun, comfyStatus, comfyCancel }
 
 // -------------------------------------------------------------------------
 // 4. Mock the AppShellContext module — the panel calls `useAppShellContext`
@@ -233,9 +262,14 @@ describe('MediaLabPanel smoke test', () => {
     callIndex = 0
     pendingFirstPage = null
     lastOnItemsRendered = null
+    comfyHealth.mockClear()
+    comfyWorkflows.mockClear()
+    comfyRun.mockClear()
+    comfyStatus.mockClear()
+    comfyCancel.mockClear()
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     // Resolve any pending first page so the in-flight loadPage doesn't
     // surface an unhandled rejection on unmount.
     if (pendingFirstPage) {
@@ -243,7 +277,7 @@ describe('MediaLabPanel smoke test', () => {
       pendingFirstPage = null
     }
     if (lastRoot) {
-      lastRoot.unmount()
+      await act(async () => lastRoot?.unmount())
       lastRoot = null
     }
     if (lastContainer && lastContainer.parentNode) {
@@ -326,5 +360,39 @@ describe('MediaLabPanel smoke test', () => {
 
     // Second page fetched.
     expect(mediaListCalls.length).toBe(2)
+  })
+
+  it('loads real ComfyUI workflows and submits the selected image workflow', async () => {
+    const { container, root } = await renderPanel()
+    lastContainer = container
+    lastRoot = root
+
+    await act(async () => {
+      await flush()
+      await flush()
+    })
+
+    expect(comfyHealth).toHaveBeenCalledTimes(1)
+    expect(comfyWorkflows).toHaveBeenCalledTimes(1)
+    expect(container.textContent).toContain('ComfyUI 0.28.3')
+    expect(container.textContent).toContain('Agnes Image')
+    expect(container.textContent).toContain('Image 1')
+    expect(container.textContent).toContain('Video 1')
+    expect(container.textContent).not.toContain('Coming soon')
+
+    const runButton = Array.from(container.querySelectorAll('button')).find(
+      (button: any) => button.textContent?.includes('Run image workflow'),
+    ) as HTMLButtonElement
+    await act(async () => {
+      runButton.click()
+      await flush()
+      await flush()
+    })
+
+    expect(comfyRun).toHaveBeenCalledWith({
+      workflowId: 'agnes-image',
+      parameters: { '1.prompt': 'Studio portrait' },
+    })
+    expect(container.textContent).toContain('prompt-1')
   })
 })
