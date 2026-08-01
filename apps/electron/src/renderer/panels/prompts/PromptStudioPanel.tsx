@@ -628,26 +628,30 @@ export function PromptStudioPanel() {
 
         {/* Project Context pane */}
         <div className="ps-context-pane">
-          <button
-            type="button"
-            className="ps-context-pane__header"
-            onClick={() => setContextPaneOpen((v) => !v)}
-          >
-            {contextPaneOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            <BookOpen size={12} />
-            <span>Project Context</span>
-            <span className="ps-context-pane__count">
-              {projectContext?.contextFiles?.length ?? 0}
-            </span>
+          <div className="ps-context-pane__header">
+            <button
+              type="button"
+              className="ps-context-pane__toggle"
+              onClick={() => setContextPaneOpen((v) => !v)}
+              aria-expanded={contextPaneOpen}
+            >
+              {contextPaneOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              <BookOpen size={12} />
+              <span>Project Context</span>
+              <span className="ps-context-pane__count">
+                {projectContext?.contextFiles?.length ?? 0}
+              </span>
+            </button>
             <button
               type="button"
               className="ps-context-pane__reload"
-              onClick={(e) => { e.stopPropagation(); resolveContext() }}
+              onClick={() => resolveContext()}
               title="Re-scan for AGENTS.md/CLAUDE.md"
+              aria-label="Re-scan project context files"
             >
               <RotateCcw size={10} />
             </button>
-          </button>
+          </div>
           {contextPaneOpen && (
             <div className="ps-context-pane__body">
               {contextLoading ? (

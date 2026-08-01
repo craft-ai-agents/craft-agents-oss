@@ -24,6 +24,8 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Bug Fixes
 
+- **Accessible rail controls** — Prompt Studio’s project-context actions and the Command workspace file tree now use valid sibling controls instead of nested buttons, improving keyboard, focus, and screen-reader behavior.
+
 - **Reliable file-tree depth limits** — reducing the Command workspace file-tree depth now immediately collapses and re-gates deeper directories, even when a queued drill expansion finishes during the same UI update.
 
 - **Installed Memory database support** — packages the native SQLite runtime required by the Memory repository in desktop installers, restoring Memory loading along with vault sync, graph, relationships, and related-search features.

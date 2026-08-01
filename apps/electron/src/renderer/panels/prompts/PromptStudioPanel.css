@@ -134,12 +134,23 @@
 .ps-context-pane__header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 4px 8px 4px 12px;
+  color: var(--color-muted);
+}
+
+.ps-context-pane__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  height: 28px;
+  padding: 0;
   border: none;
   background: transparent;
-  color: var(--color-muted);
+  color: inherit;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -148,7 +159,9 @@
   text-align: left;
 }
 
-.ps-context-pane__header:hover {
+.ps-context-pane__toggle:hover,
+.ps-context-pane__toggle:focus-visible,
+.ps-context-pane__header:has(.ps-context-pane__reload:hover) {
   color: var(--color-text);
 }
 

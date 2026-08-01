@@ -315,6 +315,8 @@ describe('LayoutShell toggleExpand ref-gate', () => {
     // nested (depth 2) is gated at default expandDepth=2.
     const nestedBtn = findTreeButton(container, 'nested')!
     expect(nestedBtn.getAttribute('data-gated')).toBe('true')
+    expect(container.querySelector('.wd-files-item button')).not.toBeNull()
+    expect(container.querySelector('button .wd-files-item')).toBeNull()
 
     // Expand nested via drill-click: the gate triggers a temporary
     // depth bump (2→3) and nested opens.

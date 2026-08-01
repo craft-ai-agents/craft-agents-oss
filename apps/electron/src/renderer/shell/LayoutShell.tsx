@@ -367,7 +367,7 @@ interface TreeRowProps {
   loadingDirs: Set<string>
   erroredDirs: Set<string>
   wdThumbnails: Record<string, string | null>
-  treeBtnRefs: React.MutableRefObject<Map<string, HTMLButtonElement>>
+  treeBtnRefs: React.MutableRefObject<Map<string, HTMLDivElement>>
   gitStatusByPath: Map<string, Map<string, string>>
   workingDirectory: string | undefined
   onFocus: (path: string) => void
@@ -439,8 +439,7 @@ function TreeRow({
   return (
     <Tooltip key={entry.path} delayDuration={400}>
       <TooltipTrigger asChild>
-        <button
-          type="button"
+        <div
           tabIndex={-1}
           role="treeitem"
           aria-expanded={
@@ -655,7 +654,7 @@ function TreeRow({
               </span>
             )}
           </div>
-        </button>
+        </div>
       </TooltipTrigger>
       <TooltipContent
         side="left"
@@ -1915,7 +1914,7 @@ const DEPTH_POPOVER_OPTIONS = [
   // ────────────────────────────────────────────────────────────────
 
   const [focusedTreePath, setFocusedTreePath] = useState<string | null>(null)
-  const treeBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
+  const treeBtnRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
   // Reset focus when working directory changes — old path may not exist in new tree
   useEffect(() => {

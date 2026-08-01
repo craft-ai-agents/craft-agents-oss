@@ -193,6 +193,24 @@ describe('PromptStudioPanel smoke test', () => {
     expect(titleEl?.textContent).toContain('8')
   })
 
+  it('uses sibling controls instead of nested buttons', async () => {
+    const { container, root } = await renderPanel()
+    lastContainer = container
+    lastRoot = root
+
+    expect(container.querySelector('button button')).toBeNull()
+    const contextToggle = container.querySelector('.ps-context-pane__toggle') as HTMLButtonElement | null
+    const contextReload = container.querySelector('.ps-context-pane__reload') as HTMLButtonElement | null
+    expect(contextToggle?.getAttribute('aria-expanded')).toBe('false')
+    expect(contextReload?.getAttribute('aria-label')).toBe('Re-scan project context files')
+
+    await act(async () => {
+      contextToggle?.click()
+      await flush()
+    })
+    expect(contextToggle?.getAttribute('aria-expanded')).toBe('true')
+  })
+
   it('shows owner profile pane with default values', async () => {
     const { container, root } = await renderPanel()
     lastContainer = container
