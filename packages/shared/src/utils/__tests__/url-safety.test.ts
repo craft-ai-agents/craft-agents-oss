@@ -45,7 +45,7 @@ describe('classifyExternalUrl — internal deep links', () => {
   })
 
   it('is case-insensitive for the scheme', () => {
-    expect(classifyExternalUrl('CRAFTAGENTS://settings').kind).toBe('internal-deeplink')
+    expect(classifyExternalUrl('ARCHSTUDIO://settings').kind).toBe('internal-deeplink')
   })
 })
 

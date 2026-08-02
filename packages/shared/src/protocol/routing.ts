@@ -199,6 +199,41 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.gitbash.BROWSE,
   RPC_CHANNELS.gitbash.SET_PATH,
 
+  // git — local-only username lookup (local git config on this machine)
+  RPC_CHANNELS.git.GET_USER_NAME,
+
+  // archCommand — local OS shell command runner
+  RPC_CHANNELS.archCommand.RUN,
+  RPC_CHANNELS.archCommand.KILL,
+
+  // memory — local SQLite memory store (Electron main process)
+  RPC_CHANNELS.memory.LIST,
+  RPC_CHANNELS.memory.GET,
+  RPC_CHANNELS.memory.CREATE,
+  RPC_CHANNELS.memory.UPDATE,
+  RPC_CHANNELS.memory.ARCHIVE,
+  RPC_CHANNELS.memory.RESTORE,
+  RPC_CHANNELS.memory.DELETE,
+  RPC_CHANNELS.memory.SEARCH,
+  RPC_CHANNELS.memory.GRAPH,
+  RPC_CHANNELS.memory.STATS,
+  RPC_CHANNELS.memory.IMPORT,
+  RPC_CHANNELS.memory.VAULT_GET,
+  RPC_CHANNELS.memory.VAULT_SET,
+  RPC_CHANNELS.memory.VAULT_OPEN,
+  RPC_CHANNELS.memory.VAULT_SYNC,
+  RPC_CHANNELS.memory.VAULT_WATCHER_STATUS,
+  RPC_CHANNELS.memory.EDGE_CREATE,
+  RPC_CHANNELS.memory.EDGE_DELETE,
+  RPC_CHANNELS.memory.EDGE_LIST,
+
+  // knowledge — local knowledge graph store (Electron main process)
+  RPC_CHANNELS.knowledge.BUILD_GRAPH,
+  RPC_CHANNELS.knowledge.GET_GRAPH,
+  RPC_CHANNELS.knowledge.GRAPH_STATUS,
+  RPC_CHANNELS.knowledge.ASK,
+  RPC_CHANNELS.knowledge.GET_CONVERSATION,
+
   // debug — local debug logging
   RPC_CHANNELS.debug.LOG,
 
@@ -421,6 +456,16 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
 
   // logo — workspace config
   RPC_CHANNELS.logo.GET_URL,
+
+  // media — ComfyUI integration + media library (runs on workspace server)
+  RPC_CHANNELS.media.LIST,
+  RPC_CHANNELS.media.COMFY_HEALTH,
+  RPC_CHANNELS.media.COMFY_START,
+  RPC_CHANNELS.media.COMFY_WORKFLOWS,
+  RPC_CHANNELS.media.COMFY_ARTIFACTS,
+  RPC_CHANNELS.media.COMFY_RUN,
+  RPC_CHANNELS.media.COMFY_STATUS,
+  RPC_CHANNELS.media.COMFY_CANCEL,
 
   // automations — workspace automations
   RPC_CHANNELS.automations.GET,

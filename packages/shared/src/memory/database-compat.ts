@@ -1,10 +1,18 @@
 // ============================================================================
 // SQLite compat layer: bun:sqlite on Bun, better-sqlite3 on Node/Electron
 // ============================================================================
-// Only loads better-sqlite3 for Electron. Bun support removed for Electron builds.
+// Under `bun test`, better-sqlite3's native .node addon panics Bun's NAPI at
+// process exit ("NAPI FATAL ERROR: Error::New napi_get_last_error_info"), so we
+// use bun:sqlite (built into the Bun runtime) when running under Bun. Electron
+// production builds still load better-sqlite3.
 // ============================================================================
 
 let cachedDatabase: any = null;
+
+/** True when the current process is Bun (its sqlite is bundled into the runtime). */
+function isBunRuntime(): boolean {
+  return typeof process !== 'undefined' && !!(process as any).versions?.bun;
+}
 
 /**
  * Resolve better-sqlite3 across the runtimes this bundle ends up in.
@@ -75,6 +83,39 @@ function loadBetterSqlite3(): any {
   );
 }
 
+/**
+ * Resolve bun:sqlite. Loaded lazily via createRequire so this module can be
+ * imported by Node/Electron too — the `bun:sqlite` specifier is never resolved
+ * unless we're actually running under Bun.
+ */
+function loadBunSqlite(): any {
+  const { createRequire } = requireNodeModule();
+  const base = (globalThis as any)?.process?.cwd?.() ?? '.';
+  const req = createRequire(`${base}/index.js`);
+  return req('bun:sqlite');
+}
+
+/** createRequire available across both runtimes without top-level node: imports. */
+function requireNodeModule(): { createRequire: (path: string) => NodeRequire } {
+  const bootstrap =
+    (typeof require === 'function' && require) ||
+    (typeof module !== 'undefined' && (module as any)?.require) ||
+    (globalThis as any)?.process?.mainModule?.require;
+  if (typeof bootstrap === 'function') {
+    return bootstrap('node:module');
+  }
+  throw new Error('No require available to load node:module');
+}
+
+/** Resolve the sqlite driver appropriate for the current runtime. */
+function loadSqliteDriver(): any {
+  if (isBunRuntime()) {
+    const sqlite = loadBunSqlite();
+    return sqlite.Database ?? sqlite;
+  }
+  return loadBetterSqlite3();
+}
+
 /** Statement wrapper that normalises better-sqlite3 API */
 export class Statement {
   private inner: any;
@@ -102,24 +143,36 @@ export class Statement {
   }
 }
 
-/** Database wrapper for better-sqlite3 */
+/** Database wrapper for better-sqlite3 / bun:sqlite */
 export class Database {
   private inner: any;
+  private bun: boolean;
 
-  constructor(path: string, _opts?: { create?: boolean; readwrite?: boolean }) {
-    // Lazy-load better-sqlite3 only when a Database is first created
+  constructor(path: string, opts?: { create?: boolean; readwrite?: boolean }) {
+    // Lazy-load the driver only when a Database is first created
     if (!cachedDatabase) {
-      cachedDatabase = loadBetterSqlite3();
+      cachedDatabase = loadSqliteDriver();
     }
+    this.bun = isBunRuntime();
 
-    // Create database instance
-    this.inner = new cachedDatabase(path);
+    // Create database instance. bun:sqlite accepts {create, readwrite} options;
+    // better-sqlite3 takes the path alone (create is implied).
+    this.inner = this.bun ? new cachedDatabase(path, opts) : new cachedDatabase(path);
 
-    // Set up PRAGMAs for optimal performance
-    this.inner.pragma('journal_mode = WAL');
-    this.inner.pragma('foreign_keys = ON');
-    this.inner.pragma('busy_timeout = 5000');
-    this.inner.pragma('cache_size = -4000');
+    // bun:sqlite exposes pragma() through exec(); better-sqlite3's pragma()
+    // auto-prefixes `PRAGMA `, so exec needs the prefix added explicitly.
+    const runPragma = (sql: string) => {
+      if (this.bun) {
+        this.inner.exec(`PRAGMA ${sql}`);
+      } else {
+        this.inner.pragma(sql);
+      }
+    };
+
+    runPragma('journal_mode = WAL');
+    runPragma('foreign_keys = ON');
+    runPragma('busy_timeout = 5000');
+    runPragma('cache_size = -4000');
   }
 
   prepare(sql: string): Statement {
