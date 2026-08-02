@@ -94,3 +94,6 @@ ARCHstudioTEST/
 
 # Dev-server log written by electron:dev
 dev.log
+
+# MCP server nested repositories
+mcp-servers/*/repo/
