@@ -46,15 +46,20 @@ export const ENV_RPC_PORT = 'ARCHSTUDIO_RPC_PORT' as const;
 // ── Repository ───────────────────────────────────────────────────────────
 
 /** GitHub repo URL (without trailing slash) */
-export const REPO_URL = 'https://github.com/lukilabs/craft-agents-oss' as const;
+export const REPO_URL = 'https://github.com/skobe79/craft-agents-oss' as const;
 
 /** GitHub repo name */
 export const REPO_NAME = 'craft-agents-oss' as const;
 
 /** GitHub org */
-export const REPO_ORG = 'lukilabs' as const;
+export const REPO_ORG = 'skobe79' as const;
 
-/** Short link shown in the app */
+/**
+ * Short link shown in the app.
+ *
+ * Still points at the upstream project's site — replace with this project's
+ * own URL once one exists. Currently unreferenced outside this module.
+ */
 export const SHORT_URL = 'https://craft.do' as const;
 
 // ── Docker ───────────────────────────────────────────────────────────────
@@ -78,7 +83,15 @@ export const GROUP_LABEL_SHORT = 'ARCHstudio' as const;
 
 // ── Viewer ───────────────────────────────────────────────────────────────
 
-/** Session viewer base URL */
+/**
+ * Session viewer base URL.
+ *
+ * WARNING: this is upstream's hosted service. Sharing a session POSTs the
+ * transcript to Craft Docs Ltd. infrastructure (see SessionManager
+ * shareToViewer / updateShare / revokeShare). Point this at a self-hosted
+ * apps/viewer deployment before relying on session sharing, or sharing will
+ * publish user data to a third party.
+ */
 export const VIEWER_URL = 'https://agents.craft.do' as const;
 
 // ── Logo ─────────────────────────────────────────────────────────────────

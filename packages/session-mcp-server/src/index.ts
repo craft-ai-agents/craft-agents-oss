@@ -288,7 +288,9 @@ function createSessionTools(includeDeveloperFeedback: boolean): Tool[] {
 // ARCHstudio Docs Upstream Proxy
 // ============================================================
 
-const DOCS_MCP_URL = 'https://agents.craft.do/docs/mcp';
+// Defaults to upstream's docs MCP; override with ARCHSTUDIO_DOCS_MCP_URL to
+// point at your own (kept in sync with the value used in claude-agent.ts).
+const DOCS_MCP_URL = process.env.ARCHSTUDIO_DOCS_MCP_URL || 'https://agents.craft.do/docs/mcp';
 
 /** Cached upstream client + tool list */
 let docsClient: Client | null = null;

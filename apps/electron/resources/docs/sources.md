@@ -4,7 +4,7 @@ This guide explains how to configure sources (MCP servers, APIs, local filesyste
 
 > **CLI-first workflow (recommended):** Use `craft-agent source ...` commands instead of editing source config files directly.
 > - `craft-agent source --help`
-> - Canonical command reference: [craft-cli.md](./craft-cli.md)
+> - Canonical command reference: [archstudio-cli.md](./archstudio-cli.md)
 
 ## Source Setup Process
 

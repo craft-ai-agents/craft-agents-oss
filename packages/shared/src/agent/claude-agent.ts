@@ -1092,11 +1092,13 @@ export class ClaudeAgent extends BaseAgent {
       const fullMcpServers: Options['mcpServers'] = {
         // Session-scoped tools (SubmitPlan, source_test, update_user_preferences, transform_data, etc.)
         session: getSessionScopedTools(sessionId, this.workspaceRootPath, undefined, this.config.memoryRepository),
-        // ARCHstudio documentation - always available for searching setup guides
-        // This is a public Mintlify MCP server, no auth needed
+        // Docs search - always available. Defaults to upstream's public
+        // Mintlify MCP server (searches Craft's docs, which cover this shared
+        // codebase). No auth needed. Point ARCHSTUDIO_DOCS_MCP_URL at your own
+        // docs MCP once you host one, to drop the craft.do dependency.
         'craft-agents-docs': {
           type: 'http',
-          url: 'https://agents.craft.do/docs/mcp',
+          url: process.env.ARCHSTUDIO_DOCS_MCP_URL || 'https://agents.craft.do/docs/mcp',
         },
         // Per-source proxy servers from centralized MCP pool (MCP + API sources)
         // Each source gets its own SDK server keyed by slug (e.g., 'linear', 'github', 'gmail')

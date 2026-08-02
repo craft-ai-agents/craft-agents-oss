@@ -1,4 +1,4 @@
-import { Menu, app, shell, BrowserWindow } from 'electron'
+import { Menu, app, BrowserWindow } from 'electron'
 import { i18n } from '@archstudio/shared/i18n'
 import { APP_NAME } from '@archstudio/shared/branding'
 import { RPC_CHANNELS, type BroadcastEventMap } from '../shared/types'
@@ -233,10 +233,6 @@ export async function rebuildMenu(): Promise<void> {
     {
       label: i18n.t("menu.help"),
       submenu: [
-        {
-          label: i18n.t("menu.helpAndDocs"),
-          click: () => shell.openExternal('https://agents.craft.do/docs')
-        },
         {
           label: i18n.t("menu.keyboardShortcuts"),
           accelerator: 'CmdOrCtrl+/',

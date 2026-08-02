@@ -2,7 +2,11 @@
 
 set -e
 
-VERSIONS_URL="https://agents.craft.do/electron"
+# Binary host. Upstream published to https://agents.craft.do/electron; this
+# fork has no release host yet, so the download is disabled by default to avoid
+# pulling upstream's binaries. Point ARCHSTUDIO_VERSIONS_URL at your own
+# electron-builder "generic" host (serving latest/<yml> + installers) to enable.
+VERSIONS_URL="${ARCHSTUDIO_VERSIONS_URL:-}"
 DOWNLOAD_DIR="$HOME/.archstudio/downloads"
 
 # Colors for output
@@ -17,6 +21,14 @@ info() { printf "%b\n" "${BLUE}>${NC} $1"; }
 success() { printf "%b\n" "${GREEN}>${NC} $1"; }
 warn() { printf "%b\n" "${YELLOW}!${NC} $1"; }
 error() { printf "%b\n" "${RED}x${NC} $1"; exit 1; }
+
+if [ -z "$VERSIONS_URL" ]; then
+    printf '%b\n' "\033[0;31mx\033[0m No binary host configured for this fork."
+    printf '%b\n' "  Set ARCHSTUDIO_VERSIONS_URL to your release host, e.g.:"
+    printf '%b\n' "    ARCHSTUDIO_VERSIONS_URL=https://github.com/skobe79/craft-agents-oss/releases/download bash install-app.sh"
+    printf '%b\n' "  Or build from source: see README.md."
+    exit 1
+fi
 
 # Detect OS
 OS="$(uname -s)"

@@ -1,10 +1,19 @@
 # ARCHstudio Windows Installer
-# Usage: irm https://agents.craft.do/install-app.ps1 | iex
+# Usage: $env:ARCHSTUDIO_VERSIONS_URL="<your-release-host>"; ./install-app.ps1
 
 & {
 $ErrorActionPreference = "Stop"
 
-$VERSIONS_URL = "https://agents.craft.do/electron"
+# Binary host. Upstream published to https://agents.craft.do/electron; this
+# fork has no release host yet, so the download is disabled by default to avoid
+# pulling upstream's binaries. Set ARCHSTUDIO_VERSIONS_URL to your own
+# electron-builder "generic" host (serving latest/<yml> + installers) to enable.
+$VERSIONS_URL = $env:ARCHSTUDIO_VERSIONS_URL
+if (-not $VERSIONS_URL) {
+    Write-Host "x No binary host configured for this fork." -ForegroundColor Red
+    Write-Host "  Set ARCHSTUDIO_VERSIONS_URL to your release host, or build from source (see README.md)."
+    return
+}
 $DOWNLOAD_DIR = "$env:TEMP\archstudio-install"
 $APP_NAME = "ARCHstudio"
 $CLI_NAME = "archstudio"

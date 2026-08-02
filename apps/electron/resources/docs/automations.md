@@ -4,7 +4,7 @@ This guide explains how to configure automations in ARCHstudio to automate workf
 
 > **CLI-first workflow (recommended):** Use `craft-agent automation ...` commands instead of editing JSON directly.
 > - `craft-agent automation --help`
-> - Canonical command reference: [craft-cli.md](./craft-cli.md)
+> - Canonical command reference: [archstudio-cli.md](./archstudio-cli.md)
 
 ## What Are Automations?
 
