@@ -51,7 +51,7 @@ import { SettingsPanel } from '../panels/settings'
 import { MediaLabPanel } from '../panels/media-lab'
 import { PromptStudioPanel } from '../panels/prompts'
 import { ProvidersPanel } from '../panels/ProvidersPanel'
-import { Drawer, DrawerPortal, DrawerOverlay, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from '@/components/ui/drawer'
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from '@/components/ui/drawer'
 import { ThumbnailHoverPreview } from '../components/right-sidebar/ThumbnailHoverPreview'
 import { ShikiDiffViewer } from '../components/shiki'
 import { HighlightedDiffViewer, type DiffViewMode } from '@archstudio/ui'
@@ -3532,20 +3532,17 @@ const DEPTH_POPOVER_OPTIONS = [
         onOpenChange={setSettingsOpen}
         direction="left"
       >
-        <DrawerPortal>
-          <DrawerOverlay />
-          <DrawerContent className="arch-settings-drawer">
-            <DrawerHeader>
-              <DrawerTitle>Settings</DrawerTitle>
-              <DrawerClose asChild>
-                <button type="button" className="arch-drawer-close-btn" aria-label="Close settings">×</button>
-              </DrawerClose>
-            </DrawerHeader>
-            <div className="arch-settings-drawer__body">
-              <SettingsPanel />
-            </div>
-          </DrawerContent>
-        </DrawerPortal>
+        <DrawerContent className="arch-settings-drawer">
+          <DrawerHeader>
+            <DrawerTitle>Settings</DrawerTitle>
+            <DrawerClose asChild>
+              <button type="button" className="arch-drawer-close-btn" aria-label="Close settings">×</button>
+            </DrawerClose>
+          </DrawerHeader>
+          <div className="arch-settings-drawer__body">
+            <SettingsPanel />
+          </div>
+        </DrawerContent>
       </Drawer>
     </div>
   )

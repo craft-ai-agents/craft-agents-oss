@@ -2754,7 +2754,7 @@
   border-right: 1px solid var(--shell-border) !important;
   box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15) !important;
   animation: slideInLeft 0.3s cubic-bezier(0.32, 0.72, 0, 1) !important;
-  z-index: 50 !important;
+  z-index: var(--z-modal, 200) !important;
 }
 
 /* Hide the dragging indicator on top */

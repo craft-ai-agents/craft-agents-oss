@@ -16,17 +16,20 @@ export function KnowledgeGraphViewer({
   onSelectNode,
 }: KnowledgeGraphViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const positionsRef = useRef<Map<number, { x: number; y: number }>>(new Map())
+  const layoutKeyRef = useRef<string>('')
+  const propsRef = useRef({ selectedNodeId, highlightedNodeIds })
+  propsRef.current = { selectedNodeId, highlightedNodeIds }
+
   useEffect(() => {
     if (!containerRef.current || !graph.nodes.length) return
-
-    // Dynamic import of 3d-force-graph from CDN
-    // For Phase 1, we'll render a simple canvas-based graph
-    // Full 3d-force-graph integration comes in Phase 2
 
     const canvas = document.createElement('canvas')
     canvas.width = containerRef.current.clientWidth
     canvas.height = containerRef.current.clientHeight
     containerRef.current.appendChild(canvas)
+    canvasRef.current = canvas
 
     const ctx = canvas.getContext('2d')
     if (!ctx) {
@@ -37,19 +40,25 @@ export function KnowledgeGraphViewer({
     let frameId: number | null = null
     let disposed = false
 
-    // Simple 2D graph visualization for Phase 1
-    // This is a placeholder; Phase 2 will integrate 3d-force-graph from CDN
-
     const nodeRadius = 8
-    const positions: Map<number, { x: number; y: number }> = new Map()
+    const positions = positionsRef.current
+    const layoutKey = [
+      graph.nodes.map((node) => node.id).join(','),
+      graph.edges.map((edge) => `${edge.source}-${edge.target}`).join(','),
+    ].join('|')
 
-    // Random layout (better layouts can be added in Phase 2)
-    graph.nodes.forEach((node) => {
-      positions.set(node.id, {
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
+    // Random layout, computed only when the graph changes so that selecting
+    // or highlighting nodes does not reshuffle the entire graph.
+    if (layoutKeyRef.current !== layoutKey) {
+      layoutKeyRef.current = layoutKey
+      positions.clear()
+      graph.nodes.forEach((node) => {
+        positions.set(node.id, {
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+        })
       })
-    })
+    }
 
     // Render loop
     const render = () => {
@@ -73,6 +82,7 @@ export function KnowledgeGraphViewer({
       })
 
       // Draw nodes
+      const { selectedNodeId, highlightedNodeIds } = propsRef.current
       graph.nodes.forEach((node) => {
         const pos = positions.get(node.id)
         if (!pos) return
@@ -133,8 +143,11 @@ export function KnowledgeGraphViewer({
       if (containerRef.current?.contains(canvas)) {
         containerRef.current.removeChild(canvas)
       }
+      if (canvasRef.current === canvas) {
+        canvasRef.current = null
+      }
     }
-  }, [graph, selectedNodeId, highlightedNodeIds, onSelectNode])
+  }, [graph])
 
   return <div ref={containerRef} className="knowledge-graph-viewer" />
 }
