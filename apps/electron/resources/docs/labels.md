@@ -4,7 +4,7 @@ Labels are additive tags that can be applied to sessions. Unlike statuses (which
 
 > **CLI-first workflow (recommended):** Use `craft-agent label ...` commands instead of editing JSON directly.
 > - `craft-agent label --help`
-> - Canonical command reference: [craft-cli.md](./craft-cli.md)
+> - Canonical command reference: [archstudio-cli.md](./archstudio-cli.md)
 
 ## Storage Locations
 

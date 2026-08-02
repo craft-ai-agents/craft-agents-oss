@@ -4,7 +4,7 @@ This guide explains how to create and configure skills in ARCHstudio.
 
 > **CLI-first workflow (recommended):** Use `craft-agent skill ...` commands instead of editing `SKILL.md` files directly.
 > - `craft-agent skill --help`
-> - Canonical command reference: [craft-cli.md](./craft-cli.md)
+> - Canonical command reference: [archstudio-cli.md](./archstudio-cli.md)
 
 ## What Are Skills?
 

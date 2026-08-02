@@ -207,8 +207,8 @@ if (isDebugMode) {
     ? join(app.getAppPath(), 'packages', 'craft-cli', 'src', 'cli.ts')
     : join(process.cwd(), 'packages', 'craft-cli', 'src', 'cli.ts')
   process.env.ARCHSTUDIO_COMMANDS_DOC_PATH = app.isPackaged
-    ? join(resourcesBase, 'resources', 'docs', 'craft-cli.md')
-    : join(process.cwd(), 'apps', 'electron', 'resources', 'docs', 'craft-cli.md')
+    ? join(resourcesBase, 'resources', 'docs', 'archstudio-cli.md')
+    : join(process.cwd(), 'apps', 'electron', 'resources', 'docs', 'archstudio-cli.md')
   process.env.ARCHSTUDIO_CLI_DOC_PATH = process.env.ARCHSTUDIO_COMMANDS_DOC_PATH
   process.env.ARCHSTUDIO_AGENT_VERSION = app.getVersion()
   // Prepend both generic wrappers dir and platform uv dir:
