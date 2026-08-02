@@ -48,9 +48,9 @@
   bottom: 100%; /* Position above the button */
   left: 0;
   width: 100%;
-  background-color: var(--sidebar-background);
+  background-color: var(--shell-surface, #1a1a1a);
   border: 1px solid var(--sidebar-border);
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3);
   z-index: 100;
   padding: 10px 0;
   margin-bottom: 5px; /* Small gap above the button */
@@ -61,6 +61,7 @@
   padding: 0 15px 10px;
   border-bottom: 1px solid var(--sidebar-border);
   margin-bottom: 10px;
+  background-color: inherit;
 }
 
 .profile-dropdown__email {
