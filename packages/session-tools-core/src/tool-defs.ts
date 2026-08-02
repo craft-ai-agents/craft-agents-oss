@@ -21,6 +21,7 @@ import { handleSubmitPlan } from './handlers/submit-plan.ts';
 import { handleConfigValidate } from './handlers/config-validate.ts';
 import { handleSkillValidate } from './handlers/skill-validate.ts';
 import { handleMermaidValidate } from './handlers/mermaid-validate.ts';
+import { handleLsp } from './handlers/lsp.ts';
 import { handleSourceTest } from './handlers/source-test.ts';
 import {
   handleSourceOAuthTrigger,
@@ -69,6 +70,25 @@ export const SkillValidateSchema = z.object({
 export const MermaidValidateSchema = z.object({
   code: z.string().describe('The mermaid diagram code to validate'),
   render: z.boolean().optional().describe('Also attempt to render (catches layout errors)'),
+});
+
+export const LspSchema = z.object({
+  operation: z
+    .enum(['diagnostics', 'definition', 'references', 'symbols'])
+    .describe('Which language-service query to run'),
+  file: z
+    .string()
+    .describe('Path to the file to analyze (absolute, or relative to the workspace root)'),
+  line: z
+    .number()
+    .int()
+    .optional()
+    .describe('1-based line number. Required for "definition" and "references".'),
+  column: z
+    .number()
+    .int()
+    .optional()
+    .describe('1-based column number. Required for "definition" and "references".'),
 });
 
 export const SourceTestSchema = z.object({
@@ -312,6 +332,22 @@ Use this when:
 - Debugging a diagram that failed to render
 
 Returns validation result with specific error messages if invalid.`,
+
+  lsp: `Read-only code intelligence backed by the TypeScript language service.
+
+Prefer this over grep when you need semantic answers rather than text matches.
+
+Operations:
+- \`diagnostics\` — type and syntax errors for a file
+- \`definition\` — where a symbol is declared (requires line + column)
+- \`references\` — where a symbol is used (requires line + column)
+- \`symbols\` — declarations in a file
+
+Supports TypeScript and JavaScript (.ts, .tsx, .mts, .cts, .js, .jsx, .mjs, .cjs).
+Positions are 1-based. Project settings resolve from the nearest tsconfig.json.
+
+If the TypeScript language service cannot be loaded, this returns
+\`available: false\` rather than silently falling back to text search.`,
 
   source_test: `Validate, test, and (by default) activate a source configuration.
 
@@ -642,6 +678,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'config_validate', description: TOOL_DESCRIPTIONS.config_validate, inputSchema: ConfigValidateSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleConfigValidate },
   { name: 'skill_validate', description: TOOL_DESCRIPTIONS.skill_validate, inputSchema: SkillValidateSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleSkillValidate },
   { name: 'mermaid_validate', description: TOOL_DESCRIPTIONS.mermaid_validate, inputSchema: MermaidValidateSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleMermaidValidate },
+  { name: 'lsp', description: TOOL_DESCRIPTIONS.lsp, inputSchema: LspSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleLsp },
   { name: 'source_test', description: TOOL_DESCRIPTIONS.source_test, inputSchema: SourceTestSchema, executionMode: 'registry', safeMode: 'allow', handler: handleSourceTest },
   { name: 'source_oauth_trigger', description: TOOL_DESCRIPTIONS.source_oauth_trigger, inputSchema: SourceOAuthTriggerSchema, executionMode: 'registry', safeMode: 'block', handler: handleSourceOAuthTrigger },
   { name: 'source_google_oauth_trigger', description: TOOL_DESCRIPTIONS.source_google_oauth_trigger, inputSchema: SourceOAuthTriggerSchema, executionMode: 'registry', safeMode: 'block', handler: handleGoogleOAuthTrigger },

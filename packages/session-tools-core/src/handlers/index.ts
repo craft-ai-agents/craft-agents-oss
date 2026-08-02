@@ -21,6 +21,10 @@ export type { SkillValidateArgs } from './skill-validate.ts';
 export { handleMermaidValidate } from './mermaid-validate.ts';
 export type { MermaidValidateArgs } from './mermaid-validate.ts';
 
+// LSP (TypeScript language service — read-only code intelligence)
+export { handleLsp } from './lsp.ts';
+export type { LspArgs, LspOperation } from './lsp.ts';
+
 // Source Test
 export { handleSourceTest } from './source-test.ts';
 export type { SourceTestArgs } from './source-test.ts';
