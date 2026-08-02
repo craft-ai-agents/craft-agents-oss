@@ -701,6 +701,36 @@ describe('source_test HTTP MCP probe credential forwarding (regression for #720)
   });
 });
 
+describe('source_test MCP error normalization', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'source-test-mcp-errors-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('persists normalized MCP connection errors for http sources', async () => {
+    writeHttpMcpSource(tempDir, 'broken-mcp');
+
+    const ctx = createCtx(tempDir, {
+      validateMcpConnection: async () => ({ success: false, error: 'MCP connection failed health check: 404 Not Found' }),
+    });
+
+    const result = await handleSourceTest(ctx, { sourceSlug: 'broken-mcp', autoEnable: false });
+    const text = result.content[0]?.text ?? '';
+
+    expect(text).toContain('MCP server endpoint not found. Check that the URL is correct and the server is online.');
+
+    const persisted = JSON.parse(
+      readFileSync(join(tempDir, 'sources', 'broken-mcp', 'config.json'), 'utf-8')
+    ) as SourceConfig;
+    expect(persisted.connectionError).toBe('MCP server endpoint not found. Check that the URL is correct and the server is online.');
+  });
+});
+
 describe('source_test basic-auth header (regression for #824)', () => {
   let tempDir: string;
   const origFetch = globalThis.fetch;

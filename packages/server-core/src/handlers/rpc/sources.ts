@@ -3,6 +3,7 @@ import { getWorkspaceByNameOrId } from '@archstudio/shared/config'
 import { loadWorkspaceSources } from '@archstudio/shared/sources'
 import { safeJsonParse } from '@archstudio/shared/utils/files'
 import { getCredentialManager } from '@archstudio/shared/credentials'
+import { normalizeMcpErrorMessage } from '@archstudio/shared/mcp'
 import type { RpcServer } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
@@ -161,13 +162,13 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       if (!source.config.mcp) return { success: false, error: 'MCP config not found' }
 
       if (source.config.connectionStatus === 'needs_auth') {
-        return { success: false, error: 'Source requires authentication' }
+        return { success: false, error: normalizeMcpErrorMessage('Source requires authentication') }
       }
       if (source.config.connectionStatus === 'failed') {
-        return { success: false, error: source.config.connectionError || 'Connection failed' }
+        return { success: false, error: normalizeMcpErrorMessage(source.config.connectionError || 'Connection failed') }
       }
       if (source.config.connectionStatus === 'untested') {
-        return { success: false, error: 'Source has not been tested yet' }
+        return { success: false, error: normalizeMcpErrorMessage('Source has not been tested yet') }
       }
 
       const { CraftMcpClient } = await import('@archstudio/shared/mcp')
@@ -231,13 +232,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     } catch (error) {
       log.error('Failed to get MCP tools:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch tools'
-      if (errorMessage.includes('404')) {
-        return { success: false, error: 'MCP server endpoint not found. The server may be offline or the URL may be incorrect.' }
-      }
-      if (errorMessage.includes('401') || errorMessage.includes('403')) {
-        return { success: false, error: 'Authentication failed. Please re-authenticate with this source.' }
-      }
-      return { success: false, error: errorMessage }
+      return { success: false, error: normalizeMcpErrorMessage(errorMessage) }
     }
   })
 }

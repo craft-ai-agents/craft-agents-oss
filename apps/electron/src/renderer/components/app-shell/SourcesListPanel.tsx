@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
+import { maybeNormalizeMcpErrorMessage } from '@archstudio/shared/mcp'
 import { DatabaseZap } from 'lucide-react'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { deriveConnectionStatus } from '@/components/ui/source-status-indicator'
@@ -115,6 +116,9 @@ export function SourcesListPanel({
         const typeConfig = SOURCE_TYPE_CONFIG[source.config.type]
         const statusConfig = SOURCE_STATUS_CONFIG[connectionStatus]
         const subtitle = source.config.tagline || source.config.provider || ''
+        const tooltipError = source.config.type === 'mcp'
+          ? maybeNormalizeMcpErrorMessage(source.config.connectionError)
+          : source.config.connectionError
         // Only these three glow. 'untested' and 'local_disabled' are not
         // states the user needs flagged, so they render a plain icon.
         const ringStatus =
@@ -130,7 +134,7 @@ export function SourcesListPanel({
             <>
               {typeConfig && <EntityListBadge colorClass={typeConfig.colorClass}>{t(typeConfig.labelKey)}</EntityListBadge>}
               {statusConfig && (
-                <EntityListBadge colorClass={statusConfig.colorClass} tooltip={source.config.connectionError || undefined} className="cursor-default">
+                <EntityListBadge colorClass={statusConfig.colorClass} tooltip={tooltipError || undefined} className="cursor-default">
                   {t(statusConfig.labelKey)}
                 </EntityListBadge>
               )}

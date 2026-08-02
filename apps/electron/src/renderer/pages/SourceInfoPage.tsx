@@ -8,6 +8,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEffect, useState, useMemo, useCallback } from 'react'
+import { maybeNormalizeMcpErrorMessage } from '@archstudio/shared/mcp'
 import { AlertCircle } from 'lucide-react'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
@@ -314,6 +315,13 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
     return buildToolsData(mcpTools)
   }, [mcpTools])
 
+  const normalizedConnectionError = useMemo(() => {
+    if (!source?.config.connectionError) return null
+    return source.config.type === 'mcp'
+      ? maybeNormalizeMcpErrorMessage(source.config.connectionError) ?? source.config.connectionError
+      : source.config.connectionError
+  }, [source])
+
   // Handle opening URL (website or folder)
   const handleOpenUrl = useCallback(async () => {
     if (!source || !sourceUrl) return
@@ -416,7 +424,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
                 <div className="px-4 py-2 border-t border-border/30 bg-destructive/5">
                   <div className="flex items-start gap-2 text-sm text-destructive">
                     <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                    <span>{source.config.connectionError}</span>
+                    <span>{normalizedConnectionError}</span>
                   </div>
                 </div>
               )}

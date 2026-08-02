@@ -6,6 +6,7 @@
  */
 
 import type { Message, StoredMessage, MessageRole } from '@archstudio/core'
+import { maybeNormalizeMcpErrorMessage } from '@archstudio/shared/mcp'
 import { isParentTaskTool } from '@archstudio/shared/utils/toolNames'
 import { storedToMessage } from '@archstudio/core'
 
@@ -28,11 +29,12 @@ export type { ActivityItem }
  */
 function stripErrorTags(content: string | undefined): string | undefined {
   if (!content) return content
-  return content
+  const cleaned = content
     .replace(/<\/?error>/gi, '')
     .replace(/<\/?tool_use_error>/gi, '')
     .replace(/^\[ERROR]\s*/i, '')
     .trim()
+  return maybeNormalizeMcpErrorMessage(cleaned)
 }
 
 // ============================================================================

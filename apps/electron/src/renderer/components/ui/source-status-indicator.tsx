@@ -11,6 +11,7 @@
  */
 
 import * as React from 'react'
+import { maybeNormalizeMcpErrorMessage } from '@archstudio/shared/mcp'
 import { cn } from '@/lib/utils'
 import {
   Tooltip,
@@ -84,10 +85,11 @@ export function SourceStatusIndicator({
 }: SourceStatusIndicatorProps) {
   const config = STATUS_CONFIG[status]
   const sizeClass = SIZE_CONFIG[size]
+  const normalizedErrorMessage = maybeNormalizeMcpErrorMessage(errorMessage) ?? errorMessage
 
   // Build tooltip description
-  const tooltipDescription = status === 'failed' && errorMessage
-    ? `${config.description}: ${errorMessage}`
+  const tooltipDescription = status === 'failed' && normalizedErrorMessage
+    ? `${config.description}: ${normalizedErrorMessage}`
     : config.description
 
   return (

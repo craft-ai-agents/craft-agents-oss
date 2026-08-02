@@ -20,6 +20,7 @@ import {
   getSourceGuidePath,
   getSourcePath,
 } from '../source-helpers.ts';
+import { normalizeMcpErrorMessage } from '@archstudio/shared/mcp';
 
 export interface SourceTestArgs {
   sourceSlug: string;
@@ -788,12 +789,12 @@ async function testMcpConnection(
           }
         } else {
           hasError = true;
-          error = result.error || 'MCP validation failed';
+          error = normalizeMcpErrorMessage(result.error || 'MCP validation failed');
           lines.push(`✗ ${error}`);
         }
       } catch (e) {
         hasError = true;
-        error = e instanceof Error ? e.message : 'Unknown error';
+        error = normalizeMcpErrorMessage(e instanceof Error ? e.message : 'Unknown error');
         lines.push(`✗ Failed to test MCP server: ${error}`);
       }
     } else if (source.mcp?.command) {
@@ -876,12 +877,12 @@ async function testMcpConnection(
           success = true; // Server is reachable, just needs auth
         } else {
           hasError = true;
-          error = result.error || 'MCP connection failed';
+          error = normalizeMcpErrorMessage(result.error || 'MCP connection failed');
           lines.push(`✗ ${error}`);
         }
       } catch (e) {
         hasError = true;
-        error = e instanceof Error ? e.message : 'Unknown error';
+        error = normalizeMcpErrorMessage(e instanceof Error ? e.message : 'Unknown error');
         lines.push(`✗ Failed to connect to MCP server: ${error}`);
       }
     } else {
