@@ -43,8 +43,10 @@ export function getDocsSource(workspaceId: string, workspaceRootPath: string): L
     provider: 'mintlify',
     type: 'mcp',
     mcp: {
+      // Deprecated placeholder (this function is no longer called). The live
+      // docs MCP url is set in claude-agent.ts via ARCHSTUDIO_DOCS_MCP_URL.
       transport: 'http',
-      url: 'https://agents.craft.do/docs/mcp',
+      url: process.env.ARCHSTUDIO_DOCS_MCP_URL || 'https://agents.craft.do/docs/mcp',
       authType: 'none',
     },
     tagline: 'Search ARCHstudio documentation and source setup guides',
