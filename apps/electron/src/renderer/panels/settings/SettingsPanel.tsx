@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import {
   Settings as SettingsIcon,
-  Brain,
   Coffee,
   Check,
   SlidersHorizontal,
@@ -12,23 +11,12 @@ import {
   Globe,
   Keyboard,
 } from 'lucide-react'
-import { THINKING_LEVEL_IDS, type ThinkingLevel } from '@archstudio/shared/agent/thinking-levels'
 import { isMac } from '@/lib/platform'
 import './SettingsPanel.css'
-
-const THINKING_LABELS: Record<ThinkingLevel, string> = {
-  off: 'Off',
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  xhigh: 'Extra high',
-  max: 'Max',
-}
 
 type SaveState = 'idle' | 'saving' | 'saved'
 
 export function SettingsPanel() {
-  const [thinking, setThinking] = useState<ThinkingLevel | null>(null)
   const [keepAwake, setKeepAwake] = useState<boolean | null>(null)
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean | null>(null)
   const [browserToolEnabled, setBrowserToolEnabled] = useState<boolean | null>(null)
@@ -59,8 +47,7 @@ export function SettingsPanel() {
     let cancelled = false
     const load = async () => {
       try {
-        const [level, awake, notif, browserTool, sendKey, spell, autoCap, mcp, cache, remote, toolDesc] = await Promise.all([
-          window.electronAPI.getDefaultThinkingLevel(),
+        const [awake, notif, browserTool, sendKey, spell, autoCap, mcp, cache, remote, toolDesc] = await Promise.all([
           window.electronAPI.getKeepAwakeWhileRunning(),
           window.electronAPI.getNotificationsEnabled(),
           window.electronAPI.getBrowserToolEnabled(),
@@ -73,7 +60,6 @@ export function SettingsPanel() {
           window.electronAPI.getRichToolDescriptions?.(),
         ])
         if (cancelled) return
-        setThinking(level)
         setKeepAwake(awake)
         setNotificationsEnabled(notif)
         setBrowserToolEnabled(browserTool)
@@ -108,20 +94,6 @@ export function SettingsPanel() {
   const flashSaved = () => {
     setSaved('saved')
     setTimeout(() => setSaved('idle'), 1600)
-  }
-
-  const changeThinking = async (level: ThinkingLevel) => {
-    const previous = thinking
-    setThinking(level)
-    setSaved('saving')
-    try {
-      await window.electronAPI.setDefaultThinkingLevel(level)
-      flashSaved()
-    } catch (err) {
-      setThinking(previous)
-      setSaved('idle')
-      setError(err instanceof Error ? err.message : String(err))
-    }
   }
 
   const changeKeepAwake = async (value: boolean) => {
@@ -343,24 +315,6 @@ export function SettingsPanel() {
 
       <div className="settings-panel__body">
         {error && <div className="settings-error">{error}</div>}
-
-        {/* Thinking levels */}
-        <div className="settings-group">
-          <label className="settings-group__label">Reasoning level</label>
-          <div className="settings-levels">
-            {THINKING_LEVEL_IDS.map((level) => (
-              <button
-                key={level}
-                type="button"
-                className={`settings-level${thinking === level ? ' is-active' : ''}`}
-                disabled={thinking === null}
-                onClick={() => void changeThinking(level)}
-              >
-                {THINKING_LABELS[level]}
-              </button>
-            ))}
-          </div>
-        </div>
 
         {/* Simple toggles list */}
         <label className="settings-row">

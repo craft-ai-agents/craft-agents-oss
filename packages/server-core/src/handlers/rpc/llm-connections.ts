@@ -1,6 +1,7 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@archstudio/shared/protocol'
 import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@archstudio/shared/config'
 import { getCredentialManager } from '@archstudio/shared/credentials'
+import { endpointProviderDisplayName, providerConnectionName } from '@archstudio/shared/config/connection-names'
 import { setSetupDeferred } from '@archstudio/shared/config/storage'
 import {
   resolveSetupTestConnectionHint,
@@ -8,7 +9,7 @@ import {
   validateStoredBackendConnection,
 } from '@archstudio/shared/agent/backend'
 import { getModelRefreshService } from '@archstudio/server-core/model-fetchers'
-import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName, validateSetupTestInput, setupTestRequiresApiKey, resolveCustomEndpointSetup } from '@archstudio/server-core/domain'
+import { parseTestConnectionError, createBuiltInConnection, validateModelList, validateSetupTestInput, setupTestRequiresApiKey, resolveCustomEndpointSetup } from '@archstudio/server-core/domain'
 import { getWorkspaceOrThrow, buildBackendHostRuntimeContext } from '@archstudio/server-core/handlers'
 import { pushTyped, type RpcServer } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -117,9 +118,9 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         if (branch.name !== undefined) updates.name = branch.name
         if (branch.piAuthProvider !== undefined) updates.piAuthProvider = branch.piAuthProvider
 
-        // Brand-name override on first setup only (user-renamed connections aren't clobbered on re-save).
-        if (isNewConnection && !updates.name && setup.baseUrl?.toLowerCase().includes('manifest.build')) {
-          updates.name = 'Manifest'
+        // Name new custom endpoints from their hostname; never clobber user-renamed connections.
+        if (isNewConnection && !updates.name && setup.baseUrl) {
+          updates.name = endpointProviderDisplayName(setup.baseUrl) ?? undefined
         }
       } else if (setup.baseUrl !== undefined) {
         // Base URL was explicitly updated without custom protocol config.
@@ -137,10 +138,9 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       // Skip when custom endpoint protocol is driving routing.
       if (setup.piAuthProvider && !isCustomEndpointCompat) {
         updates.piAuthProvider = setup.piAuthProvider
-        // Update connection name to show the actual provider (e.g. "ARCHstudio Backend (Google AI Studio)")
-        const providerName = piAuthProviderDisplayName(setup.piAuthProvider)
+        const providerName = providerConnectionName(setup.piAuthProvider)
         if (providerName) {
-          updates.name = `ARCHstudio Backend (${providerName})`
+          updates.name = providerName
         }
         // Only set default models when using standard Pi provider AND user didn't pick explicit models
         if (!hasConfiguredBaseUrl && !setup.models?.length) {

@@ -37,6 +37,7 @@
     "./branding": "./src/branding.ts",
     "./colors": "./src/colors/index.ts",
     "./config": "./src/config/index.ts",
+    "./config/connection-names": "./src/config/connection-names.ts",
     "./config/paths": "./src/config/paths.ts",
     "./config/watcher": "./src/config/watcher.ts",
     "./config/types": "./src/config/types.ts",

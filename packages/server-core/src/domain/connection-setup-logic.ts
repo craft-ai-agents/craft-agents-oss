@@ -168,35 +168,6 @@ export const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
 }
 
 // ============================================================
-// Pi Auth Provider Display Names
-// ============================================================
-
-const PI_AUTH_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
-  anthropic: 'Anthropic',
-  openai: 'OpenAI',
-  'openai-codex': 'OpenAI',
-  google: 'Google AI Studio',
-  openrouter: 'OpenRouter',
-  'azure-openai-responses': 'Azure OpenAI',
-  'amazon-bedrock': 'Amazon Bedrock',
-  groq: 'Groq',
-  mistral: 'Mistral',
-  xai: 'xAI',
-  cerebras: 'Cerebras',
-  zai: 'z.ai',
-  huggingface: 'Hugging Face',
-  minimax: 'Minimax',
-  'minimax-cn': 'Minimax CN',
-  'kimi-coding': 'Kimi (Coding)',
-  'vercel-ai-gateway': 'Vercel AI Gateway',
-}
-
-/** Get a human-readable display name for a Pi auth provider key */
-export function piAuthProviderDisplayName(piAuthProvider: string): string | null {
-  return PI_AUTH_PROVIDER_DISPLAY_NAMES[piAuthProvider] ?? null
-}
-
-// ============================================================
 // Connection Creation
 // ============================================================
 

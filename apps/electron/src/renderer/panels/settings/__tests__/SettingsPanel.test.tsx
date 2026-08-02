@@ -20,36 +20,28 @@ gs.localStorage = win.localStorage
 
 const getDefaultThinkingLevel = mock(async () => 'medium')
 const getKeepAwakeWhileRunning = mock(async () => false)
-const getNetworkProxySettings = mock(async () => ({ enabled: false }))
-const getServerStatus = mock(async () => ({
-  running: true,
-  url: 'https://studio.local:4242',
-  tls: true,
-  insecureWarning: false,
-  needsRestart: false,
-}))
-const getLaunchAtLogin = mock(async () => false)
-const getConfirmBeforeExit = mock(async () => true)
+const getNotificationsEnabled = mock(async () => true)
+const getBrowserToolEnabled = mock(async () => true)
+const getSendMessageKey = mock(async () => 'enter')
+const getSpellCheck = mock(async () => true)
+const getAutoCapitalisation = mock(async () => true)
 const setDefaultThinkingLevel = mock(async () => undefined)
 const setKeepAwakeWhileRunning = mock(async () => undefined)
-const setNetworkProxySettings = mock(async () => undefined)
-const setLaunchAtLogin = mock(async () => undefined)
-const setConfirmBeforeExit = mock(async () => undefined)
+const setNotificationsEnabled = mock(async () => undefined)
 const exportSettings = mock(async () => ({ success: true, path: 'D:\\Backups\\archstudio-settings.zip' }))
 const importSettings = mock(async () => ({ success: true }))
 
 ;(win as any).electronAPI = {
   getDefaultThinkingLevel,
   getKeepAwakeWhileRunning,
-  getNetworkProxySettings,
-  getServerStatus,
-  getLaunchAtLogin,
-  getConfirmBeforeExit,
+  getNotificationsEnabled,
+  getBrowserToolEnabled,
+  getSendMessageKey,
+  getSpellCheck,
+  getAutoCapitalisation,
   setDefaultThinkingLevel,
   setKeepAwakeWhileRunning,
-  setNetworkProxySettings,
-  setLaunchAtLogin,
-  setConfirmBeforeExit,
+  setNotificationsEnabled,
   exportSettings,
   importSettings,
 }
@@ -100,15 +92,14 @@ describe('Settings panel', () => {
     for (const fn of [
       getDefaultThinkingLevel,
       getKeepAwakeWhileRunning,
-      getNetworkProxySettings,
-      getServerStatus,
-      getLaunchAtLogin,
-      getConfirmBeforeExit,
+      getNotificationsEnabled,
+      getBrowserToolEnabled,
+      getSendMessageKey,
+      getSpellCheck,
+      getAutoCapitalisation,
       setDefaultThinkingLevel,
       setKeepAwakeWhileRunning,
-      setNetworkProxySettings,
-      setLaunchAtLogin,
-      setConfirmBeforeExit,
+      setNotificationsEnabled,
       exportSettings,
       importSettings,
     ]) fn.mockClear()
@@ -126,47 +117,31 @@ describe('Settings panel', () => {
     root = rendered.root
     container = rendered.container
 
-    expect(getDefaultThinkingLevel).toHaveBeenCalledTimes(1)
+    expect(getDefaultThinkingLevel).not.toHaveBeenCalled()
     expect(getKeepAwakeWhileRunning).toHaveBeenCalledTimes(1)
-    expect(getNetworkProxySettings).toHaveBeenCalledTimes(1)
-    expect(getServerStatus).toHaveBeenCalledTimes(1)
-    expect(getLaunchAtLogin).toHaveBeenCalledTimes(1)
-    expect(getConfirmBeforeExit).toHaveBeenCalledTimes(1)
+    expect(getNotificationsEnabled).toHaveBeenCalledTimes(1)
     expect(container.textContent).toContain('Settings')
-    expect(container.querySelector('.settings-level.is-active')?.textContent).toBe('Medium')
-    expect(container.textContent).toContain('Running')
-    expect(container.textContent).toContain('https://studio.local:4242')
-    expect(container.textContent).toContain('TLS')
-    expect(checkboxFor(container, 'Confirm before exit').checked).toBe(true)
+    expect(container.textContent).not.toContain('Reasoning level')
+    expect(container.querySelectorAll('.settings-level').length).toBe(0)
+    expect(checkboxFor(container, 'Desktop notifications').checked).toBe(true)
     expect(container.querySelectorAll('.settings-soon').length).toBe(0)
     expect(container.textContent).not.toContain('Coming soon')
     expect(container.textContent).not.toContain('Enable agent pets')
     expect(container.textContent).not.toContain('Experimental media generation')
   })
 
-  it('persists primary toggles, reasoning, proxy, compact UI, export, and import', async () => {
+  it('persists primary toggles, compact UI, export, and import', async () => {
     const rendered = await renderPanel()
     root = rendered.root
     container = rendered.container
 
-    const highButton = Array.from(container.querySelectorAll('.settings-level')).find(
-      (button: any) => button.textContent === 'High',
-    ) as HTMLElement
-    await click(highButton)
-    expect(setDefaultThinkingLevel).toHaveBeenCalledWith('high')
+    expect(setDefaultThinkingLevel).not.toHaveBeenCalled()
 
     await click(checkboxFor(container, 'Keep awake while running'))
     expect(setKeepAwakeWhileRunning).toHaveBeenCalledWith(true)
 
-    await click(checkboxFor(container, 'Route traffic through a proxy'))
-    expect(setNetworkProxySettings).toHaveBeenCalledWith({ enabled: true })
-    expect(container.textContent).toContain('HTTP proxy')
-
-    await click(checkboxFor(container, 'Launch at login'))
-    expect(setLaunchAtLogin).toHaveBeenCalledWith(true)
-
-    await click(checkboxFor(container, 'Confirm before exit'))
-    expect(setConfirmBeforeExit).toHaveBeenCalledWith(false)
+    await click(checkboxFor(container, 'Desktop notifications'))
+    expect(setNotificationsEnabled).toHaveBeenCalledWith(false)
 
     await click(checkboxFor(container, 'Compact UI'))
     expect(win.localStorage.getItem('archstudio:compactUI')).toBe('true')
