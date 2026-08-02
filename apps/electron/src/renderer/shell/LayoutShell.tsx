@@ -48,6 +48,7 @@ import { IntegrationsPanel } from '../panels/integrations'
 import { SearchPanel } from '../panels/search'
 import { SecurityPanel } from '../panels/security'
 import { SettingsPanel } from '../panels/settings'
+import { isValidSettingsSubpage, type SettingsSubpage } from '../../shared/settings-registry'
 import { MediaLabPanel } from '../panels/media-lab'
 import { PromptStudioPanel } from '../panels/prompts'
 import { ProvidersPanel } from '../panels/ProvidersPanel'
@@ -106,8 +107,8 @@ const RAIL_TABS: { id: RailTab; label: string }[] = [
 ]
 
 const navItems = [
-  { id: 'sessions' as ShellView, label: 'Sessions', icon: MessagesSquare },
   { id: 'command' as ShellView, label: 'Command', icon: Command },
+  { id: 'sessions' as ShellView, label: 'Sessions', icon: MessagesSquare },
   // Label only — the `runs` id is a wire-level deep-link route
   // (`archstudio://runs/...`, see shared/route-parser.ts) and must not change.
   // "Activity" is the honest name: these are sessions with status and spend,
@@ -722,6 +723,7 @@ function LayoutShell({
   const [sessionsView, setSessionsView] = useState<'list' | 'board'>(getInitialSessionsView)
   const [sidebarCollapsedLocal, setSidebarCollapsed] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsSubpage, setSettingsSubpage] = useState<SettingsSubpage | undefined>(undefined)
   const [userName, setUserName] = useState<string | null>(null)
 
   // Fetch git user name for profile menu
@@ -2685,14 +2687,10 @@ const DEPTH_POPOVER_OPTIONS = [
         <div className="layout-sidebar__footer">
           <ProfileMenu
             userName={userName ?? 'Skobez'}
-            onOpenSettings={() => setSettingsOpen(true)}
-            onOpenLanguage={() => console.log('Open Language Settings')}
-            onOpenHelp={() => console.log('Open Help')}
-            onUpgradePlan={() => console.log('Upgrade Plan')}
-            onGetAppsAndExtensions={() => console.log('Get Apps and Extensions')}
-            onGiftClaude={() => console.log('Gift Claude')}
-            onLearnMore={() => console.log('Learn More')}
-            onLogout={() => console.log('Logout')}
+            onOpenSettings={(subpage) => {
+              setSettingsSubpage(isValidSettingsSubpage(subpage ?? '') ? (subpage as SettingsSubpage) : undefined)
+              setSettingsOpen(true)
+            }}
           />
         </div>
       </aside>
@@ -3165,7 +3163,7 @@ const DEPTH_POPOVER_OPTIONS = [
             </DrawerClose>
           </DrawerHeader>
           <div className="arch-settings-drawer__body">
-            <SettingsPanel />
+            <SettingsPanel key={settingsSubpage ?? 'default'} initialSubpage={settingsSubpage} />
           </div>
         </DrawerContent>
       </Drawer>

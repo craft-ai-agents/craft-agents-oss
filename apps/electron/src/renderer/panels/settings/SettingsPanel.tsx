@@ -25,8 +25,13 @@ import './SettingsPanel.css'
 /** Opening Settings with nothing selected should still show something useful. */
 const DEFAULT_SUBPAGE: SettingsSubpage = 'app'
 
-export function SettingsPanel() {
-  const [subpage, setSubpage] = useState<SettingsSubpage>(DEFAULT_SUBPAGE)
+export interface SettingsPanelProps {
+  /** Page to open on first render. Defaults to DEFAULT_SUBPAGE. */
+  initialSubpage?: SettingsSubpage
+}
+
+export function SettingsPanel({ initialSubpage }: SettingsPanelProps = {}) {
+  const [subpage, setSubpage] = useState<SettingsSubpage>(initialSubpage ?? DEFAULT_SUBPAGE)
   const SettingsPage = getSettingsPageComponent(subpage)
 
   return (

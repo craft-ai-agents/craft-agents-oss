@@ -1,43 +1,72 @@
 import React, { useState } from 'react'
 import {
   Settings,
-  Globe,
-  LifeBuoy,
-  CreditCard,
-  AppWindow,
-  Gift,
-  BookOpen,
-  LogOut,
+  Sparkles,
+  Palette,
+  Keyboard,
+  FolderCog,
+  ShieldCheck,
+  Tags,
+  MessageSquare,
+  Server,
+  SlidersHorizontal,
+  Bell,
   ChevronRight,
   UserRound,
 } from 'lucide-react'
 
+/**
+ * A settings entry in the profile menu. `id` matches a SettingsSubpage id in
+ * shared/settings-registry.ts, so the caller can open that page directly.
+ */
+export interface ProfileMenuSettingsItem {
+  id: string
+  label: string
+  icon: React.ComponentType<{ size?: string | number }>
+}
+
+/**
+ * ARCHstudio's own settings pages, mirroring SETTINGS_PAGES order.
+ * This deliberately replaces the upstream account menu (Upgrade plan /
+ * Get apps and extensions / Gift Claude / Log out), which was a copy of a
+ * hosted product's UI and does not apply here: this app is single-user and
+ * local, with no accounts, no plans, and nothing to log out of.
+ */
+export const DEFAULT_PROFILE_SETTINGS_ITEMS: ProfileMenuSettingsItem[] = [
+  { id: 'app', label: 'App', icon: Bell },
+  { id: 'ai', label: 'AI', icon: Sparkles },
+  { id: 'appearance', label: 'Appearance', icon: Palette },
+  { id: 'input', label: 'Input', icon: Keyboard },
+  { id: 'workspace', label: 'Workspace', icon: FolderCog },
+  { id: 'permissions', label: 'Permissions', icon: ShieldCheck },
+  { id: 'labels', label: 'Labels', icon: Tags },
+  { id: 'messaging', label: 'Messaging', icon: MessageSquare },
+  { id: 'server', label: 'Server', icon: Server },
+  { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
+  { id: 'preferences', label: 'Preferences', icon: SlidersHorizontal },
+]
+
 interface ProfileMenuProps {
   userName: string
-  onOpenSettings: () => void
-  onOpenLanguage: () => void
-  onOpenHelp: () => void
-  onUpgradePlan: () => void
-  onGetAppsAndExtensions: () => void
-  onGiftClaude: () => void
-  onLearnMore: () => void
-  onLogout: () => void
+  /** Opens the settings drawer; `subpage` selects which page to land on. */
+  onOpenSettings: (subpage?: string) => void
+  /** Settings entries to list. Defaults to DEFAULT_PROFILE_SETTINGS_ITEMS. */
+  settingsItems?: ProfileMenuSettingsItem[]
 }
 
 export function ProfileMenu({
   userName,
   onOpenSettings,
-  onOpenLanguage,
-  onOpenHelp,
-  onUpgradePlan,
-  onGetAppsAndExtensions,
-  onGiftClaude,
-  onLearnMore,
-  onLogout,
+  settingsItems = DEFAULT_PROFILE_SETTINGS_ITEMS,
 }: ProfileMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
 
   const toggleOpen = () => setIsOpen(!isOpen)
+
+  const select = (subpage?: string) => {
+    setIsOpen(false)
+    onOpenSettings(subpage)
+  }
 
   return (
     <div className="profile-menu-container">
@@ -49,70 +78,34 @@ export function ProfileMenu({
         aria-controls="profile-dropdown-menu"
       >
         <UserRound size={18} />
-        <span className="profile-label">
-          {userName} <span className="profile-status">Pro</span>
-        </span>
+        <span className="profile-label">{userName}</span>
         <ChevronRight size={16} className={`profile-chevron ${isOpen ? 'profile-chevron--open' : ''}`} />
       </button>
 
       {isOpen && (
         <div id="profile-dropdown-menu" className="profile-dropdown">
           <div className="profile-dropdown__header">
-            <span className="profile-dropdown__email">skobeponga@gmail.com</span>
+            <span className="profile-dropdown__email">ARCHstudio</span>
           </div>
           <ul className="profile-dropdown__list">
             <li>
-              <button type="button" onClick={onOpenSettings}>
+              <button type="button" onClick={() => select()}>
                 <Settings size={16} />
-                <span>Settings</span>
-              </button>
-            </li>
-            <li>
-              <button type="button" onClick={onOpenLanguage}>
-                <Globe size={16} />
-                <span>Language</span>
-                <ChevronRight size={14} className="profile-dropdown__item-chevron" />
-              </button>
-            </li>
-            <li>
-              <button type="button" onClick={onOpenHelp}>
-                <LifeBuoy size={16} />
-                <span>Get help</span>
+                <span>All Settings</span>
               </button>
             </li>
             <li className="profile-dropdown__separator" />
-            <li>
-              <button type="button" onClick={onUpgradePlan}>
-                <CreditCard size={16} />
-                <span>Upgrade plan</span>
-              </button>
-            </li>
-            <li>
-              <button type="button" onClick={onGetAppsAndExtensions}>
-                <AppWindow size={16} />
-                <span>Get apps and extensions</span>
-              </button>
-            </li>
-            <li>
-              <button type="button" onClick={onGiftClaude}>
-                <Gift size={16} />
-                <span>Gift Claude</span>
-              </button>
-            </li>
-            <li>
-              <button type="button" onClick={onLearnMore}>
-                <BookOpen size={16} />
-                <span>Learn more</span>
-                <ChevronRight size={14} className="profile-dropdown__item-chevron" />
-              </button>
-            </li>
-            <li className="profile-dropdown__separator" />
-            <li>
-              <button type="button" onClick={onLogout}>
-                <LogOut size={16} />
-                <span>Log out</span>
-              </button>
-            </li>
+            {settingsItems.map((item) => {
+              const Icon = item.icon
+              return (
+                <li key={item.id}>
+                  <button type="button" onClick={() => select(item.id)}>
+                    <Icon size={16} />
+                    <span>{item.label}</span>
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         </div>
       )}
