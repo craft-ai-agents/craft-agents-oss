@@ -9,9 +9,11 @@
 #   5. `bun run gen:ipc-snapshot:check` — IPC channel inventory matches channels.ts
 #   6. `bun run test:ui:treeBfsGate`  — depth-gate + trim + pinned-paths tests still pass (stage-gated)
 #   7. `bun run check:test-count`    — treeBfsGate test count did not drop (stage-gated)
-#   8. `bash scripts/check-brand-leaks.sh` — no lingering old brand strings
-#   9. `bash tools/check-branding-leaks.sh` — same check + untracked files
-#  10. `bash scripts/check-rebrand-commit.sh` — rebranding + functional not mixed
+#   8. `bun run check:renderer-node-imports` — no Node builtins in the renderer bundle
+#
+# Non-blocking notice (never fails the commit):
+#   - brand-leak scans (scripts/check-brand-leaks.sh, tools/check-branding-leaks.sh)
+#     just print a note if upstream strings appear.
 #
 # Escape hatches:
 #   SKIP_ICON_CHECK=1|true|yes|on  — skips all pre-commit gates
@@ -19,8 +21,8 @@
 #   SKIP_MOCK_AUDIT=1              — skips only the mock-coverage gate (#4)
 #   SKIP_TREEBFSGATE=1             — skips only the tree-policy regression gate (#6)
 #   SKIP_TEST_COUNT=1              — skips only the test-count regression gate (#7)
-#   SKIP_BRAND_LEAK=1              — skips only the brand-leak gate (#8, #9)
-#   SKIP_REBRAND_CHECK=1           — skips only the rebrand-commit gate (#10)
+#   SKIP_RENDERER_NODE_CHECK=1     — skips only the renderer/Node boundary gate (#8)
+#   SKIP_BRAND_LEAK=1              — silences the non-blocking brand-leak notice
 
 # Defensive cd: husky generally runs hooks with cwd == repo root, but
 # some git clients and Windows combinations vary. Resolve to repo root
@@ -178,32 +180,23 @@ bun run gen:ipc-snapshot:check || {
   exit 1
 }
 
-# ── Brand-leak gate ─────────────────────────────────────────────────
-# Ensures no lingering old brand strings (Craft Agents, craft-agents,
-# craft-ai-agents) are introduced. Catches accidental reverts of the
-# ARCHstudio rebrand. Catches any string that would appear in user-
-# facing UI, docs, or public-facing config.
-#
-# Bypass (sparingly): SKIP_BRAND_LEAK=1 git commit ...
-bash scripts/check-brand-leaks.sh || {
-  printf '[husky] Brand-leak detected -- old brand strings found.\n'
-  printf '[husky] Fix:    grep for the old brand string and replace with ARCHstudio.\n'
-  printf '[husky] Bypass: SKIP_BRAND_LEAK=1 git commit ...\n'
-  exit 1
-}
-
-# ── Branding-leak gate (tracked + new files) ────────────────────────
-# Extends the tracked-file check above to also scan untracked (new)
-# files. Catches the case where someone introduces a brand-new file
-# with the old brand by accident (e.g., copying an old template).
-#
-# Bypass (sparingly): SKIP_BRAND_LEAK=1 git commit ...
-bash tools/check-branding-leaks.sh || {
-  printf '[husky] Branding-leak detected -- old brand strings in tracked or new files.\n'
-  printf '[husky] Fix:    grep for the old brand string and replace with ARCHstudio.\n'
-  printf '[husky] Bypass: SKIP_BRAND_LEAK=1 git commit ...\n'
-  exit 1
-}
+# ── Brand-leak notice (non-blocking) ────────────────────────────────
+# Informational only. Surfaces lingering upstream brand strings so an
+# accidental paste is easy to spot, but never blocks a commit — this is
+# our own codebase now, not an in-progress rebrand. Run the scans
+# manually any time: bash scripts/check-brand-leaks.sh
+#                    bash tools/check-branding-leaks.sh
+# Silence entirely: SKIP_BRAND_LEAK=1 git commit ...
+SKIP_BRAND_LEAK_NORMALIZED=$(printf '%s' "${SKIP_BRAND_LEAK:-0}" | tr '[:upper:]' '[:lower:]')
+case "$SKIP_BRAND_LEAK_NORMALIZED" in
+  1|true|yes|on) : ;;
+  *)
+    bash scripts/check-brand-leaks.sh > /dev/null 2>&1 || \
+      printf '[husky] note: brand-leak scan found upstream strings (non-blocking). Run: bash scripts/check-brand-leaks.sh\n'
+    bash tools/check-branding-leaks.sh > /dev/null 2>&1 || \
+      printf '[husky] note: branding scan (incl. untracked) found upstream strings (non-blocking). Run: bash tools/check-branding-leaks.sh\n'
+    ;;
+esac
 
 # ── Tree-policy regression gate ──────────────────────────────────────
 # If the commit touches any of:
@@ -378,33 +371,7 @@ if [ -n "$STAGED_TEST_COUNT" ]; then
   esac
 fi
 
-# ── Rebrand-commit discipline gate ─────────────────────────────────
-# Enforces the two-commit discipline: rebranding commits and functional
-# commits must never be mixed. If both rebranding files (docs, config,
-# templates) and functional files (source, tests, scripts) are staged,
-# the commit is refused with guidance on how to separate them.
-#
-# Bypass (sparingly): SKIP_REBRAND_CHECK=1 git commit ...
-SKIP_REBRAND_NORMALIZED=$(printf '%s' "${SKIP_REBRAND_CHECK:-0}" | tr '[:upper:]' '[:lower:]')
-case "$SKIP_REBRAND_NORMALIZED" in
-  1|true|yes|on)
-    printf '[husky] SKIP_REBRAND_CHECK is set, skipping rebrand-commit gate.\n'
-    ;;
-  0|false|no|off|"")
-    bash scripts/check-rebrand-commit.sh || {
-      printf '[husky] Rebrand-commit discipline violated — rebranding and functional changes mixed.\n'
-      printf '[husky] Fix:    Separate rebranding from functional changes (see script output).\n'
-      printf '[husky] Bypass: SKIP_REBRAND_CHECK=1 git commit ...\n'
-      exit 1
-    }
-    ;;
-  *)
-    printf '[husky] unrecognized SKIP_REBRAND_CHECK=%s, treating as "do not skip".\n' "$SKIP_REBRAND_CHECK"
-    bash scripts/check-rebrand-commit.sh || {
-      printf '[husky] Rebrand-commit discipline violated — rebranding and functional changes mixed.\n'
-      printf '[husky] Fix:    Separate rebranding from functional changes (see script output).\n'
-      printf '[husky] Bypass: SKIP_REBRAND_CHECK=1 git commit ...\n'
-      exit 1
-    }
-    ;;
-esac
+# The rebrand-commit discipline gate (forcing rebranding and functional
+# changes into separate commits) was removed: it only made sense during the
+# active rebrand sprint. This is our own codebase now, so mixed commits are
+# fine. scripts/check-rebrand-commit.sh remains if you ever want to run it.
