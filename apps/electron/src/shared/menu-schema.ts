@@ -294,15 +294,10 @@ export const ROOT_MENU = {
  * sub-page (mobile). Excludes `keyboardShortcuts`, which is a `MenuItemAction`
  * and lives in `ROOT_MENU` so mobile can hoist it to the root list.
  */
-export const HELP_LINKS: MenuItemUrl[] = [
-  {
-    type: 'url',
-    id: 'helpAndDocs',
-    labelKey: 'menu.helpAndDocs',
-    url: 'https://agents.craft.do/docs',
-    icon: 'HelpCircle',
-  },
-]
+// Empty for this fork: the only entry pointed at upstream's docs site
+// (agents.craft.do), which this fork does not host. Add entries here once a
+// docs site exists — both the desktop and mobile menus render from this list.
+export const HELP_LINKS: MenuItemUrl[] = []
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Debug menu (dev-only)

@@ -226,7 +226,7 @@ nsis:
 linux:
   icon: resources/icon.png
   category: Utility
-  maintainer: "Craft Docs Ltd. <support@craft.do>"
+  maintainer: "Skobez <skobeponga@gmail.com>"
   target:
     - target: AppImage
       arch:

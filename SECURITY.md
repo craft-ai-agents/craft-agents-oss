@@ -8,7 +8,7 @@ We take security seriously. If you discover a security vulnerability in ARCHstud
 
 **Please do NOT report security vulnerabilities through public GitHub issues.**
 
-Instead, please send an email to: **security@craft.do**
+Instead, please send an email to: **skobeponga@gmail.com**
 
 Include the following information:
 - Description of the vulnerability
