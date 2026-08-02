@@ -24,14 +24,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
+  padding: calc(16px * var(--density-scale));
   border-bottom: 1px solid var(--color-border);
 }
 
 .ps-sidebar__title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: calc(10px * var(--density-scale));
   font-size: 15px;
   font-weight: 600;
   color: var(--color-accent);
@@ -40,7 +40,7 @@
 .ps-sidebar__count {
   font-size: 10px;
   font-weight: 600;
-  padding: 2px 7px;
+  padding: 2px calc(7px * var(--density-scale));
   border-radius: 999px;
   background: color-mix(in srgb, var(--color-accent) 18%, transparent);
   color: var(--color-accent);
@@ -49,12 +49,12 @@
 
 .ps-sidebar__actions {
   display: flex;
-  gap: 4px;
+  gap: calc(4px * var(--density-scale));
 }
 
 /* ---- Profile pane ---- */
 .ps-profile-pane {
-  padding: 8px 12px;
+  padding: calc(8px * var(--density-scale)) calc(12px * var(--density-scale));
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
   flex-shrink: 0;
@@ -63,9 +63,9 @@
 .ps-profile-pane__header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: calc(6px * var(--density-scale));
   width: 100%;
-  padding: 4px 0;
+  padding: calc(4px * var(--density-scale)) 0;
   border: none;
   background: transparent;
   color: var(--color-muted);
@@ -84,14 +84,14 @@
 .ps-profile-pane__fields {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
+  gap: calc(6px * var(--density-scale));
+  margin-top: calc(8px * var(--density-scale));
 }
 
 .ps-profile-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: calc(8px * var(--density-scale));
 }
 
 .ps-profile-row label {
@@ -101,14 +101,14 @@
   color: var(--color-muted);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: calc(4px * var(--density-scale));
 }
 
 .ps-profile-row input,
 .ps-profile-row select {
   flex: 1;
   height: 28px;
-  padding: 0 8px;
+  padding: 0 calc(8px * var(--density-scale));
   border-radius: 6px;
   border: 1px solid var(--color-border);
   background: var(--color-surface-muted);
@@ -134,9 +134,9 @@
 .ps-context-pane__header {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: calc(4px * var(--density-scale));
   width: 100%;
-  padding: 4px 8px 4px 12px;
+  padding: calc(4px * var(--density-scale)) calc(8px * var(--density-scale)) calc(4px * var(--density-scale)) calc(12px * var(--density-scale));
   color: var(--color-muted);
 }
 

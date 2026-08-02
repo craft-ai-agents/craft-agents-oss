@@ -116,6 +116,8 @@ export default function AppearanceSettingsPage() {
     setColorTheme,
     font,
     setFont,
+    density,
+    setDensity,
     activeWorkspaceId,
     setWorkspaceColorTheme,
     themeLoadError,
@@ -436,6 +438,12 @@ export default function AppearanceSettingsPage() {
               {/* Interface */}
               <SettingsSection title={t("settings.appearance.interface")}>
                 <SettingsCard>
+                  <SettingsToggle
+                    label={t("settings.appearance.compactUi")}
+                    description={t("settings.appearance.compactUiDesc")}
+                    checked={density === 'compact'}
+                    onCheckedChange={(checked) => setDensity(checked ? 'compact' : 'comfortable')}
+                  />
                   <SettingsToggle
                     label={t("settings.appearance.connectionIcons")}
                     description={t("settings.appearance.connectionIconsDesc")}

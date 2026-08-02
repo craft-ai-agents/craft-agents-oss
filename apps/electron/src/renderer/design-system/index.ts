@@ -8,6 +8,8 @@
  */
 
 import './tokens.css'
+// After tokens.css — density redefines --ds-space-* and must win the cascade.
+import './density.css'
 import './typography.css'
 import './motion.css'
 import './elevation.css'
@@ -62,6 +64,16 @@ export const DS_Z = {
   toast: 'var(--ds-z-toast)',
   modal: 'var(--ds-z-modal)',
 } as const
+
+/**
+ * UI density. `comfortable` is the default and renders identically to how the
+ * app looked before density existed (`--density-scale: 1`).
+ */
+export const DS_DENSITIES = ['comfortable', 'compact'] as const
+export type DsDensity = (typeof DS_DENSITIES)[number]
+
+/** Multiplier hand-written CSS applies to its own px values. */
+export const DS_DENSITY_SCALE = 'var(--density-scale)'
 
 export type DsStateKey = keyof typeof DS_STATE
 export type DsModeKey = keyof typeof DS_MODE

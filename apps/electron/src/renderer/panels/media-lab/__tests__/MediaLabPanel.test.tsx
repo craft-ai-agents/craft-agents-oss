@@ -184,6 +184,13 @@ const comfyWorkflows = mock(async () => ({
       nodeClasses: ['AgnesVideo', 'SaveVideo'],
       parameters: [{ id: '2.prompt', label: 'Prompt', kind: 'text', value: 'Slow camera move' }],
     },
+    {
+      id: 'agnes-audio',
+      name: 'Agnes Audio',
+      kind: 'audio',
+      nodeClasses: ['AgnesAudio', 'SaveAudio'],
+      parameters: [{ id: '3.prompt', label: 'Prompt', kind: 'text', value: 'Warm analog pad' }],
+    },
   ],
 }))
 const comfyRun = mock(async () => ({ promptId: 'prompt-12345678' }))
@@ -409,6 +416,7 @@ describe('MediaLabPanel smoke test', () => {
     expect(container.textContent).toContain('Agnes Image')
     expect(container.textContent).toContain('Image Studio1 workflow')
     expect(container.textContent).toContain('Video Studio1 workflow')
+    expect(container.textContent).toContain('Music Studio1 workflow')
     expect(container.textContent).not.toContain('Coming soon')
 
     const runButton = Array.from(container.querySelectorAll('button')).find(
@@ -452,5 +460,52 @@ describe('MediaLabPanel smoke test', () => {
     expect(comfyStart).toHaveBeenCalledTimes(1)
     expect(comfyWorkflows).toHaveBeenCalledTimes(2)
     expect(container.textContent).toContain('Online')
+  })
+
+  it('switches to Music Studio and submits the audio workflow', async () => {
+    const { container, root } = await renderPanel()
+    lastContainer = container
+    lastRoot = root
+
+    await act(async () => {
+      await flush()
+      await flush()
+    })
+
+    // Image is the default mode, so the audio workflow is not selected yet.
+    expect(container.textContent).toContain('Compose an image')
+
+    const musicButton = Array.from(container.querySelectorAll('.media-studio__rail > button')).find(
+      (button: any) => button.textContent?.includes('Music Studio'),
+    ) as HTMLButtonElement
+    expect(musicButton).toBeTruthy()
+
+    await act(async () => {
+      musicButton.click()
+      await flush()
+    })
+
+    expect(container.textContent).toContain('Score a track')
+    expect(container.textContent).toContain('Agnes Audio')
+    // ComfyUI namespaces audio output as `audio`, not a pluralised `audios`.
+    expect(container.textContent).toContain('ARCHstudio/audio')
+    expect(container.textContent).not.toContain('ARCHstudio/audios')
+
+    const runButton = Array.from(container.querySelectorAll('button')).find(
+      (button: any) => button.textContent?.includes('Generate audio'),
+    ) as HTMLButtonElement
+    expect(runButton).toBeTruthy()
+
+    await act(async () => {
+      runButton.click()
+      await flush()
+      await flush()
+    })
+
+    expect(comfyRun).toHaveBeenCalledTimes(1)
+    // comfyRun is declared with no parameters, so bun types its call tuple as
+    // empty; the panel does pass a request object.
+    const calls = comfyRun.mock.calls as unknown as Array<[{ workflowId?: string }]>
+    expect(calls[0]?.[0]?.workflowId).toBe('agnes-audio')
   })
 })

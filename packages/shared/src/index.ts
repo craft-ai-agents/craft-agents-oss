@@ -1,7 +1,7 @@
 /**
  * @archstudio/shared
  *
- * Shared business logic for Craft Agent.
+ * Shared business logic for ARCHstudio.
  * Used by the Electron app.
  *
  * Import specific modules via subpath exports:

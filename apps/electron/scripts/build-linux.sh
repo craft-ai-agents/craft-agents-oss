@@ -234,22 +234,32 @@ else
     LINUX_ARCH="aarch64"
 fi
 
-# electron-builder outputs: Craft-Agents-x86_64.AppImage or Craft-Agents-aarch64.AppImage
-BUILT_APPIMAGE_NAME="Craft-Agents-${LINUX_ARCH}.AppImage"
-BUILT_APPIMAGE_PATH="$ELECTRON_DIR/release/$BUILT_APPIMAGE_NAME"
+# electron-builder.yml sets artifactName, so the AppImage normally lands on our
+# naming already. Without that template electron-builder falls back to its own
+# arch spelling (x86_64 / aarch64), so accept that form too and rename it.
+APPIMAGE_NAME="ARCHstudio-${ARCH}.AppImage"
+BUILT_APPIMAGE_NAME=""
+for candidate in "ARCHstudio-${ARCH}.AppImage" "ARCHstudio-${LINUX_ARCH}.AppImage"; do
+    if [ -f "$ELECTRON_DIR/release/$candidate" ]; then
+        BUILT_APPIMAGE_NAME="$candidate"
+        break
+    fi
+done
 
-if [ ! -f "$BUILT_APPIMAGE_PATH" ]; then
-    echo "ERROR: Expected AppImage not found at $BUILT_APPIMAGE_PATH"
+if [ -z "$BUILT_APPIMAGE_NAME" ]; then
+    echo "ERROR: Expected AppImage not found in $ELECTRON_DIR/release/"
+    echo "Looked for: ARCHstudio-${ARCH}.AppImage, ARCHstudio-${LINUX_ARCH}.AppImage"
     echo "Contents of release directory:"
     ls -la "$ELECTRON_DIR/release/"
     exit 1
 fi
 
-# Rename to our standard naming convention: Craft-Agents-x64.AppImage, Craft-Agents-arm64.AppImage
-APPIMAGE_NAME="Craft-Agents-${ARCH}.AppImage"
+BUILT_APPIMAGE_PATH="$ELECTRON_DIR/release/$BUILT_APPIMAGE_NAME"
 APPIMAGE_PATH="$ELECTRON_DIR/release/$APPIMAGE_NAME"
-mv "$BUILT_APPIMAGE_PATH" "$APPIMAGE_PATH"
-echo "Renamed $BUILT_APPIMAGE_NAME -> $APPIMAGE_NAME"
+if [ "$BUILT_APPIMAGE_PATH" != "$APPIMAGE_PATH" ]; then
+    mv "$BUILT_APPIMAGE_PATH" "$APPIMAGE_PATH"
+    echo "Renamed $BUILT_APPIMAGE_NAME -> $APPIMAGE_NAME"
+fi
 
 echo ""
 echo "=== Build Complete ==="

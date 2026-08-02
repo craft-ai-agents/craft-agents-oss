@@ -20,6 +20,53 @@ const KIND_ICON: Record<MediaKind, typeof Image> = {
   doc: FileText,
 }
 
+/** The media kinds the Create tab can generate. `doc` is library-only. */
+type CreationKind = 'image' | 'video' | 'audio'
+
+/**
+ * Per-studio copy. A three-way branch inline at every call site was the
+ * alternative; this keeps the wording for a mode in one place.
+ *
+ * `outputFolder` must match the server's namespacing in
+ * `integrations/comfyui/workflow.ts` — note audio is `audio`, not `audios`,
+ * so it cannot be derived by pluralising the kind.
+ */
+const STUDIO: Record<CreationKind, {
+  label: string
+  icon: typeof Image
+  eyebrow: string
+  heading: string
+  promptPlaceholder: string
+  outputFolder: string
+}> = {
+  image: {
+    label: 'Image Studio',
+    icon: Image,
+    eyebrow: 'IMAGE',
+    heading: 'Compose an image',
+    promptPlaceholder: 'Describe the composition, subject, lighting and atmosphere…',
+    outputFolder: 'images',
+  },
+  video: {
+    label: 'Video Studio',
+    icon: Video,
+    eyebrow: 'VIDEO',
+    heading: 'Direct a sequence',
+    promptPlaceholder: 'Describe the action, camera movement, pacing and atmosphere…',
+    outputFolder: 'videos',
+  },
+  audio: {
+    label: 'Music Studio',
+    icon: Music,
+    eyebrow: 'AUDIO',
+    heading: 'Score a track',
+    promptPlaceholder: 'Describe the genre, instrumentation, tempo and mood…',
+    outputFolder: 'audio',
+  },
+}
+
+const CREATION_KINDS = Object.keys(STUDIO) as CreationKind[]
+
 /**
  * Default page size. Mirrors the server's `DEFAULT_LIMIT` so a single page
  * response is "what the user sees in roughly 3 viewports". The server also
@@ -199,7 +246,7 @@ export function MediaLabPanel() {
   const [comfyHealth, setComfyHealth] = useState<ComfyHealth | null>(null)
   const [comfyWorkflows, setComfyWorkflows] = useState<ComfyWorkflowSummary[]>([])
   const [comfyRejectedCount, setComfyRejectedCount] = useState(0)
-  const [creationKind, setCreationKind] = useState<'image' | 'video'>('image')
+  const [creationKind, setCreationKind] = useState<CreationKind>('image')
   const [selectedWorkflowId, setSelectedWorkflowId] = useState('')
   const [workflowValues, setWorkflowValues] = useState<Record<string, string | number>>({})
   const [comfyLoading, setComfyLoading] = useState(true)
@@ -835,17 +882,25 @@ export function MediaLabPanel() {
         <div className="media-studio">
           <aside className="media-studio__rail">
             <div className="media-studio__rail-label">Studio mode</div>
-            <button type="button" className={creationKind === 'image' ? 'is-active' : ''} onClick={() => setCreationKind('image')}>
-              <span className="media-studio__mode-icon is-image"><Image size={18} /></span>
-              <div><strong>Image Studio</strong><small>{comfyWorkflows.filter((workflow) => workflow.kind === 'image').length} workflows</small></div>
-            </button>
-            <button type="button" className={creationKind === 'video' ? 'is-active' : ''} onClick={() => setCreationKind('video')}>
-              <span className="media-studio__mode-icon is-video"><Video size={18} /></span>
-              <div><strong>Video Studio</strong><small>{comfyWorkflows.filter((workflow) => workflow.kind === 'video').length} workflows</small></div>
-            </button>
+            {CREATION_KINDS.map((kind) => {
+              const studio = STUDIO[kind]
+              const ModeIcon = studio.icon
+              const count = comfyWorkflows.filter((workflow) => workflow.kind === kind).length
+              return (
+                <button
+                  key={kind}
+                  type="button"
+                  className={creationKind === kind ? 'is-active' : ''}
+                  onClick={() => setCreationKind(kind)}
+                >
+                  <span className={`media-studio__mode-icon is-${kind}`}><ModeIcon size={18} /></span>
+                  <div><strong>{studio.label}</strong><small>{count} workflows</small></div>
+                </button>
+              )
+            })}
             <div className="media-studio__rail-foot">
               <span>Output namespace</span>
-              <code>ARCHstudio/{creationKind}s</code>
+              <code>ARCHstudio/{STUDIO[creationKind].outputFolder}</code>
               <small>{comfyRejectedCount} incompatible workflow files excluded</small>
             </div>
           </aside>
@@ -853,12 +908,12 @@ export function MediaLabPanel() {
           <main className="media-studio__main">
             <section className="media-composer">
               <div className="media-composer__eyebrow">
-                <span>{creationKind === 'image' ? 'IMAGE' : 'VIDEO'} / {workflowProvider(selectedWorkflow).toUpperCase()}</span>
+                <span>{STUDIO[creationKind].eyebrow} / {workflowProvider(selectedWorkflow).toUpperCase()}</span>
                 <span className={comfyHealth?.connected ? 'is-ready' : 'is-offline'}>{comfyHealth?.connected ? 'READY TO CREATE' : 'ENGINE OFFLINE'}</span>
               </div>
               <div className="media-composer__heading">
                 <div>
-                  <h3>{creationKind === 'image' ? 'Compose an image' : 'Direct a sequence'}</h3>
+                  <h3>{STUDIO[creationKind].heading}</h3>
                   <p>Choose a proven workflow, describe the result, then monitor every stage below.</p>
                 </div>
                 <label className="media-composer__workflow">
@@ -879,7 +934,7 @@ export function MediaLabPanel() {
                       <span>Creative direction</span>
                       <textarea
                         rows={6}
-                        placeholder={creationKind === 'image' ? 'Describe the composition, subject, lighting and atmosphere�' : 'Describe the action, camera movement, pacing and atmosphere�'}
+                        placeholder={STUDIO[creationKind].promptPlaceholder}
                         value={String(workflowValues[promptParameter.id] ?? '')}
                         onChange={(event) => setWorkflowValues((values) => ({ ...values, [promptParameter.id]: event.target.value }))}
                       />

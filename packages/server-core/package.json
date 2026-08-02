@@ -2,7 +2,7 @@
   "name": "@archstudio/server-core",
   "version": "0.11.2",
   "license": "Apache-2.0",
-  "description": "Reusable headless server infrastructure for Craft Agent",
+  "description": "Reusable headless server infrastructure for ARCHstudio",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",

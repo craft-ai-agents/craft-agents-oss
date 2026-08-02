@@ -379,7 +379,7 @@ WRAPPER_EOF
 
     # Migrate old installation (both the Craft-era filename and the ARCHstudio one,
     # in case an interrupted upgrade left a stale copy at the wrapper's install dir).
-    for OLD_APPIMAGE in "$INSTALL_DIR/Craft-Agents-x64.AppImage" "$INSTALL_DIR/ARCHstudio-x64.AppImage"; do
+    for OLD_APPIMAGE in "$INSTALL_DIR/Craft-Agents-x64.AppImage" "$INSTALL_DIR/ARCHstudio-x64.AppImage"; do  # brand-leak-allow: pre-rebrand filename
         [ -f "$OLD_APPIMAGE" ] && rm -f "$OLD_APPIMAGE"
     done
 

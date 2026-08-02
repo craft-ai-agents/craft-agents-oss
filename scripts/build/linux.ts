@@ -54,20 +54,28 @@ export async function packageLinux(config: BuildConfig): Promise<string> {
     console.warn('  linux-unpacked not found, skipping SDK verification');
   }
 
-  // electron-builder uses different arch names: x86_64 for x64, aarch64 for arm64
+  // electron-builder.yml sets `artifactName: ARCHstudio-${arch}.${ext}`, so the
+  // AppImage normally lands on our naming already. Without that template
+  // electron-builder falls back to its own arch spelling (x86_64 / aarch64), so
+  // accept that form too and rename it rather than failing the build.
   const linuxArch = arch === 'x64' ? 'x86_64' : 'aarch64';
-  const builtName = `Craft-Agents-${linuxArch}.AppImage`;
-  const builtPath = join(electronDir, 'release', builtName);
+  const finalName = `ARCHstudio-${arch}.AppImage`;
+  const finalPath = join(electronDir, 'release', finalName);
 
-  if (!existsSync(builtPath)) {
+  const candidates = [finalName, `ARCHstudio-${linuxArch}.AppImage`];
+  const builtName = candidates.find((name) =>
+    existsSync(join(electronDir, 'release', name)),
+  );
+
+  if (!builtName) {
     console.error('Contents of release directory:');
     await $`ls -la ${join(electronDir, 'release')}`;
-    throw new Error(`Expected AppImage not found at ${builtPath}`);
+    throw new Error(
+      `Expected AppImage not found. Looked for: ${candidates.join(', ')}`,
+    );
   }
 
-  // Rename to our standard naming convention
-  const finalName = `Craft-Agents-${arch}.AppImage`;
-  const finalPath = join(electronDir, 'release', finalName);
+  const builtPath = join(electronDir, 'release', builtName);
 
   if (builtPath !== finalPath) {
     renameSync(builtPath, finalPath);

@@ -10,9 +10,11 @@ import {
   type ThemeFile,
   type ShikiThemeConfig,
 } from '@config/theme'
+import { DS_DENSITIES, type DsDensity } from '@/design-system'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type FontFamily = 'inter' | 'system'
+export type { DsDensity as UiDensity }
 
 interface ThemeContextType {
   // Preferences (persisted at app level)
@@ -20,10 +22,13 @@ interface ThemeContextType {
   /** App-level default color theme (used when workspace has no override) */
   colorTheme: string
   font: FontFamily
+  /** UI density. `comfortable` renders identically to pre-density builds. */
+  density: DsDensity
   setMode: (mode: ThemeMode) => void
   /** Set app-level default color theme */
   setColorTheme: (theme: string) => void
   setFont: (font: FontFamily) => void
+  setDensity: (density: DsDensity) => void
 
   // Workspace-level theme override
   /** Active workspace ID (null if no workspace context) */
@@ -68,6 +73,7 @@ interface StoredTheme {
   mode: ThemeMode
   colorTheme: string
   font?: FontFamily
+  density?: DsDensity
   /** True when user explicitly changed theme in UI (not auto-saved on startup) */
   isUserOverride?: boolean
 }
@@ -133,8 +139,15 @@ function loadStoredTheme(): StoredTheme | null {
   return storage.get<StoredTheme | null>(storage.KEYS.theme, null)
 }
 
-function saveTheme(theme: StoredTheme): void {
-  storage.set(storage.KEYS.theme, theme)
+/**
+ * Merge rather than replace. Every caller builds a fresh object from the
+ * fields it knows about, so a plain write silently drops any field the caller
+ * does not mention — which is how `density` would be lost the first time the
+ * user changed the theme mode.
+ */
+function saveTheme(theme: Partial<StoredTheme> & Pick<StoredTheme, 'mode' | 'colorTheme'>): void {
+  const existing = loadStoredTheme()
+  storage.set(storage.KEYS.theme, { ...existing, ...theme })
 }
 
 export function ThemeProvider({
@@ -156,6 +169,12 @@ export function ThemeProvider({
     return defaultColorTheme // Will be updated by config.json effect
   })
   const [font, setFontState] = useState<FontFamily>(stored?.font ?? defaultFont)
+  const [density, setDensityState] = useState<DsDensity>(
+    // Guard the stored value: it is user-writable localStorage, and an
+    // unknown density would leave the DOM attribute set to something no
+    // stylesheet matches.
+    DS_DENSITIES.includes(stored?.density as DsDensity) ? (stored!.density as DsDensity) : 'comfortable',
+  )
   const [systemPreference, setSystemPreference] = useState<'light' | 'dark'>(getSystemPreference)
   const [previewColorTheme, setPreviewColorTheme] = useState<string | null>(null)
 
@@ -326,9 +345,18 @@ export function ThemeProvider({
       delete root.dataset.theme
     }
 
+    // Apply UI density. Comfortable is the default, so the attribute is
+    // removed rather than set — that keeps the selector in density.css to a
+    // single positive case and leaves the default cascade untouched.
+    if (density === 'compact') {
+      root.dataset.density = 'compact'
+    } else {
+      delete root.dataset.density
+    }
+
     // Always set theme override for semi-transparent background (vibrancy effect)
     root.dataset.themeOverride = 'true'
-  }, [effectiveColorTheme, font])
+  }, [effectiveColorTheme, font, density])
 
   // Apply dark/light class and theme-specific DOM attributes
   // This runs when preset loads or mode changes
@@ -488,6 +516,16 @@ export function ThemeProvider({
     }
   }, [mode, colorTheme])
 
+  /**
+   * Density is renderer-local: it changes layout only, and every window can
+   * reasonably differ. It is therefore persisted but NOT broadcast to other
+   * windows the way mode/colorTheme/font are.
+   */
+  const setDensity = useCallback((newDensity: DsDensity) => {
+    setDensityState(newDensity)
+    saveTheme({ mode, colorTheme, density: newDensity })
+  }, [mode, colorTheme])
+
   // Set workspace-specific color theme override
   const setWorkspaceColorTheme = useCallback((newTheme: string | null) => {
     if (!activeWorkspaceId) return
@@ -518,6 +556,8 @@ export function ThemeProvider({
         mode,
         colorTheme,
         font,
+        density,
+        setDensity,
         setMode,
         setColorTheme,
         setFont,

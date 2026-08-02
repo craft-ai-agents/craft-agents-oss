@@ -1,7 +1,7 @@
 # CLAUDE.md — `@archstudio/shared`
 
 ## Purpose
-Core business logic package for Craft Agent:
+Core business logic package for ARCHstudio:
 - Agent backends and session-scoped tools
 - Sources, credentials, sessions, and config
 - Permission modes and validation

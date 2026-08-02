@@ -30,7 +30,7 @@ export { expandPath, normalizePath, pathStartsWith, toPortablePath };
  * These files have specific formats (JSON, TOML, YAML) that can break apps if malformed.
  */
 const CONFIG_FILE_PATTERNS = [
-  // Craft Agent configs
+  // ARCHstudio configs
   /\.archstudio\/.*\/(config|permissions|theme|guide|labels|statuses)\.json$/,
   /\.archstudio\/config\.json$/,
   /\.archstudio\/preferences\.json$/,

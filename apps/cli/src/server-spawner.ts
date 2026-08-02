@@ -1,5 +1,5 @@
 /**
- * Server spawner — start a headless Craft Agent server as a child process.
+ * Server spawner — start a headless ARCHstudio server as a child process.
  *
  * Spawns `bun run <serverEntry>`, reads stdout for the `ARCHSTUDIO_SERVER_URL=`
  * and `ARCHSTUDIO_SERVER_TOKEN=` lines, and returns a handle to stop the server.

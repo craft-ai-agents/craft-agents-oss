@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * @archstudio/server — standalone headless Craft Agent server.
+ * @archstudio/server — standalone headless ARCHstudio server.
  *
  * Usage:
  *   ARCHSTUDIO_SERVER_TOKEN=<secret> bun run packages/server/src/index.ts

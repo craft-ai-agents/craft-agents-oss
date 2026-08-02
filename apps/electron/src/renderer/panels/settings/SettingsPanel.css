@@ -1,478 +1,56 @@
+/**
+ * SettingsPanel — shell Settings view.
+ *
+ * Layout only. The panel is a two-pane host (navigator + selected page); every
+ * control inside it is rendered by the shared settings page components and
+ * styled by those, not from here.
+ *
+ * This file previously carried ~470 lines styling a bespoke flat toggle list
+ * that duplicated the settings pages. That list is gone, and so are its styles
+ * — leaving them behind would have kept leaking global `.settings-row`,
+ * `.settings-switch` and `.settings-button` rules into the rest of the app.
+ */
+
 .settings-panel {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100%;
   min-height: 0;
 }
 
-.settings-panel__header {
+.settings-panel__nav {
+  flex: 0 0 clamp(220px, 24%, 320px);
+  min-width: 0;
+  overflow-y: auto;
+  border-right: 1px solid color-mix(in oklch, var(--ds-shadow-color) 10%, transparent);
+}
+
+.settings-panel__detail {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid color-mix(in oklch, var(--ds-shadow-color) 10%, transparent);
+  flex-direction: column;
 }
 
-.settings-panel__title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.settings-panel__title h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.settings-panel__username {
-  font-size: 14px;
-  font-weight: 400;
-  color: var(--ds-text-muted);
-}
-
-.settings-panel__saved {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  color: var(--ds-text-muted);
-}
-
-.settings-panel__saved.is-done {
-  color: var(--brand-lime);
-}
-
-.settings-panel__body {
+/* The pages own their internal scrolling (each wraps content in a ScrollArea),
+   so the detail pane must not introduce a second scroll container. */
+.settings-panel__detail > * {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  padding: 16px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  max-width: 100%;
 }
 
-.settings-error {
-  padding: 10px 12px;
-  border-radius: 9px;
-  font-size: 12px;
-  color: var(--ds-error);
-  background: color-mix(in oklch, var(--ds-error) 8%, transparent);
-  border: 1px solid color-mix(in oklch, var(--ds-error) 25%, transparent);
-}
+/* Narrow shell: stack the navigator above the page rather than squeezing both. */
+@media (max-width: 720px) {
+  .settings-panel {
+    flex-direction: column;
+  }
 
-.settings-group {
-  padding: 8px 0;
-  margin-top: 4px;
-}
-
-.settings-group__label {
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ds-text-secondary);
-  padding: 8px 12px 4px;
-  margin: 0;
-}
-
-.settings-section__head {
-  display: none;
-}
-
-.settings-section__head h3 {
-  display: none;
-}
-
-.settings-section__lead {
-  display: none;
-}
-
-.settings-levels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.settings-level {
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: none;
-  background: var(--ds-neutral-bg);
-  color: var(--ds-text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  box-shadow: inset 0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 8%, transparent);
-}
-
-.settings-level:hover:not(:disabled) {
-  background: var(--ds-hover-bg);
-  box-shadow: inset 0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 12%, transparent);
-}
-
-.settings-level.is-active {
-  color: var(--ds-text-on-brand);
-  background: linear-gradient(135deg, var(--brand-lime), var(--brand-purple));
-  box-shadow: 0 2px 8px color-mix(in oklch, var(--brand-lime) 30%, transparent);
-}
-
-.settings-level:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.settings-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  box-shadow: none;
-  cursor: pointer;
-  transition: background 100ms ease;
-}
-
-.settings-row:hover:not(:has(input:disabled, select:disabled, button:disabled)) {
-  background: color-mix(in oklch, var(--foreground) 5%, transparent);
-}
-
-.settings-row:has(input:disabled, select:disabled, button:disabled) {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.settings-row--select {
-  padding: 10px 12px;
-}
-
-.settings-row__label {
-  display: block;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.settings-row__hint {
-  display: block;
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--ds-text-muted);
-}
-
-.settings-switch {
-  appearance: none;
-  position: relative;
-  width: 38px;
-  height: 21px;
-  flex-shrink: 0;
-  border-radius: 999px;
-  background: color-mix(in oklch, var(--foreground) 12%, transparent);
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.settings-switch::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: var(--ds-text-on-brand);
-  transition: transform 0.15s ease;
-}
-
-.settings-switch:checked {
-  background: linear-gradient(135deg, var(--brand-lime), var(--brand-purple));
-}
-
-.settings-switch:checked::after {
-  transform: translateX(17px);
-}
-
-.settings-switch:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.settings-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 12px;
-  padding-left: 14px;
-  border-left: 2px solid color-mix(in oklch, var(--ds-shadow-color) 15%, transparent);
-}
-
-.settings-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
-  margin: 0;
-  background: transparent;
-  border-radius: 6px;
-}
-
-.settings-field span {
-  font-size: 12px;
-  color: var(--ds-text);
-  font-weight: 500;
-}
-
-.settings-field input {
-  padding: 8px 11px;
-  border-radius: 8px;
-  border: none;
-  background: color-mix(in oklch, var(--foreground) 3%, transparent);
-  box-shadow: inset 0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 12%, transparent);
-  color: var(--ds-text);
-  font-size: 12px;
-  font-family: var(--mono-font, 'JetBrainsMono',monospace);
-  outline: none;
-  transition: all 150ms ease;
-}
-
-.settings-field input:focus {
-  border: 1px solid var(--brand-purple);
-  box-shadow: 0 0 0 3px var(--ds-command-ring), inset 0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 12%, transparent);
-  background: var(--ds-command-surface);
-}
-
-.settings-select {
-  padding: 6px 8px;
-  border-radius: 6px;
-  border: 1px solid color-mix(in oklch, var(--ds-shadow-color) 20%, transparent);
-  background: var(--ds-panel);
-  box-shadow: none;
-  color: var(--ds-text);
-  font-size: 12px;
-  outline: none;
-  min-width: 120px;
-  cursor: pointer;
-  transition: all 100ms ease;
-}
-
-.settings-select:hover:not(:disabled) {
-  border-color: color-mix(in oklch, var(--ds-shadow-color) 30%, transparent);
-  background: var(--ds-hover-bg);
-}
-
-.settings-select:focus {
-  border-color: var(--brand-purple);
-  background: var(--ds-panel);
-  box-shadow: 0 0 0 2px color-mix(in oklch, var(--brand-purple) 20%, transparent);
-}
-
-.settings-button {
-  padding: 7px 14px;
-  border-radius: 8px;
-  border: none;
-  background: var(--ds-neutral-bg);
-  box-shadow: inset 0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 8%, transparent);
-  color: var(--ds-text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.settings-button:hover:not(:disabled) {
-  background: color-mix(in oklch, var(--brand-purple) 12%, transparent);
-  color: var(--ds-text-on-brand);
-  box-shadow: 0 2px 6px color-mix(in oklch, var(--brand-purple) 25%, transparent);
-}
-
-.settings-button:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.settings-status {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 12px;
-  color: var(--ds-text-secondary);
-}
-
-.settings-status code {
-  font-size: 11px;
-  padding: 2px 7px;
-  border-radius: 5px;
-  background: color-mix(in oklch, var(--foreground) 5%, transparent);
-  font-family: var(--mono-font, 'JetBrainsMono',monospace);
-}
-
-.settings-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ds-text-muted);
-}
-
-.settings-dot.is-on {
-  background: var(--brand-lime);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand-lime) 20%, transparent);
-}
-
-.settings-tag {
-  padding: 1px 7px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--brand-lime);
-  background: color-mix(in oklch, var(--brand-lime) 12%, transparent);
-  border: 1px solid color-mix(in oklch, var(--brand-lime) 30%, transparent);
-}
-
-.settings-warn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 9px 12px;
-  border-radius: 9px;
-  font-size: 12px;
-  color: color-mix(in oklch, var(--ds-warning) 80%, var(--ds-text));
-  background: color-mix(in oklch, var(--ds-warning) 8%, transparent);
-  border: 1px solid color-mix(in oklch, var(--ds-warning) 25%, transparent);
-}
-
-.settings-soon {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: auto;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: color-mix(in oklch, var(--brand-purple) 68%, var(--ds-text));
-  background: color-mix(in oklch, var(--brand-purple) 8%, transparent);
-  border: 1px solid color-mix(in oklch, var(--brand-purple) 25%, transparent);
-  white-space: nowrap;
-}
-
-.settings-row .settings-soon {
-  margin-left: 8px;
-}
-
-/* ---- Export / Import --------------------------------------------------- */
-
-.settings-export-row {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 12px;
-  margin-top: 8px;
-}
-
-.settings-export-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.settings-button--primary {
-  background: linear-gradient(135deg, var(--brand-lime), var(--brand-purple));
-  border: none;
-  color: var(--ds-text-on-brand);
-  font-weight: 600;
-  box-shadow: 0 4px 12px color-mix(in oklch, var(--brand-lime) 30%, transparent);
-}
-
-.settings-button--primary:hover:not(:disabled) {
-  opacity: 0.9;
-  color: var(--ds-text-on-brand);
-  background: linear-gradient(135deg, var(--brand-lime), var(--brand-purple));
-  box-shadow: 0 6px 16px color-mix(in oklch, var(--brand-lime) 35%, transparent);
-}
-
-.settings-export-msg {
-  font-size: 11px;
-  color: var(--ds-text-muted);
-  padding: 0 2px;
-}
-
-.settings-export-msg--import {
-  color: var(--brand-lime);
-}
-
-/* ---- Keyboard Shortcuts ------------------------------------------------- */
-
-.settings-shortcuts {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.settings-shortcuts__group {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.settings-shortcuts__category {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ds-text-muted);
-  margin-bottom: 4px;
-  padding-top: 4px;
-  border-top: 1px solid color-mix(in oklch, var(--ds-shadow-color) 15%, transparent);
-}
-
-.settings-shortcut-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 3px 0;
-}
-
-.settings-shortcut-row__label {
-  font-size: 13px;
-  color: var(--ds-text);
-}
-
-.settings-shortcut-row__desc {
-  font-size: 11px;
-  color: var(--ds-text-muted);
-  margin-top: 1px;
-}
-
-.settings-shortcut-row__keys {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  flex-shrink: 0;
-  margin-left: 12px;
-}
-
-.settings-shortcut-kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
-  font-size: 11px;
-  font-weight: 500;
-  font-family: inherit;
-  color: var(--ds-text-secondary);
-  background: var(--bg-muted, var(--ds-panel));
-  border: 1px solid color-mix(in oklch, var(--ds-shadow-color) 20%, transparent);
-  border-radius: 4px;
-  box-shadow: 0 1px 1px color-mix(in oklch, var(--ds-shadow-color) 25%, transparent);
+  .settings-panel__nav {
+    flex: 0 0 auto;
+    max-height: 40%;
+    border-right: none;
+    border-bottom: 1px solid color-mix(in oklch, var(--ds-shadow-color) 10%, transparent);
+  }
 }

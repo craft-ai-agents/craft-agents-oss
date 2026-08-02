@@ -21,7 +21,14 @@ cd "$(git rev-parse --show-toplevel)"
 
 # ── Pattern: human-facing brand strings ────────────────────────────────────
 # These should never appear in user-facing UI, docs, or messages.
-PATTERN='Craft Agents|CraftAgents|craft-ai-agents'
+# 'Craft-Agents' catches the hyphenated artifact filename form
+# (Craft-Agents-x64.exe) that the Windows installer used to hardcode.
+#
+# 'Craft Agent' (singular) is matched too. It was missed for a long time and
+# had spread into shipped strings — the desktop notification body, the remote
+# workspace connect copy, CLI --help, the viewer header and every bundled doc
+# under resources/docs. Plural-only matching is not enough.
+PATTERN='Craft Agents?|Craft-Agents|CraftAgents|craft-ai-agents'
 
 # ── Allowlist: internal code identifiers that can't be renamed ──────────────
 # Each pattern has a comment explaining why it's excluded.
@@ -49,6 +56,13 @@ ALLOW_PATTERNS=(
   '@CraftAgentsBot'
 )
 
+# ── Per-line opt-out: `brand-leak-allow` ───────────────────────────────────
+# Migration code has to name the old brand to detect and clean up a
+# pre-rebrand install. Excluding those whole files would blind the gate to
+# real leaks in them (that is exactly how the Windows installer stayed
+# old-brand), so such lines carry an inline `brand-leak-allow` marker instead.
+# Use it only where the old string is load-bearing, never to silence a rename.
+
 # ── File-level exclusions: docs and tooling that contain old brand ─────────
 # These files are historical records or rebranding tools that legitimately
 # contain the old brand string. Checked per-file after the initial scan.
@@ -62,7 +76,13 @@ ALLOW_PATTERNS=(
 #   scripts/check-brand-leaks\.sh / tools/check-branding-leaks\.sh — these
 #     files ARE the gate; they must contain the old-brand pattern string and
 #     allowlist comments to work at all.
-FILE_EXCLUSIONS='release-notes/|docs/brand/|docs/git/|scripts/rebrand\.ts|scripts/split-commits\.sh|scripts/check-brand-leaks\.sh|tools/check-branding-leaks\.sh'
+#   TRADEMARK\.md — states the former mark by name as a legal record; the
+#     whole point of the clause is that the old name existed.
+#   docs/baseline/ — a measurement snapshot describing how the app behaved at
+#     a point in time, under the name it had then.
+#   resources/bridge-mcp-server/ — a committed build artifact, not a source
+#     file. Editing it here would be overwritten by the next bundle.
+FILE_EXCLUSIONS='release-notes/|docs/brand/|docs/git/|docs/baseline/|TRADEMARK\.md|resources/bridge-mcp-server/|scripts/rebrand\.ts|scripts/split-commits\.sh|scripts/check-brand-leaks\.sh|tools/check-branding-leaks\.sh'
 
 # Build a single grep -E pattern from the allow list
 ALLOW_RE=$(IFS='|'; echo "${ALLOW_PATTERNS[*]}")
@@ -71,10 +91,12 @@ ALLOW_RE=$(IFS='|'; echo "${ALLOW_PATTERNS[*]}")
 HITS=$(git grep -nEI "$PATTERN" -- \
     '*.ts' '*.tsx' '*.js' '*.jsx' '*.json' '*.yml' '*.yaml' \
     '*.toml' '*.sh' '*.md' '*.css' '*.html' '*.vue' '*.svelte' \
+    '*.ps1' '*.psm1' '*.cmd' '*.bat' '*.nsh' \
     2>/dev/null \
   | grep -vE 'node_modules/|release/|dist/|out-tsc/|\.tmp-tools/|\.freebuff/|\.hermes/|coverage/|bun\.lock' \
   | grep -vE "^[^:]+:[^:]*:.*($ALLOW_RE)" \
   | grep -vE "($FILE_EXCLUSIONS)" \
+  | grep -vF 'brand-leak-allow' \
   || true)
 
 if [ -z "$HITS" ]; then

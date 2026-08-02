@@ -11,6 +11,22 @@
 </head>
 <body>
   <script>
+    // UI density, applied before first paint.
+    //
+    // ThemeContext is the singleton that owns this attribute, but it only runs
+    // after React mounts. Without this, a compact user gets a frame of
+    // comfortable spacing and the whole layout visibly reflows on every launch.
+    // Reads the same `craft-theme` key ThemeContext persists to.
+    try {
+      var storedTheme = JSON.parse(localStorage.getItem('craft-theme') || '{}');
+      if (storedTheme && storedTheme.density === 'compact') {
+        document.documentElement.dataset.density = 'compact';
+      }
+    } catch (e) {
+      // Unparseable or unavailable storage — fall through to comfortable.
+    }
+  </script>
+  <script>
     // React DevTools - only in development (when running via Vite dev server)
     if (location.protocol === 'file:' || location.hostname === 'localhost') {
       const s = document.createElement('script');

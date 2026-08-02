@@ -4,8 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
 import { Window } from 'happy-dom'
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { ActionRegistryProvider } from '../../../actions'
-import { SettingsPanel } from '../SettingsPanel'
 
 const win = new Window({ url: 'http://localhost:5173' })
 const doc = win.document
@@ -18,33 +16,45 @@ gs.Node = win.Node
 gs.navigator = win.navigator
 gs.localStorage = win.localStorage
 
-const getDefaultThinkingLevel = mock(async () => 'medium')
-const getKeepAwakeWhileRunning = mock(async () => false)
-const getNotificationsEnabled = mock(async () => true)
-const getBrowserToolEnabled = mock(async () => true)
-const getSendMessageKey = mock(async () => 'enter')
-const getSpellCheck = mock(async () => true)
-const getAutoCapitalisation = mock(async () => true)
-const setDefaultThinkingLevel = mock(async () => undefined)
-const setKeepAwakeWhileRunning = mock(async () => undefined)
-const setNotificationsEnabled = mock(async () => undefined)
-const exportSettings = mock(async () => ({ success: true, path: 'D:\\Backups\\archstudio-settings.zip' }))
-const importSettings = mock(async () => ({ success: true }))
+// The panel is a host: its job is to render the navigator and swap in the page
+// the navigator selects. The real pages pull in i18n, update-checker hooks and
+// a wide electronAPI surface — none of which this component is responsible
+// for — so they are stubbed and each page's own behaviour is tested elsewhere.
+const pageMountCounts: Record<string, number> = {}
 
-;(win as any).electronAPI = {
-  getDefaultThinkingLevel,
-  getKeepAwakeWhileRunning,
-  getNotificationsEnabled,
-  getBrowserToolEnabled,
-  getSendMessageKey,
-  getSpellCheck,
-  getAutoCapitalisation,
-  setDefaultThinkingLevel,
-  setKeepAwakeWhileRunning,
-  setNotificationsEnabled,
-  exportSettings,
-  importSettings,
+function makeStubPage(id: string) {
+  return function StubPage() {
+    React.useEffect(() => {
+      pageMountCounts[id] = (pageMountCounts[id] ?? 0) + 1
+    }, [])
+    return <div data-testid={`page-${id}`}>{`stub:${id}`}</div>
+  }
 }
+
+mock.module('@/pages/settings/settings-pages', () => ({
+  getSettingsPageComponent: (subpage: string) => makeStubPage(subpage),
+}))
+
+mock.module('@/pages/settings/SettingsNavigator', () => ({
+  default: ({
+    selectedSubpage,
+    onSelectSubpage,
+  }: {
+    selectedSubpage: string | null
+    onSelectSubpage: (subpage: string) => void
+  }) => (
+    <div>
+      <span data-testid="selected">{selectedSubpage ?? 'none'}</span>
+      {['app', 'appearance', 'server'].map((id) => (
+        <button key={id} type="button" data-testid={`nav-${id}`} onClick={() => onSelectSubpage(id)}>
+          {id}
+        </button>
+      ))}
+    </div>
+  ),
+}))
+
+const { SettingsPanel } = await import('../SettingsPanel')
 
 function flush() {
   return new Promise<void>((resolve) => setTimeout(resolve, 0))
@@ -55,24 +65,10 @@ async function renderPanel() {
   doc.body.appendChild(container)
   const root = createRoot(container)
   await act(async () => {
-    root.render(
-      <ActionRegistryProvider>
-        <SettingsPanel />
-      </ActionRegistryProvider>,
-    )
-    await flush()
+    root.render(<SettingsPanel />)
     await flush()
   })
   return { container, root }
-}
-
-function checkboxFor(container: any, label: string): HTMLInputElement {
-  const row = Array.from(container.querySelectorAll('label.settings-row')).find(
-    (candidate: any) => candidate.textContent?.includes(label),
-  ) as HTMLElement | undefined
-  const input = row?.querySelector('input[type="checkbox"]') as HTMLInputElement | null
-  if (!input) throw new Error(`Missing checkbox for ${label}`)
-  return input
 }
 
 async function click(element: HTMLElement) {
@@ -87,22 +83,7 @@ describe('Settings panel', () => {
   let container: any = null
 
   beforeEach(() => {
-    win.localStorage.clear()
-    doc.documentElement.classList.remove('compact-ui')
-    for (const fn of [
-      getDefaultThinkingLevel,
-      getKeepAwakeWhileRunning,
-      getNotificationsEnabled,
-      getBrowserToolEnabled,
-      getSendMessageKey,
-      getSpellCheck,
-      getAutoCapitalisation,
-      setDefaultThinkingLevel,
-      setKeepAwakeWhileRunning,
-      setNotificationsEnabled,
-      exportSettings,
-      importSettings,
-    ]) fn.mockClear()
+    for (const key of Object.keys(pageMountCounts)) delete pageMountCounts[key]
   })
 
   afterEach(async () => {
@@ -112,53 +93,51 @@ describe('Settings panel', () => {
     container = null
   })
 
-  it('loads and renders persisted settings and server posture without dead controls', async () => {
+  it('renders the navigator and defaults to the app page', async () => {
     const rendered = await renderPanel()
     root = rendered.root
     container = rendered.container
 
-    expect(getDefaultThinkingLevel).not.toHaveBeenCalled()
-    expect(getKeepAwakeWhileRunning).toHaveBeenCalledTimes(1)
-    expect(getNotificationsEnabled).toHaveBeenCalledTimes(1)
-    expect(container.textContent).toContain('Settings')
-    expect(container.textContent).not.toContain('Reasoning level')
-    expect(container.querySelectorAll('.settings-level').length).toBe(0)
-    expect(checkboxFor(container, 'Desktop notifications').checked).toBe(true)
-    expect(container.querySelectorAll('.settings-soon').length).toBe(0)
-    expect(container.textContent).not.toContain('Coming soon')
-    expect(container.textContent).not.toContain('Enable agent pets')
-    expect(container.textContent).not.toContain('Experimental media generation')
+    expect(container.querySelector('[data-testid="selected"]')?.textContent).toBe('app')
+    expect(container.querySelector('[data-testid="page-app"]')).not.toBeNull()
   })
 
-  it('persists primary toggles, compact UI, export, and import', async () => {
+  it('swaps the detail pane to the selected page', async () => {
     const rendered = await renderPanel()
     root = rendered.root
     container = rendered.container
 
-    expect(setDefaultThinkingLevel).not.toHaveBeenCalled()
+    await click(container.querySelector('[data-testid="nav-server"]'))
 
-    await click(checkboxFor(container, 'Keep awake while running'))
-    expect(setKeepAwakeWhileRunning).toHaveBeenCalledWith(true)
+    expect(container.querySelector('[data-testid="selected"]')?.textContent).toBe('server')
+    expect(container.querySelector('[data-testid="page-server"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="page-app"]')).toBeNull()
+  })
 
-    await click(checkboxFor(container, 'Desktop notifications'))
-    expect(setNotificationsEnabled).toHaveBeenCalledWith(false)
+  it('remounts the page on change so it reloads its own state', async () => {
+    const rendered = await renderPanel()
+    root = rendered.root
+    container = rendered.container
 
-    await click(checkboxFor(container, 'Compact UI'))
-    expect(win.localStorage.getItem('archstudio:compactUI')).toBe('true')
-    expect(doc.documentElement.classList.contains('compact-ui')).toBe(true)
+    expect(pageMountCounts.app).toBe(1)
 
-    const exportButton = Array.from(container.querySelectorAll('button')).find(
-      (button: any) => button.textContent === 'Export Settings',
-    ) as HTMLElement
-    await click(exportButton)
-    expect(exportSettings).toHaveBeenCalledTimes(1)
-    expect(container.textContent).toContain('Exported to D:\\Backups\\archstudio-settings.zip')
+    await click(container.querySelector('[data-testid="nav-appearance"]'))
+    await click(container.querySelector('[data-testid="nav-app"]'))
 
-    const importButton = Array.from(container.querySelectorAll('button')).find(
-      (button: any) => button.textContent === 'Import Settings',
-    ) as HTMLElement
-    await click(importButton)
-    expect(importSettings).toHaveBeenCalledTimes(1)
-    expect(container.textContent).toContain('Settings imported successfully!')
+    // Returning to a page must mount it again rather than reuse a stale tree.
+    expect(pageMountCounts.app).toBe(2)
+    expect(pageMountCounts.appearance).toBe(1)
+  })
+
+  it('does not resurrect the removed flat toggle list', async () => {
+    const rendered = await renderPanel()
+    root = rendered.root
+    container = rendered.container
+
+    // These belonged to the duplicate settings system this panel replaced.
+    expect(container.querySelectorAll('label.settings-row').length).toBe(0)
+    expect(container.querySelectorAll('.settings-switch').length).toBe(0)
+    expect(container.textContent).not.toContain('Compact UI')
+    expect(container.textContent).not.toContain('Coming soon')
   })
 })

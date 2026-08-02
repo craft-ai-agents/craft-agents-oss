@@ -208,7 +208,20 @@ nsis:
   # can redirect it). Bun subprocess cannot read/write files in Program Files
   # due to Windows permissions — avoid installing there.
   perMachine: false
-  deleteAppDataOnUninstall: true
+  # Keep the Electron userData directory on uninstall. The rebrand left several
+  # userData dirs side by side, so any migration that reinstalls under the new
+  # brand runs an uninstall step first — with this true, that step silently
+  # destroys the user's sessions and settings. Uninstalling should not be a
+  # data-loss event either way; ~/.archstudio is untouched by NSIS regardless.
+  deleteAppDataOnUninstall: false
+  # Name the Start Menu entry explicitly so it cannot drift from productName.
+  shortcutName: ARCHstudio
+  # `always` recreates the desktop shortcut on update. The default (true) only
+  # creates it on first install, so anyone whose shortcut was lost across the
+  # rebrand never gets one back.
+  createDesktopShortcut: always
+  # Removes pre-rebrand shortcuts that the new appId cannot detect. See the file.
+  include: build/installer.nsh
 
 linux:
   icon: resources/icon.png

@@ -249,7 +249,7 @@ docker run -d \
 
 ## CLI Client
 
-A terminal client that connects to a running Craft Agent server over WebSocket (`ws://` or `wss://`). Use it for scripting, CI/CD pipelines, server validation, or when you prefer the command line.
+A terminal client that connects to a running ARCHstudio server over WebSocket (`ws://` or `wss://`). Use it for scripting, CI/CD pipelines, server validation, or when you prefer the command line.
 
 ### Installation
 
@@ -420,7 +420,7 @@ Go to **APIs & Services → Library** and enable the APIs you need:
 1. Go to **APIs & Services → OAuth consent screen**
 2. Select **External** user type (unless you have Google Workspace)
 3. Fill in required fields:
-   - App name: e.g., "My Craft Agent"
+   - App name: e.g., "My ARCHstudio"
    - User support email: your email
    - Developer contact: your email
 4. Add scopes (optional - can leave default)
@@ -432,11 +432,11 @@ Go to **APIs & Services → Library** and enable the APIs you need:
 1. Go to **APIs & Services → Credentials**
 2. Click **Create Credentials → OAuth Client ID**
 3. Application type: **Desktop app**
-4. Name: e.g., "Craft Agent Desktop"
+4. Name: e.g., "ARCHstudio Desktop"
 5. Click **Create**
 6. Note the **Client ID** and **Client Secret**
 
-#### 5. Configure in Craft Agent
+#### 5. Configure in ARCHstudio
 
 When setting up a Google source (Gmail, Calendar, Drive, YouTube, Search Console, etc.), add these fields to your source's `config.json`:
 

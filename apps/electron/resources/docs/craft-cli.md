@@ -1,4 +1,4 @@
-# Craft Agent CLI Guide
+# ARCHstudio CLI Guide
 
 `craft-agent` is the preferred interface for managing workspace config domains such as labels, sources, skills, and automations.
 

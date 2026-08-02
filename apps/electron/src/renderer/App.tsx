@@ -9,7 +9,7 @@ import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOp
 import { generateMessageId } from '../shared/types'
 import { useEventProcessor } from './event-processor'
 import type { AgentEvent, Effect } from './event-processor'
-import { AppShell } from '@/components/app-shell/AppShell'
+import { ChatSessionArea } from '@/shell'
 import type { AppShellContextType } from '@/context/AppShellContext'
 import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
 import { WorkspacePicker } from '@/components/workspace'
@@ -1527,7 +1527,7 @@ export default function App() {
                   onRetry={() => { void loadSessionsFromServer() }}
                 />
               ) : (
-                <AppShell
+                <ChatSessionArea
                   contextValue={appShellContextValue}
                   defaultLayout={[20, 32, 48]}
                   menuNewChatTrigger={menuNewChatTrigger}

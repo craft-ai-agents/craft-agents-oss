@@ -611,7 +611,7 @@ const MOCK_BROWSER_PRESETS: Record<BrowserTabStripMockPreset, BrowserInstanceInf
   'long-names': [
     {
       id: 'long-1',
-      url: 'https://www.notion.so/Craft-Agents-Multi-Session-Browser-Registry-Design-Review-Thread-2026-Q1',
+      url: 'https://www.notion.so/ARCHstudio-Multi-Session-Browser-Registry-Design-Review-Thread-2026-Q1',
       title: 'ARCHstudio Multi-Session Browser Registry Design Review Thread (Q1 2026)',
       favicon: null,
       isLoading: false,
