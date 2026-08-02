@@ -598,7 +598,7 @@ This project uses the [Claude Agent SDK](https://www.npmjs.com/package/@anthropi
 
 ### Trademark
 
-"Craft" and "ARCHstudio" are trademarks of Craft Docs Ltd. See [TRADEMARK.md](TRADEMARK.md) for usage guidelines.
+"Craft" and "Craft Agents" are trademarks of Craft Docs Ltd. "ARCHstudio" is the name of this project and is not covered by the Apache 2.0 grant. See [TRADEMARK.md](TRADEMARK.md) for usage guidelines.
 
 ## Contributing
 
