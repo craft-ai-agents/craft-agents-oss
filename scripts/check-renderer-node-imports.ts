@@ -114,6 +114,12 @@ function specifiersOf(file: string): string[] {
   for (const m of src.matchAll(/^[ \t]*import\s*['"]([^'"]+)['"]/gm)) out.push(m[1]!)
   for (const m of src.matchAll(/require\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) out.push(m[1]!)
 
+  // Dynamic `await import('x')` with a literal specifier. These are real
+  // runtime edges — SessionManager.ts reaches config/storage this way — and a
+  // bundler still has to resolve them, so a Node builtin behind one is just as
+  // fatal in the browser as a static import.
+  for (const m of src.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) out.push(m[1]!)
+
   return out
 }
 

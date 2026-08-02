@@ -112,6 +112,27 @@ bun run icon-check || {
   exit 1
 }
 
+# ── Renderer / Node boundary gate ──────────────────────────────────
+# Blocks renderer code from value-importing a Node-backed
+# @archstudio/shared subpath, which drags fs/path/crypto into the
+# browser bundle and fails at runtime far from the cause.
+#
+# Bypass (sparingly): SKIP_RENDERER_NODE_CHECK=1 git commit ...
+SKIP_RENDERER_NODE_NORMALIZED=$(printf '%s' "${SKIP_RENDERER_NODE_CHECK:-0}" | tr '[:upper:]' '[:lower:]')
+case "$SKIP_RENDERER_NODE_NORMALIZED" in
+  1|true|yes|on)
+    printf '[husky] SKIP_RENDERER_NODE_CHECK is set, skipping renderer/Node boundary gate.\n'
+    ;;
+  *)
+    bun run check:renderer-node-imports || {
+      printf '[husky] check:renderer-node-imports failed -- Node builtins would enter the renderer bundle.\n'
+      printf '[husky] Fix:    make the import type-only, or import a browser-safe leaf subpath.\n'
+      printf '[husky] Bypass: SKIP_RENDERER_NODE_CHECK=1 git commit ...\n'
+      exit 1
+    }
+    ;;
+esac
+
 # ── Electron mock coverage gate ─────────────────────────────────────
 # If the commit touches any source file under apps/electron/src/main/,
 # the per-test Electron-mock-coverage snapshots must be in sync with
