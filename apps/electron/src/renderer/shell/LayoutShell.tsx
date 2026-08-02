@@ -720,6 +720,27 @@ function LayoutShell({
   const [sessionsView, setSessionsView] = useState<'list' | 'board'>(getInitialSessionsView)
   const [sidebarCollapsedLocal, setSidebarCollapsed] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [userName, setUserName] = useState<string | null>(null)
+
+  // Fetch git user name for profile menu
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const gitName = await window.electronAPI.getGitUserName?.()
+        if (!cancelled && gitName) {
+          setUserName(gitName)
+        }
+      } catch {
+        // Silently fail if git user name unavailable
+        if (!cancelled) setUserName(null)
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
   // Controlled when the parent supplies `sidebarCollapsed`; otherwise local.
   const sidebarCollapsed = sidebarCollapsedProp ?? sidebarCollapsedLocal
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WorkspaceTab>('agent-chat')
@@ -2617,38 +2638,60 @@ const DEPTH_POPOVER_OPTIONS = [
           </button>
         )}
 
-        <nav className="layout-sidebar__nav">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const isActive = activeView === item.id
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={`layout-nav-item ${isActive ? 'layout-nav-item--active' : ''}`}
-                onClick={() => handleNavigate(item.id)}
-                title={item.label}
-              >
-                <Icon size={18} aria-hidden="true" />
-                {!sidebarCollapsed && <span className="layout-nav-item__label">{item.label}</span>}
-              </button>
-            )
-          })}
-        </nav>
+        <div className="layout-main-nav-area">
+          <nav className="layout-sidebar__nav">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const isActive = activeView === item.id
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`layout-nav-item ${isActive ? 'layout-nav-item--active' : ''}`}
+                  onClick={() => handleNavigate(item.id)}
+                  title={item.label}
+                >
+                  <Icon size={18} aria-hidden="true" />
+                  {!sidebarCollapsed && <span className="layout-nav-item__label">{item.label}</span>}
+                </button>
+              )
+            })}
+          </nav>
 
+          {!sidebarCollapsed && (
+            <div className="layout-sidebar__section">
+              <h3 className="layout-sidebar__section-title">Pinned</h3>
+              <ul className="layout-sidebar__list">
+                {/* Placeholder for pinned items */}
+                <li><button type="button" className="layout-sidebar__list-item"><FolderKanban size={16} /> Personal Dashboard</button></li>
+              </ul>
+            </div>
+          )}
+
+          {!sidebarCollapsed && (
+            <div className="layout-sidebar__section">
+              <h3 className="layout-sidebar__section-title">Recents</h3>
+              <ul className="layout-sidebar__list layout-sidebar__list--recents">
+                {/* Placeholder for recent items */}
+                <li><button type="button" className="layout-sidebar__list-item"><FileText size={16} /> Review and fixes needed</button></li>
+                <li><button type="button" className="layout-sidebar__list-item"><FileText size={16} /> Personal dashboard</button></li>
+              </ul>
+            </div>
+          )}
+        </div>
 
         <div className="layout-sidebar__footer">
-          <button
-            type="button"
-            className="layout-nav-item layout-nav-item--settings"
-            onClick={() => setSettingsOpen(true)}
-            title={settingsNavItem.label}
-          >
-            <settingsNavItem.icon size={18} aria-hidden="true" />
-            {!sidebarCollapsed && (
-              <span className="layout-nav-item__label">{settingsNavItem.label}</span>
-            )}
-          </button>
+          <ProfileMenu
+            userName={userName ?? 'Skobez'}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenLanguage={() => console.log('Open Language Settings')}
+            onOpenHelp={() => console.log('Open Help')}
+            onUpgradePlan={() => console.log('Upgrade Plan')}
+            onGetAppsAndExtensions={() => console.log('Get Apps and Extensions')}
+            onGiftClaude={() => console.log('Gift Claude')}
+            onLearnMore={() => console.log('Learn More')}
+            onLogout={() => console.log('Logout')}
+          />
         </div>
       </aside>
 
@@ -3106,7 +3149,25 @@ const DEPTH_POPOVER_OPTIONS = [
                                         </kbd>
                                       </button>
                                     ))}
-                                  </div>
+{/* Settings Drawer Modal */}
+      <Drawer
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        direction="left"
+      >
+        <DrawerContent className="arch-settings-drawer">
+          <DrawerHeader>
+            <DrawerTitle>Settings</DrawerTitle>
+            <DrawerClose asChild>
+              <button type="button" className="arch-drawer-close-btn" aria-label="Close settings">×</button>
+            </DrawerClose>
+          </DrawerHeader>
+          <div className="arch-settings-drawer__body">
+            <SettingsPanel />
+          </div>
+        </DrawerContent>
+      </Drawer>
+    </div>
                                 )}
                               </span>
                               {/*
@@ -3526,25 +3587,7 @@ const DEPTH_POPOVER_OPTIONS = [
         </main>
       </div>
 
-      {/* Settings Drawer Modal */}
-      <Drawer
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        direction="left"
-      >
-        <DrawerContent className="arch-settings-drawer">
-          <DrawerHeader>
-            <DrawerTitle>Settings</DrawerTitle>
-            <DrawerClose asChild>
-              <button type="button" className="arch-drawer-close-btn" aria-label="Close settings">×</button>
-            </DrawerClose>
-          </DrawerHeader>
-          <div className="arch-settings-drawer__body">
-            <SettingsPanel />
-          </div>
-        </DrawerContent>
-      </Drawer>
-    </div>
+      </div>
   )
 }
 

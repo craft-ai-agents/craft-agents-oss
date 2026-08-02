@@ -296,8 +296,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 14px 10px;
-  overflow-y: auto;
+  padding: 14px 10px 0;
 }
 
 .layout-nav-item {
@@ -333,53 +332,76 @@
   white-space: nowrap;
 }
 
-/* Pinned footer. `margin-top: auto` pushes it to the bottom of the sidebar
-   flex column; the top hairline separates it from the scrolling nav list so
-   Settings reads as anchored chrome rather than "the last nav item". */
-.layout-sidebar__footer {
-  margin-top: auto;
-  padding: 10px;
-  border-top: 1px solid var(--shell-border-soft);
+/* The main navigation area, containing nav, pinned, and recents */
+.layout-main-nav-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Settings gets the brand green→purple treatment. It carries a faint tint even
-   when inactive so the pinned slot is visibly distinct from the plain nav
-   items above it, then lifts to a full glow when it's the active view. */
-.layout-nav-item--settings {
-  background: linear-gradient(
-    90deg,
-    color-mix(in oklch, var(--brand-lime) 6%, transparent),
-    color-mix(in oklch, var(--brand-purple) 6%, transparent)
-  );
-  border-color: color-mix(in oklch, var(--brand-purple) 20%, transparent);
+.layout-sidebar__section {
+  padding: 0 10px;
+  margin-top: 18px;
+}
+
+.layout-sidebar__section-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--shell-text-dim);
+  padding: 0 11px;
+  margin-bottom: 8px;
+}
+
+.layout-sidebar__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.layout-sidebar__list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--shell-text-muted);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
   transition:
     background-color 140ms ease,
-    border-color 140ms ease,
-    box-shadow 140ms ease,
-    color 140ms ease;
+    color 140ms ease,
+    border-color 140ms ease;
 }
 
-.layout-nav-item--settings:hover {
-  background: linear-gradient(
-    90deg,
-    color-mix(in oklch, var(--brand-lime) 14%, transparent),
-    color-mix(in oklch, var(--brand-purple) 14%, transparent)
-  );
-  border-color: color-mix(in oklch, var(--brand-purple) 38%, transparent);
+.layout-sidebar__list-item:hover {
+  background: var(--shell-border-soft);
   color: var(--foreground);
 }
 
-.layout-nav-item--settings.layout-nav-item--active {
-  box-shadow:
-    inset 2px 0 0 var(--brand-lime),
-    0 0 12px color-mix(in oklch, var(--brand-purple) 34%, transparent),
-    0 0 4px color-mix(in oklch, var(--brand-lime) 26%, transparent);
+.layout-sidebar__list-item svg {
+  color: var(--shell-text-dim);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .layout-nav-item--settings {
-    transition: none;
-  }
+.layout-sidebar__list--recents .layout-sidebar__list-item {
+  font-size: 12px;
+  padding-left: 13px;
+}
+
+.layout-sidebar__list--recents .layout-sidebar__list-item svg {
+  color: var(--shell-text-dim);
+  width: 14px;
+  height: 14px;
 }
 
 .layout-theme-toggle {

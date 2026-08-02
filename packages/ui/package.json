@@ -16,7 +16,9 @@
     "./annotations/follow-up-state": "./src/components/annotations/follow-up-state.ts",
     "./ui/drawer": "./src/components/ui/drawer.tsx",
     "./context": "./src/context/index.ts",
-    "./styles": "./src/styles/index.css"
+    "./styles": "./src/styles/index.css",
+    "./ProfileMenu": "./src/components/ProfileMenu.tsx",
+    "./ProfileMenu.css": "./src/components/ProfileMenu.css"
   },
   "dependencies": {
     "@archstudio/core": "workspace:*",

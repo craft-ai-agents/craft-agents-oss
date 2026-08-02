@@ -1,0 +1,112 @@
+.profile-menu-container {
+  position: relative;
+  width: 100%;
+}
+
+.profile-button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 10px 15px;
+  background: transparent;
+  border: none;
+  color: var(--sidebar-text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.profile-button:hover {
+  background-color: var(--sidebar-hover-bg);
+}
+
+.profile-button svg {
+  margin-right: 10px;
+  color: var(--sidebar-icon);
+}
+
+.profile-label {
+  flex-grow: 1;
+  text-align: left;
+}
+
+.profile-status {
+  font-weight: bold;
+  margin-left: 5px;
+}
+
+.profile-chevron {
+  transition: transform 0.2s ease;
+}
+
+.profile-chevron--open {
+  transform: rotate(90deg);
+}
+
+.profile-dropdown {
+  position: absolute;
+  bottom: 100%; /* Position above the button */
+  left: 0;
+  width: 100%;
+  background-color: var(--sidebar-background);
+  border: 1px solid var(--sidebar-border);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  padding: 10px 0;
+  margin-bottom: 5px; /* Small gap above the button */
+  border-radius: 8px;
+}
+
+.profile-dropdown__header {
+  padding: 0 15px 10px;
+  border-bottom: 1px solid var(--sidebar-border);
+  margin-bottom: 10px;
+}
+
+.profile-dropdown__email {
+  font-size: 13px;
+  color: var(--sidebar-text-secondary);
+}
+
+.profile-dropdown__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.profile-dropdown__list li button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px 15px;
+  background: transparent;
+  border: none;
+  color: var(--sidebar-text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.profile-dropdown__list li button:hover {
+  background-color: var(--sidebar-hover-bg);
+}
+
+.profile-dropdown__list li button svg {
+  margin-right: 10px;
+  color: var(--sidebar-icon);
+}
+
+.profile-dropdown__list li button span {
+  flex-grow: 1;
+  text-align: left;
+}
+
+.profile-dropdown__item-chevron {
+  color: var(--sidebar-icon);
+}
+
+.profile-dropdown__separator {
+  height: 1px;
+  background-color: var(--sidebar-border);
+  margin: 10px 0;
+}
