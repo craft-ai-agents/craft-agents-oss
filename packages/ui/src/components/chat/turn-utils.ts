@@ -6,7 +6,7 @@
  */
 
 import type { Message, StoredMessage, MessageRole } from '@archstudio/core'
-import { maybeNormalizeMcpErrorMessage } from '@archstudio/shared/mcp'
+import { maybeNormalizeMcpErrorMessage } from '@archstudio/shared/mcp/errors'
 import { isParentTaskTool } from '@archstudio/shared/utils/toolNames'
 import { storedToMessage } from '@archstudio/core'
 

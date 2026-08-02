@@ -20,7 +20,7 @@ import {
   getSourceGuidePath,
   getSourcePath,
 } from '../source-helpers.ts';
-import { normalizeMcpErrorMessage } from '@archstudio/shared/mcp';
+import { normalizeMcpErrorMessage } from '@archstudio/shared/mcp/errors';
 
 export interface SourceTestArgs {
   sourceSlug: string;

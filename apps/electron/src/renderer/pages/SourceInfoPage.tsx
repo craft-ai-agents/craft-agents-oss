@@ -8,7 +8,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import { maybeNormalizeMcpErrorMessage } from '@archstudio/shared/mcp'
+import { maybeNormalizeMcpErrorMessage } from '@archstudio/shared/mcp/errors'
 import { AlertCircle } from 'lucide-react'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'

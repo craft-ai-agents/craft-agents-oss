@@ -11,7 +11,7 @@
  */
 
 import * as React from 'react'
-import { maybeNormalizeMcpErrorMessage } from '@archstudio/shared/mcp'
+import { maybeNormalizeMcpErrorMessage } from '@archstudio/shared/mcp/errors'
 import { cn } from '@/lib/utils'
 import {
   Tooltip,
