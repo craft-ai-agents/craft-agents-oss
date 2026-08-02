@@ -107,6 +107,7 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     resources,
     transfer,
     media,
+    comfyui,
     inference,
   ] = await Promise.all([
     import('@archstudio/server-core/handlers/rpc/auth'),
@@ -128,6 +129,7 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     import('@archstudio/server-core/handlers/rpc/resources'),
     import('@archstudio/server-core/handlers/rpc/transfer'),
     import('@archstudio/server-core/handlers/rpc/media'),
+    import('@archstudio/server-core/handlers/rpc/comfyui'),
     import('@archstudio/server-core/handlers/rpc/inference'),
   ])
 
@@ -151,6 +153,7 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     ...resources.HANDLED_CHANNELS,
     ...transfer.HANDLED_CHANNELS,
     ...media.HANDLED_CHANNELS,
+    ...comfyui.HANDLED_CHANNELS,
     ...inference.CORE_HANDLED_CHANNELS,
   ])
 }

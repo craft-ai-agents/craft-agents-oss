@@ -107,6 +107,9 @@ async function getExpectedChannels(): Promise<Set<string>> {
     transfer,
     tasks,
     projects,
+    media,
+    comfyui,
+    inference,
   ] = await Promise.all([
     import('@archstudio/server-core/handlers/rpc/auth'),
     import('@archstudio/server-core/handlers/rpc/automations'),
@@ -126,15 +129,21 @@ async function getExpectedChannels(): Promise<Set<string>> {
     import('@archstudio/server-core/handlers/rpc/transfer'),
     import('@archstudio/server-core/handlers/rpc/tasks'),
     import('@archstudio/server-core/handlers/rpc/projects'),
+    import('@archstudio/server-core/handlers/rpc/media'),
+    import('@archstudio/server-core/handlers/rpc/comfyui'),
+    import('@archstudio/server-core/handlers/rpc/inference'),
   ])
 
   // GUI handler channels (remain in electron)
-  const [browser, guiSystem, guiWorkspace, guiSettings, knowledge] = await Promise.all([
+  const [browser, guiSystem, guiWorkspace, guiSettings, knowledge, memory, prompts, health] = await Promise.all([
     import('../browser'),
     import('../system'),
     import('../workspace'),
     import('../settings'),
     import('../knowledge'),
+    import('../memory'),
+    import('../prompts'),
+    import('../health'),
   ])
 
   return new Set([
@@ -161,6 +170,12 @@ async function getExpectedChannels(): Promise<Set<string>> {
     ...guiWorkspace.GUI_HANDLED_CHANNELS,
     ...guiSettings.GUI_HANDLED_CHANNELS,
     ...knowledge.KNOWLEDGE_HANDLED_CHANNELS,
+    ...memory.CORE_HANDLED_CHANNELS,
+    ...prompts.CORE_HANDLED_CHANNELS,
+    ...health.CORE_HANDLED_CHANNELS,
+    ...media.HANDLED_CHANNELS,
+    ...comfyui.HANDLED_CHANNELS,
+    ...inference.CORE_HANDLED_CHANNELS,
   ])
 }
 

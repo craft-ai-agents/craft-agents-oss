@@ -26,6 +26,11 @@ export interface ConfigDefaults {
      * When false, the local dispatcher rejects with `BROWSER_REMOTE_EVALUATE_BLOCKED`.
      */
     allowRemoteEvaluate: boolean;
+    /**
+     * Enable local (stdio) MCP servers by default. A workspace can override
+     * this per-workspace via its own `localMcpServers.enabled` config.
+     */
+    localMcpEnabled: boolean;
   };
   workspaceDefaults: {
     thinkingLevel: ThinkingLevel;

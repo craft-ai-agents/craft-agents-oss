@@ -11,7 +11,8 @@
     "richToolDescriptions": true,
     "extendedPromptCache": false,
     "browserToolEnabled": true,
-    "allowRemoteEvaluate": true
+    "allowRemoteEvaluate": true,
+    "localMcpEnabled": true
   },
   "workspaceDefaults": {
     "thinkingLevel": "think",

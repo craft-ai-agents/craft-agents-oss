@@ -77,6 +77,8 @@ export interface StoredConfig {
   // Tools
   browserToolEnabled?: boolean;  // Enable built-in browser tool (default: true). Disable for Playwright/Puppeteer.
   allowRemoteEvaluate?: boolean;  // Allow remote agents to call `browser_tool evaluate` on local browser (default: true).
+  // Local (stdio) MCP servers
+  localMcpEnabled?: boolean;  // Enable local/stdio MCP servers (default: true).
   // Prompt caching & context
   extendedPromptCache?: boolean;  // Use 1h prompt cache TTL instead of 5m (default: false)
   enable1MContext?: boolean;  // Enable 1M context window for supported models (default: false — opt-in; requires Anthropic Tier 4+)
@@ -128,6 +130,7 @@ const FALLBACK_CONFIG_DEFAULTS: ConfigDefaults = {
     extendedPromptCache: false,
     browserToolEnabled: true,
     allowRemoteEvaluate: true,
+    localMcpEnabled: true,
   },
   workspaceDefaults: {
     thinkingLevel: 'medium',
@@ -573,6 +576,29 @@ export function setAllowRemoteEvaluate(allowed: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.allowRemoteEvaluate = allowed;
+  saveConfig(config);
+}
+
+/**
+ * Whether local (stdio) MCP servers are enabled app-wide. This is the global
+ * default that applies unless a workspace overrides it via its own config.
+ *
+ * Defaults to true. The Settings drawer exposes this as the "Local MCP servers"
+ * toggle.
+ */
+export function getLocalMcpEnabled(): boolean {
+  const config = loadStoredConfig();
+  if (config?.localMcpEnabled !== undefined) {
+    return config.localMcpEnabled;
+  }
+  const defaults = loadConfigDefaults();
+  return defaults.defaults.localMcpEnabled ?? defaults.workspaceDefaults.localMcpServers.enabled;
+}
+
+export function setLocalMcpEnabled(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.localMcpEnabled = enabled;
   saveConfig(config);
 }
 

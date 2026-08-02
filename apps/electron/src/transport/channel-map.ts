@@ -329,6 +329,10 @@ export const CHANNEL_MAP = {
   // Tools settings
   getBrowserToolEnabled: invoke(RPC_CHANNELS.tools.GET_BROWSER_TOOL_ENABLED),
   setBrowserToolEnabled: invoke(RPC_CHANNELS.tools.SET_BROWSER_TOOL_ENABLED),
+  getLocalMcpEnabled: invoke(RPC_CHANNELS.tools.GET_LOCAL_MCP_ENABLED),
+  setLocalMcpEnabled: invoke(RPC_CHANNELS.tools.SET_LOCAL_MCP_ENABLED),
+  getAllowRemoteEvaluate: invoke(RPC_CHANNELS.tools.GET_ALLOW_REMOTE_EVALUATE),
+  setAllowRemoteEvaluate: invoke(RPC_CHANNELS.tools.SET_ALLOW_REMOTE_EVALUATE),
 
   // Prompt caching & context
   getExtendedPromptCache: invoke(RPC_CHANNELS.caching.GET_EXTENDED_PROMPT_CACHE),
@@ -357,6 +361,7 @@ export const CHANNEL_MAP = {
   getGitBranch: invoke(RPC_CHANNELS.git.GET_BRANCH),
   getGitStatus: invoke(RPC_CHANNELS.git.STATUS),
   getFileGitDiff: invoke(RPC_CHANNELS.git.FILE_DIFF),
+  getGitUserName: invoke(RPC_CHANNELS.git.GET_USER_NAME),
   checkGitBash: invoke(RPC_CHANNELS.gitbash.CHECK),
   browseForGitBash: invoke(RPC_CHANNELS.gitbash.BROWSE),
   setGitBashPath: invoke(RPC_CHANNELS.gitbash.SET_PATH),

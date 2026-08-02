@@ -452,6 +452,10 @@ const mock: ElectronAPI = {
   // ── Tools ─────────────────────────────────────────────────────────────
   getBrowserToolEnabled: () => Promise.resolve(true),
   setBrowserToolEnabled: voidResult,
+  getLocalMcpEnabled: () => Promise.resolve(true),
+  setLocalMcpEnabled: voidResult,
+  getAllowRemoteEvaluate: () => Promise.resolve(true),
+  setAllowRemoteEvaluate: voidResult,
   getRichToolDescriptions: () => Promise.resolve(true),
   setRichToolDescriptions: voidResult,
 
@@ -488,6 +492,7 @@ const mock: ElectronAPI = {
 
   // ── Git ───────────────────────────────────────────────────────────────
   getGitBranch: () => Promise.resolve(null),
+  getGitUserName: () => Promise.resolve(null),
   getGitStatus: () => Promise.resolve({
     branch: null,
     dirPath: '',

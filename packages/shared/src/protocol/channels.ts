@@ -348,6 +348,10 @@ export const RPC_CHANNELS = {
   tools: {
     GET_BROWSER_TOOL_ENABLED: 'tools:getBrowserToolEnabled',
     SET_BROWSER_TOOL_ENABLED: 'tools:setBrowserToolEnabled',
+    GET_LOCAL_MCP_ENABLED: 'tools:getLocalMcpEnabled',
+    SET_LOCAL_MCP_ENABLED: 'tools:setLocalMcpEnabled',
+    GET_ALLOW_REMOTE_EVALUATE: 'tools:getAllowRemoteEvaluate',
+    SET_ALLOW_REMOTE_EVALUATE: 'tools:setAllowRemoteEvaluate',
   },
   caching: {
     GET_EXTENDED_PROMPT_CACHE: 'caching:getExtendedPromptCache',

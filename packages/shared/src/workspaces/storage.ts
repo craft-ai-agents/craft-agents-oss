@@ -21,7 +21,7 @@ import { CONFIG_DIR } from '../config/paths.ts';
 import { atomicWriteFileSync, readJsonFileSync } from '../utils/files.ts';
 import { getDefaultStatusConfig, saveStatusConfig, ensureDefaultIconFiles } from '../statuses/storage.ts';
 import { getDefaultLabelConfig, saveLabelConfig } from '../labels/storage.ts';
-import { loadConfigDefaults } from '../config/storage.ts';
+import { loadConfigDefaults, getLocalMcpEnabled } from '../config/storage.ts';
 import { parsePermissionMode, PERMISSION_MODE_ORDER } from '../agent/mode-types.ts';
 import { normalizeThinkingLevel } from '../agent/thinking-levels.ts';
 import type {
@@ -483,7 +483,7 @@ export function setWorkspaceColorTheme(rootPath: string, themeId: string | undef
 
 /**
  * Check if local (stdio) MCP servers are enabled for a workspace.
- * Resolution order: ENV (ARCHSTUDIO_LOCAL_MCP_ENABLED) > workspace config > default (true)
+ * Resolution order: ENV (ARCHSTUDIO_LOCAL_MCP_ENABLED) > workspace config > global config > default (true)
  *
  * @param rootPath - Absolute path to workspace root folder
  * @returns true if local MCP servers should be enabled
@@ -501,8 +501,8 @@ export function isLocalMcpEnabled(rootPath: string): boolean {
     return config.localMcpServers.enabled;
   }
 
-  // 3. Default: enabled
-  return true;
+  // 3. Global app config (Settings drawer "Local MCP servers" toggle)
+  return getLocalMcpEnabled();
 }
 
 // ============================================================

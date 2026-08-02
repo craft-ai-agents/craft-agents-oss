@@ -11,6 +11,14 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'path'
 const MAX_CONVERSATION_MESSAGES = 200
 const GRAPH_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces')
 
+export const KNOWLEDGE_HANDLED_CHANNELS = [
+  RPC_CHANNELS.knowledge.BUILD_GRAPH,
+  RPC_CHANNELS.knowledge.GET_GRAPH,
+  RPC_CHANNELS.knowledge.GRAPH_STATUS,
+  RPC_CHANNELS.knowledge.ASK,
+  RPC_CHANNELS.knowledge.GET_CONVERSATION,
+] as const
+
 type KnowledgeConversationMessage = { role: 'user' | 'assistant'; content: string }
 
 // In-memory conversation history per workspace. Persistence is intentionally

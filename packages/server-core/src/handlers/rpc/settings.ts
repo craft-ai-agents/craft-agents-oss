@@ -39,6 +39,10 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.settings.SET_DEFAULT_THINKING_LEVEL,
   RPC_CHANNELS.tools.GET_BROWSER_TOOL_ENABLED,
   RPC_CHANNELS.tools.SET_BROWSER_TOOL_ENABLED,
+  RPC_CHANNELS.tools.GET_LOCAL_MCP_ENABLED,
+  RPC_CHANNELS.tools.SET_LOCAL_MCP_ENABLED,
+  RPC_CHANNELS.tools.GET_ALLOW_REMOTE_EVALUATE,
+  RPC_CHANNELS.tools.SET_ALLOW_REMOTE_EVALUATE,
   RPC_CHANNELS.settings.GET_NETWORK_PROXY,
   RPC_CHANNELS.dialog.OPEN_FOLDER,
   RPC_CHANNELS.rtk.GET_ENABLED,
@@ -357,6 +361,26 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
   server.handle(RPC_CHANNELS.tools.SET_BROWSER_TOOL_ENABLED, async (_ctx, enabled: boolean) => {
     const { setBrowserToolEnabled } = await import('@archstudio/shared/config/storage')
     setBrowserToolEnabled(enabled)
+  })
+
+  server.handle(RPC_CHANNELS.tools.GET_LOCAL_MCP_ENABLED, async () => {
+    const { getLocalMcpEnabled } = await import('@archstudio/shared/config/storage')
+    return getLocalMcpEnabled()
+  })
+
+  server.handle(RPC_CHANNELS.tools.SET_LOCAL_MCP_ENABLED, async (_ctx, enabled: boolean) => {
+    const { setLocalMcpEnabled } = await import('@archstudio/shared/config/storage')
+    setLocalMcpEnabled(enabled)
+  })
+
+  server.handle(RPC_CHANNELS.tools.GET_ALLOW_REMOTE_EVALUATE, async () => {
+    const { getAllowRemoteEvaluate } = await import('@archstudio/shared/config/storage')
+    return getAllowRemoteEvaluate()
+  })
+
+  server.handle(RPC_CHANNELS.tools.SET_ALLOW_REMOTE_EVALUATE, async (_ctx, allowed: boolean) => {
+    const { setAllowRemoteEvaluate } = await import('@archstudio/shared/config/storage')
+    setAllowRemoteEvaluate(allowed)
   })
 
   // ============================================================

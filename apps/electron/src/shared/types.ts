@@ -631,6 +631,10 @@ export interface ElectronAPI {
   // Tools settings
   getBrowserToolEnabled(): Promise<boolean>
   setBrowserToolEnabled(enabled: boolean): Promise<void>
+  getLocalMcpEnabled(): Promise<boolean>
+  setLocalMcpEnabled(enabled: boolean): Promise<void>
+  getAllowRemoteEvaluate(): Promise<boolean>
+  setAllowRemoteEvaluate(allowed: boolean): Promise<void>
 
   // Appearance settings
   getRichToolDescriptions(): Promise<boolean>
@@ -672,6 +676,7 @@ export interface ElectronAPI {
   getGitBranch(dirPath: string): Promise<string | null>
   getGitStatus(dirPath: string): Promise<GitStatusResult>
   getFileGitDiff(dirPath: string, relPath: string): Promise<GitFileDiffResult>
+  getGitUserName(): Promise<string | null>
 
   // Git Bash (Windows)
   checkGitBash(): Promise<GitBashStatus>
