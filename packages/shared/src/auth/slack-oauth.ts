@@ -31,6 +31,13 @@ const SLACK_CLIENT_SECRET = process.env.SLACK_OAUTH_CLIENT_SECRET || '';
 const SLACK_AUTH_URL = 'https://slack.com/oauth/v2/authorize';
 const SLACK_TOKEN_URL = 'https://slack.com/api/oauth.v2.access';
 
+// Slack rejects http://localhost redirect URIs, so even the desktop app must
+// use an HTTPS relay that bounces the callback back to http://localhost:<port>.
+// Defaults to upstream's relay so Slack login keeps working; point
+// ARCHSTUDIO_SLACK_RELAY_URL at your own relay to drop the craft.do dependency.
+const SLACK_RELAY_CALLBACK_URL =
+  process.env.ARCHSTUDIO_SLACK_RELAY_URL || 'https://agents.craft.do/auth/slack/callback';
+
 /**
  * Predefined USER scope sets for common Slack services
  * These are user scopes (user_scope), not bot scopes (scope)
@@ -264,9 +271,9 @@ export function prepareSlackOAuth(options: PrepareSlackOAuthOptions): PreparedOA
   const userScopes = getSlackScopes(options);
   const state = generateState();
 
-  // Slack requires HTTPS → use Cloudflare relay when using callbackPort
+  // Slack requires HTTPS → use the relay when using callbackPort
   const redirectUri = options.callbackUrl
-    ?? `https://agents.craft.do/auth/slack/callback?port=${options.callbackPort}`;
+    ?? `${SLACK_RELAY_CALLBACK_URL}?port=${options.callbackPort}`;
 
   const authUrl = new URL(SLACK_AUTH_URL);
   authUrl.searchParams.set('client_id', SLACK_CLIENT_ID);
@@ -355,9 +362,9 @@ export async function startSlackOAuth(options: SlackOAuthOptions = {}): Promise<
     const localUrl = new URL(callbackServer.url);
     const port = localUrl.port;
 
-    // Use Cloudflare Worker relay for Slack OAuth (Slack requires HTTPS)
-    // The relay redirects: https://agents.craft.do/auth/slack/callback → http://localhost:{port}/callback
-    const redirectUri = `https://agents.craft.do/auth/slack/callback?port=${port}`;
+    // Use the HTTPS relay for Slack OAuth (Slack rejects http://localhost).
+    // The relay redirects: <SLACK_RELAY_CALLBACK_URL> → http://localhost:{port}/callback
+    const redirectUri = `${SLACK_RELAY_CALLBACK_URL}?port=${port}`;
 
     // Build authorization URL
     // Use user_scope (not scope) to get a user token instead of bot token
