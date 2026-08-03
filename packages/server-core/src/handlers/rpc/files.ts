@@ -25,6 +25,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.file.READ_USER_ATTACHMENT,
   RPC_CHANNELS.file.STORE_ATTACHMENT,
   RPC_CHANNELS.file.GENERATE_THUMBNAIL,
+  RPC_CHANNELS.file.WRITE,
   RPC_CHANNELS.fs.SEARCH,
   RPC_CHANNELS.fs.LIST_DIRECTORY,
   RPC_CHANNELS.fs.READ_DIRECTORY,
@@ -449,6 +450,21 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
       const message = error instanceof Error ? error.message : 'Unknown error'
       deps.platform.logger.error('storeAttachment error:', message)
       throw new Error(`Failed to store attachment: ${message}`)
+    }
+  })
+
+  // Write UTF-8 content to a file on disk (save-back for editor).
+  // Uses the same path validation as readFile to prevent traversal attacks.
+  server.handle(RPC_CHANNELS.file.WRITE, async (ctx, path: string, content: string) => {
+    try {
+      const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
+      const safePath = await validateFilePath(path, getWorkspaceAllowedDirs(workspaceId))
+      await writeFile(safePath, content, 'utf-8')
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      deps.platform.logger.error('writeFile error:', path, message)
+      return { success: false, error: message }
     }
   })
 

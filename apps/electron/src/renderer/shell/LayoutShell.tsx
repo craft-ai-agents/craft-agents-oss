@@ -60,7 +60,7 @@ import { ShikiDiffViewer } from '../components/shiki'
 import { HighlightedDiffViewer, type DiffViewMode } from '@archstudio/ui'
 import { HomeHero } from '../home'
 import { sessionMetaMapAtom, activeSessionIdAtom, sessionAtomFamily } from '../atoms/sessions'
-import { CodeWorkspacePanel, CanvasWorkspacePanel, PreviewWorkspacePanel, TasksWorkspacePanel, type WorkspaceArtifact } from './WorkspaceTabPanels'
+import { EditorWorkspacePanel, PreviewWorkspacePanel, TasksWorkspacePanel, type WorkspaceArtifact } from './WorkspaceTabPanels'
 import type { StoredAttachment, Session } from '../../shared/types'
 import { AnimatedARCHstudioSymbol } from '../components/icons/AnimatedARCHstudioSymbol'
 import { toast } from 'sonner'
@@ -89,13 +89,12 @@ export type ShellView =
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 
-type WorkspaceTab = 'agent-chat' | 'code' | 'canvas' | 'preview' | 'tasks'
+type WorkspaceTab = 'agent-chat' | 'editor' | 'preview' | 'tasks'
 type RailTab = 'context' | 'files' | 'changes'
 
 const WORKSPACE_TABS: { id: WorkspaceTab; label: string }[] = [
   { id: 'agent-chat', label: 'Agent Chat' },
-  { id: 'code', label: 'Code' },
-  { id: 'canvas', label: 'Canvas' },
+  { id: 'editor', label: 'Editor' },
   { id: 'preview', label: 'Preview' },
   { id: 'tasks', label: 'Tasks' },
 ]
@@ -773,13 +772,18 @@ function LayoutShell({
       return
     }
     try {
-      const saved = JSON.parse(readWorkspaceStateRaw(`archstudio:workspace:${activeSessionId}`) || '{}') as { artifacts?: WorkspaceArtifact[]; selectedFile?: string; activeTab?: WorkspaceTab }
+      const saved = JSON.parse(readWorkspaceStateRaw(`archstudio:workspace:${activeSessionId}`) || '{}') as { artifacts?: WorkspaceArtifact[]; selectedFile?: string; activeTab?: WorkspaceTab | 'code' | 'canvas' }
       const artifacts = Array.isArray(saved.artifacts) ? saved.artifacts : []
       setCanvasArtifacts(artifacts)
       setSelectedCanvasArtifactId(artifacts[0]?.id ?? null)
       setSelectedWorkspaceFile(saved.selectedFile ?? null)
       setPreviewArtifactId(null)
-      setActiveWorkspaceTab(saved.activeTab ?? 'agent-chat')
+      // Map legacy tab names to the new consolidated 'editor' tab
+      const legacyTab = saved.activeTab
+      const mappedTab: WorkspaceTab =
+        legacyTab === 'code' || legacyTab === 'canvas' ? 'editor'
+        : (legacyTab as WorkspaceTab | undefined) ?? 'agent-chat'
+      setActiveWorkspaceTab(mappedTab)
     } catch {
       setCanvasArtifacts([])
       setSelectedCanvasArtifactId(null)
@@ -2826,33 +2830,31 @@ const DEPTH_POPOVER_OPTIONS = [
                 </div>
                 <div className="arch-agent-workspace__body">
                 <div className="arch-agent-workspace__session">
-                  {activeWorkspaceTab === 'agent-chat' ? children : activeWorkspaceTab === 'code' ? (
-                    <CodeWorkspacePanel
+                  {activeWorkspaceTab === 'agent-chat' ? children : activeWorkspaceTab === 'editor' ? (
+                    <EditorWorkspacePanel
                       filePath={selectedWorkspaceFile}
-                      onChooseFile={() => void window.electronAPI.openFileDialog().then((paths) => { if (paths[0]) setSelectedWorkspaceFile(paths[0]) })}
-                      onPreview={() => { setPreviewArtifactId(null); setActiveWorkspaceTab('preview') }}
-                      onOpenExternal={openWorkspaceFileExternal}
-                      onAddToCanvas={(artifact) => { setCanvasArtifacts((items) => [...items, artifact]); setSelectedCanvasArtifactId(artifact.id); setActiveWorkspaceTab('canvas') }}
-                    />
-                  ) : activeWorkspaceTab === 'canvas' ? (
-                    <CanvasWorkspacePanel
                       artifacts={canvasArtifacts}
-                      selectedId={selectedCanvasArtifactId}
-                      onSelect={setSelectedCanvasArtifactId}
-                      onChange={(artifact) => setCanvasArtifacts((items) => items.map((item) => item.id === artifact.id ? artifact : item))}
-                      onCreate={() => { const artifact: WorkspaceArtifact = { id: crypto.randomUUID(), title: 'Untitled artifact', kind: 'markdown', content: '# New artifact\n', updatedAt: Date.now() }; setCanvasArtifacts((items) => [...items, artifact]); setSelectedCanvasArtifactId(artifact.id) }}
-                      onDelete={(id) => { if (!window.confirm('Delete this Canvas artifact?')) return; setCanvasArtifacts((items) => items.filter((item) => item.id !== id)); setSelectedCanvasArtifactId((current) => current === id ? null : current) }}
-                      onPreview={(artifact) => { setPreviewArtifactId(artifact.id); setActiveWorkspaceTab('preview') }}
+                      selectedArtifactId={selectedCanvasArtifactId}
+                      onSelectArtifact={setSelectedCanvasArtifactId}
+                      onChooseFile={() => void window.electronAPI.openFileDialog().then((paths) => { if (paths[0]) { setSelectedWorkspaceFile(paths[0]); setSelectedCanvasArtifactId(null) } })}
+                      onOpenExternal={openWorkspaceFileExternal}
+                      onSaveFile={async (path, content) => { try { return await window.electronAPI.writeFile(path, content) } catch (err) { return { success: false, error: err instanceof Error ? err.message : 'Write failed' } } }}
+                      onCreateArtifact={() => { const artifact: WorkspaceArtifact = { id: crypto.randomUUID(), title: 'Untitled artifact', kind: 'markdown', content: '# New artifact\n', updatedAt: Date.now() }; setCanvasArtifacts((items) => [...items, artifact]); setSelectedCanvasArtifactId(artifact.id) }}
+                      onChangeArtifact={(artifact) => setCanvasArtifacts((items) => items.map((item) => item.id === artifact.id ? artifact : item))}
+                      onDeleteArtifact={(id) => { if (!window.confirm('Delete this artifact?')) return; setCanvasArtifacts((items) => items.filter((item) => item.id !== id)); setSelectedCanvasArtifactId((current) => current === id ? null : current) }}
+                      onPreview={() => { setPreviewArtifactId(selectedCanvasArtifactId); setActiveWorkspaceTab('preview') }}
+                      theme={resolvedTheme}
                     />
                   ) : activeWorkspaceTab === 'preview' ? (
                     <PreviewWorkspacePanel
                       filePath={selectedWorkspaceFile}
                       artifact={canvasArtifacts.find((item) => item.id === previewArtifactId) ?? null}
-                      onChooseFile={() => void window.electronAPI.openFileDialog().then((paths) => { if (paths[0]) { setSelectedWorkspaceFile(paths[0]); setPreviewArtifactId(null) } })}
+                      onChooseFile={() => void window.electronAPI.openFileDialog().then((paths) => { if (paths[0]) { setSelectedWorkspaceFile(paths[0]); setSelectedCanvasArtifactId(null); setPreviewArtifactId(null) } })}
                       onOpenExternal={openWorkspaceFileExternal}
+                      theme={resolvedTheme}
                     />
                   ) : (
-                    <TasksWorkspacePanel sessionId={activeSessionId} onOpenOutput={(path) => { setSelectedWorkspaceFile(path); setPreviewArtifactId(null); setActiveWorkspaceTab('preview') }} />
+                    <TasksWorkspacePanel sessionId={activeSessionId} onOpenOutput={(path) => { setSelectedWorkspaceFile(path); setSelectedCanvasArtifactId(null); setPreviewArtifactId(null); setActiveWorkspaceTab('preview') }} />
                   )}
                 </div>
                 <aside className="arch-context-rail" aria-label="Session context">
@@ -3287,7 +3289,7 @@ const DEPTH_POPOVER_OPTIONS = [
                                   openFileLocation={openFileLocation}
                                   onOpenFile={
                                     typeof window !== 'undefined'
-                                      ? (path: string) => { setSelectedWorkspaceFile(path); setPreviewArtifactId(null); setActiveWorkspaceTab('code') }
+                                      ? (path: string) => { setSelectedWorkspaceFile(path); setSelectedCanvasArtifactId(null); setPreviewArtifactId(null); setActiveWorkspaceTab('editor') }
                                       : undefined
                                   }
                                 />

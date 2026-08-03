@@ -351,6 +351,8 @@ export interface ElectronAPI {
 
   // File operations
   readFile(path: string): Promise<string>
+  /** Write UTF-8 content to a file on disk (save-back for editor). */
+  writeFile(path: string, content: string): Promise<{ success: boolean; error?: string }>
   /** Read a file as binary data (Uint8Array) */
   readFileBinary(path: string): Promise<Uint8Array>
   /** Read a file as a data URL (data:{mime};base64,...) for binary preview (images, PDFs) */

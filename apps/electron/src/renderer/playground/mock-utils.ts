@@ -214,6 +214,11 @@ export const mockElectronAPI = {
     return [] // Let user use file input or drag-drop
   },
 
+  writeFile: async (path: string, _content: string) => {
+    console.log('[Playground] writeFile called:', path)
+    return { success: true }
+  },
+
   readFileAttachment: async (path: string) => {
     console.log('[Playground] readFileAttachment called:', path)
     return null // Let FileReader API handle it

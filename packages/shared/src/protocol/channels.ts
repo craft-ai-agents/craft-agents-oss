@@ -102,6 +102,7 @@ export const RPC_CHANNELS = {
     READ_USER_ATTACHMENT: 'file:readUserAttachment',
     STORE_ATTACHMENT: 'file:storeAttachment',
     GENERATE_THUMBNAIL: 'file:generateThumbnail',
+    WRITE: 'file:write',
   },
   fs: {
     SEARCH: 'fs:search',

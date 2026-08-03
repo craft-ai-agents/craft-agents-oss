@@ -177,6 +177,7 @@ const mock: ElectronAPI = {
 
   // ── File operations ───────────────────────────────────────────────────
   readFile: () => Promise.resolve(''),
+  writeFile: () => Promise.resolve({ success: true }),
   readFileBinary: () => Promise.resolve(new Uint8Array()),
   readFileDataUrl: () => Promise.resolve(''),
   readFilePreviewDataUrl: () => Promise.resolve(''),
