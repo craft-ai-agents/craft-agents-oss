@@ -95,5 +95,8 @@ ARCHstudioTEST/
 # Dev-server log written by electron:dev
 dev.log
 
+# Stray test output captured from full-suite runs (scratch, not source)
+_testout.txt
+
 # MCP server nested repositories
 mcp-servers/*/repo/
