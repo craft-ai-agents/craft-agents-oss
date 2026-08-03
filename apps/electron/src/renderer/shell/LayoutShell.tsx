@@ -2304,6 +2304,10 @@ const DEPTH_POPOVER_OPTIONS = [
     if (typeof window === 'undefined' || !window.electronAPI?.getServerStatus) return
     let cancelled = false
     const refresh = () => {
+      // Re-check the API on every poll (not just at mount): components may
+      // outlive the API surface (e.g. test workers swapping `window`), and a
+      // stray 5s poll must no-op rather than throw.
+      if (typeof window === 'undefined' || !window.electronAPI?.getServerStatus) return
       window.electronAPI.getServerStatus().then((status) => {
         if (!cancelled) setServerStatus(status)
       }).catch(() => {
