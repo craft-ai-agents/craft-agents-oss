@@ -8,8 +8,10 @@
 import * as React from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
+import { motion } from 'motion/react'
 import { cn } from '@/lib/utils'
+import { AnimatedCollapsibleContent, springTransition } from '@/components/ui/collapsible'
 import { AutomationAvatar } from './AutomationAvatar'
 import { AutomationActionPreview } from './AutomationActionPreview'
 import { Switch } from '@/components/ui/switch'
@@ -46,12 +48,16 @@ export function AutomationCard({
         onClick={() => setExpanded(!expanded)}
         className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-foreground/2 transition-colors"
       >
-        {/* Expand chevron */}
-        {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        )}
+        {/* Expand chevron — one icon, spring-rotated 90° when expanded so
+            the chevron and the content animate with the same physical feel. */}
+        <motion.div
+          initial={false}
+          animate={{ rotate: expanded ? 90 : 0 }}
+          transition={springTransition}
+          className="shrink-0"
+        >
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+        </motion.div>
 
         {/* Avatar */}
         <AutomationAvatar event={automation.event} size="sm" />
@@ -72,7 +78,7 @@ export function AutomationCard({
       </button>
 
       {/* Expanded content */}
-      {expanded && (
+      <AnimatedCollapsibleContent isOpen={expanded}>
         <div className="border-t border-border/30 px-4 py-3 space-y-3">
           {/* Trigger info */}
           <div className="space-y-1">
@@ -110,7 +116,7 @@ export function AutomationCard({
             )}
           </div>
         </div>
-      )}
+      </AnimatedCollapsibleContent>
     </div>
   )
 }
