@@ -177,7 +177,7 @@ export function SearchPanel({ onSelectSession }: SearchPanelProps) {
                 </button>
               )}
               {isOpen && result.matches.length > 3 && (
-                <button type="button" className="search-group__more" onClick={() => toggle(result.sessionId)}>
+                <button type="button" className="search-group__more animate-in fade-in-0 duration-150" onClick={() => toggle(result.sessionId)}>
                   Collapse
                 </button>
               )}

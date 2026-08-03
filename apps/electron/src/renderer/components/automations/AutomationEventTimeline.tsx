@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { type ExecutionEntry, type ExecutionStatus } from './types'
 import { formatShortRelativeTime } from './utils'
+import { AnimatedCollapsibleContent } from '@/components/ui/collapsible'
 
 // ============================================================================
 // Helpers
@@ -171,7 +172,8 @@ export function AutomationEventTimeline({ entries, className, onReplay }: Automa
             </div>
 
             {/* Expanded webhook details */}
-            {isExpanded && entry.webhookDetails && (
+            {entry.webhookDetails && (
+            <AnimatedCollapsibleContent isOpen={isExpanded && !!entry.webhookDetails}>
               <div className="mx-4 mb-3 mt-0.5 rounded-md border border-border/40 bg-foreground/[0.02] px-3 py-2.5 text-xs relative">
                 <div className="absolute top-2 right-2">
                   <CopyButton details={entry.webhookDetails} />
@@ -220,6 +222,7 @@ export function AutomationEventTimeline({ entries, className, onReplay }: Automa
                   </div>
                 )}
               </div>
+            </AnimatedCollapsibleContent>
             )}
           </div>
         )
