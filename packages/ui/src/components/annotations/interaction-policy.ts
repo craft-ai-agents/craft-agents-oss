@@ -1,4 +1,4 @@
-import type { AnnotationV1 } from '@craft-agent/core'
+import type { AnnotationV1 } from '@archstudio/core'
 import { getAnnotationFollowUpState, type AnnotationFollowUpState } from './follow-up-state'
 
 export type AnnotationChipInteraction = {

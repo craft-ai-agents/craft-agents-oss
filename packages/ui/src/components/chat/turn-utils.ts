@@ -5,9 +5,10 @@
  * Converts the flat Message[] array into grouped turns for email-like display.
  */
 
-import type { Message, StoredMessage, MessageRole } from '@craft-agent/core'
-import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
-import { storedToMessage } from '@craft-agent/core'
+import type { Message, StoredMessage, MessageRole } from '@archstudio/core'
+import { maybeNormalizeMcpErrorMessage } from '@archstudio/shared/mcp/errors'
+import { isParentTaskTool } from '@archstudio/shared/utils/toolNames'
+import { storedToMessage } from '@archstudio/core'
 
 export { storedToMessage }
 import type { ActivityItem, ActivityStatus, ActivityType, ResponseContent, TodoItem } from './TurnCard'
@@ -28,11 +29,12 @@ export type { ActivityItem }
  */
 function stripErrorTags(content: string | undefined): string | undefined {
   if (!content) return content
-  return content
+  const cleaned = content
     .replace(/<\/?error>/gi, '')
     .replace(/<\/?tool_use_error>/gi, '')
     .replace(/^\[ERROR]\s*/i, '')
     .trim()
+  return maybeNormalizeMcpErrorMessage(cleaned)
 }
 
 // ============================================================================

@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Check, DatabaseZap } from 'lucide-react'
-import { FilterableSelectPopover } from '@craft-agent/ui'
+import { FilterableSelectPopover } from '@archstudio/ui'
 
 import { cn } from '@/lib/utils'
 import { SourceAvatar } from '@/components/ui/source-avatar'

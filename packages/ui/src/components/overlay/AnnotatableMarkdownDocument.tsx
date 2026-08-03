@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Markdown } from '../markdown'
-import type { AnnotationV1 } from '@craft-agent/core'
+import type { AnnotationV1 } from '@archstudio/core'
 import { type IslandTransitionConfig } from '../ui'
 import { AnnotationIslandMenu } from '../annotations/AnnotationIslandMenu'
 import {

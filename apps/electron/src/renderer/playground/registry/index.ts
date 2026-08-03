@@ -1,4 +1,5 @@
 import type { ComponentEntry, CategoryGroup, Category } from './types'
+import { ownerAgentComponents } from './owner-agent'
 import { onboardingComponents } from './onboarding'
 import { chatComponents } from './chat'
 import { turnCardComponents, fullscreenOverlayComponents } from './turn-card'
@@ -30,6 +31,7 @@ import { taskEditorComponents } from './task-editor'
 export * from './types'
 
 export const componentRegistry: ComponentEntry[] = [
+  ...ownerAgentComponents,
   ...mobileWebUIComponents,
   ...apiKeyInputComponents,
   ...onboardingComponents,
@@ -61,7 +63,7 @@ export const componentRegistry: ComponentEntry[] = [
 ]
 
 export function getCategories(): CategoryGroup[] {
-  const categoryOrder: Category[] = ['Mobile WebUI', 'Automations', 'Onboarding', 'Agent Setup', 'Chat', 'Island', 'Browser', 'Planner', 'Custom Shadows', 'Session List', 'Kanban', 'Entity Lists', 'Edit Popover', 'Turn Cards', 'TurnCard Modes', 'Fullscreen', 'Chat Messages', 'Chat Inputs', 'Toast Messages', 'Markdown', 'Icons', 'OAuth', 'Messaging']
+  const categoryOrder: Category[] = ['Owner Agent', 'Mobile WebUI', 'Automations', 'Onboarding', 'Agent Setup', 'Chat', 'Island', 'Browser', 'Planner', 'Custom Shadows', 'Session List', 'Kanban', 'Entity Lists', 'Edit Popover', 'Turn Cards', 'TurnCard Modes', 'Fullscreen', 'Chat Messages', 'Chat Inputs', 'Toast Messages', 'Markdown', 'Icons', 'OAuth', 'Messaging']
   const categoryMap = new Map<Category, ComponentEntry[]>()
 
   for (const entry of componentRegistry) {

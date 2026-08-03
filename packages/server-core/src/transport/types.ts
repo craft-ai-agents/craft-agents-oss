@@ -2,12 +2,24 @@
  * Transport-layer interfaces for the WS-based RPC.
  */
 
-import type { PushTarget } from '@craft-agent/shared/protocol'
+import type { PushTarget } from '@archstudio/shared/protocol'
 
 export interface RequestContext {
   clientId: string
   workspaceId: string | null
   webContentsId: number | null
+  /**
+   * AbortSignal fired when the client cancels the originating request (via a
+   * 'cancel' envelope) or when the server teardown (client disconnect, server
+   * shutdown) means the handler's result will be discarded. Handlers can
+   * ignore it, subscribe via `signal.addEventListener('abort', ...)`, or
+   * wrap long-running async loops that should bail on cancellation.
+   *
+   * The signal is never-aborted for handlers that don't observe cancellation
+   * — it's a never-fired default. This means existing handlers can adopt
+   * it incrementally without behavior changes.
+   */
+  signal: AbortSignal
 }
 
 export type HandlerFn = (ctx: RequestContext, ...args: any[]) => Promise<any> | any

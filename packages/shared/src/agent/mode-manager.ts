@@ -16,7 +16,7 @@ import { homedir } from 'os';
 import { existsSync, realpathSync } from 'fs';
 import { debug } from '../utils/debug.ts';
 import { dirname, isAbsolute, relative, resolve } from 'path';
-import { getSessionSafeAllowedToolNames } from '@craft-agent/session-tools-core';
+import { getSessionSafeAllowedToolNames } from '@archstudio/session-tools-core';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
 import { isBrowserToolNameOrAlias } from './browser-tool-names.ts';
 import type { PermissionsContext, MergedPermissionsConfig } from './permissions-config.ts';
@@ -196,7 +196,15 @@ function isPathWithinDirectory(targetPath: string, baseDir: string): boolean {
     return false;
   }
 
-  const realBase = existsSync(resolvedBase) ? realpathSync.native(resolvedBase) : resolvedBase;
+  // Base directory doesn't exist on disk — there are no symlinks to escape
+  // through, so a pure logical containment check is both correct and the only
+  // option (realpath has nothing to resolve). This keeps Windows case
+  // differences and not-yet-created plans folders working.
+  if (!existsSync(resolvedBase)) {
+    return isWithin(resolvedBase, resolvedTarget);
+  }
+
+  const realBase = realpathSync.native(resolvedBase);
 
   if (existsSync(resolvedTarget)) {
     const realTarget = realpathSync.native(resolvedTarget);
@@ -1610,8 +1618,9 @@ export function extractBashWriteTarget(command: string): string | null {
 
   // Pattern 2: shell -c/-lc with inner redirect (Codex pattern, unquoted paths)
   // Match: /bin/zsh -lc "... > /path/to/file ..." or bash -c '... > /path ...'
+  // Capture allows backslashes so Windows paths (C:\Users\...) aren't truncated.
   const shellExecMatch = command.match(
-    /(?:\/bin\/)?(?:zsh|bash|sh)\s+(?:-\w+\s+)*["'].*?>\s*([^\s'"\\]+)/
+    /(?:\/bin\/)?(?:zsh|bash|sh)\s+(?:-\w+\s+)*["'].*?>\s*([^\s'"|&;]+)/
   );
   if (shellExecMatch?.[1] && shellExecMatch[1] !== '/dev/null') {
     return shellExecMatch[1];
@@ -1701,12 +1710,12 @@ export function getPathHint(targetPath: string, plansFolderPath: string, dataFol
   }
 
   // Case: Writing to workspace root instead of session
-  if (normalizedTarget.includes('/.craft-agent/workspaces/') && !normalizedTarget.includes('/sessions/')) {
+  if (normalizedTarget.includes('/.archstudio/workspaces/') && !normalizedTarget.includes('/sessions/')) {
     return 'Hint: Write to the session plans or data folder, not the workspace root.';
   }
 
-  // Case: Writing outside .craft-agent entirely
-  if (!normalizedTarget.includes('/.craft-agent/')) {
+  // Case: Writing outside .archstudio entirely
+  if (!normalizedTarget.includes('/.archstudio/')) {
     return 'Hint: Files must be written to the session plans or data folder. Use plansFolderPath or dataFolderPath from <session_state>.';
   }
 

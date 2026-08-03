@@ -55,11 +55,16 @@ def resolve_wrapper(tool_name: str) -> Path:
     return wrapper
 
 
+def sanitize_python_environment(source: dict[str, str]) -> dict[str, str]:
+    blocked = {"PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"}
+    return {key: value for key, value in source.items() if key.upper() not in blocked}
+
+
 def build_env() -> dict[str, str]:
     uv = resolve_uv_binary()
-    env = dict(os.environ)
-    env["CRAFT_UV"] = str(uv)
-    env["CRAFT_SCRIPTS"] = str(SCRIPTS_DIR)
+    env = sanitize_python_environment(dict(os.environ))
+    env["ARCHSTUDIO_UV"] = str(uv)
+    env["ARCHSTUDIO_SCRIPTS"] = str(SCRIPTS_DIR)
     env["PATH"] = os.pathsep.join([
         str(BIN_DIR),
         str(uv.parent),

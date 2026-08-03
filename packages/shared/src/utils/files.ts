@@ -1,7 +1,11 @@
-import { existsSync, readFileSync, statSync, writeFileSync, unlinkSync, mkdtempSync, renameSync } from 'fs';
+// Namespace imports (not `{ existsSync, ... }`): a named import destructures
+// the property at module top-level. This module is transitively reachable
+// from the Electron renderer bundle, where Vite externalizes `fs`/`child_process`/`os`
+// behind a proxy that throws on property access.
+import * as fs from 'fs';
 import { extname, basename, resolve, join, relative } from 'path';
-import { execSync } from 'child_process';
-import { tmpdir } from 'os';
+import * as childProcess from 'child_process';
+import * as os from 'os';
 
 /**
  * Strip UTF-8 BOM (Byte Order Mark) from a string.
@@ -22,10 +26,10 @@ export function safeJsonParse(text: string): unknown {
 
 /**
  * Read and parse a JSON file, handling UTF-8 BOM transparently.
- * Replaces the common JSON.parse(readFileSync(path, 'utf-8')) pattern.
+ * Replaces the common JSON.parse(fs.readFileSync(path, 'utf-8')) pattern.
  */
 export function readJsonFileSync<T = unknown>(filePath: string): T {
-  return JSON.parse(stripBom(readFileSync(filePath, 'utf-8'))) as T;
+  return JSON.parse(stripBom(fs.readFileSync(filePath, 'utf-8'))) as T;
 }
 
 /**
@@ -36,11 +40,11 @@ export function readJsonFileSync<T = unknown>(filePath: string): T {
 export function atomicWriteFileSync(filePath: string, data: string): void {
   const tmpPath = filePath + '.tmp';
   try {
-    writeFileSync(tmpPath, data);
-    renameSync(tmpPath, filePath);
+    fs.writeFileSync(tmpPath, data);
+    fs.renameSync(tmpPath, filePath);
   } catch (error) {
     // Clean up temp file if rename failed
-    try { unlinkSync(tmpPath); } catch {}
+    try { fs.unlinkSync(tmpPath); } catch {}
     throw error;
   }
 }
@@ -354,11 +358,11 @@ export function readFileAttachment(filePath: string): FileAttachment | null {
   try {
     const resolved = resolvePath(filePath);
 
-    if (!existsSync(resolved)) {
+    if (!fs.existsSync(resolved)) {
       return null;
     }
 
-    const stats = statSync(resolved);
+    const stats = fs.statSync(resolved);
 
     if (!stats.isFile()) {
       return null;
@@ -382,32 +386,32 @@ export function readFileAttachment(filePath: string): FileAttachment | null {
 
     if (type === 'image') {
       // Read as base64 for images
-      const buffer = readFileSync(resolved);
+      const buffer = fs.readFileSync(resolved);
       attachment.base64 = buffer.toString('base64');
     } else if (type === 'text') {
       // Read as text for text files (with size limit)
       if (stats.size > MAX_TEXT_SIZE) {
         // Read only first part of large text files
-        const buffer = readFileSync(resolved);
+        const buffer = fs.readFileSync(resolved);
         attachment.text = buffer.toString('utf-8').slice(0, MAX_TEXT_SIZE) +
           `\n\n[File truncated - showing first ${MAX_TEXT_SIZE / 1024}KB of ${Math.round(stats.size / 1024)}KB]`;
       } else {
-        attachment.text = readFileSync(resolved, 'utf-8');
+        attachment.text = fs.readFileSync(resolved, 'utf-8');
       }
     } else if (type === 'pdf') {
       // Read PDF as base64
-      const buffer = readFileSync(resolved);
+      const buffer = fs.readFileSync(resolved);
       attachment.base64 = buffer.toString('base64');
     } else if (type === 'office') {
       // Read Office files as base64 (will be converted to markdown later)
-      const buffer = readFileSync(resolved);
+      const buffer = fs.readFileSync(resolved);
       attachment.base64 = buffer.toString('base64');
     } else if (type === 'audio') {
       // Read audio as base64 — backends that recognize 'audio' decide how to
       // forward it (transcription, native audio input, etc). Backends that
       // don't recognize 'audio' fall through to their existing 'unknown'
       // branches so the attachment is at least visible.
-      const buffer = readFileSync(resolved);
+      const buffer = fs.readFileSync(resolved);
       attachment.base64 = buffer.toString('base64');
     }
 
@@ -497,7 +501,7 @@ function readClipboardMacOS(): FileAttachment[] {
 
   // First, check for file URLs in clipboard (when files are copied in Finder)
   try {
-    const scriptFile = join(tmpdir(), `craft-clipboard-files-${Date.now()}.js`);
+    const scriptFile = join(os.tmpdir(), `craft-clipboard-files-${Date.now()}.js`);
     const jxaScript = `
 ObjC.import('AppKit');
 ObjC.import('Foundation');
@@ -517,15 +521,15 @@ if (fileURLs && !fileURLs.isNil()) {
   "no_files";
 }
 `;
-    writeFileSync(scriptFile, jxaScript);
+    fs.writeFileSync(scriptFile, jxaScript);
 
-    const result = execSync(`osascript -l JavaScript "${scriptFile}"`, {
+    const result = childProcess.execSync(`osascript -l JavaScript "${scriptFile}"`, {
       encoding: 'utf-8',
       stdio: 'pipe',
       timeout: 5000,
     }).trim();
 
-    try { unlinkSync(scriptFile); } catch {}
+    try { fs.unlinkSync(scriptFile); } catch {}
 
     if (result !== 'no_files' && result.startsWith('{')) {
       const parsed = JSON.parse(result);
@@ -574,7 +578,7 @@ function readClipboardWindows(): FileAttachment[] {
         "no_files"
       }
     `;
-    const result = execSync(`powershell -NoProfile -Command "${psScript.replace(/\n/g, ' ')}"`, {
+    const result = childProcess.execSync(`powershell -NoProfile -Command "${psScript.replace(/\n/g, ' ')}"`, {
       encoding: 'utf-8',
       stdio: 'pipe',
       timeout: 5000,
@@ -616,7 +620,7 @@ function readClipboardWindows(): FileAttachment[] {
  * Read image data from Windows clipboard using PowerShell
  */
 function readClipboardImageDataWindows(): FileAttachment | null {
-  const tempFile = join(tmpdir(), `craft-clipboard-${Date.now()}.png`);
+  const tempFile = join(os.tmpdir(), `craft-clipboard-${Date.now()}.png`);
 
   try {
     // PowerShell script to save clipboard image to file
@@ -630,13 +634,13 @@ function readClipboardImageDataWindows(): FileAttachment | null {
         "no_image"
       }
     `;
-    const result = execSync(`powershell -NoProfile -Command "${psScript.replace(/\n/g, ' ')}"`, {
+    const result = childProcess.execSync(`powershell -NoProfile -Command "${psScript.replace(/\n/g, ' ')}"`, {
       encoding: 'utf-8',
       stdio: 'pipe',
       timeout: 5000,
     }).trim();
 
-    if (result === 'success' && existsSync(tempFile)) {
+    if (result === 'success' && fs.existsSync(tempFile)) {
       return readImageFile(tempFile);
     }
   } catch {
@@ -658,7 +662,7 @@ function readClipboardLinux(): FileAttachment[] {
     // Try xclip first (most common)
     let result: string | null = null;
     try {
-      result = execSync('xclip -selection clipboard -t text/uri-list -o 2>/dev/null', {
+      result = childProcess.execSync('xclip -selection clipboard -t text/uri-list -o 2>/dev/null', {
         encoding: 'utf-8',
         stdio: 'pipe',
         timeout: 5000,
@@ -666,7 +670,7 @@ function readClipboardLinux(): FileAttachment[] {
     } catch {
       // xclip not available, try xsel
       try {
-        result = execSync('xsel --clipboard --output 2>/dev/null', {
+        result = childProcess.execSync('xsel --clipboard --output 2>/dev/null', {
           encoding: 'utf-8',
           stdio: 'pipe',
           timeout: 5000,
@@ -712,23 +716,23 @@ function readClipboardLinux(): FileAttachment[] {
  * Read image data from Linux clipboard using xclip
  */
 function readClipboardImageDataLinux(): FileAttachment | null {
-  const tempFile = join(tmpdir(), `craft-clipboard-${Date.now()}.png`);
+  const tempFile = join(os.tmpdir(), `craft-clipboard-${Date.now()}.png`);
 
   // Try xclip for image/png content
   try {
-    execSync(`xclip -selection clipboard -t image/png -o > "${tempFile}" 2>/dev/null`, {
+    childProcess.execSync(`xclip -selection clipboard -t image/png -o > "${tempFile}" 2>/dev/null`, {
       shell: '/bin/bash',
       stdio: 'pipe',
       timeout: 5000,
     });
 
-    if (existsSync(tempFile)) {
-      const stats = statSync(tempFile);
+    if (fs.existsSync(tempFile)) {
+      const stats = fs.statSync(tempFile);
       if (stats.size > 0) {
         return readImageFile(tempFile);
       }
       // Empty file, cleanup
-      try { unlinkSync(tempFile); } catch {}
+      try { fs.unlinkSync(tempFile); } catch {}
     }
   } catch {
     // xclip image extraction failed
@@ -736,19 +740,19 @@ function readClipboardImageDataLinux(): FileAttachment | null {
 
   // Try wl-paste for Wayland
   try {
-    execSync(`wl-paste --type image/png > "${tempFile}" 2>/dev/null`, {
+    childProcess.execSync(`wl-paste --type image/png > "${tempFile}" 2>/dev/null`, {
       shell: '/bin/bash',
       stdio: 'pipe',
       timeout: 5000,
     });
 
-    if (existsSync(tempFile)) {
-      const stats = statSync(tempFile);
+    if (fs.existsSync(tempFile)) {
+      const stats = fs.statSync(tempFile);
       if (stats.size > 0) {
         return readImageFile(tempFile);
       }
       // Empty file, cleanup
-      try { unlinkSync(tempFile); } catch {}
+      try { fs.unlinkSync(tempFile); } catch {}
     }
   } catch {
     // wl-paste failed
@@ -761,12 +765,12 @@ function readClipboardImageDataLinux(): FileAttachment | null {
  * Read image data directly from macOS clipboard (for screenshots, copied images)
  */
 function readClipboardImageDataMacOS(): FileAttachment | null {
-  const tempFile = join(tmpdir(), `craft-clipboard-${Date.now()}.png`);
+  const tempFile = join(os.tmpdir(), `craft-clipboard-${Date.now()}.png`);
 
   // Method 1: Try pngpaste first (most reliable if installed via: brew install pngpaste)
   try {
-    execSync(`pngpaste "${tempFile}" 2>/dev/null`, { stdio: 'pipe' });
-    if (existsSync(tempFile)) {
+    childProcess.execSync(`pngpaste "${tempFile}" 2>/dev/null`, { stdio: 'pipe' });
+    if (fs.existsSync(tempFile)) {
       const result = readImageFile(tempFile);
       if (result) return result;
     }
@@ -776,7 +780,7 @@ function readClipboardImageDataMacOS(): FileAttachment | null {
 
   // Method 2: Use osascript with JXA (JavaScript for Automation)
   try {
-    const scriptFile = join(tmpdir(), `craft-clipboard-script-${Date.now()}.js`);
+    const scriptFile = join(os.tmpdir(), `craft-clipboard-script-${Date.now()}.js`);
     const jxaScript = `
 ObjC.import('AppKit');
 ObjC.import('Foundation');
@@ -799,17 +803,17 @@ if (imgData && !imgData.isNil()) {
   "no_image";
 }
 `;
-    writeFileSync(scriptFile, jxaScript);
+    fs.writeFileSync(scriptFile, jxaScript);
 
-    const result = execSync(`osascript -l JavaScript "${scriptFile}"`, {
+    const result = childProcess.execSync(`osascript -l JavaScript "${scriptFile}"`, {
       encoding: 'utf-8',
       stdio: 'pipe',
       timeout: 5000,
     }).trim();
 
-    try { unlinkSync(scriptFile); } catch {}
+    try { fs.unlinkSync(scriptFile); } catch {}
 
-    if (result === 'success' && existsSync(tempFile)) {
+    if (result === 'success' && fs.existsSync(tempFile)) {
       const imageResult = readImageFile(tempFile);
       if (imageResult) return imageResult;
     }
@@ -825,13 +829,13 @@ if (imgData && !imgData.isNil()) {
  */
 function readImageFile(tempFile: string): FileAttachment | null {
   try {
-    const stats = statSync(tempFile);
-    const buffer = readFileSync(tempFile);
+    const stats = fs.statSync(tempFile);
+    const buffer = fs.readFileSync(tempFile);
     const base64 = buffer.toString('base64');
 
     // Clean up temp file
     try {
-      unlinkSync(tempFile);
+      fs.unlinkSync(tempFile);
     } catch {
       // Ignore cleanup errors
     }

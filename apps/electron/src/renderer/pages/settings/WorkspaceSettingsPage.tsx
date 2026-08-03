@@ -21,12 +21,12 @@ import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { cn } from '@/lib/utils'
 import { routes } from '@/lib/navigate'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@archstudio/ui'
 import { RenameDialog } from '@/components/ui/rename-dialog'
 import type { PermissionMode, WorkspaceSettings, LoadedSource } from '../../../shared/types'
 import { useDirectoryPicker } from '@/hooks/useDirectoryPicker'
 import { ServerDirectoryBrowser } from '@/components/ServerDirectoryBrowser'
-import { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/mode-types'
+import { PERMISSION_MODE_CONFIG } from '@archstudio/shared/agent/mode-types'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { toast } from 'sonner'
@@ -65,6 +65,11 @@ export default function WorkspaceSettingsPage() {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('ask')
   const [workingDirectory, setWorkingDirectory] = useState('')
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
+  // Open-dir cap for the working-directory tree. Persisted on
+  // WorkspaceSettings.maxOpenDirs and read back into LayoutShell by
+  // AppShell. Undefined → renderer-side default of 50 (see
+  // DEFAULT_MAX_OPEN_DIRS in LayoutShell.tsx).
+  const [maxOpenDirs, setMaxOpenDirs] = useState<number>(50)
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true)
 
   // Default sources state
@@ -92,6 +97,7 @@ export default function WorkspaceSettingsPage() {
           setPermissionMode(settings.permissionMode || 'ask')
           setWorkingDirectory(settings.workingDirectory || '')
           setLocalMcpEnabled(settings.localMcpEnabled ?? true)
+          setMaxOpenDirs(settings.maxOpenDirs ?? 50)
           // Load cyclable permission modes from workspace settings
           if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
             setEnabledModes(settings.cyclablePermissionModes)
@@ -278,6 +284,16 @@ export default function WorkspaceSettingsPage() {
     async (enabled: boolean) => {
       setLocalMcpEnabled(enabled)
       await updateWorkspaceSetting('localMcpEnabled', enabled)
+    },
+    [updateWorkspaceSetting]
+  )
+
+  const handleMaxOpenDirsChange = useCallback(
+    async (value: string) => {
+      const parsed = Number(value)
+      if (!Number.isFinite(parsed) || parsed <= 0) return
+      setMaxOpenDirs(parsed)
+      await updateWorkspaceSetting('maxOpenDirs', parsed)
     },
     [updateWorkspaceSetting]
   )
@@ -544,6 +560,27 @@ export default function WorkspaceSettingsPage() {
                   description={t("settings.workspace.localMcpServersDesc")}
                   checked={localMcpEnabled}
                   onCheckedChange={handleLocalMcpEnabledChange}
+                />
+                {/*
+                  Open-dir cap for the working-directory tree. Presets match
+                  the breadth bands a power user actually cares about
+                  (small repo → wide monorepo), and the menu-select pattern
+                  matches how the permission-mode selector above stays
+                  consistent. Free-form input would invite unbounded
+                  values that defeat the cap's purpose.
+                */}
+                <SettingsMenuSelectRow
+                  label={t("settings.workspace.maxOpenDirs")}
+                  description={t("settings.workspace.maxOpenDirsDesc")}
+                  value={String(maxOpenDirs)}
+                  onValueChange={handleMaxOpenDirsChange}
+                  options={[
+                    { value: '25', label: '25', description: t("settings.workspace.maxOpenDirs.s") },
+                    { value: '50', label: '50', description: t("settings.workspace.maxOpenDirs.default") },
+                    { value: '100', label: '100', description: t("settings.workspace.maxOpenDirs.m") },
+                    { value: '200', label: '200', description: t("settings.workspace.maxOpenDirs.l") },
+                    { value: '500', label: '500', description: t("settings.workspace.maxOpenDirs.xl") },
+                  ]}
                 />
               </SettingsCard>
             </SettingsSection>

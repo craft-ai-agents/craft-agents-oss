@@ -78,19 +78,19 @@ async function ensureBundledUvForCurrentPlatform(): Promise<void> {
 // Detects instance number from folder name suffix (e.g., craft-agents-1 → instance 1)
 function detectInstance(): void {
   // Don't override if already set (e.g., by sourcing detect-instance.sh first)
-  if (process.env.CRAFT_VITE_PORT) return;
+  if (process.env.ARCHSTUDIO_VITE_PORT) return;
 
   const folderName = basename(ROOT_DIR);
   const match = folderName.match(/-(\d+)$/);
 
   if (match) {
     const instanceNum = match[1];
-    process.env.CRAFT_INSTANCE_NUMBER = instanceNum;
-    process.env.CRAFT_VITE_PORT = `${instanceNum}173`;
-    process.env.CRAFT_APP_NAME = `Craft Agents [${instanceNum}]`;
-    process.env.CRAFT_CONFIG_DIR = join(process.env.HOME || "", `.craft-agent-${instanceNum}`);
-    process.env.CRAFT_DEEPLINK_SCHEME = `craftagents${instanceNum}`;
-    console.log(`🔢 Instance ${instanceNum} detected: port=${process.env.CRAFT_VITE_PORT}, config=${process.env.CRAFT_CONFIG_DIR}`);
+    process.env.ARCHSTUDIO_INSTANCE_NUMBER = instanceNum;
+    process.env.ARCHSTUDIO_VITE_PORT = `${instanceNum}173`;
+    process.env.ARCHSTUDIO_APP_NAME = `ARCHstudio [${instanceNum}]`;
+    process.env.ARCHSTUDIO_CONFIG_DIR = join(process.env.HOME || "", `.archstudio-${instanceNum}`);
+    process.env.ARCHSTUDIO_DEEPLINK_SCHEME = `archstudio${instanceNum}`;
+    console.log(`🔢 Instance ${instanceNum} detected: port=${process.env.ARCHSTUDIO_VITE_PORT}, config=${process.env.ARCHSTUDIO_CONFIG_DIR}`);
   }
 }
 
@@ -275,7 +275,7 @@ function getOAuthDefines(): Record<string, string> {
 
 // Get environment variables for electron process
 function getElectronEnv(): Record<string, string> {
-  const vitePort = process.env.CRAFT_VITE_PORT || "5173";
+  const vitePort = process.env.ARCHSTUDIO_VITE_PORT || "5173";
 
   // Codex binary path is resolved at runtime by the binary-resolver module.
   // It checks: CODEX_PATH env var > bundled binary > local dev fork > system PATH.
@@ -284,10 +284,10 @@ function getElectronEnv(): Record<string, string> {
   return {
     ...process.env as Record<string, string>,
     VITE_DEV_SERVER_URL: `http://localhost:${vitePort}`,
-    CRAFT_CONFIG_DIR: process.env.CRAFT_CONFIG_DIR || "",
-    CRAFT_APP_NAME: process.env.CRAFT_APP_NAME || "Craft Agents",
-    CRAFT_DEEPLINK_SCHEME: process.env.CRAFT_DEEPLINK_SCHEME || "craftagents",
-    CRAFT_INSTANCE_NUMBER: process.env.CRAFT_INSTANCE_NUMBER || "",
+    ARCHSTUDIO_CONFIG_DIR: process.env.ARCHSTUDIO_CONFIG_DIR || "",
+    ARCHSTUDIO_APP_NAME: process.env.ARCHSTUDIO_APP_NAME || "ARCHstudio",
+    ARCHSTUDIO_DEEPLINK_SCHEME: process.env.ARCHSTUDIO_DEEPLINK_SCHEME || "archstudio",
+    ARCHSTUDIO_INSTANCE_NUMBER: process.env.ARCHSTUDIO_INSTANCE_NUMBER || "",
   };
 }
 
@@ -301,7 +301,7 @@ function getElectronEnv(): Record<string, string> {
 //   TLA-free ESM, so the runtime `require('@anthropic-ai/claude-agent-sdk')`
 //   resolves correctly. Mirror of the same flag in `scripts/electron-build-main.ts`
 //   and `apps/electron/package.json` build:main.
-const MAIN_BUNDLE_EXTERNALS = ["electron", "@anthropic-ai/claude-agent-sdk"];
+const MAIN_BUNDLE_EXTERNALS = ["electron", "@anthropic-ai/claude-agent-sdk", "better-sqlite3"];
 
 // Run a one-shot esbuild using the JavaScript API
 async function runEsbuild(
@@ -437,7 +437,7 @@ async function main(): Promise<void> {
   // Build WhatsApp worker bundle so the adapter can spawn it on demand
   await buildWaWorker();
 
-  const vitePort = process.env.CRAFT_VITE_PORT || "5173";
+  const vitePort = process.env.ARCHSTUDIO_VITE_PORT || "5173";
   const oauthDefines = getOAuthDefines();
 
   // Kill any existing process on the Vite port

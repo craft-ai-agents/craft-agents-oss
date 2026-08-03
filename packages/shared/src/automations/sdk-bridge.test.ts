@@ -12,9 +12,9 @@ function input(overrides: Partial<SdkAutomationInput> = {}): SdkAutomationInput 
 
 describe('sdk-bridge', () => {
   describe('buildEnvFromSdkInput', () => {
-    it('should always include CRAFT_EVENT', () => {
+    it('should always include ARCHSTUDIO_EVENT', () => {
       const env = buildEnvFromSdkInput('PreToolUse', input());
-      expect(env.CRAFT_EVENT).toBe('PreToolUse');
+      expect(env.ARCHSTUDIO_EVENT).toBe('PreToolUse');
     });
 
     it('should include process.env variables', () => {
@@ -32,10 +32,26 @@ describe('sdk-bridge', () => {
       }
     });
 
+    it('strips env vars whose value is the literal string "undefined" (Windows WSL leak)', () => {
+      // ORIGINAL_XDG_CURRENT_DESKTOP is exported as the literal string
+      // "undefined" when WSL env is imported into the Windows shell. cleanEnv()
+      // must drop it so it never reaches the child-process env.
+      const leakedKey = 'ORIGINAL_XDG_CURRENT_DESKTOP';
+      const original = process.env[leakedKey];
+      process.env[leakedKey] = 'undefined';
+      try {
+        const env = buildEnvFromSdkInput('PreToolUse', input());
+        expect(env[leakedKey]).toBeUndefined();
+      } finally {
+        if (original === undefined) delete process.env[leakedKey];
+        else process.env[leakedKey] = original;
+      }
+    });
+
     describe('PreToolUse / PostToolUse', () => {
-      it('should map tool_name to CRAFT_TOOL_NAME', () => {
+      it('should map tool_name to ARCHSTUDIO_TOOL_NAME', () => {
         const env = buildEnvFromSdkInput('PreToolUse', input({ tool_name: 'Bash' }));
-        expect(env.CRAFT_TOOL_NAME).toBe('Bash');
+        expect(env.ARCHSTUDIO_TOOL_NAME).toBe('Bash');
       });
 
       it('should map tool_input as sanitized JSON', () => {
@@ -43,8 +59,8 @@ describe('sdk-bridge', () => {
           tool_name: 'Bash',
           tool_input: { command: 'ls -la' },
         }));
-        expect(env.CRAFT_TOOL_INPUT).toBeDefined();
-        expect(env.CRAFT_TOOL_INPUT).not.toContain('`');
+        expect(env.ARCHSTUDIO_TOOL_INPUT).toBeDefined();
+        expect(env.ARCHSTUDIO_TOOL_INPUT).not.toContain('`');
       });
 
       it('should map tool_response for PostToolUse', () => {
@@ -52,18 +68,18 @@ describe('sdk-bridge', () => {
           tool_name: 'Bash',
           tool_response: 'file1.txt\nfile2.txt',
         }));
-        expect(env.CRAFT_TOOL_RESPONSE).toBeDefined();
+        expect(env.ARCHSTUDIO_TOOL_RESPONSE).toBeDefined();
       });
     });
 
     describe('PostToolUseFailure', () => {
-      it('should map error to CRAFT_ERROR', () => {
+      it('should map error to ARCHSTUDIO_ERROR', () => {
         const env = buildEnvFromSdkInput('PostToolUseFailure', input({
           tool_name: 'Bash',
           error: 'Command failed',
         }));
-        expect(env.CRAFT_TOOL_NAME).toBe('Bash');
-        expect(env.CRAFT_ERROR).toBeDefined();
+        expect(env.ARCHSTUDIO_TOOL_NAME).toBe('Bash');
+        expect(env.ARCHSTUDIO_ERROR).toBeDefined();
       });
     });
 
@@ -72,9 +88,9 @@ describe('sdk-bridge', () => {
         const env = buildEnvFromSdkInput('UserPromptSubmit', input({
           prompt: 'Hello `world`',
         }));
-        expect(env.CRAFT_PROMPT).toBeDefined();
+        expect(env.ARCHSTUDIO_PROMPT).toBeDefined();
         // Backticks should be escaped with backslash
-        expect(env.CRAFT_PROMPT).toContain('\\`');
+        expect(env.ARCHSTUDIO_PROMPT).toContain('\\`');
       });
     });
 
@@ -84,8 +100,8 @@ describe('sdk-bridge', () => {
           source: 'manual',
           model: 'claude-opus-4-7',
         }));
-        expect(env.CRAFT_SOURCE).toBe('manual');
-        expect(env.CRAFT_MODEL).toBe('claude-opus-4-7');
+        expect(env.ARCHSTUDIO_SOURCE).toBe('manual');
+        expect(env.ARCHSTUDIO_MODEL).toBe('claude-opus-4-7');
       });
     });
 
@@ -95,8 +111,8 @@ describe('sdk-bridge', () => {
           agent_id: 'agent-123',
           agent_type: 'research',
         }));
-        expect(env.CRAFT_AGENT_ID).toBe('agent-123');
-        expect(env.CRAFT_AGENT_TYPE).toBe('research');
+        expect(env.ARCHSTUDIO_AGENT_ID).toBe('agent-123');
+        expect(env.ARCHSTUDIO_AGENT_TYPE).toBe('research');
       });
     });
 
@@ -106,18 +122,18 @@ describe('sdk-bridge', () => {
           message: 'Test `message`',
           title: 'Test `title`',
         }));
-        expect(env.CRAFT_MESSAGE).toBeDefined();
-        expect(env.CRAFT_TITLE).toBeDefined();
+        expect(env.ARCHSTUDIO_MESSAGE).toBeDefined();
+        expect(env.ARCHSTUDIO_TITLE).toBeDefined();
         // Backticks should be escaped
-        expect(env.CRAFT_MESSAGE).toContain('\\`');
-        expect(env.CRAFT_TITLE).toContain('\\`');
+        expect(env.ARCHSTUDIO_MESSAGE).toContain('\\`');
+        expect(env.ARCHSTUDIO_TITLE).toContain('\\`');
       });
     });
 
     describe('unknown/default events', () => {
       it('should return minimal env for events with no specific mappings', () => {
         const env = buildEnvFromSdkInput('Stop' as any, input());
-        expect(env.CRAFT_EVENT).toBe('Stop');
+        expect(env.ARCHSTUDIO_EVENT).toBe('Stop');
         // Should still have process.env vars
         expect(env.PATH).toBeDefined();
       });
@@ -129,7 +145,7 @@ describe('sdk-bridge', () => {
           prompt: '$(rm -rf /)',
         }));
         // $ should be escaped with backslash to prevent command substitution
-        expect(env.CRAFT_PROMPT).toContain('\\$');
+        expect(env.ARCHSTUDIO_PROMPT).toContain('\\$');
       });
 
       it('should not sanitize internal fields like tool_name', () => {
@@ -137,7 +153,7 @@ describe('sdk-bridge', () => {
           tool_name: 'Bash',
         }));
         // tool_name is internal, should be passed through as-is
-        expect(env.CRAFT_TOOL_NAME).toBe('Bash');
+        expect(env.ARCHSTUDIO_TOOL_NAME).toBe('Bash');
       });
     });
   });

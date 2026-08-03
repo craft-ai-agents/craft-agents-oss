@@ -5,7 +5,7 @@ import { FadingText } from '@/components/ui/fading-text'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import type { LoadedSkill, LoadedSource, FileSearchResult } from '../../../shared/types'
-import { AGENTS_PLUGIN_NAME } from '@craft-agent/shared/skills/types'
+import { AGENTS_PLUGIN_NAME } from '@archstudio/shared/skills/types'
 
 // ============================================================================
 // Types

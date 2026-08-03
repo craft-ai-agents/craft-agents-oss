@@ -102,10 +102,12 @@ export const RPC_CHANNELS = {
     READ_USER_ATTACHMENT: 'file:readUserAttachment',
     STORE_ATTACHMENT: 'file:storeAttachment',
     GENERATE_THUMBNAIL: 'file:generateThumbnail',
+    WRITE: 'file:write',
   },
   fs: {
     SEARCH: 'fs:search',
     LIST_DIRECTORY: 'fs:listDirectory',
+    READ_DIRECTORY: 'fs:readDirectory',
   },
   debug: {
     LOG: 'debug:log',
@@ -127,9 +129,29 @@ export const RPC_CHANNELS = {
     BROADCAST_WORKSPACE_THEME: 'theme:broadcastWorkspaceTheme',
     WORKSPACE_THEME_CHANGED: 'theme:workspaceThemeChanged',
   },
+  llmInference: {
+    HISTORY: 'llmInference:history',
+    HISTORY_ALL: 'llmInference:historyAll',
+    /** Push channel: broadcast when a new inference event is recorded. */
+    UPDATED: 'llmInference:updated',
+  },
+  knowledge: {
+    BUILD_GRAPH: 'knowledge:buildGraph',
+    GET_GRAPH: 'knowledge:getGraph',
+    GRAPH_STATUS: 'knowledge:graphStatus',
+    ASK: 'knowledge:ask',
+    GET_CONVERSATION: 'knowledge:getConversation',
+  },
+  health: {
+    RECORD: 'health:record',
+    HEATMAP: 'health:heatmap',
+    HEATMAP_ALL: 'health:heatmapAll',
+  },
   system: {
     VERSIONS: 'system:versions',
     HOME_DIR: 'system:homeDir',
+    /** Resolved CONFIG_DIR (honors ARCHSTUDIO_CONFIG_DIR). Never derive this from HOME_DIR. */
+    CONFIG_DIR: 'system:configDir',
     IS_DEBUG_MODE: 'system:isDebugMode',
   },
   update: {
@@ -186,6 +208,8 @@ export const RPC_CHANNELS = {
     EXCHANGE_CLAUDE_CODE: 'onboarding:exchangeClaudeCode',
     HAS_CLAUDE_OAUTH_STATE: 'onboarding:hasClaudeOAuthState',
     CLEAR_CLAUDE_OAUTH_STATE: 'onboarding:clearClaudeOAuthState',
+    GET_CONNECTED_PROVIDER: 'onboarding:getConnectedProvider',
+    SET_CONNECTED_PROVIDER: 'onboarding:setConnectedProvider',
     DEFER_SETUP: 'onboarding:deferSetup',
   },
   llmConnections: {
@@ -325,6 +349,10 @@ export const RPC_CHANNELS = {
   tools: {
     GET_BROWSER_TOOL_ENABLED: 'tools:getBrowserToolEnabled',
     SET_BROWSER_TOOL_ENABLED: 'tools:setBrowserToolEnabled',
+    GET_LOCAL_MCP_ENABLED: 'tools:getLocalMcpEnabled',
+    SET_LOCAL_MCP_ENABLED: 'tools:setLocalMcpEnabled',
+    GET_ALLOW_REMOTE_EVALUATE: 'tools:getAllowRemoteEvaluate',
+    SET_ALLOW_REMOTE_EVALUATE: 'tools:setAllowRemoteEvaluate',
   },
   caching: {
     GET_EXTENDED_PROMPT_CACHE: 'caching:getExtendedPromptCache',
@@ -350,11 +378,104 @@ export const RPC_CHANNELS = {
   },
   git: {
     GET_BRANCH: 'git:getBranch',
+    GET_USER_NAME: 'git:getUserName',
+    STATUS: 'git:status',
+    FILE_DIFF: 'git:fileDiff',
   },
   gitbash: {
     CHECK: 'gitbash:check',
     BROWSE: 'gitbash:browse',
     SET_PATH: 'gitbash:setPath',
+  },
+  archCommand: {
+    RUN: 'archCommand:run',
+    KILL: 'archCommand:kill',
+  },
+  memory: {
+    LIST: 'memory:list',
+    GET: 'memory:get',
+    CREATE: 'memory:create',
+    UPDATE: 'memory:update',
+    ARCHIVE: 'memory:archive',
+    RESTORE: 'memory:restore',
+    DELETE: 'memory:delete',
+    SEARCH: 'memory:search',
+    /** Return the active memory list plus persisted edges for the graph view. */
+    GRAPH: 'memory:graph',
+    /** Return aggregate stats: class distribution, FTS health, vault sync status. */
+    STATS: 'memory:stats',
+    /** Bulk-import memories from the Obsidian vault on disk.
+     * Wire request: none (server reads the default vault root from
+     * `DEFAULT_VAULT_ROOT`). Wire response: `{ read, imported, skipped,
+     * errors: Array<{ message, filePath? }> }`. Synchronous — small vaults
+     * (< few thousand files) finish in well under a second. */
+    IMPORT: 'memory:import',
+    /** Return the current vault path and whether it's a custom (user-configured) path. */
+    VAULT_GET: 'memory:vault:get',
+    /** Set the vault path. Wire request: `path: string`. Re-creates the vault sync singleton. */
+    VAULT_SET: 'memory:vault:set',
+    /** Open the vault root in the OS file manager. */
+    VAULT_OPEN: 'memory:vault:open',
+    /** Perform a full bidirectional sync between DB and vault. */
+    VAULT_SYNC: 'memory:vault:sync',
+    /** Get watcher status (active/inactive). */
+    VAULT_WATCHER_STATUS: 'memory:vault:watcherStatus',
+    /** Create a user-defined edge between two memories. Wire request: `{ sourceId, targetId, type, weight? }`. */
+    EDGE_CREATE: 'memory:edge:create',
+    /** Delete an edge by its ID. Wire request: `edgeId: string`. */
+    EDGE_DELETE: 'memory:edge:delete',
+    /** List all edges involving a given memory. Wire request: `memoryId: string`. */
+    EDGE_LIST: 'memory:edge:list',
+  },
+  prompts: {
+    /**
+     * Compile a prompt from the given options using the PromptCompiler.
+     * Accepts a `CompileOptions` object, returns a `CompileResult`.
+     * Uses the process-wide MemoryRepository singleton for the memory layer.
+     */
+    COMPILE: 'prompt:compile',
+    /**
+     * Invalidate the PromptCompiler's internal layer cache so the next call
+     * to `compile()` re-reads workspace context files (AGENTS.md/CLAUDE.md)
+     * and re-renders all stable layers from scratch.
+     */
+    INVALIDATE: 'prompt:invalidate',
+    /**
+     * Resolve the workspace root directory and scan for AGENTS.md / CLAUDE.md.
+     * Returns `{ workingDirectory, contextFiles }` or `null` if the workspace
+     * cannot be resolved. Used by the Prompt Studio's Project Context pane.
+     */
+    RESOLVE_CONTEXT: 'prompt:resolveContext',
+    /**
+     * Push channel: fired by the main process when a watched AGENTS.md or
+     * CLAUDE.md file changes on disk. The renderer subscribes via the
+     * `onContextFilesChanged` ElectronAPI listener and re-compiles the
+     * prompt automatically.
+     */
+    CONTEXT_FILES_CHANGED: 'prompt:contextFilesChanged',
+  },
+  media: {
+    /**
+     * Server-side cursor-paginated media list. Iterates the workspace's
+     * session tree server-side (replaces the previous N x getSessionFiles
+     * fan-out), applies an optional kind filter, and returns one page of
+     * items plus a `nextCursor` to fetch the next page.
+     *
+     * Wire shape (request): `{ kind?: MediaKind, cursor?: string, limit?: number }`
+     * Wire shape (response): `{ items: MediaItem[], hasMore: boolean, nextCursor: string | null }`
+     *
+     * Client should mirror the existing `AbortSignal` pattern (the signal is
+     * never serialized; the transport attaches a 'cancel' envelope when it
+     * fires, and the server's per-request AbortController flips).
+     */
+    LIST: 'media:list',
+    COMFY_HEALTH: 'media:comfy-health',
+    COMFY_START: 'media:comfy-start',
+    COMFY_WORKFLOWS: 'media:comfy-workflows',
+    COMFY_ARTIFACTS: 'media:comfy-artifacts',
+    COMFY_RUN: 'media:comfy-run',
+    COMFY_STATUS: 'media:comfy-status',
+    COMFY_CANCEL: 'media:comfy-cancel',
   },
   browserPane: {
     CREATE: 'browser-pane:create',

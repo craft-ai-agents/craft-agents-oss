@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import type { LabelConfig } from '@craft-agent/shared/labels';
+import type { LabelConfig } from '@archstudio/shared/labels';
 import { createLabelMenuItems, filterItems } from '../label-menu-utils';
 
 describe('createLabelMenuItems', () => {

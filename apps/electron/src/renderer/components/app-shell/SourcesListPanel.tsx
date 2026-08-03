@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
+import { maybeNormalizeMcpErrorMessage } from '@archstudio/shared/mcp/errors'
 import { DatabaseZap } from 'lucide-react'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { deriveConnectionStatus } from '@/components/ui/source-status-indicator'
@@ -115,14 +116,25 @@ export function SourcesListPanel({
         const typeConfig = SOURCE_TYPE_CONFIG[source.config.type]
         const statusConfig = SOURCE_STATUS_CONFIG[connectionStatus]
         const subtitle = source.config.tagline || source.config.provider || ''
+        const tooltipError = source.config.type === 'mcp'
+          ? maybeNormalizeMcpErrorMessage(source.config.connectionError)
+          : source.config.connectionError
+        // Only these three glow. 'untested' and 'local_disabled' are not
+        // states the user needs flagged, so they render a plain icon.
+        const ringStatus =
+          connectionStatus === 'connected' ? 'connected' as const :
+          connectionStatus === 'failed' ? 'failed' as const :
+          connectionStatus === 'needs_auth' ? 'needs_auth' as const : null
         return {
-          icon: <SourceAvatar source={source} size="sm" />,
+          icon: (
+            <SourceAvatar source={source} size="sm" ringStatus={ringStatus} />
+          ),
           title: source.config.name,
           badges: (
             <>
               {typeConfig && <EntityListBadge colorClass={typeConfig.colorClass}>{t(typeConfig.labelKey)}</EntityListBadge>}
               {statusConfig && (
-                <EntityListBadge colorClass={statusConfig.colorClass} tooltip={source.config.connectionError || undefined} className="cursor-default">
+                <EntityListBadge colorClass={statusConfig.colorClass} tooltip={tooltipError || undefined} className="cursor-default">
                   {t(statusConfig.labelKey)}
                 </EntityListBadge>
               )}
@@ -133,7 +145,7 @@ export function SourcesListPanel({
             <SourceMenu
               sourceSlug={source.config.slug}
               sourceName={source.config.name}
-              onOpenInNewWindow={() => window.electronAPI.openUrl(`craftagents://sources/source/${source.config.slug}?window=focused`)}
+              onOpenInNewWindow={() => window.electronAPI.openUrl(`archstudio://sources/source/${source.config.slug}?window=focused`)}
               onShowInFinder={() => window.electronAPI.showInFolder(source.folderPath)}
               onDelete={() => onDeleteSource(source.config.slug)}
               onSendToWorkspace={hasOtherWorkspaces ? () => {

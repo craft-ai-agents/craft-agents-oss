@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Build script for standalone Craft Agent server.
+ * Build script for standalone ARCHstudio server.
  *
  * Assembles a self-contained distribution directory with all runtime
  * dependencies, resources, and platform-specific binaries.
@@ -81,7 +81,7 @@ interface ServerBuildConfig {
 
 function showHelp(): void {
   console.log(`
-Standalone server build script for Craft Agent
+Standalone server build script for ARCHstudio
 
 Usage:
   bun run scripts/build-server.ts [options]
@@ -309,7 +309,7 @@ function copyDependencyTree(
 /**
  * Scan all .ts files in a directory tree for import/require statements
  * and return the set of external npm package names (not relative paths,
- * not node: builtins, not workspace @craft-agent/* packages).
+ * not node: builtins, not workspace @archstudio/* packages).
  */
 function scanImports(dir: string): Set<string> {
   const packages = new Set<string>();
@@ -328,7 +328,7 @@ function scanImports(dir: string): Set<string> {
         while ((match = importRe.exec(content)) !== null) {
           const spec = match[1]!;
           // Skip relative imports, node: builtins, workspace packages
-          if (spec.startsWith('.') || spec.startsWith('node:') || spec.startsWith('@craft-agent/')) continue;
+          if (spec.startsWith('.') || spec.startsWith('node:') || spec.startsWith('@archstudio/')) continue;
           // Extract package name (handle scoped: @scope/name)
           const parts = spec.split('/');
           const pkgName = spec.startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0]!;
@@ -452,7 +452,7 @@ function copyWorkspacePackages(config: ServerBuildConfig): void {
 
   // messaging-whatsapp-worker is included so dist/worker.cjs (built in step 4) ships.
   // The worker is spawned as a Node subprocess against that file at runtime; see
-  // CRAFT_MESSAGING_WA_WORKER env resolution in packages/server/src/index.ts.
+  // ARCHSTUDIO_MESSAGING_WA_WORKER env resolution in packages/server/src/index.ts.
   const packages = [
     'server',
     'server-core',
@@ -505,7 +505,7 @@ function copyWorkspacePackages(config: ServerBuildConfig): void {
 function createRootConfig(config: ServerBuildConfig): void {
   const { outputDir, version } = config;
 
-  // Root package.json with workspaces (Bun resolves @craft-agent/* through this)
+  // Root package.json with workspaces (Bun resolves @archstudio/* through this)
   const rootPkg = {
     name: 'craft-server-dist',
     version,
@@ -521,16 +521,16 @@ function createRootConfig(config: ServerBuildConfig): void {
       module: 'ESNext',
       moduleResolution: 'bundler',
       paths: {
-        '@craft-agent/server-core/*': ['./packages/server-core/src/*'],
-        '@craft-agent/shared/*': ['./packages/shared/src/*'],
-        '@craft-agent/core/*': ['./packages/core/src/*'],
-        '@craft-agent/session-tools-core/*': ['./packages/session-tools-core/src/*'],
+        '@archstudio/server-core/*': ['./packages/server-core/src/*'],
+        '@archstudio/shared/*': ['./packages/shared/src/*'],
+        '@archstudio/core/*': ['./packages/core/src/*'],
+        '@archstudio/session-tools-core/*': ['./packages/session-tools-core/src/*'],
       },
     },
   };
   writeFileSync(join(outputDir, 'tsconfig.json'), JSON.stringify(rootTsconfig, null, 2) + '\n');
 
-  // Create workspace symlinks in node_modules/@craft-agent/
+  // Create workspace symlinks in node_modules/@archstudio/
   // Bun needs these to resolve workspace package imports at runtime
   const scopeDir = join(outputDir, 'node_modules', '@craft-agent');
   mkdirSync(scopeDir, { recursive: true });
@@ -544,8 +544,8 @@ function createRootConfig(config: ServerBuildConfig): void {
       try {
         const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
         const name: string = pkgJson.name || '';
-        if (name.startsWith('@craft-agent/')) {
-          const shortName = name.replace('@craft-agent/', '');
+        if (name.startsWith('@archstudio/')) {
+          const shortName = name.replace('@archstudio/', '');
           const linkPath = join(scopeDir, shortName);
           const target = join('..', '..', 'packages', pkg);
           if (!existsSync(linkPath)) {
@@ -578,14 +578,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Set environment for resource resolution
-export CRAFT_BUNDLED_ASSETS_ROOT="$ROOT"
-export CRAFT_IS_PACKAGED=true
-export CRAFT_APP_ROOT="$ROOT"
-export CRAFT_RESOURCES_PATH="$ROOT/resources"
+export ARCHSTUDIO_BUNDLED_ASSETS_ROOT="$ROOT"
+export ARCHSTUDIO_IS_PACKAGED=true
+export ARCHSTUDIO_APP_ROOT="$ROOT"
+export ARCHSTUDIO_RESOURCES_PATH="$ROOT/resources"
 
 # CLI tools (doc tools use uv + Python scripts)
-export CRAFT_UV="$ROOT/resources/bin/uv"
-export CRAFT_SCRIPTS="$ROOT/resources/scripts"
+export ARCHSTUDIO_UV="$ROOT/resources/bin/uv"
+export ARCHSTUDIO_SCRIPTS="$ROOT/resources/scripts"
 
 # Prepend resource bin to PATH (makes doc tool wrappers available)
 export PATH="$ROOT/resources/bin:$ROOT/vendor/bun:$PATH"
@@ -597,7 +597,7 @@ exec "$ROOT/vendor/bun/bun" run "$ROOT/packages/server/src/index.ts" "$@"
 
   // start.sh — convenience entry
   const startSh = `#!/bin/sh
-# Craft Agent Server — convenience entry point
+# ARCHstudio Server — convenience entry point
 DIR="$(cd "$(dirname "$0")" && pwd)"
 exec "$DIR/bin/craft-server" "$@"
 `;
@@ -609,7 +609,7 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "=== Craft Agent Server Setup ==="
+echo "=== ARCHstudio Server Setup ==="
 echo ""
 
 # Make binaries executable
@@ -625,22 +625,22 @@ done
 echo "Binaries configured."
 
 # Generate token if not set
-if [ -z "\${CRAFT_SERVER_TOKEN:-}" ]; then
+if [ -z "\${ARCHSTUDIO_SERVER_TOKEN:-}" ]; then
   TOKEN=\$(openssl rand -hex 32)
   cat > "$DIR/.env" <<ENVFILE
-CRAFT_SERVER_TOKEN=$TOKEN
+ARCHSTUDIO_SERVER_TOKEN=$TOKEN
 
 # TLS — uncomment and set paths to enable wss://
-# CRAFT_RPC_TLS_CERT=/path/to/cert.pem
-# CRAFT_RPC_TLS_KEY=/path/to/key.pem
-# CRAFT_RPC_TLS_CA=/path/to/ca.pem
+# ARCHSTUDIO_RPC_TLS_CERT=/path/to/cert.pem
+# ARCHSTUDIO_RPC_TLS_KEY=/path/to/key.pem
+# ARCHSTUDIO_RPC_TLS_CA=/path/to/ca.pem
 ENVFILE
   echo ""
   echo "Generated server token (saved to $DIR/.env)"
 else
-  TOKEN="\$CRAFT_SERVER_TOKEN"
+  TOKEN="\$ARCHSTUDIO_SERVER_TOKEN"
   echo ""
-  echo "Using CRAFT_SERVER_TOKEN from environment."
+  echo "Using ARCHSTUDIO_SERVER_TOKEN from environment."
 fi
 
 # Systemd installation
@@ -650,12 +650,12 @@ if [ "\${1:-}" = "--systemd" ]; then
     exit 1
   fi
 
-  SERVICE_USER="\${CRAFT_USER:-\$(logname 2>/dev/null || echo craft)}"
+  SERVICE_USER="\${ARCHSTUDIO_USER:-\$(logname 2>/dev/null || echo craft)}"
   SERVICE_FILE="/etc/systemd/system/craft-server.service"
 
   cat > "$SERVICE_FILE" <<UNIT
 [Unit]
-Description=Craft Agent Server
+Description=ARCHstudio Server
 After=network.target
 
 [Service]
@@ -663,8 +663,8 @@ Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$DIR
 EnvironmentFile=$DIR/.env
-Environment=CRAFT_RPC_HOST=127.0.0.1
-Environment=CRAFT_RPC_PORT=9100
+Environment=ARCHSTUDIO_RPC_HOST=127.0.0.1
+Environment=ARCHSTUDIO_RPC_PORT=9100
 ExecStart=$DIR/bin/craft-server
 Restart=on-failure
 RestartSec=5
@@ -687,7 +687,7 @@ fi
 
 echo ""
 echo "Quick start:"
-echo "  CRAFT_SERVER_TOKEN=$TOKEN $DIR/start.sh"
+echo "  ARCHSTUDIO_SERVER_TOKEN=$TOKEN $DIR/start.sh"
 echo ""
 echo "Or with systemd:"
 echo "  sudo $DIR/install.sh --systemd"
@@ -723,14 +723,14 @@ COPY . .
 RUN chmod +x bin/craft-server vendor/bun/bun resources/bin/uv && \\
     for f in resources/bin/*; do [ -f "$f" ] && chmod +x "$f"; done
 
-ENV CRAFT_IS_PACKAGED=true
-ENV CRAFT_BUNDLED_ASSETS_ROOT=/app
-ENV CRAFT_APP_ROOT=/app
-ENV CRAFT_RESOURCES_PATH=/app/resources
-ENV CRAFT_UV=/app/resources/bin/uv
-ENV CRAFT_SCRIPTS=/app/resources/scripts
-ENV CRAFT_RPC_HOST=0.0.0.0
-ENV CRAFT_RPC_PORT=9100
+ENV ARCHSTUDIO_IS_PACKAGED=true
+ENV ARCHSTUDIO_BUNDLED_ASSETS_ROOT=/app
+ENV ARCHSTUDIO_APP_ROOT=/app
+ENV ARCHSTUDIO_RESOURCES_PATH=/app/resources
+ENV ARCHSTUDIO_UV=/app/resources/bin/uv
+ENV ARCHSTUDIO_SCRIPTS=/app/resources/scripts
+ENV ARCHSTUDIO_RPC_HOST=0.0.0.0
+ENV ARCHSTUDIO_RPC_PORT=9100
 ENV PATH="/app/resources/bin:/app/vendor/bun:\${PATH}"
 
 EXPOSE 9100
@@ -746,13 +746,13 @@ services:
     ports:
       - "9100:9100"
     environment:
-      - CRAFT_SERVER_TOKEN=\${CRAFT_SERVER_TOKEN:?Set CRAFT_SERVER_TOKEN}
-      - CRAFT_RPC_PORT=9100
+      - ARCHSTUDIO_SERVER_TOKEN=\${ARCHSTUDIO_SERVER_TOKEN:?Set ARCHSTUDIO_SERVER_TOKEN}
+      - ARCHSTUDIO_RPC_PORT=9100
       # TLS — uncomment to enable wss://
-      # - CRAFT_RPC_TLS_CERT=/certs/cert.pem
-      # - CRAFT_RPC_TLS_KEY=/certs/key.pem
+      # - ARCHSTUDIO_RPC_TLS_CERT=/certs/cert.pem
+      # - ARCHSTUDIO_RPC_TLS_KEY=/certs/key.pem
     volumes:
-      - craft-data:/root/.craft-agent
+      - craft-data:/root/.archstudio
       # TLS — mount cert directory
       # - ./certs:/certs:ro
     restart: unless-stopped
@@ -824,7 +824,7 @@ async function main(): Promise<void> {
     version,
   };
 
-  console.log(`=== Building Craft Agent Server ${version} for ${platform}-${arch} ===`);
+  console.log(`=== Building ARCHstudio Server ${version} for ${platform}-${arch} ===`);
   console.log(`  Output: ${outputDir}`);
 
   // Step 1: Clean
@@ -896,7 +896,7 @@ async function main(): Promise<void> {
 
   console.log('\n  Build completed successfully!');
   console.log(`\nQuick start:`);
-  console.log(`  CRAFT_SERVER_TOKEN=<secret> ${outputDir}/start.sh`);
+  console.log(`  ARCHSTUDIO_SERVER_TOKEN=<secret> ${outputDir}/start.sh`);
 }
 
 main();

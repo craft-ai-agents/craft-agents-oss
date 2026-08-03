@@ -39,7 +39,7 @@ describe('unified-network-interceptor SSE processors', () => {
   let sessionDir: string;
 
   beforeAll(async () => {
-    process.env.CRAFT_INTERCEPTOR_DISABLE_AUTO_INSTALL = '1';
+    process.env.ARCHSTUDIO_INTERCEPTOR_DISABLE_AUTO_INSTALL = '1';
     const mod = await import('../unified-network-interceptor.ts');
     createOpenAiSseStrippingStream = mod.createOpenAiSseStrippingStream;
     createOpenAiResponsesSseStrippingStream = mod.createOpenAiResponsesSseStrippingStream;
@@ -48,7 +48,7 @@ describe('unified-network-interceptor SSE processors', () => {
   });
 
   afterAll(() => {
-    delete process.env.CRAFT_INTERCEPTOR_DISABLE_AUTO_INSTALL;
+    delete process.env.ARCHSTUDIO_INTERCEPTOR_DISABLE_AUTO_INSTALL;
   });
 
   beforeEach(() => {

@@ -11,7 +11,7 @@
  *   handler calls complete()    → signals no more events
  */
 
-import type { AgentEvent } from '@craft-agent/core/types';
+import type { AgentEvent } from '@archstudio/core/types';
 
 export class EventQueue {
   private queue: AgentEvent[] = [];

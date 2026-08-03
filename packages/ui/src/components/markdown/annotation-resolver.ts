@@ -1,4 +1,4 @@
-import type { AnnotationV1 } from '@craft-agent/core'
+import type { AnnotationV1 } from '@archstudio/core'
 
 export interface ResolvedTextAnnotation {
   annotation: AnnotationV1

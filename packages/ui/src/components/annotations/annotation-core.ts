@@ -1,4 +1,4 @@
-import type { AnnotationV1 } from '@craft-agent/core'
+import type { AnnotationV1 } from '@archstudio/core'
 
 export const ANNOTATION_PREFIX_SUFFIX_WINDOW = 24
 export const SELECTION_POINTER_MAX_AGE_MS = 1500

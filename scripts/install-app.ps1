@@ -1,12 +1,31 @@
-# Craft Agents Windows Installer
-# Usage: irm https://agents.craft.do/install-app.ps1 | iex
+# ARCHstudio Windows Installer
+# Usage: $env:ARCHSTUDIO_VERSIONS_URL="<your-release-host>"; ./install-app.ps1
 
 & {
 $ErrorActionPreference = "Stop"
 
-$VERSIONS_URL = "https://agents.craft.do/electron"
-$DOWNLOAD_DIR = "$env:TEMP\craft-agent-install"
-$APP_NAME = "Craft Agents"
+# Binary host. Upstream published to https://agents.craft.do/electron; this
+# fork has no release host yet, so the download is disabled by default to avoid
+# pulling upstream's binaries. Set ARCHSTUDIO_VERSIONS_URL to your own
+# electron-builder "generic" host (serving latest/<yml> + installers) to enable.
+$VERSIONS_URL = $env:ARCHSTUDIO_VERSIONS_URL
+if (-not $VERSIONS_URL) {
+    Write-Host "x No binary host configured for this fork." -ForegroundColor Red
+    Write-Host "  Set ARCHSTUDIO_VERSIONS_URL to your release host, or build from source (see README.md)."
+    return
+}
+$DOWNLOAD_DIR = "$env:TEMP\archstudio-install"
+$APP_NAME = "ARCHstudio"
+$CLI_NAME = "archstudio"
+
+# Old brand identifiers, kept only so an existing pre-rebrand install can be
+# detected and cleaned up. Do not use these for anything the installer writes.
+$LEGACY_APP_NAMES = @("Craft Agents", "Craft Agent")  # brand-leak-allow: detects pre-rebrand install
+$LEGACY_INSTALL_DIRS = @(
+    "$env:LOCALAPPDATA\Programs\Craft Agents",  # brand-leak-allow
+    "$env:LOCALAPPDATA\Programs\@craft-agentelectron"
+)
+$LEGACY_BIN_DIR = "$env:LOCALAPPDATA\Craft Agents\bin"  # brand-leak-allow
 
 # Colors for output
 function Write-Info { Write-Host "> $args" -ForegroundColor Blue }
@@ -58,7 +77,7 @@ Write-Info "Latest version: $version"
 # Parse YAML to extract sha512, url (filename), and size for our architecture
 # YAML format:
 #   files:
-#     - url: Craft-Agents-x64.exe
+#     - url: ARCHstudio-x64.exe
 #       sha512: <base64>
 #       size: 123456789
 #       arch: x64
@@ -108,7 +127,7 @@ if (-not $checksum -or $checksum.Length -lt 80) {
 
 # Use default filename if not found
 if (-not $filename) {
-    $filename = "Craft-Agents-$arch.exe"
+    $filename = "$APP_NAME-$arch.exe"
 }
 
 $installerUrl = "$VERSIONS_URL/latest/$filename"
@@ -191,11 +210,13 @@ if ($actualHash -ne $checksum) {
 
 Write-Success "Checksum verified!"
 
-# Close the app if it's running
-$process = Get-Process -Name "Craft Agents" -ErrorAction SilentlyContinue
-if ($process) {
-    Write-Info "Closing Craft Agents..."
-    $process | Stop-Process -Force
+# Close the app if it's running (current brand and any pre-rebrand build)
+$running = @($APP_NAME) + $LEGACY_APP_NAMES | ForEach-Object {
+    Get-Process -Name $_ -ErrorAction SilentlyContinue
+}
+if ($running) {
+    Write-Info "Closing $APP_NAME..."
+    $running | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
 }
 
@@ -226,12 +247,104 @@ try {
 Write-Info "Cleaning up..."
 Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue
 
-# Add command line shortcut
-Write-Info "Adding 'craft-agents' command to PATH..."
+# ── Resolve where the installer actually put the app ───────────────────────
+# NSIS is configured with allowToChangeInstallationDirectory, so the install
+# root is not guaranteed. Probe the default first, then the legacy roots, then
+# fall back to whatever the Start Menu shortcut resolves to.
+$exePath = $null
+$candidateDirs = @("$env:LOCALAPPDATA\Programs\$APP_NAME") + $LEGACY_INSTALL_DIRS
+foreach ($dir in $candidateDirs) {
+    $candidate = Join-Path $dir "$APP_NAME.exe"
+    if (Test-Path $candidate) { $exePath = $candidate; break }
+}
 
-$binDir = "$env:LOCALAPPDATA\Craft Agents\bin"
-$cmdFile = "$binDir\craft-agents.cmd"
-$exePath = "$env:LOCALAPPDATA\Programs\Craft Agents\Craft Agents.exe"
+# ── Repair shortcuts left behind by the pre-rebrand install ────────────────
+# A pre-rebrand build emitted "Craft Agents.exe" (brand-leak-allow) under the mangled
+# "@craft-agentelectron" directory. A later step created an ARCHstudio-named
+# shortcut pointing at an ARCHstudio.exe that build never produced, so the
+# Start Menu entry resolves to nothing and the app cannot be reopened after an
+# update. Any shortcut of ours whose target is missing is repointed at the real
+# exe, or removed if we cannot find one.
+Write-Info "Checking shortcuts..."
+
+$shortcutDirs = @(
+    [Environment]::GetFolderPath('Desktop'),
+    [Environment]::GetFolderPath('StartMenu'),
+    [Environment]::GetFolderPath('Programs'),
+    [Environment]::GetFolderPath('CommonStartMenu'),
+    [Environment]::GetFolderPath('CommonPrograms')
+) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+
+$ourNames = @($APP_NAME) + $LEGACY_APP_NAMES
+$shell = New-Object -ComObject WScript.Shell
+$repaired = 0
+$removed = 0
+
+foreach ($dir in $shortcutDirs) {
+    $links = Get-ChildItem -Path $dir -Filter '*.lnk' -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $ourNames -contains $_.BaseName }
+
+    foreach ($link in $links) {
+        try {
+            $sc = $shell.CreateShortcut($link.FullName)
+            if ($sc.TargetPath -and (Test-Path $sc.TargetPath)) { continue }
+
+            if ($exePath) {
+                $sc.TargetPath = $exePath
+                $sc.WorkingDirectory = Split-Path $exePath -Parent
+                $sc.Save()
+                $repaired++
+            } else {
+                Remove-Item $link.FullName -Force -ErrorAction SilentlyContinue
+                $removed++
+            }
+        } catch {
+            # A shortcut we cannot read is not worth failing the install over.
+        }
+    }
+}
+
+if ($repaired -gt 0) { Write-Success "Repaired $repaired stale shortcut(s)" }
+if ($removed -gt 0)  { Write-Warn "Removed $removed shortcut(s) with no valid target" }
+
+# Ensure a desktop shortcut exists — the old install never created one.
+if ($exePath) {
+    $desktop = [Environment]::GetFolderPath('Desktop')
+    $desktopLink = Join-Path $desktop "$APP_NAME.lnk"
+    if ($desktop -and -not (Test-Path $desktopLink)) {
+        try {
+            $sc = $shell.CreateShortcut($desktopLink)
+            $sc.TargetPath = $exePath
+            $sc.WorkingDirectory = Split-Path $exePath -Parent
+            $sc.Save()
+            Write-Success "Created desktop shortcut"
+        } catch {
+            Write-Warn "Could not create desktop shortcut: $_"
+        }
+    }
+}
+
+# ── Retire the old CLI shim ────────────────────────────────────────────────
+# The pre-rebrand installer put a 'craft-agents.cmd' launcher on PATH pointing
+# at the old exe. Left in place it silently launches nothing.
+if (Test-Path $LEGACY_BIN_DIR) {
+    Remove-Item -Path $LEGACY_BIN_DIR -Recurse -Force -ErrorAction SilentlyContinue
+    $userPathNow = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($userPathNow -like "*$LEGACY_BIN_DIR*") {
+        $cleaned = ($userPathNow -split ';' | Where-Object { $_ -and $_ -ne $LEGACY_BIN_DIR }) -join ';'
+        [Environment]::SetEnvironmentVariable("Path", $cleaned, "User")
+    }
+    Write-Success "Removed the old 'craft-agents' command"
+}
+
+# Add command line shortcut
+Write-Info "Adding '$CLI_NAME' command to PATH..."
+
+$binDir = "$env:LOCALAPPDATA\$APP_NAME\bin"
+$cmdFile = "$binDir\$CLI_NAME.cmd"
+if (-not $exePath) {
+    $exePath = "$env:LOCALAPPDATA\Programs\$APP_NAME\$APP_NAME.exe"
+}
 
 # Create bin directory
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
@@ -245,9 +358,9 @@ $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($userPath -notlike "*$binDir*") {
     $newPath = "$userPath;$binDir"
     [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
-    Write-Success "Added to PATH (restart terminal to use 'craft-agents' command)"
+    Write-Success "Added to PATH (restart terminal to use '$CLI_NAME' command)"
 } else {
-    Write-Success "Command 'craft-agents' is ready"
+    Write-Success "Command '$CLI_NAME' is ready"
 }
 
 Write-Host ""
@@ -255,10 +368,10 @@ Write-Host "--------------------------------------------------------------------
 Write-Host ""
 Write-Success "Installation complete!"
 Write-Host ""
-Write-Host "  Craft Agents has been installed."
+Write-Host "  $APP_NAME has been installed."
 Write-Host ""
 Write-Host "  Launch from:"
 Write-Host "    - Start Menu or desktop shortcut"
-Write-Host "    - Command line: craft-agents (restart terminal first)"
+Write-Host "    - Command line: $CLI_NAME (restart terminal first)"
 Write-Host ""
 }

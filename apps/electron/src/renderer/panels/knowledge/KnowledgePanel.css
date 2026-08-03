@@ -1,0 +1,99 @@
+.knowledge-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #000000;
+  color: #ffffff;
+  position: relative;
+}
+
+.knowledge-panel--loading,
+.knowledge-panel--error,
+.knowledge-panel--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+
+.knowledge-panel__header {
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.knowledge-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.knowledge-panel__title h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.knowledge-panel__count {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 12px;
+  border-radius: 12px;
+}
+
+.knowledge-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.knowledge-loading__spinner {
+  animation: spin 1s linear infinite;
+  width: 32px;
+  height: 32px;
+  color: #00ccff;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.knowledge-error {
+  text-align: center;
+}
+
+.knowledge-error__title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: #ff4444;
+}
+
+.knowledge-error__message {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
+  max-width: 400px;
+}
+
+.knowledge-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.knowledge-empty p {
+  margin: 0;
+  font-size: 14px;
+}

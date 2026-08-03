@@ -8,6 +8,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEffect, useState, useMemo, useCallback } from 'react'
+import { maybeNormalizeMcpErrorMessage } from '@archstudio/shared/mcp/errors'
 import { AlertCircle } from 'lucide-react'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
@@ -28,7 +29,7 @@ import {
   type ToolRow,
 } from '@/components/info'
 import type { LoadedSource, McpToolWithPermission } from '../../shared/types'
-import type { PermissionsConfigFile } from '@craft-agent/shared/agent/modes'
+import type { PermissionsConfigFile } from '@archstudio/shared/agent/modes'
 
 interface SourceInfoPageProps {
   sourceSlug: string
@@ -314,6 +315,13 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
     return buildToolsData(mcpTools)
   }, [mcpTools])
 
+  const normalizedConnectionError = useMemo(() => {
+    if (!source?.config.connectionError) return null
+    return source.config.type === 'mcp'
+      ? maybeNormalizeMcpErrorMessage(source.config.connectionError) ?? source.config.connectionError
+      : source.config.connectionError
+  }, [source])
+
   // Handle opening URL (website or folder)
   const handleOpenUrl = useCallback(async () => {
     if (!source || !sourceUrl) return
@@ -351,7 +359,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
 
   // Handle opening in new window
   const handleOpenInNewWindow = useCallback(() => {
-    window.electronAPI.openUrl(`craftagents://sources/source/${sourceSlug}?window=focused`)
+    window.electronAPI.openUrl(`archstudio://sources/source/${sourceSlug}?window=focused`)
   }, [sourceSlug])
 
   // Get source name for header
@@ -416,7 +424,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
                 <div className="px-4 py-2 border-t border-border/30 bg-destructive/5">
                   <div className="flex items-start gap-2 text-sm text-destructive">
                     <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                    <span>{source.config.connectionError}</span>
+                    <span>{normalizedConnectionError}</span>
                   </div>
                 </div>
               )}

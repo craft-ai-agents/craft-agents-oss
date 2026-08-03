@@ -49,10 +49,15 @@ module.exports = {
       'storage.ts', // isSourceUsable is defined here
       'credential-manager.ts', // State-setting and inverse check
       'server-builder.ts', // OAuth provider checks (documented)
+      'token-refresh-manager.ts', // Mirror disk write to in-memory state on refresh failure
     ]
 
     const filename = context.filename || context.getFilename()
-    const basename = filename.split('/').pop() || ''
+    // Normalize separators so the allowlist matches on both POSIX
+    // (`packages/shared/src/sources/storage.ts`) and Windows
+    // (`packages\shared\src\sources\storage.ts`) — ESLint hands us the
+    // path with the host's native separators.
+    const basename = filename.split(/[\\/]/).pop() || ''
 
     // Allow in specific files
     if (allowedFiles.includes(basename)) {

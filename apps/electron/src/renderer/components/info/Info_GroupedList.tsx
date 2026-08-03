@@ -8,7 +8,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { cva } from 'class-variance-authority'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@archstudio/ui'
 import { cn } from '@/lib/utils'
 
 const groupHeaderVariants = cva(

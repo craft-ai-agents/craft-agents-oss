@@ -9,8 +9,8 @@
 import { app, session } from 'electron';
 import { Agent, Dispatcher, ProxyAgent, setGlobalDispatcher } from 'undici';
 import { parseNoProxyRules, shouldBypassProxy, splitCommaSeparated, type NoProxyRule } from './network-proxy-utils';
-import { getNetworkProxySettings, setNetworkProxySettings } from '@craft-agent/shared/config/storage';
-import type { NetworkProxySettings } from '@craft-agent/shared/config/types';
+import { getNetworkProxySettings, setNetworkProxySettings } from '@archstudio/shared/config/storage';
+import type { NetworkProxySettings } from '@archstudio/shared/config/types';
 import { BROWSER_PANE_SESSION_PARTITION } from './browser-pane-manager';
 import log from './logger';
 

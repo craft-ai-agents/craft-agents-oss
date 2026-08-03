@@ -20,7 +20,7 @@ import openrouterIcon from '@/assets/provider-icons/openrouter.svg'
 import piIcon from '@/assets/provider-icons/pi.svg'
 import vercelIcon from '@/assets/provider-icons/vercel.svg'
 
-import type { LlmProviderType } from '@craft-agent/shared/config/llm-connections'
+import type { LlmProviderType } from '@archstudio/shared/config/llm-connections'
 
 /**
  * Icon URLs for each provider
@@ -55,8 +55,8 @@ const providerDisplayNames: Record<string, string> = {
   minimax: 'Minimax',
   ollama: 'Ollama',
   openrouter: 'OpenRouter',
-  pi: 'Craft Agents Backend',
-  pi_compat: 'Craft Agents Backend',
+  pi: 'ARCHstudio Backend',
+  pi_compat: 'ARCHstudio Backend',
   vercel: 'Vercel',
 }
 

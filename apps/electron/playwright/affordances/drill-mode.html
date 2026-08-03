@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<!--
+  apps/electron/playwright/affordances/drill-mode.html
+
+  Captures the drill-mode chip in its visible state — the inline pill
+  that appears in the Working Directory section header when
+  `drillBaselineDepth !== null` (LayoutShell.tsx:2873).  The DOM below
+  mirrors what the production JSX renders:
+
+    <span class="wd-files-drill-chip"
+          title={`Cap overridden: ${drillBaselineDepth} → ${expandDepth}. Click ✕ to restore.`}>
+      <ChevronsDownUp size={9} />
+      <span>Drill</span>
+      <button class="wd-files-drill-chip__cancel"
+              aria-label="Cancel drill and restore original depth">✕</button>
+    </span>
+
+  Layout: pill sits in the section header, immediately to the right
+  of the file count and to the left of the depth selector popover.
+  The captured element wraps the chip + its inline cancel button.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Drill-mode chip — visible</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      /* Page-local: section header mimics the LayoutShell rail header
+         so the chip sits in the same horizontal position it would in
+         production. */
+      .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 4px 10px;
+        border-radius: 4px;
+        background: transparent;
+      }
+      .section-header__title {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--foreground);
+        letter-spacing: 0.02em;
+        margin-right: auto;
+      }
+      .arch-file-list__count {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        color: var(--shell-text-dim);
+      }
+      .arch-file-list__action {
+        font-size: 9px;
+        font-weight: 600;
+        color: var(--shell-text-dim);
+        text-decoration: none;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        background: transparent;
+        border: 0;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="affordance-stage">
+      <span class="affordance-stage__label">Drill-mode chip — override active</span>
+
+      <div class="drill-chip-affordance">
+        <div class="section-header">
+          <span class="section-header__title">Working Directory</span>
+          <span class="arch-file-list__count">7</span>
+          <button type="button" class="arch-file-list__action">Collapse all</button>
+          <!-- The drill chip itself.  In production this sits between
+               the file count and the depth popover trigger. -->
+          <span
+            class="wd-files-drill-chip"
+            title="Cap overridden: 2 → 4. Click ✕ to restore."
+            aria-live="polite"
+          >
+            <!-- ChevronsDownUp size=9: inline SVG keeps snapshots
+                 deterministic.  Two stacked v-shapes, top one pointing
+                 up and bottom one pointing down — this matches the
+                 lucide-react path verbatim so the glyph silhouette
+                 agrees with production. -->
+            <svg
+              class="wd-files-drill-chip__icon"
+              xmlns="http://www.w3.org/2000/svg"
+              width="9"
+              height="9"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m17 3 5 5-5 5"></path>
+              <path d="m7 13 5 5 5-5"></path>
+            </svg>
+            <span>Drill</span>
+            <button
+              type="button"
+              class="wd-files-drill-chip__cancel"
+              aria-label="Cancel drill and restore original depth"
+            >
+              ✕
+            </button>
+          </span>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronDown, Sparkles, Plus, Trash2, Check, X, ExternalLin
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { Spinner, LoadingIndicator, Markdown } from '@craft-agent/ui'
+import { Spinner, LoadingIndicator, Markdown } from '@archstudio/ui'
 import { ANTHROPIC_MODELS, DEFAULT_MODEL, getModelShortName } from '@config/models'
 import { useAtomValue, useStore } from 'jotai'
 import { useProjects } from '@/hooks/useProjects'

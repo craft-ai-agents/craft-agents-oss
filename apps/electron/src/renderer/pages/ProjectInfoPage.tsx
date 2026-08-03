@@ -22,11 +22,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@archstudio/ui'
 import { cn } from '@/lib/utils'
 import { PROJECT_COLOR_PALETTE } from '@/utils/project-colors'
 import { InlineColorPickerRow } from '@/components/ui/inline-color-picker-row'
-import type { LoadedProject, ProjectAsset } from '@craft-agent/shared/projects/types'
+import type { LoadedProject, ProjectAsset } from '@archstudio/shared/projects/types'
 
 interface ProjectInfoPageProps {
   projectSlug: string

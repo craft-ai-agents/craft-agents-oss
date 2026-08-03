@@ -7,7 +7,7 @@ const rule = require('../no-floating-z-tokens-in-island.cjs')
 
 function runRule(code: string, filename: string) {
   const linter = new Linter({ configType: 'eslintrc' })
-  linter.defineRule('craft-styles/no-floating-z-tokens-in-island', rule)
+  linter.defineRule('archstudio-styles/no-floating-z-tokens-in-island', rule)
 
   return linter.verify(code, {
     parserOptions: {
@@ -15,7 +15,7 @@ function runRule(code: string, filename: string) {
       sourceType: 'module',
     },
     rules: {
-      'craft-styles/no-floating-z-tokens-in-island': 'error',
+      'archstudio-styles/no-floating-z-tokens-in-island': 'error',
     },
   }, filename)
 }

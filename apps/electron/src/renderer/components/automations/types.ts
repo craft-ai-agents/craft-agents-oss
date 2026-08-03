@@ -4,7 +4,7 @@
  * UI-specific types for the automations components.
  *
  * ARCHITECTURE NOTE: These types are mirrored from packages/shared/src/automations/types.ts.
- * The renderer runs in a browser context and CANNOT import from @craft-agent/shared,
+ * The renderer runs in a browser context and CANNOT import from @archstudio/shared,
  * which uses Node.js APIs (crypto, fs, etc.). Additionally, the automations package is not
  * exported as a package entry point. These types must be manually kept in sync.
  * See apps/electron/CLAUDE.md "Common Mistake: Node.js APIs in Renderer".
@@ -12,7 +12,7 @@
 
 import { computeNextRuns } from './utils'
 import type { PermissionMode } from '../../../shared/types'
-import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
+import type { ThinkingLevel } from '@archstudio/shared/agent/thinking-levels'
 import { DEFAULT_WEBHOOK_METHOD } from './constants'
 
 // ============================================================================

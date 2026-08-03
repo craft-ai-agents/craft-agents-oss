@@ -2,14 +2,18 @@ import { describe, it, expect, afterEach } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { pathToFileURL } from 'node:url';
 
 const originalCwd = process.cwd();
-const originalConfigDir = process.env.CRAFT_CONFIG_DIR;
+const originalConfigDir = process.env.ARCHSTUDIO_CONFIG_DIR;
+
+// file URL (forward slashes) so the path survives subprocess --eval on Windows.
+const PERMISSIONS_CONFIG_MODULE = pathToFileURL(join(import.meta.dir, '..', 'permissions-config.ts')).href;
 
 afterEach(() => {
   process.chdir(originalCwd);
-  if (originalConfigDir === undefined) delete process.env.CRAFT_CONFIG_DIR;
-  else process.env.CRAFT_CONFIG_DIR = originalConfigDir;
+  if (originalConfigDir === undefined) delete process.env.ARCHSTUDIO_CONFIG_DIR;
+  else process.env.ARCHSTUDIO_CONFIG_DIR = originalConfigDir;
 });
 
 describe('ensureDefaultPermissions migration', () => {
@@ -55,11 +59,25 @@ describe('ensureDefaultPermissions migration', () => {
       }, null, 2)
     );
 
-    process.env.CRAFT_CONFIG_DIR = tempConfig;
-    process.chdir(tempRoot);
-
-    const mod = await import(`../permissions-config.ts?case=${Date.now()}`);
-    mod.ensureDefaultPermissions();
+    // Run ensureDefaultPermissions in a fresh subprocess: CONFIG_DIR is captured
+    // from ARCHSTUDIO_CONFIG_DIR at module load, and a worker process may reuse a
+    // previously-loaded paths.ts (with the default CONFIG_DIR), making an in-process
+    // env override flaky. The subprocess chdirs to tempRoot so the bundled assets
+    // dir (cwd/resources/permissions) resolves to the fixture; the parent keeps its
+    // own cwd so cleanup rmSync doesn't hit EBUSY.
+    const run = Bun.spawnSync([process.execPath, '--eval', `
+      import { ensureDefaultPermissions } from '${PERMISSIONS_CONFIG_MODULE}';
+      ensureDefaultPermissions();
+    `], {
+      cwd: tempRoot,
+      env: { ...process.env, ARCHSTUDIO_CONFIG_DIR: tempConfig },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    expect(run.exitCode).toBe(0);
+    if (run.exitCode !== 0) {
+      console.error(run.stderr.toString());
+    }
 
     const merged = JSON.parse(readFileSync(join(installedDir, 'default.json'), 'utf-8'));
 

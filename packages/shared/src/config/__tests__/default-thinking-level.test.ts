@@ -69,7 +69,7 @@ function runEval(configDir: string, code: string): string {
     '--eval',
     `import { getDefaultThinkingLevel, setDefaultThinkingLevel } from '${STORAGE_MODULE_PATH}'; ${code}`,
   ], {
-    env: { ...process.env, CRAFT_CONFIG_DIR: configDir },
+    env: { ...process.env, ARCHSTUDIO_CONFIG_DIR: configDir },
     stdout: 'pipe',
     stderr: 'pipe',
   })

@@ -6,7 +6,7 @@
  * re-imports these — do not duplicate the logic there.
  *
  * Two distinct transforms live here:
- *   - `normalizeFollowUpText` (re-exported from `@craft-agent/ui`) — the
+ *   - `normalizeFollowUpText` (re-exported from `@archstudio/ui`) — the
  *     content-preserving whitespace collapse used for the agent-facing
  *     message. NO length cap.
  *   - `truncateForChipTooltip` — UI helper that shortens + ellipsizes for
@@ -16,7 +16,7 @@
  *     accidentally reused it.
  */
 
-import { normalizeFollowUpText } from '@craft-agent/ui/annotations/follow-up-state'
+import { normalizeFollowUpText } from '@archstudio/ui/annotations/follow-up-state'
 
 export type PendingFollowUpAnnotation = {
   messageId: string

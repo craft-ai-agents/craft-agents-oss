@@ -178,6 +178,93 @@ describe('PermissionManager', () => {
     });
   });
 
+  describe('Retry Hint', () => {
+
+    it('returns retryHint with retryable=true for allowed tools in ask mode', () => {
+      permissionManager.setPermissionMode('ask');
+      const result = permissionManager.evaluateToolCall('Bash', { command: 'ls -la' });
+      expect(result.allowed).toBe(true);
+      expect(result.retryHint).toBeDefined();
+      expect(result.retryHint!.retryable).toBe(true);
+      expect(result.retryHint!.maxRetries).toBe(3);
+      expect(result.retryHint!.backoffMs).toBeGreaterThan(0);
+    });
+
+    it('returns retryHint with retryable=true for allowed tools in allow-all mode', () => {
+      permissionManager.setPermissionMode('allow-all');
+      const result = permissionManager.evaluateToolCall('Bash', { command: 'sudo rm -rf /' });
+      expect(result.allowed).toBe(true);
+      expect(result.retryHint).toBeDefined();
+      expect(result.retryHint!.retryable).toBe(true);
+      expect(result.retryHint!.maxRetries).toBe(3);
+    });
+
+    it('returns retryHint with retryable=true for allowed tools in safe mode', () => {
+      permissionManager.setPermissionMode('safe');
+      const result = permissionManager.evaluateToolCall('Read', { file_path: '/test/file.txt' });
+      expect(result.allowed).toBe(true);
+      expect(result.retryHint).toBeDefined();
+      expect(result.retryHint!.retryable).toBe(true);
+    });
+
+    it('returns retryHint with retryable=false and reason for blocked tools', () => {
+      permissionManager.setPermissionMode('safe');
+      const result = permissionManager.evaluateToolCall('Write', { file_path: '/test/file.txt', content: 'data' });
+      expect(result.allowed).toBe(false);
+      expect(result.retryHint).toBeDefined();
+      expect(result.retryHint!.retryable).toBe(false);
+      expect(result.retryHint!.maxRetries).toBe(0);
+      expect(typeof result.retryHint!.reason).toBe('string');
+      expect(result.retryHint!.reason!.length).toBeGreaterThan(0);
+    });
+
+    it('returns retryHint with retryable=true and defaults in ask mode', () => {
+      permissionManager.setPermissionMode('ask');
+      const result = permissionManager.evaluateToolCall('Bash', { command: 'rm /tmp/test.txt' });
+      // In ask mode, all commands are allowed (requiresPermission is handled
+      // at the PreToolUse pipeline level, not by shouldAllowToolInMode).
+      expect(result.allowed).toBe(true);
+      expect(result.retryHint).toBeDefined();
+      expect(result.retryHint!.retryable).toBe(true);
+      expect(result.retryHint!.maxRetries).toBe(PermissionManager.DEFAULT_RETRY_CONFIG.maxRetries);
+    });
+
+    it('respects custom retryDefaults from config', () => {
+      const customPm = new PermissionManager({
+        workspaceId: 'test-workspace',
+        sessionId: TEST_SESSION_ID,
+        retryDefaults: { maxRetries: 5, backoffMs: 2000 },
+      });
+      initializeModeState(TEST_SESSION_ID, 'allow-all');
+      const result = customPm.evaluateToolCall('Bash', { command: 'ls' });
+      expect(result.allowed).toBe(true);
+      expect(result.retryHint).toBeDefined();
+      expect(result.retryHint!.maxRetries).toBe(5);
+      expect(result.retryHint!.backoffMs).toBe(2000);
+    });
+
+    it('uses defaults when retryDefaults is not configured', () => {
+      const defaultPm = new PermissionManager({
+        workspaceId: 'test-workspace',
+        sessionId: TEST_SESSION_ID,
+      });
+      initializeModeState(TEST_SESSION_ID, 'allow-all');
+      const result = defaultPm.evaluateToolCall('Bash', { command: 'ls' });
+      expect(result.retryHint).toBeDefined();
+      expect(result.retryHint!.maxRetries).toBe(PermissionManager.DEFAULT_RETRY_CONFIG.maxRetries);
+      expect(result.retryHint!.backoffMs).toBe(PermissionManager.DEFAULT_RETRY_CONFIG.backoffMs);
+    });
+
+    it('returns retryHint for blocked bash commands in safe mode', () => {
+      permissionManager.setPermissionMode('safe');
+      const result = permissionManager.evaluateToolCall('Bash', { command: 'rm -rf /' });
+      expect(result.allowed).toBe(false);
+      expect(result.retryHint).toBeDefined();
+      expect(result.retryHint!.retryable).toBe(false);
+      expect(result.retryHint!.reason).toMatch(/blocked|allowed|safe|mode|write/i);
+    });
+  });
+
   describe('Context Management', () => {
     it('should update working directory', () => {
       permissionManager.updateWorkingDirectory('/new/path');

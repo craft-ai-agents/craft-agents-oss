@@ -7,8 +7,8 @@ import { expandWebhookAction } from './webhook-utils.ts';
 import type { WebhookAction } from './types.ts';
 
 const env = {
-  CRAFT_WH_SESSION_ID: 'sess-123',
-  CRAFT_WH_EVENT: 'LabelAdd',
+  ARCHSTUDIO_WH_SESSION_ID: 'sess-123',
+  ARCHSTUDIO_WH_EVENT: 'LabelAdd',
   API_TOKEN: 'tok-secret',
 };
 
@@ -16,7 +16,7 @@ describe('expandWebhookAction', () => {
   it('expands URL templates', () => {
     const action: WebhookAction = {
       type: 'webhook',
-      url: 'https://api.example.com/hook/${CRAFT_WH_SESSION_ID}',
+      url: 'https://api.example.com/hook/${ARCHSTUDIO_WH_SESSION_ID}',
     };
     const result = expandWebhookAction(action, env);
     expect(result.url).toBe('https://api.example.com/hook/sess-123');
@@ -26,7 +26,7 @@ describe('expandWebhookAction', () => {
     const action: WebhookAction = {
       type: 'webhook',
       url: 'https://api.example.com',
-      headers: { 'X-Event': '${CRAFT_WH_EVENT}', 'X-Static': 'unchanged' },
+      headers: { 'X-Event': '${ARCHSTUDIO_WH_EVENT}', 'X-Static': 'unchanged' },
     };
     const result = expandWebhookAction(action, env);
     expect(result.headers).toEqual({ 'X-Event': 'LabelAdd', 'X-Static': 'unchanged' });
@@ -36,7 +36,7 @@ describe('expandWebhookAction', () => {
     const action: WebhookAction = {
       type: 'webhook',
       url: 'https://api.example.com',
-      body: 'session=${CRAFT_WH_SESSION_ID}',
+      body: 'session=${ARCHSTUDIO_WH_SESSION_ID}',
       bodyFormat: 'raw',
     };
     const result = expandWebhookAction(action, env);
@@ -47,7 +47,7 @@ describe('expandWebhookAction', () => {
     const action: WebhookAction = {
       type: 'webhook',
       url: 'https://api.example.com',
-      body: { id: '${CRAFT_WH_SESSION_ID}', event: '${CRAFT_WH_EVENT}' },
+      body: { id: '${ARCHSTUDIO_WH_SESSION_ID}', event: '${ARCHSTUDIO_WH_EVENT}' },
     };
     const result = expandWebhookAction(action, env);
     expect(result.body).toEqual({ id: 'sess-123', event: 'LabelAdd' });
@@ -57,7 +57,7 @@ describe('expandWebhookAction', () => {
     const action: WebhookAction = {
       type: 'webhook',
       url: 'https://api.example.com',
-      auth: { type: 'basic', username: '${CRAFT_WH_SESSION_ID}', password: '${API_TOKEN}' },
+      auth: { type: 'basic', username: '${ARCHSTUDIO_WH_SESSION_ID}', password: '${API_TOKEN}' },
     };
     const result = expandWebhookAction(action, env);
     expect(result.auth).toEqual({ type: 'basic', username: 'sess-123', password: 'tok-secret' });

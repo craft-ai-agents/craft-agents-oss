@@ -1,0 +1,59 @@
+/* =============================================================================
+   TYPOGRAPHY — families, scale, weights.
+
+   Two families only: Inter for UI, JetBrains Mono for anything the machine
+   produced (paths, code, output, ids, token counts). Mixing a third face is
+   how a tool app starts looking like a template.
+============================================================================= */
+
+:root {
+  --ds-font-ui: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --ds-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Scale — tight ratio, because dense tool UIs break under big jumps. */
+  --ds-text-2xs: 10px;
+  --ds-text-xs: 11px;
+  --ds-text-sm: 12px;
+  --ds-text-base: 13px;
+  --ds-text-md: 14px;
+  --ds-text-lg: 16px;
+  --ds-text-xl: 20px;
+  --ds-text-2xl: 26px;
+  --ds-text-display: 34px;
+
+  --ds-weight-regular: 400;
+  --ds-weight-medium: 500;
+  --ds-weight-semibold: 600;
+  --ds-weight-bold: 700;
+
+  --ds-leading-tight: 1.25;
+  --ds-leading-normal: 1.5;
+  --ds-leading-relaxed: 1.65;
+
+  --ds-tracking-tight: -0.01em;
+  --ds-tracking-normal: 0;
+  --ds-tracking-wide: 0.04em;
+}
+
+/* Section label — the small uppercase headers used across panel sections. */
+.ds-section-label {
+  font-size: var(--ds-text-base);
+  font-weight: var(--ds-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--ds-tracking-wide);
+  color: var(--ds-text-secondary);
+}
+
+/* Machine text — paths, ids, output, counts. */
+.ds-mono {
+  font-family: var(--ds-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Brand wordmark treatment: lime-to-purple across the type itself. */
+.ds-brand-text {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}

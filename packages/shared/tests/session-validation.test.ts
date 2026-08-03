@@ -163,12 +163,12 @@ describe('isValidSessionId', () => {
 // ============================================================
 
 describe('getSessionPath - defense in depth', () => {
-  const workspaceRoot = '/Users/test/.craft-agent/workspaces/test-workspace';
-  const expectedSessionsDir = `${workspaceRoot}/sessions`;
+  const workspaceRoot = '/Users/test/.archstudio/workspaces/test-workspace';
+  const expectedSessionsDir = join(workspaceRoot, 'sessions');
 
   it('returns correct path for valid session IDs', () => {
     const result = getSessionPath(workspaceRoot, '260202-swift-river');
-    expect(result).toBe(`${expectedSessionsDir}/260202-swift-river`);
+    expect(result).toBe(join(expectedSessionsDir, '260202-swift-river'));
   });
 
   it('sanitizes path traversal attempts - path stays within workspace', () => {
@@ -176,7 +176,7 @@ describe('getSessionPath - defense in depth', () => {
     const result = getSessionPath(workspaceRoot, '../../../tmp');
 
     // The path should NOT escape the sessions directory
-    expect(result).toBe(`${expectedSessionsDir}/tmp`);
+    expect(result).toBe(join(expectedSessionsDir, 'tmp'));
     expect(result.startsWith(expectedSessionsDir)).toBe(true);
 
     // Verify it doesn't contain path traversal
@@ -185,38 +185,38 @@ describe('getSessionPath - defense in depth', () => {
 
   it('sanitizes deep path traversal - stays within workspace', () => {
     const result = getSessionPath(workspaceRoot, '../../../../../../../../tmp');
-    expect(result).toBe(`${expectedSessionsDir}/tmp`);
+    expect(result).toBe(join(expectedSessionsDir, 'tmp'));
     expect(result.startsWith(expectedSessionsDir)).toBe(true);
   });
 
   it('sanitizes absolute path attempts', () => {
     const result = getSessionPath(workspaceRoot, '/etc/passwd');
-    expect(result).toBe(`${expectedSessionsDir}/passwd`);
+    expect(result).toBe(join(expectedSessionsDir, 'passwd'));
     expect(result.startsWith(expectedSessionsDir)).toBe(true);
   });
 
   it('sanitizes mixed traversal attempts', () => {
     const result = getSessionPath(workspaceRoot, 'foo/../../../etc/passwd');
     // basename() returns 'passwd' for this input
-    expect(result).toBe(`${expectedSessionsDir}/passwd`);
+    expect(result).toBe(join(expectedSessionsDir, 'passwd'));
     expect(result.startsWith(expectedSessionsDir)).toBe(true);
   });
 });
 
 describe('getSessionAttachmentsPath - defense in depth', () => {
-  const workspaceRoot = '/Users/test/.craft-agent/workspaces/test-workspace';
-  const expectedSessionsDir = `${workspaceRoot}/sessions`;
+  const workspaceRoot = '/Users/test/.archstudio/workspaces/test-workspace';
+  const expectedSessionsDir = join(workspaceRoot, 'sessions');
 
   it('returns correct path for valid session IDs', () => {
     const result = getSessionAttachmentsPath(workspaceRoot, '260202-swift-river');
-    expect(result).toBe(`${expectedSessionsDir}/260202-swift-river/attachments`);
+    expect(result).toBe(join(expectedSessionsDir, '260202-swift-river', 'attachments'));
   });
 
   it('sanitizes path traversal - attachments path stays within workspace', () => {
     const result = getSessionAttachmentsPath(workspaceRoot, '../../../tmp');
 
     // Should resolve to sessions/tmp/attachments, NOT /tmp/attachments
-    expect(result).toBe(`${expectedSessionsDir}/tmp/attachments`);
+    expect(result).toBe(join(expectedSessionsDir, 'tmp', 'attachments'));
     expect(result.startsWith(expectedSessionsDir)).toBe(true);
     expect(result.includes('..')).toBe(false);
   });
@@ -228,29 +228,29 @@ describe('getSessionAttachmentsPath - defense in depth', () => {
 
     // CRITICAL: Must NOT resolve to /tmp/attachments
     expect(result).not.toBe('/tmp/attachments');
-    expect(result).toBe(`${expectedSessionsDir}/tmp/attachments`);
+    expect(result).toBe(join(expectedSessionsDir, 'tmp', 'attachments'));
     expect(result.startsWith(expectedSessionsDir)).toBe(true);
   });
 });
 
 describe('getSessionPlansPath - defense in depth', () => {
-  const workspaceRoot = '/Users/test/.craft-agent/workspaces/test-workspace';
-  const expectedSessionsDir = `${workspaceRoot}/sessions`;
+  const workspaceRoot = '/Users/test/.archstudio/workspaces/test-workspace';
+  const expectedSessionsDir = join(workspaceRoot, 'sessions');
 
   it('sanitizes path traversal attempts', () => {
     const result = getSessionPlansPath(workspaceRoot, '../../../tmp');
-    expect(result).toBe(`${expectedSessionsDir}/tmp/plans`);
+    expect(result).toBe(join(expectedSessionsDir, 'tmp', 'plans'));
     expect(result.startsWith(expectedSessionsDir)).toBe(true);
   });
 });
 
 describe('getSessionDownloadsPath - defense in depth', () => {
-  const workspaceRoot = '/Users/test/.craft-agent/workspaces/test-workspace';
-  const expectedSessionsDir = `${workspaceRoot}/sessions`;
+  const workspaceRoot = '/Users/test/.archstudio/workspaces/test-workspace';
+  const expectedSessionsDir = join(workspaceRoot, 'sessions');
 
   it('sanitizes path traversal attempts', () => {
     const result = getSessionDownloadsPath(workspaceRoot, '../../../tmp');
-    expect(result).toBe(`${expectedSessionsDir}/tmp/downloads`);
+    expect(result).toBe(join(expectedSessionsDir, 'tmp', 'downloads'));
     expect(result.startsWith(expectedSessionsDir)).toBe(true);
   });
 });
@@ -260,14 +260,15 @@ describe('getSessionDownloadsPath - defense in depth', () => {
 // ============================================================
 
 describe('path normalization safety', () => {
-  const workspaceRoot = '/Users/test/.craft-agent/workspaces/test-workspace';
+  const workspaceRoot = '/Users/test/.archstudio/workspaces/test-workspace';
+  const rootNorm = normalize(workspaceRoot);
 
   it('normalized path still stays within workspace', () => {
     const result = getSessionPath(workspaceRoot, '../../../tmp');
     const normalized = normalize(result);
 
     // Even after normalization, path should be safe
-    expect(normalized.startsWith(workspaceRoot)).toBe(true);
+    expect(normalized.startsWith(rootNorm)).toBe(true);
   });
 
   it('join() with sanitized input produces safe path', () => {
@@ -276,7 +277,7 @@ describe('path normalization safety', () => {
     const sanitized = sanitizeSessionId(maliciousInput); // Returns 'tmp'
     const result = join(workspaceRoot, 'sessions', sanitized);
 
-    expect(result).toBe(`${workspaceRoot}/sessions/tmp`);
-    expect(result.startsWith(workspaceRoot)).toBe(true);
+    expect(result).toBe(join(workspaceRoot, 'sessions', sanitized));
+    expect(result.startsWith(rootNorm)).toBe(true);
   });
 });

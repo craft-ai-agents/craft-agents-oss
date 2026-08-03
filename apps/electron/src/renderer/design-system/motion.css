@@ -1,0 +1,61 @@
+/* =============================================================================
+   MOTION — duration, easing, and named transitions.
+
+   Rule of thumb: state feedback is instant (fast), things that move across the
+   screen get medium, and only entrances/exits earn slow. Everything here
+   collapses to 0 under prefers-reduced-motion.
+============================================================================= */
+
+:root {
+  --ds-duration-instant: 80ms;
+  --ds-duration-fast: 140ms;
+  --ds-duration-medium: 220ms;
+  --ds-duration-slow: 360ms;
+
+  /* Standard: most UI. Decelerate: entrances. Accelerate: exits.
+     Spring: playful emphasis (brand moments only). */
+  --ds-ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
+  --ds-ease-decelerate: cubic-bezier(0, 0, 0.2, 1);
+  --ds-ease-accelerate: cubic-bezier(0.4, 0, 1, 1);
+  --ds-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --ds-transition-color: color var(--ds-duration-fast) var(--ds-ease-standard),
+    background-color var(--ds-duration-fast) var(--ds-ease-standard),
+    border-color var(--ds-duration-fast) var(--ds-ease-standard);
+  --ds-transition-transform: transform var(--ds-duration-medium) var(--ds-ease-standard);
+  --ds-transition-elevation: box-shadow var(--ds-duration-medium) var(--ds-ease-standard);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ds-duration-instant: 0ms;
+    --ds-duration-fast: 0ms;
+    --ds-duration-medium: 0ms;
+    --ds-duration-slow: 0ms;
+  }
+}
+
+/* Indeterminate progress — used by run/tool cards while a job is live. */
+@keyframes ds-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ds-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.ds-spin {
+  animation: ds-spin 1s linear infinite;
+}
+
+.ds-pulse {
+  animation: ds-pulse 1.6s var(--ds-ease-standard) infinite;
+}

@@ -1,10 +1,10 @@
 import { existsSync } from 'node:fs'
 import { join } from 'path'
-import { homedir } from 'os'
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, updateWorkspaceRemoteServer } from '@craft-agent/shared/config'
-import { perf } from '@craft-agent/shared/utils'
-import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
+import { RPC_CHANNELS } from '@archstudio/shared/protocol'
+import { getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, updateWorkspaceRemoteServer } from '@archstudio/shared/config'
+import { CONFIG_DIR } from '@archstudio/shared/config/paths.ts'
+import { perf } from '@archstudio/shared/utils'
+import { pushTyped, type RpcServer } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { isValidWorkspaceRootPath } from '../../utils/path-validation'
 
@@ -60,7 +60,7 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
 
   // Check if a workspace slug already exists (for validation before creation)
   server.handle(RPC_CHANNELS.workspaces.CHECK_SLUG, async (_ctx, slug: string) => {
-    const defaultWorkspacesDir = join(homedir(), '.craft-agent', 'workspaces')
+    const defaultWorkspacesDir = join(CONFIG_DIR, 'workspaces')
     const workspacePath = join(defaultWorkspacesDir, slug)
     const exists = existsSync(workspacePath)
     return { exists, path: workspacePath }
@@ -278,28 +278,28 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   // ============================================================
 
   server.handle(RPC_CHANNELS.theme.GET_APP, async () => {
-    const { loadAppTheme } = await import('@craft-agent/shared/config/storage')
+    const { loadAppTheme } = await import('@archstudio/shared/config/storage')
     return loadAppTheme()
   })
 
   // Preset themes (app-level)
   server.handle(RPC_CHANNELS.theme.GET_PRESETS, async () => {
-    const { loadPresetThemes } = await import('@craft-agent/shared/config/storage')
+    const { loadPresetThemes } = await import('@archstudio/shared/config/storage')
     return loadPresetThemes()
   })
 
   server.handle(RPC_CHANNELS.theme.LOAD_PRESET, async (_ctx, themeId: string) => {
-    const { loadPresetTheme } = await import('@craft-agent/shared/config/storage')
+    const { loadPresetTheme } = await import('@archstudio/shared/config/storage')
     return loadPresetTheme(themeId)
   })
 
   server.handle(RPC_CHANNELS.theme.GET_COLOR_THEME, async () => {
-    const { getColorTheme } = await import('@craft-agent/shared/config/storage')
+    const { getColorTheme } = await import('@archstudio/shared/config/storage')
     return getColorTheme()
   })
 
   server.handle(RPC_CHANNELS.theme.SET_COLOR_THEME, async (_ctx, themeId: string) => {
-    const { setColorTheme } = await import('@craft-agent/shared/config/storage')
+    const { setColorTheme } = await import('@archstudio/shared/config/storage')
     setColorTheme(themeId)
   })
 
@@ -310,8 +310,8 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
 
   // Workspace-level theme overrides
   server.handle(RPC_CHANNELS.theme.GET_WORKSPACE_COLOR_THEME, async (_ctx, workspaceId: string) => {
-    const { getWorkspaces } = await import('@craft-agent/shared/config/storage')
-    const { getWorkspaceColorTheme } = await import('@craft-agent/shared/workspaces/storage')
+    const { getWorkspaces } = await import('@archstudio/shared/config/storage')
+    const { getWorkspaceColorTheme } = await import('@archstudio/shared/workspaces/storage')
     const workspaces = getWorkspaces()
     const workspace = workspaces.find(w => w.id === workspaceId)
     if (!workspace) return null
@@ -319,8 +319,8 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   })
 
   server.handle(RPC_CHANNELS.theme.SET_WORKSPACE_COLOR_THEME, async (_ctx, workspaceId: string, themeId: string | null) => {
-    const { getWorkspaces } = await import('@craft-agent/shared/config/storage')
-    const { setWorkspaceColorTheme } = await import('@craft-agent/shared/workspaces/storage')
+    const { getWorkspaces } = await import('@archstudio/shared/config/storage')
+    const { setWorkspaceColorTheme } = await import('@archstudio/shared/workspaces/storage')
     const workspaces = getWorkspaces()
     const workspace = workspaces.find(w => w.id === workspaceId)
     if (!workspace) return
@@ -328,8 +328,8 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   })
 
   server.handle(RPC_CHANNELS.theme.GET_ALL_WORKSPACE_THEMES, async () => {
-    const { getWorkspaces } = await import('@craft-agent/shared/config/storage')
-    const { getWorkspaceColorTheme } = await import('@craft-agent/shared/workspaces/storage')
+    const { getWorkspaces } = await import('@archstudio/shared/config/storage')
+    const { getWorkspaceColorTheme } = await import('@archstudio/shared/workspaces/storage')
     const workspaces = getWorkspaces()
     const themes: Record<string, string | undefined> = {}
     for (const ws of workspaces) {
@@ -352,16 +352,16 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { listViews } = await import('@craft-agent/shared/views/storage')
+    const { listViews } = await import('@archstudio/shared/views/storage')
     return listViews(workspace.rootPath)
   })
 
   // Save views (replaces full array)
-  server.handle(RPC_CHANNELS.views.SAVE, async (_ctx, workspaceId: string, views: import('@craft-agent/shared/views').ViewConfig[]) => {
+  server.handle(RPC_CHANNELS.views.SAVE, async (_ctx, workspaceId: string, views: import('@archstudio/shared/views').ViewConfig[]) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { saveViews } = await import('@craft-agent/shared/views/storage')
+    const { saveViews } = await import('@archstudio/shared/views/storage')
     saveViews(workspace.rootPath, views)
     // Broadcast labels changed since views are used alongside labels in sidebar
     pushTyped(server, RPC_CHANNELS.labels.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
@@ -374,9 +374,9 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   // Tool icon mappings — loads tool-icons.json and resolves each entry's icon to a data URL
   // for display in the Appearance settings page
   server.handle(RPC_CHANNELS.toolIcons.GET_MAPPINGS, async () => {
-    const { getToolIconsDir } = await import('@craft-agent/shared/config/storage')
-    const { loadToolIconConfig } = await import('@craft-agent/shared/utils/cli-icon-resolver')
-    const { encodeIconToDataUrl } = await import('@craft-agent/shared/utils/icon-encoder')
+    const { getToolIconsDir } = await import('@archstudio/shared/config/storage')
+    const { loadToolIconConfig } = await import('@archstudio/shared/utils/cli-icon-resolver')
+    const { encodeIconToDataUrl } = await import('@archstudio/shared/utils/icon-encoder')
     const { join } = await import('path')
 
     const toolIconsDir = getToolIconsDir()
@@ -400,7 +400,7 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
 
   // Logo URL resolution (uses Node.js filesystem cache for provider domains)
   server.handle(RPC_CHANNELS.logo.GET_URL, async (_ctx, serviceUrl: string, provider?: string) => {
-    const { getLogoUrl } = await import('@craft-agent/shared/utils/logo')
+    const { getLogoUrl } = await import('@archstudio/shared/utils/logo')
     const result = getLogoUrl(serviceUrl, provider)
     return result
   })

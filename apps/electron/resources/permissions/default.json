@@ -102,44 +102,44 @@
       "comment": "CLI tools: bare invocation (prints help)"
     },
     {
-      "pattern": "^craft-agent\\s+label\\s+(list|get|auto-rule-list|auto-rule-validate)\\b",
-      "comment": "craft-agent label read-only operations"
+      "pattern": "^archstudio\\s+label\\s+(list|get|auto-rule-list|auto-rule-validate)\\b",
+      "comment": "archstudio label read-only operations"
     },
     {
-      "pattern": "^craft-agent\\s+source\\s+(list|get|validate|test|auth-help)\\b",
-      "comment": "craft-agent source read-only operations"
+      "pattern": "^archstudio\\s+source\\s+(list|get|validate|test|auth-help)\\b",
+      "comment": "archstudio source read-only operations"
     },
     {
-      "pattern": "^craft-agent\\s+skill\\s+(list|get|validate|where)\\b",
-      "comment": "craft-agent skill read-only operations"
+      "pattern": "^archstudio\\s+skill\\s+(list|get|validate|where)\\b",
+      "comment": "archstudio skill read-only operations"
     },
     {
-      "pattern": "^craft-agent\\s+automation\\s+(list|get|validate|history|last-executed|test|lint)\\b",
-      "comment": "craft-agent automation read-only operations"
+      "pattern": "^archstudio\\s+automation\\s+(list|get|validate|history|last-executed|test|lint)\\b",
+      "comment": "archstudio automation read-only operations"
     },
     {
-      "pattern": "^craft-agent\\s+permission\\s+(list|get|validate)\\b",
-      "comment": "craft-agent permission read-only operations"
+      "pattern": "^archstudio\\s+permission\\s+(list|get|validate)\\b",
+      "comment": "archstudio permission read-only operations"
     },
     {
-      "pattern": "^craft-agent\\s+theme\\s+(get|validate|list-presets|get-preset)\\b",
-      "comment": "craft-agent theme read-only operations"
+      "pattern": "^archstudio\\s+theme\\s+(get|validate|list-presets|get-preset)\\b",
+      "comment": "archstudio theme read-only operations"
     },
     {
-      "pattern": "^craft-agent\\s*$",
-      "comment": "craft-agent bare invocation (prints help)"
+      "pattern": "^archstudio\\s*$",
+      "comment": "archstudio bare invocation (prints help)"
     },
     {
-      "pattern": "^craft-agent\\s+(label|source|skill|automation|permission|theme)\\s*$",
-      "comment": "craft-agent entity help"
+      "pattern": "^archstudio\\s+(label|source|skill|automation|permission|theme)\\s*$",
+      "comment": "archstudio entity help"
     },
     {
-      "pattern": "^craft-agent\\s+(label|source|skill|automation|permission|theme)\\s+--help\\b",
-      "comment": "craft-agent entity help flags"
+      "pattern": "^archstudio\\s+(label|source|skill|automation|permission|theme)\\s+--help\\b",
+      "comment": "archstudio entity help flags"
     },
     {
-      "pattern": "^craft-agent\\s+--(help|version|discover)\\b",
-      "comment": "craft-agent global flags"
+      "pattern": "^archstudio\\s+--(help|version|discover)\\b",
+      "comment": "archstudio global flags"
     },
     {
       "pattern": "^find\\b",

@@ -34,7 +34,7 @@ export default [
     plugins: {
       '@typescript-eslint': tsPlugin,
       // Custom plugin for shared package rules
-      'craft-shared': {
+      'archstudio-shared': {
         rules: {
           'no-direct-open-import': noDirectOpenImport,
           'no-inline-source-auth-check': noInlineSourceAuthCheck,
@@ -43,9 +43,9 @@ export default [
     },
     rules: {
       // Prevent direct imports of 'open' package — use openUrl() from utils instead
-      'craft-shared/no-direct-open-import': 'error',
+      'archstudio-shared/no-direct-open-import': 'error',
       // Prevent inline source.config.isAuthenticated checks — use isSourceUsable() instead
-      'craft-shared/no-inline-source-auth-check': 'error',
+      'archstudio-shared/no-inline-source-auth-check': 'error',
     },
   },
 ]

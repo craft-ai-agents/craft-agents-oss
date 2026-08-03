@@ -3,8 +3,8 @@ import { CliRpcClient } from './client.ts'
 import {
   serializeEnvelope,
   deserializeEnvelope,
-} from '@craft-agent/server-core/transport'
-import type { MessageEnvelope } from '@craft-agent/shared/protocol'
+} from '@archstudio/server-core/transport'
+import type { MessageEnvelope } from '@archstudio/shared/protocol'
 
 // ---------------------------------------------------------------------------
 // Mock WS server helpers
@@ -226,7 +226,13 @@ describe('CliRpcClient', () => {
     server = createErrorServer()
     const client = new CliRpcClient(server.url)
     await client.connect()
-    await expect(client.invoke('system:versions')).rejects.toThrow('test error')
+    // Awaiting via `expect(...).rejects` starves WebSocket message delivery in
+    // bun 1.3.10 — timers still fire, so the request only settles when the
+    // client's own 10s timeout trips. Catching the rejection directly keeps the
+    // socket readable and settles in ~1ms.
+    const err = await client.invoke('system:versions').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error).message).toContain('test error')
     client.destroy()
   })
 

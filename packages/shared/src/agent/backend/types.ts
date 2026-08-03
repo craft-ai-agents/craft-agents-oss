@@ -12,7 +12,7 @@
  * - AsyncGenerator for streaming: Consistent with existing CraftAgent API
  */
 
-import type { AgentEvent } from '@craft-agent/core/types';
+import type { AgentEvent } from '@archstudio/core/types';
 import type { FileAttachment } from '../../utils/files.ts';
 import type { ThinkingLevel } from '../thinking-levels.ts';
 import type { PermissionMode } from '../mode-manager.ts';
@@ -276,6 +276,14 @@ export interface CoreBackendConfig {
   enable1MContext?: boolean;
 
   /**
+   * Shared MemoryRepository instance for memory_search / memory_recall tools.
+   * When provided, the agent uses this instead of opening its own DB connection.
+   * This ensures the agent tools and MemoryPanel share the same SQLite
+   * connection and FTS5 index.
+   */
+  memoryRepository?: import('../../memory/repository.ts').MemoryRepository;
+
+  /**
    * Pre-computed source configurations for initial setup.
    * Passed at construction so backends can set up sources in postInit().
    */
@@ -285,6 +293,7 @@ export interface CoreBackendConfig {
     apiServers: Record<string, unknown>;
     enabledSlugs: string[];
   };
+
 }
 
 // ============================================================

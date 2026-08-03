@@ -6,12 +6,12 @@ describe('resolveKeepBackgroundTasksAlive', () => {
     expect(resolveKeepBackgroundTasksAlive({})).toBe(true);
   });
   it('is ON for "1"/"true"', () => {
-    expect(resolveKeepBackgroundTasksAlive({ CRAFT_KEEP_BG_AGENTS_ALIVE: '1' })).toBe(true);
-    expect(resolveKeepBackgroundTasksAlive({ CRAFT_KEEP_BG_AGENTS_ALIVE: 'true' })).toBe(true);
+    expect(resolveKeepBackgroundTasksAlive({ ARCHSTUDIO_KEEP_BG_AGENTS_ALIVE: '1' })).toBe(true);
+    expect(resolveKeepBackgroundTasksAlive({ ARCHSTUDIO_KEEP_BG_AGENTS_ALIVE: 'true' })).toBe(true);
   });
   it('is OFF for "0"/"false" (explicit kill-switch)', () => {
-    expect(resolveKeepBackgroundTasksAlive({ CRAFT_KEEP_BG_AGENTS_ALIVE: '0' })).toBe(false);
-    expect(resolveKeepBackgroundTasksAlive({ CRAFT_KEEP_BG_AGENTS_ALIVE: 'false' })).toBe(false);
+    expect(resolveKeepBackgroundTasksAlive({ ARCHSTUDIO_KEEP_BG_AGENTS_ALIVE: '0' })).toBe(false);
+    expect(resolveKeepBackgroundTasksAlive({ ARCHSTUDIO_KEEP_BG_AGENTS_ALIVE: 'false' })).toBe(false);
   });
 });
 

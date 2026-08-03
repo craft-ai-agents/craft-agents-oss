@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Check, Globe, Copy, RefreshCw, Link2Off } from 'lucide-react'
 import type { MenuComponents } from '@/components/ui/menu-context'
 import { getStatusIconStyle, type SessionStatusId, type SessionStatus } from '@/config/session-status-config'
-import { sortLabelsForDisplay, type LabelConfig } from '@craft-agent/shared/labels'
+import { sortLabelsForDisplay, type LabelConfig } from '@archstudio/shared/labels'
 import { LabelIcon } from '@/components/ui/label-icon'
 
 export interface ShareMenuItemsProps {

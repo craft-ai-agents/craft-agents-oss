@@ -1,7 +1,7 @@
 /**
  * Pi Session Tool Proxy Definitions
  *
- * Thin wrapper around the canonical tool definitions in @craft-agent/session-tools-core.
+ * Thin wrapper around the canonical tool definitions in @archstudio/session-tools-core.
  * Adds the `mcp__session__` prefix that the Pi SDK expects.
  */
 
@@ -9,7 +9,7 @@ import {
   getToolDefsAsJsonSchema,
   SESSION_TOOL_NAMES,
   type JsonSchemaToolDef,
-} from '@craft-agent/session-tools-core';
+} from '@archstudio/session-tools-core';
 import { FEATURE_FLAGS } from '../../../feature-flags.ts';
 
 export type SessionToolProxyDef = JsonSchemaToolDef;

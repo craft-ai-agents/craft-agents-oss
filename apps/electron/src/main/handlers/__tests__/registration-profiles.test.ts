@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import type { RpcServer } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
 const registeredChannels: string[] = []
@@ -106,25 +106,31 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     onboarding,
     resources,
     transfer,
+    media,
+    comfyui,
+    inference,
   ] = await Promise.all([
-    import('@craft-agent/server-core/handlers/rpc/auth'),
-    import('@craft-agent/server-core/handlers/rpc/automations'),
-    import('@craft-agent/server-core/handlers/rpc/files'),
-    import('@craft-agent/server-core/handlers/rpc/labels'),
-    import('@craft-agent/server-core/handlers/rpc/llm-connections'),
-    import('@craft-agent/server-core/handlers/rpc/oauth'),
-    import('@craft-agent/server-core/handlers/rpc/projects'),
-    import('@craft-agent/server-core/handlers/rpc/sessions'),
-    import('@craft-agent/server-core/handlers/rpc/settings'),
-    import('@craft-agent/server-core/handlers/rpc/skills'),
-    import('@craft-agent/server-core/handlers/rpc/sources'),
-    import('@craft-agent/server-core/handlers/rpc/statuses'),
-    import('@craft-agent/server-core/handlers/rpc/system'),
-    import('@craft-agent/server-core/handlers/rpc/tasks'),
-    import('@craft-agent/server-core/handlers/rpc/workspace'),
-    import('@craft-agent/server-core/handlers/rpc/onboarding'),
-    import('@craft-agent/server-core/handlers/rpc/resources'),
-    import('@craft-agent/server-core/handlers/rpc/transfer'),
+    import('@archstudio/server-core/handlers/rpc/auth'),
+    import('@archstudio/server-core/handlers/rpc/automations'),
+    import('@archstudio/server-core/handlers/rpc/files'),
+    import('@archstudio/server-core/handlers/rpc/labels'),
+    import('@archstudio/server-core/handlers/rpc/llm-connections'),
+    import('@archstudio/server-core/handlers/rpc/oauth'),
+    import('@archstudio/server-core/handlers/rpc/projects'),
+    import('@archstudio/server-core/handlers/rpc/sessions'),
+    import('@archstudio/server-core/handlers/rpc/settings'),
+    import('@archstudio/server-core/handlers/rpc/skills'),
+    import('@archstudio/server-core/handlers/rpc/sources'),
+    import('@archstudio/server-core/handlers/rpc/statuses'),
+    import('@archstudio/server-core/handlers/rpc/system'),
+    import('@archstudio/server-core/handlers/rpc/tasks'),
+    import('@archstudio/server-core/handlers/rpc/workspace'),
+    import('@archstudio/server-core/handlers/rpc/onboarding'),
+    import('@archstudio/server-core/handlers/rpc/resources'),
+    import('@archstudio/server-core/handlers/rpc/transfer'),
+    import('@archstudio/server-core/handlers/rpc/media'),
+    import('@archstudio/server-core/handlers/rpc/comfyui'),
+    import('@archstudio/server-core/handlers/rpc/inference'),
   ])
 
   return new Set([
@@ -146,15 +152,22 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     ...onboarding.HANDLED_CHANNELS,
     ...resources.HANDLED_CHANNELS,
     ...transfer.HANDLED_CHANNELS,
+    ...media.HANDLED_CHANNELS,
+    ...comfyui.HANDLED_CHANNELS,
+    ...inference.CORE_HANDLED_CHANNELS,
   ])
 }
 
 async function getExpectedGuiChannels(): Promise<Set<string>> {
-  const [browser, system, workspace, settings] = await Promise.all([
+  const [browser, system, workspace, settings, health, prompt, memory, knowledge] = await Promise.all([
     import('../browser'),
     import('../system'),
     import('../workspace'),
     import('../settings'),
+    import('../health'),
+    import('../prompts'),
+    import('../memory'),
+    import('../knowledge'),
   ])
 
   return new Set([
@@ -162,6 +175,10 @@ async function getExpectedGuiChannels(): Promise<Set<string>> {
     ...system.GUI_HANDLED_CHANNELS,
     ...workspace.GUI_HANDLED_CHANNELS,
     ...settings.GUI_HANDLED_CHANNELS,
+    ...health.CORE_HANDLED_CHANNELS,
+    ...prompt.CORE_HANDLED_CHANNELS,
+    ...memory.CORE_HANDLED_CHANNELS,
+    ...knowledge.KNOWLEDGE_HANDLED_CHANNELS,
   ])
 }
 

@@ -4,6 +4,16 @@ import { loadShellEnv } from './shell-env'
 loadShellEnv()
 
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
+
+// Some Windows systems fail before the first window is created when Chromium's
+// GPU helper cannot load its graphics runtime (0xc0000135). ARCHstudio does not
+// require hardware acceleration for its desktop shell, so use Electron's stable
+// software rendering path on Windows. This must run before app.whenReady().
+if (process.platform === 'win32') {
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('in-process-gpu')
+}
 import { createHash, randomUUID } from 'crypto'
 import { hostname, homedir } from 'os'
 import * as Sentry from '@sentry/electron/main'
@@ -67,8 +77,9 @@ Sentry.init({
 // renderer would restore its language from localStorage on every restart while
 // the main process silently stayed at English — breaking session title language,
 // the system prompt's "Preferred language" line, and the native menu.
-import { setupI18n, i18n, SUPPORTED_LANGUAGE_CODES, type LanguageCode } from '@craft-agent/shared/i18n'
-import { getPersistedUiLanguage, setPersistedUiLanguage } from '@craft-agent/shared/config'
+import { setupI18n, i18n, SUPPORTED_LANGUAGE_CODES, type LanguageCode } from '@archstudio/shared/i18n'
+import { getPersistedUiLanguage, setPersistedUiLanguage } from '@archstudio/shared/config'
+import type { UserPreferences } from '@archstudio/shared/config'
 setupI18n()
 const persistedUiLanguage = getPersistedUiLanguage()
 if (persistedUiLanguage) {
@@ -82,46 +93,66 @@ const machineId = createHash('sha256').update(hostname() + homedir()).digest('he
 Sentry.setUser({ id: machineId })
 
 import { join, delimiter } from 'path'
-import { existsSync, readFileSync } from 'fs'
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { RPC_CHANNELS } from '@archstudio/shared/protocol'
+import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@archstudio/server-core/sessions'
 import { registerAllRpcHandlers } from './handlers/index'
-import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
+import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient } from '@archstudio/server-core/handlers/rpc'
 import type { PlatformServices } from '../runtime/platform'
 import { createElectronPlatform } from './platform'
 import type { HandlerDeps } from './handlers/handler-deps'
-import { bootstrapServer, releaseServerLock } from '@craft-agent/server-core/bootstrap'
-import { createMessagingBootstrap, type MessagingBootstrapHandle } from '@craft-agent/messaging-gateway'
-import { getCredentialManager } from '@craft-agent/shared/credentials'
-import { initModelRefreshService, getModelRefreshService, setFetcherPlatform } from '@craft-agent/server-core/model-fetchers'
-import { setSearchPlatform, setImageProcessor } from '@craft-agent/server-core/services'
+import { bootstrapServer, releaseServerLock } from '@archstudio/server-core/bootstrap'
+import { createMessagingBootstrap, type MessagingBootstrapHandle } from '@archstudio/messaging-gateway'
+import { getCredentialManager } from '@archstudio/shared/credentials'
+import { initModelRefreshService, getModelRefreshService, setFetcherPlatform } from '@archstudio/server-core/model-fetchers'
+import { setSearchPlatform, setImageProcessor } from '@archstudio/server-core/services'
 import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
 import { loadWindowState, saveWindowState } from './window-state'
-import { getWorkspaces, getWorkspaceByNameOrId, loadStoredConfig, addWorkspace, saveConfig } from '@craft-agent/shared/config'
-import { getDefaultWorkspacesDir } from '@craft-agent/shared/workspaces'
-import { initializeDocs } from '@craft-agent/shared/docs'
-import { initializeReleaseNotes } from '@craft-agent/shared/release-notes'
-import { ensureDefaultPermissions } from '@craft-agent/shared/agent/permissions-config'
-import { ensureToolIcons, ensurePresetThemes } from '@craft-agent/shared/config'
-import { setBundledAssetsRoot } from '@craft-agent/shared/utils'
-import { initializeBackendHostRuntime } from '@craft-agent/shared/agent/backend'
-import { setPowerShellValidatorRoot } from '@craft-agent/shared/agent'
+import { getWorkspaces, getWorkspaceByNameOrId, loadStoredConfig, addWorkspace, saveConfig } from '@archstudio/shared/config'
+import { CONFIG_DIR } from '@archstudio/shared/config/paths.ts'
+import { getDefaultWorkspacesDir } from '@archstudio/shared/workspaces'
+import { initializeDocs } from '@archstudio/shared/docs'
+import { initializeReleaseNotes } from '@archstudio/shared/release-notes'
+import { ensureDefaultPermissions } from '@archstudio/shared/agent/permissions-config'
+import { ensureToolIcons, ensurePresetThemes } from '@archstudio/shared/config'
+import { setBundledAssetsRoot } from '@archstudio/shared/utils'
+import { initializeBackendHostRuntime } from '@archstudio/shared/agent/backend'
+import { setPowerShellValidatorRoot } from '@archstudio/shared/agent'
 import { handleDeepLink } from './deep-link'
 import { BrowserPaneManager } from './browser-pane-manager'
-import { OAuthFlowStore } from '@craft-agent/shared/auth'
+import { OAuthFlowStore } from '@archstudio/shared/auth'
 import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-protocol'
 import log, { isDebugMode, mainLog, getLogFilePath, getMessagingGatewayLogFilePath, messagingGatewayLog, autoUpdateLog } from './logger'
-import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
-import { registerPiModelResolver } from '@craft-agent/shared/config'
-import { getPiModelsForAuthProvider, getAllPiModels } from '@craft-agent/shared/config'
+import { setPerfEnabled, enableDebug } from '@archstudio/shared/utils'
+import { registerPiModelResolver } from '@archstudio/shared/config'
+import { getPiModelsForAuthProvider, getAllPiModels } from '@archstudio/shared/config'
 import { initNotificationService, initBadgeIcon, initInstanceBadge, updateBadgeCount } from './notifications'
 import { checkForUpdatesOnLaunch, setAutoUpdateEventSink, isUpdating, setBeforeUpdateQuitHook } from './auto-update'
-import type { EventSink } from '@craft-agent/server-core/transport'
-import { validateGitBashPath, checkVCRedistInstalled } from '@craft-agent/server-core/services'
+import type { EventSink } from '@archstudio/server-core/transport'
+import { validateGitBashPath, checkVCRedistInstalled } from '@archstudio/server-core/services'
+import { APP_NAME } from '@archstudio/shared/branding'
 
-// Initialize electron-log for renderer process support
-log.initialize()
+// Set the app name and redirect userData BEFORE anything reads a path from
+// Electron. Unpackaged, Electron derives userData from package.json `name`
+// (the npm scope), so without this the logger resolves under the old scope
+// directory instead of CONFIG_DIR. app.setName must precede setPath because
+// Electron composes the default appData path from the name.
+app.setName(process.env.ARCHSTUDIO_APP_NAME || process.env.ARCHSTUDIO_APP_NAME || APP_NAME)
+
+const electronDataDir = join(CONFIG_DIR, 'electron-data')
+if (!existsSync(electronDataDir)) {
+  mkdirSync(electronDataDir, { recursive: true })
+}
+app.setPath('userData', electronDataDir)
+
+// Initialize electron-log for renderer process support. Console spying is
+// opt-in in electron-log 5.x; keep it explicit so ordinary renderer
+// console.* calls continue to reach the main log without a second ad-hoc
+// webContents listener in WindowManager.
+// Must stay AFTER the setName/setPath block above: electron-log resolves its
+// file path at initialize() time.
+log.initialize({ spyRendererConsole: true })
 
 // Diagnostic: report main-process i18n hydration result. We log here (not inline
 // at the hydration site above) because mainLog is only available after this point.
@@ -132,13 +163,13 @@ mainLog.info('[i18n] startup hydration', {
 
 // Enable debug/perf in dev mode (running from source)
 if (isDebugMode) {
-  process.env.CRAFT_DEBUG = '1'
+  process.env.ARCHSTUDIO_DEBUG = '1'
   enableDebug()
   setPerfEnabled(true)
 }
 
 // Bundle CLI tools: resolve platform-specific uv binary and wrapper scripts.
-// These are available to all agent Bash sessions via CRAFT_UV, CRAFT_SCRIPTS env vars
+// These are available to all agent Bash sessions via ARCHSTUDIO_UV, ARCHSTUDIO_SCRIPTS env vars
 // and PATH prepend. uv auto-downloads Python 3.12 on first use (~5s, then cached).
 {
   // In packaged app: resources are at process.resourcesPath/app/resources/
@@ -156,30 +187,30 @@ if (isDebugMode) {
   const fallbackUv = bundledUvExists ? null : 'uv'
 
   // Runtime resolver hints for shared session tools
-  process.env.CRAFT_IS_PACKAGED = app.isPackaged ? '1' : '0'
-  process.env.CRAFT_RESOURCES_BASE = resourcesBase
-  process.env.CRAFT_APP_ROOT = app.isPackaged ? app.getAppPath() : process.cwd()
+  process.env.ARCHSTUDIO_IS_PACKAGED = app.isPackaged ? '1' : '0'
+  process.env.ARCHSTUDIO_RESOURCES_BASE = resourcesBase
+  process.env.ARCHSTUDIO_APP_ROOT = app.isPackaged ? app.getAppPath() : process.cwd()
 
-  process.env.CRAFT_UV = bundledUvExists ? uvBinary : (fallbackUv ?? uvBinary)
+  process.env.ARCHSTUDIO_UV = bundledUvExists ? uvBinary : (fallbackUv ?? uvBinary)
 
   // Bun runtime (packaged builds should prefer bundled runtime over PATH)
   const bunBinary = join(resourcesBase, 'vendor', 'bun', process.platform === 'win32' ? 'bun.exe' : 'bun')
   if (existsSync(bunBinary)) {
-    process.env.CRAFT_BUN = bunBinary
+    process.env.ARCHSTUDIO_BUN = bunBinary
   }
 
-  process.env.CRAFT_SCRIPTS = scriptsDir
-  process.env.CRAFT_COMMANDS_ENTRY = app.isPackaged
+  process.env.ARCHSTUDIO_SCRIPTS = scriptsDir
+  process.env.ARCHSTUDIO_COMMANDS_ENTRY = app.isPackaged
     ? join(app.getAppPath(), 'packages', 'craft-agents-commands', 'src', 'main.ts')
     : join(process.cwd(), 'packages', 'craft-agents-commands', 'src', 'main.ts')
-  process.env.CRAFT_CLI_ENTRY = app.isPackaged
+  process.env.ARCHSTUDIO_CLI_ENTRY = app.isPackaged
     ? join(app.getAppPath(), 'packages', 'craft-cli', 'src', 'cli.ts')
     : join(process.cwd(), 'packages', 'craft-cli', 'src', 'cli.ts')
-  process.env.CRAFT_COMMANDS_DOC_PATH = app.isPackaged
-    ? join(resourcesBase, 'resources', 'docs', 'craft-cli.md')
-    : join(process.cwd(), 'apps', 'electron', 'resources', 'docs', 'craft-cli.md')
-  process.env.CRAFT_CLI_DOC_PATH = process.env.CRAFT_COMMANDS_DOC_PATH
-  process.env.CRAFT_AGENT_VERSION = app.getVersion()
+  process.env.ARCHSTUDIO_COMMANDS_DOC_PATH = app.isPackaged
+    ? join(resourcesBase, 'resources', 'docs', 'archstudio-cli.md')
+    : join(process.cwd(), 'apps', 'electron', 'resources', 'docs', 'archstudio-cli.md')
+  process.env.ARCHSTUDIO_CLI_DOC_PATH = process.env.ARCHSTUDIO_COMMANDS_DOC_PATH
+  process.env.ARCHSTUDIO_AGENT_VERSION = app.getVersion()
   // Prepend both generic wrappers dir and platform uv dir:
   // - binDir exposes wrapper commands (pdf-tool, docx-tool, ...)
   // - uvPlatformDir exposes raw `uv` for direct shell usage / debugging
@@ -188,12 +219,12 @@ if (isDebugMode) {
   if (!bundledUvExists) {
     mainLog.warn('Bundled uv binary missing, CLI document tools may fail unless uv is available on PATH.', {
       expectedUvPath: uvBinary,
-      usingCraftUv: process.env.CRAFT_UV,
+      usingCraftUv: process.env.ARCHSTUDIO_UV,
     })
   }
 
   if (isDebugMode) {
-    mainLog.info('CLI tools configured:', { uvBinary: process.env.CRAFT_UV, binDir, scriptsDir, bundledUvExists })
+    mainLog.info('CLI tools configured:', { uvBinary: process.env.ARCHSTUDIO_UV, binDir, scriptsDir, bundledUvExists })
   }
 }
 
@@ -203,9 +234,9 @@ registerPiModelResolver((piAuthProvider) =>
   piAuthProvider ? getPiModelsForAuthProvider(piAuthProvider) : getAllPiModels()
 )
 
-// Custom URL scheme for deeplinks (e.g., craftagents://auth-complete)
-// Supports multi-instance dev: CRAFT_DEEPLINK_SCHEME env var (craftagents1, craftagents2, etc.)
-const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents'
+// Custom URL scheme for deeplinks (e.g., archstudio://auth-complete)
+// Supports multi-instance dev: ARCHSTUDIO_DEEPLINK_SCHEME env var (archstudio1, archstudio2, etc.)
+const DEEPLINK_SCHEME = process.env.ARCHSTUDIO_DEEPLINK_SCHEME || 'archstudio'
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
@@ -221,14 +252,13 @@ let moduleClientResolver: ((webContentsId: number) => string | undefined) | null
 // directly.
 let messagingHandle: MessagingBootstrapHandle | null = null
 
+// userData redirection and app naming happen near the top of this file,
+// before log.initialize() — see the block above the logger init.
+
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
 
-// Set app name early (before app.whenReady) to ensure correct macOS menu bar title
-// Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Craft Agents [1]")
-app.setName(process.env.CRAFT_APP_NAME || 'Craft Agents')
-
-// Register as default protocol client for craftagents:// URLs
+// Register as default protocol client for archstudio:// URLs
 // This must be done before app.whenReady() on some platforms
 if (process.defaultApp) {
   // Development mode: need to pass the app path
@@ -245,7 +275,7 @@ import { applyConfiguredProxySettings } from './network-proxy'
 void applyConfiguredProxySettings()
 
 // Accept self-signed / untrusted certificates when connecting to a user-configured remote server.
-// Only bypasses cert validation for the exact CRAFT_SERVER_URL origin — all other connections
+// Only bypasses cert validation for the exact ARCHSTUDIO_SERVER_URL origin — all other connections
 // use standard certificate verification. Without this, wss:// to self-signed servers fails with
 // ERR_CERT_AUTHORITY_INVALID because Chromium's WebSocket rejects untrusted certs.
 //
@@ -258,10 +288,10 @@ function normalizeOriginForCert(urlStr: string): string {
   return u.origin
 }
 
-if (process.env.CRAFT_SERVER_URL) {
+if (process.env.ARCHSTUDIO_SERVER_URL) {
   let serverOrigin: string | undefined
   try {
-    serverOrigin = normalizeOriginForCert(process.env.CRAFT_SERVER_URL)
+    serverOrigin = normalizeOriginForCert(process.env.ARCHSTUDIO_SERVER_URL)
   } catch {
     // Invalid URL — will fail later during connection, no need to handle here
   }
@@ -381,7 +411,7 @@ async function createInitialWindows(): Promise<void> {
 
 app.whenReady().then(async () => {
   // Export packaged state as env var so logger.ts (and headless Bun) don't need 'electron'
-  process.env.CRAFT_IS_PACKAGED = app.isPackaged ? 'true' : 'false'
+  process.env.ARCHSTUDIO_IS_PACKAGED = app.isPackaged ? 'true' : 'false'
 
   // Register bundled assets root so all seeding functions can find their files
   // (docs, permissions, themes, tool-icons resolve via getBundledAssetsDir)
@@ -409,10 +439,10 @@ app.whenReady().then(async () => {
   // Ensure default permissions file exists (copies bundled default.json on first run)
   ensureDefaultPermissions()
 
-  // Seed tool icons to ~/.craft-agent/tool-icons/ (copies bundled SVGs on first run)
+  // Seed tool icons to ~/.archstudio/tool-icons/ (copies bundled SVGs on first run)
   ensureToolIcons()
 
-  // Seed preset themes to ~/.craft-agent/themes/ (copies bundled theme JSONs on first run)
+  // Seed preset themes to ~/.archstudio/themes/ (copies bundled theme JSONs on first run)
   ensurePresetThemes()
 
   // Register thumbnail:// protocol handler (scheme was registered earlier, before app.whenReady)
@@ -442,8 +472,8 @@ app.whenReady().then(async () => {
     }
 
     // Multi-instance dev: show instance number badge on dock icon
-    // CRAFT_INSTANCE_NUMBER is set by detect-instance.sh for numbered folders
-    const instanceNum = process.env.CRAFT_INSTANCE_NUMBER
+    // ARCHSTUDIO_INSTANCE_NUMBER is set by detect-instance.sh for numbered folders
+    const instanceNum = process.env.ARCHSTUDIO_INSTANCE_NUMBER
     if (instanceNum) {
       const num = parseInt(instanceNum, 10)
       if (!isNaN(num) && num > 0) {
@@ -459,14 +489,14 @@ app.whenReady().then(async () => {
     // Create the application menu (needs windowManager for New Window action)
     createApplicationMenu(windowManager)
 
-    // When CRAFT_SERVER_URL is set, this Electron instance is a thin client —
+    // When ARCHSTUDIO_SERVER_URL is set, this Electron instance is a thin client —
     // it only creates windows whose preload connects to the remote server.
     // Skip server-side initialization (SessionManager, model refresh, platform injection).
-    const isClientOnly = !!process.env.CRAFT_SERVER_URL
-    const isHeadless = !!process.env.CRAFT_HEADLESS
+    const isClientOnly = !!process.env.ARCHSTUDIO_SERVER_URL
+    const isHeadless = !!process.env.ARCHSTUDIO_HEADLESS
 
     if (isClientOnly) {
-      mainLog.info(`Client-only mode: CRAFT_SERVER_URL=${process.env.CRAFT_SERVER_URL} (server initialization skipped)`)
+      mainLog.info(`Client-only mode: ARCHSTUDIO_SERVER_URL=${process.env.ARCHSTUDIO_SERVER_URL} (server initialization skipped)`)
     }
 
     // Initialize notification service (always — triggered by server push events)
@@ -553,7 +583,7 @@ app.whenReady().then(async () => {
     if (!isClientOnly) {
       // Restore persisted Git Bash path on Windows (must happen before any SDK subprocess spawn)
       if (process.platform === 'win32') {
-        const { getGitBashPath, clearGitBashPath } = await import('@craft-agent/shared/config')
+        const { getGitBashPath, clearGitBashPath } = await import('@archstudio/shared/config')
         const gitBashPath = getGitBashPath()
         if (gitBashPath) {
           const validation = await validateGitBashPath(gitBashPath)
@@ -574,9 +604,9 @@ app.whenReady().then(async () => {
         const vcCheck = checkVCRedistInstalled()
         if (!vcCheck.installed) {
           mainLog.warn('[vcredist]', vcCheck.message)
-          process.env.CRAFT_VCREDIST_MISSING = '1'
+          process.env.ARCHSTUDIO_VCREDIST_MISSING = '1'
           if (vcCheck.downloadUrl) {
-            process.env.CRAFT_VCREDIST_URL = vcCheck.downloadUrl
+            process.env.ARCHSTUDIO_VCREDIST_URL = vcCheck.downloadUrl
           }
         } else if (isDebugMode) {
           mainLog.info('[vcredist]', vcCheck.message)
@@ -591,7 +621,7 @@ app.whenReady().then(async () => {
       const resolveClientId = (wcId: number) => clientMap.get(wcId)
 
       // Read embedded server config (Server settings page)
-      const { getServerConfig } = await import('@craft-agent/shared/config')
+      const { getServerConfig } = await import('@archstudio/shared/config')
       const embeddedServerConfig = getServerConfig()
       const serverModeEnabled = embeddedServerConfig.enabled && !isClientOnly
 
@@ -599,14 +629,14 @@ app.whenReady().then(async () => {
       const serverToken = serverModeEnabled && embeddedServerConfig.token
         ? embeddedServerConfig.token
         : randomUUID()
-      const rpcHost = process.env.CRAFT_RPC_HOST
+      const rpcHost = process.env.ARCHSTUDIO_RPC_HOST
         ?? (serverModeEnabled ? '0.0.0.0' : '127.0.0.1')
-      const rpcPort = process.env.CRAFT_RPC_PORT
-        ? parseInt(process.env.CRAFT_RPC_PORT, 10)
+      const rpcPort = process.env.ARCHSTUDIO_RPC_PORT
+        ? parseInt(process.env.ARCHSTUDIO_RPC_PORT, 10)
         : (serverModeEnabled ? embeddedServerConfig.port : 0)
 
       // Load TLS certificates if configured
-      let tls: import('@craft-agent/server-core/transport').WsRpcTlsOptions | undefined
+      let tls: import('@archstudio/server-core/transport').WsRpcTlsOptions | undefined
       if (serverModeEnabled && embeddedServerConfig.tlsCertPath && embeddedServerConfig.tlsKeyPath) {
         try {
           tls = {
@@ -666,13 +696,13 @@ app.whenReady().then(async () => {
             sessionManager: sm,
             credentialManager: getCredentialManager(),
             getMessagingDir: (wsId: string) =>
-              join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
+              join(CONFIG_DIR, 'workspaces', wsId, 'messaging'),
             getLegacyMessagingDir: (wsId: string) => {
               const ws = getWorkspaces().find((w) => w.id === wsId)
               return ws ? join(ws.rootPath, 'messaging') : undefined
             },
             // Route messaging diagnostics through the dedicated messaging log
-            // at ~/.craft-agent/logs/messaging-gateway.log.
+            // at ~/.archstudio/logs/messaging-gateway.log.
             logger: messagingGatewayLog,
             // WhatsApp worker runs under Electron's embedded Node via
             // ELECTRON_RUN_AS_NODE (WhatsAppAdapter defaults nodeBin to
@@ -703,7 +733,7 @@ app.whenReady().then(async () => {
         setSessionEventSink: (sm, sink) => sm.setEventSink(sink),
         initializeSessionManager: (sm) => sm.initialize(),
         initModelRefreshService: () => initModelRefreshService(async (slug: string) => {
-          const { getCredentialManager } = await import('@craft-agent/shared/credentials')
+          const { getCredentialManager } = await import('@archstudio/shared/credentials')
           const manager = getCredentialManager()
           const [apiKey, oauth] = await Promise.all([
             manager.getLlmApiKey(slug).catch(() => null),
@@ -756,6 +786,45 @@ app.whenReady().then(async () => {
         // without a process restart.
         const baseSink = instance.wsServer.push.bind(instance.wsServer)
         instance.sessionManager.setEventSink(messagingHandle.wrapSink(baseSink))
+
+        // Wire the shared MemoryRepository so agent tools (memory_search,
+        // memory_recall) and MemoryPanel IPC handlers share the same SQLite
+        // connection and FTS5 index.
+        try {
+          const { getMemoryRepository, getVaultSync } = await import('./handlers/memory')
+          const repo = await getMemoryRepository()
+          instance.sessionManager.setMemoryRepository(repo)
+          mainLog.info('[memory] Shared MemoryRepository wired to SessionManager')
+
+          // Vault round-trip: auto-import Obsidian vault .md files into memory
+          // on startup so vault edits are reflected without a manual import click.
+          try {
+            const vault = await getVaultSync()
+            const readResult = vault.readVault()
+            if (readResult.records.length > 0) {
+              const importStats = repo.importMemories(readResult.records, 'system')
+              mainLog.info(
+                `[memory] Vault auto-import: ${importStats.imported} imported, ` +
+                `${importStats.skipped} skipped, ${importStats.errors.length} errors`
+              )
+              if (importStats.errors.length > 0) {
+                for (const err of importStats.errors.slice(0, 5)) {
+                  mainLog.warn(`[memory] Vault import error: ${err.message} (${err.filePath ?? 'n/a'})`)
+                }
+              }
+            } else {
+              mainLog.info('[memory] No vault records to import on startup')
+            }
+          } catch (vaultErr) {
+            mainLog.warn('[memory] Vault auto-import skipped (vault not configured or unreadable):', vaultErr)
+          }
+        } catch (err) {
+          mainLog.error(
+            '[memory] Failed to wire MemoryRepository:',
+            err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err),
+          )
+        }
+
         if (messagingHandle.registry.size > 0) {
           mainLog.info(`[messaging] Fan-out sink active for ${messagingHandle.registry.size} workspace(s)`)
         }
@@ -767,7 +836,7 @@ app.whenReady().then(async () => {
 
       // Remove workspace from config (cleanup stale entries)
       ipcMain.handle('workspace:remove', async (_event, workspaceId: string) => {
-        const { removeWorkspace: remove } = await import('@craft-agent/shared/config')
+        const { removeWorkspace: remove } = await import('@archstudio/shared/config')
         return remove(workspaceId)
       })
 
@@ -791,7 +860,7 @@ app.whenReady().then(async () => {
       ipcMain.handle('session:transferToWorkspace', async (_event, sessionId: string, targetWorkspaceId: string, sessionIndex?: number, sessionCount?: number) => {
         const idx = sessionIndex ?? 0
         const count = sessionCount ?? 1
-        const { getWorkspaceByNameOrId } = await import('@craft-agent/shared/config')
+        const { getWorkspaceByNameOrId } = await import('@archstudio/shared/config')
         const { connectToRemote } = await import('./handlers/workspace')
         const { CHUNKED_TRANSFER_THRESHOLD, getChunkCount, invokeChunked, prepareChunkedPayload } = await import('./chunked-rpc')
 
@@ -911,6 +980,161 @@ app.whenReady().then(async () => {
         app.exit(0)
       })
 
+      // Launch at login preference
+      ipcMain.handle('app:getLaunchAtLogin', () => {
+        const settings = app.getLoginItemSettings()
+        return settings.openAtLogin
+      })
+      ipcMain.handle('app:setLaunchAtLogin', (_event, openAtLogin: boolean) => {
+        app.setLoginItemSettings({ openAtLogin })
+      })
+
+      // Confirm before exit preference (stored in preferences.json)
+      ipcMain.handle('app:getConfirmBeforeExit', async () => {
+        try {
+          const { loadPreferences } = await import('@archstudio/shared/config')
+          return loadPreferences().confirmBeforeExit ?? true
+        } catch (err) {
+          // loadPreferences already swallows a missing/unreadable file and
+          // returns {}, so reaching here means something unexpected broke.
+          // Log it rather than silently defaulting forever.
+          mainLog.error('[settings] Failed to read confirmBeforeExit:', err)
+          return true // default to confirmed exit
+        }
+      })
+      ipcMain.handle('app:setConfirmBeforeExit', async (_event, value: boolean) => {
+        try {
+          const { updatePreferences } = await import('@archstudio/shared/config')
+          updatePreferences({ confirmBeforeExit: value })
+        } catch (err) {
+          mainLog.error('[settings] Failed to persist confirmBeforeExit:', err)
+        }
+      })
+
+      // Settings export: dump config.json + preferences.json + themes as a portable bundle.
+      ipcMain.handle('app:exportSettings', async (_event) => {
+        try {
+          const config = loadStoredConfig()
+          const exportBundle: Record<string, unknown> = {
+            version: app.getVersion(),
+            exportedAt: Date.now(),
+            config,
+          }
+          // Include preferences if they exist. loadPreferences() returns {} for
+          // a missing file, so an empty object means "nothing to export".
+          try {
+            const { loadPreferences } = await import('@archstudio/shared/config')
+            const prefs = loadPreferences()
+            if (Object.keys(prefs).length > 0) {
+              exportBundle.preferences = prefs
+            }
+          } catch (err) {
+            mainLog.warn('[settings] Could not include preferences in export:', err)
+          }
+          // Include custom themes (list files in themes directory)
+          try {
+            const { getAppThemesDir } = await import('@archstudio/shared/config')
+            const themesDir = getAppThemesDir()
+            if (existsSync(themesDir)) {
+              const themeFiles = readdirSync(themesDir).filter(f => f.endsWith('.json'))
+              const themes: Record<string, string> = {}
+              for (const file of themeFiles) {
+                themes[file] = readFileSync(join(themesDir, file), 'utf-8')
+              }
+              if (Object.keys(themes).length > 0) {
+                exportBundle.themes = themes
+              }
+            }
+          } catch {
+            // themes directory may not exist — optional
+          }
+          // Open save dialog so user picks where to write
+          const win = BrowserWindow.fromWebContents(_event.sender)
+            || BrowserWindow.getFocusedWindow()
+            || BrowserWindow.getAllWindows()[0]
+          const { filePath } = await dialog.showSaveDialog(win, {
+            title: 'Export Settings',
+            defaultPath: `archstudio-settings-${new Date().toISOString().slice(0, 10)}.json`,
+            filters: [{ name: 'JSON', extensions: ['json'] }],
+          })
+          if (!filePath) return { success: false, canceled: true }
+          writeFileSync(filePath, JSON.stringify(exportBundle, null, 2), 'utf-8')
+          mainLog.info('[settings] Settings exported to', filePath)
+          return { success: true, path: filePath }
+        } catch (err) {
+          mainLog.error('[settings] Export settings failed:', err)
+          return { success: false, error: err instanceof Error ? err.message : String(err) }
+        }
+      })
+
+      // Settings import: read a bundle file, validate, and restore config + preferences + themes.
+      ipcMain.handle('app:importSettings', async (_event) => {
+        try {
+          const win = BrowserWindow.fromWebContents(_event.sender)
+            || BrowserWindow.getFocusedWindow()
+            || BrowserWindow.getAllWindows()[0]
+          const { filePaths, canceled } = await dialog.showOpenDialog(win, {
+            title: 'Import Settings',
+            filters: [{ name: 'JSON', extensions: ['json'] }],
+            properties: ['openFile'],
+          })
+          if (canceled || !filePaths?.[0]) return { success: false, canceled: true }
+          const raw = readFileSync(filePaths[0], 'utf-8')
+          let bundle: Record<string, unknown>
+          try {
+            bundle = JSON.parse(raw)
+          } catch {
+            return { success: false, error: 'Invalid JSON file' }
+          }
+          // Validate bundle structure
+          if (!bundle.config || typeof bundle.config !== 'object') {
+            return { success: false, error: 'Bundle is missing the "config" object' }
+          }
+          const configObj = bundle.config as Record<string, unknown>
+          if (!Array.isArray(configObj.workspaces)) {
+            return { success: false, error: 'Bundle config is missing the "workspaces" array' }
+          }
+          // Restore config.json
+          const { saveConfig, getAppThemesDir } = await import('@archstudio/shared/config')
+          saveConfig(bundle.config as any)
+          mainLog.info('[settings] Config restored from import')
+          // Restore preferences if present
+          if (bundle.preferences && typeof bundle.preferences === 'object') {
+            try {
+              const { savePreferences } = await import('@archstudio/shared/config')
+              savePreferences(bundle.preferences as UserPreferences)
+              mainLog.info('[settings] Preferences restored from import')
+            } catch (err) {
+              // Non-fatal for the rest of the import, but the user must not be
+              // told their preferences were restored when they were not.
+              mainLog.error('[settings] Failed to restore preferences from import:', err)
+            }
+          }
+          // Restore themes if present
+          if (bundle.themes && typeof bundle.themes === 'object') {
+            try {
+              const themesDir = getAppThemesDir()
+              if (!existsSync(themesDir)) {
+                mkdirSync(themesDir, { recursive: true })
+              }
+              for (const [filename, content] of Object.entries(bundle.themes as Record<string, string>)) {
+                if (filename.endsWith('.json') && typeof content === 'string') {
+                  writeFileSync(join(themesDir, filename), content, 'utf-8')
+                }
+              }
+              mainLog.info('[settings] Themes restored from import')
+            } catch {
+              // non-critical
+            }
+          }
+          mainLog.info('[settings] Settings imported from', filePaths[0])
+          return { success: true }
+        } catch (err) {
+          mainLog.error('[settings] Import settings failed:', err)
+          return { success: false, error: err instanceof Error ? err.message : String(err) }
+        }
+      })
+
       // Language change: sync from renderer to main process, persist, and rebuild native menu.
       // Persistence here is what lets the next app launch hydrate main's i18n correctly —
       // see the `getPersistedUiLanguage()` block at the top of this file.
@@ -960,13 +1184,13 @@ app.whenReady().then(async () => {
       }
 
       instance.wsServer.handle(RPC_CHANNELS.settings.GET_SERVER_CONFIG, async () => {
-        const { getServerConfig: getConfig } = await import('@craft-agent/shared/config')
+        const { getServerConfig: getConfig } = await import('@archstudio/shared/config')
         return getConfig()
       })
 
       instance.wsServer.handle(RPC_CHANNELS.settings.SET_SERVER_CONFIG, async (_ctx: unknown, config: unknown) => {
-        const { setServerConfig: setConfig } = await import('@craft-agent/shared/config')
-        const cfg = config as import('@craft-agent/shared/config/server-config').ServerConfig
+        const { setServerConfig: setConfig } = await import('@archstudio/shared/config')
+        const cfg = config as import('@archstudio/shared/config/server-config').ServerConfig
         // Validate port range
         if (cfg.port < 1024 || cfg.port > 65535) {
           throw new Error(`Port must be between 1024 and 65535, got ${cfg.port}`)
@@ -982,7 +1206,7 @@ app.whenReady().then(async () => {
       })
 
       instance.wsServer.handle(RPC_CHANNELS.settings.GET_SERVER_STATUS, async () => {
-        const { getServerConfig: getConfig } = await import('@craft-agent/shared/config')
+        const { getServerConfig: getConfig } = await import('@archstudio/shared/config')
         const saved = getConfig()
         const protocol = runningServerState.tls ? 'wss' : 'ws'
 
@@ -1047,8 +1271,8 @@ app.whenReady().then(async () => {
 
       // Headless: print connection details
       if (isHeadless) {
-        console.log(`CRAFT_SERVER_URL=${instance.protocol}://${instance.host}:${instance.port}`)
-        console.log(`CRAFT_SERVER_TOKEN=${instance.token}`)
+        console.log(`ARCHSTUDIO_SERVER_URL=${instance.protocol}://${instance.host}:${instance.port}`)
+        console.log(`ARCHSTUDIO_SERVER_TOKEN=${instance.token}`)
       }
     }
 
@@ -1063,7 +1287,7 @@ app.whenReady().then(async () => {
     // Skip in thin-client mode — credentials are managed by the remote server.
     if (!isClientOnly) {
       try {
-        const { getCredentialManager } = await import('@craft-agent/shared/credentials')
+        const { getCredentialManager } = await import('@archstudio/shared/credentials')
         const credentialManager = getCredentialManager()
         const health = await credentialManager.checkHealth()
         if (!health.healthy) {
@@ -1088,7 +1312,7 @@ app.whenReady().then(async () => {
     // Runs after init so config and auth state are available.
     // Derives values from the default LLM connection instead of legacy config fields.
     try {
-      const { getLlmConnection, getDefaultLlmConnection } = await import('@craft-agent/shared/config')
+      const { getLlmConnection, getDefaultLlmConnection } = await import('@archstudio/shared/config')
       const workspaces = getWorkspaces()
       const defaultConnSlug = getDefaultLlmConnection()
       const defaultConn = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null
@@ -1154,7 +1378,7 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.env.CRAFT_HEADLESS) return  // headless server stays alive
+  if (process.env.ARCHSTUDIO_HEADLESS) return  // headless server stays alive
   // On macOS, apps typically stay active until explicitly quit
   if (process.platform !== 'darwin') {
     app.quit()
@@ -1256,6 +1480,15 @@ app.on('before-quit', async (event) => {
       } catch (err) {
         mainLog.error('[messaging] dispose failed:', err)
       }
+    }
+
+    // Close the shared MemoryRepository connection (WAL checkpoint + release lock)
+    try {
+      const { closeMemoryRepository } = await import('./handlers/memory')
+      await closeMemoryRepository()
+      mainLog.info('[memory] MemoryRepository connection closed')
+    } catch (err) {
+      mainLog.error('[memory] Failed to close MemoryRepository:', err)
     }
 
     // Clean up power manager (release power blocker)

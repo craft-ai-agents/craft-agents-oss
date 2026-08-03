@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/styled-dropdown"
 import { cn } from "@/lib/utils"
 import { Check, ChevronDown, Eye, EyeOff, Loader2 } from "lucide-react"
+import { GROUP_NAME } from '@archstudio/shared/branding'
 import { pickTierDefaults, resolveTierModels, type PiModelInfo } from "./tier-models"
 import {
   resolveCustomEndpointPayload,
@@ -132,7 +133,7 @@ const OPENAI_PRESETS: Preset[] = [
 
 // Pi provider presets - unified API for 20+ LLM providers
 const PI_PRESETS: Preset[] = [
-  { key: 'pi', label: 'Craft Agents Backend (Direct)', url: '' },
+  { key: 'pi', label: `${GROUP_NAME} (Direct)`, url: '' },
   { key: 'openrouter', label: 'OpenRouter', url: 'https://openrouter.ai/api' },
   { key: 'custom', label: 'Custom', url: '' },
 ]

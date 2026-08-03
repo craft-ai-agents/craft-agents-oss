@@ -47,7 +47,7 @@ export interface MessagingPlatformRuntimeInfo {
 
 /**
  * A user authorised to drive the workspace's bot at the platform level.
- * Mirrors `PlatformOwner` in `@craft-agent/messaging-gateway` — kept here
+ * Mirrors `PlatformOwner` in `@archstudio/messaging-gateway` — kept here
  * to avoid the renderer / RPC layer importing the gateway package directly.
  */
 export interface MessagingPlatformOwnerInfo {

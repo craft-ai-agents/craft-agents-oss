@@ -220,7 +220,7 @@ export async function exchangeClaudeCode(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'User-Agent': `CraftAgents/${APP_VERSION}`,
+        'User-Agent': `ARCHstudio/${APP_VERSION}`,
         Accept: 'application/json',
       },
       body: JSON.stringify(params),

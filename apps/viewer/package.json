@@ -1,8 +1,8 @@
 {
-  "name": "@craft-agent/viewer",
+  "name": "@archstudio/viewer",
   "version": "0.11.2",
   "license": "Apache-2.0",
-  "description": "Web viewer for Craft Agents sessions - upload and share session transcripts",
+  "description": "Web viewer for ARCHstudio sessions - upload and share session transcripts",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,8 +12,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@craft-agent/core": "workspace:*",
-    "@craft-agent/ui": "workspace:*",
+    "@archstudio/core": "workspace:*",
+    "@archstudio/ui": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-i18next": "^17.0.2"

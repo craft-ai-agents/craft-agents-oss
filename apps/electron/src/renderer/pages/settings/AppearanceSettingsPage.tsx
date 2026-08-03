@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { LANGUAGES, type LanguageCode } from '@craft-agent/shared/i18n'
+import { LANGUAGES, type LanguageCode } from '@archstudio/shared/i18n'
 import type { ColumnDef } from '@tanstack/react-table'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -116,6 +116,8 @@ export default function AppearanceSettingsPage() {
     setColorTheme,
     font,
     setFont,
+    density,
+    setDensity,
     activeWorkspaceId,
     setWorkspaceColorTheme,
     themeLoadError,
@@ -250,12 +252,12 @@ export default function AppearanceSettingsPage() {
     const load = async () => {
       if (!window.electronAPI) return
       try {
-        const [mappings, homeDir] = await Promise.all([
+        const [mappings, configDir] = await Promise.all([
           window.electronAPI.getToolIconMappings(),
-          window.electronAPI.getHomeDir(),
+          window.electronAPI.getConfigDir(),
         ])
         setToolIcons(mappings)
-        setToolIconsJsonPath(`${homeDir}/.craft-agent/tool-icons/tool-icons.json`)
+        setToolIconsJsonPath(`${configDir}/tool-icons/tool-icons.json`)
       } catch (error) {
         console.error('Failed to load tool icon mappings:', error)
       }
@@ -436,6 +438,12 @@ export default function AppearanceSettingsPage() {
               {/* Interface */}
               <SettingsSection title={t("settings.appearance.interface")}>
                 <SettingsCard>
+                  <SettingsToggle
+                    label={t("settings.appearance.compactUi")}
+                    description={t("settings.appearance.compactUiDesc")}
+                    checked={density === 'compact'}
+                    onCheckedChange={(checked) => setDensity(checked ? 'compact' : 'comfortable')}
+                  />
                   <SettingsToggle
                     label={t("settings.appearance.connectionIcons")}
                     description={t("settings.appearance.connectionIconsDesc")}

@@ -11,6 +11,7 @@
 
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { localeFormattingMatches } from './locale-sort-utils'
 
 const LOCALES_DIR = resolve(
   import.meta.dir ?? new URL('.', import.meta.url).pathname,
@@ -40,7 +41,7 @@ for (const file of localeFiles) {
 
   const formatted = JSON.stringify(sorted, null, 2) + '\n'
 
-  if (formatted === original) continue
+  if (localeFormattingMatches(original, formatted)) continue
 
   drift++
   if (checkOnly) {

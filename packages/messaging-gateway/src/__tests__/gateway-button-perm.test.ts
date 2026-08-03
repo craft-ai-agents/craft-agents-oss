@@ -25,7 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { ISessionManager } from '@craft-agent/server-core/handlers'
+import type { ISessionManager } from '@archstudio/server-core/handlers'
 import { MessagingGateway } from '../gateway'
 import type { SessionEvent } from '../renderer'
 import type {

@@ -8,7 +8,7 @@
 import { Zap } from 'lucide-react'
 import { EntityIcon } from '@/components/ui/entity-icon'
 import { useEntityIcon } from '@/lib/icon-cache'
-import type { IconSize } from '@craft-agent/shared/icons'
+import type { IconSize } from '@archstudio/shared/icons'
 import type { LoadedSkill } from '../../../shared/types'
 
 interface SkillAvatarProps {

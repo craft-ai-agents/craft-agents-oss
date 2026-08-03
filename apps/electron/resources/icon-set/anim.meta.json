@@ -1,0 +1,10 @@
+{
+  "loopSeconds": 4,
+  "frames": 120,
+  "fps": 30,
+  "size": 512,
+  "ringRotationSeconds": 4,
+  "diamondPulseSecondsStatic": 2,
+  "diamondPulseSecondsLive": 1.6,
+  "note": "Diamond pulse uses a 2s cycle in the static asset so exactly two pulse cycles fit inside the 4s loop and the seam is invisible. The live splash uses a 1.6s cycle which does not divide 4s evenly -- the live splash accepts a visible seam in exchange for a slightly snappier cadence."
+}

@@ -1,6 +1,6 @@
-# Craft Agents Electron App
+# ARCHstudio Electron App
 
-The primary desktop interface for Craft Agents, built with Electron + React. Provides a multi-session inbox with chat interface for interacting with Claude via Craft workspaces.
+The primary desktop interface for ARCHstudio, built with Electron + React. Provides a multi-session inbox with chat interface for interacting with Claude via Craft workspaces.
 
 ## Quick Start
 
@@ -240,14 +240,14 @@ navigate(routes.sidebar.flagged())        // Show flagged
 
 ### Deep Links
 
-External apps can navigate using `craftagents://` URLs:
+External apps can navigate using `archstudio://` URLs:
 
 ```
-craftagents://settings
-craftagents://allSessions/session/session123
-craftagents://sources/source/github
-craftagents://action/new-chat
-craftagents://workspace/{id}/allSessions/session/abc123
+archstudio://settings
+archstudio://allSessions/session/session123
+archstudio://sources/source/github
+archstudio://action/new-chat
+archstudio://workspace/{id}/allSessions/session/abc123
 ```
 
 See `CLAUDE.md` for complete route reference.

@@ -1,21 +1,33 @@
 # Trademark Policy
 
-This trademark policy governs the use of the "Craft" and "Craft Agents" names, logos, and branding in connection with the Craft Agents open source project.
+This policy covers the use of the "ARCHstudio" name, logo, and branding in
+connection with the ARCHstudio open source project, and explains how this
+project relates to the trademarks of the upstream project it was forked from.
+
+## Background
+
+ARCHstudio is a fork of
+[craft-agents-oss](https://github.com/lukilabs/craft-agents-oss), originally
+built by Craft Docs Ltd. and released under the Apache License 2.0. The fork is
+independent: it is not produced, endorsed, or supported by Craft Docs Ltd.
 
 ## Trademarks
 
-The following are trademarks of Craft Docs Ltd.:
+**"Craft" and "Craft Agents" are trademarks of Craft Docs Ltd.**, as are the
+Craft logo and icon. This project claims no rights in them and uses the terms
+only where factually accurate — for example, to identify the upstream project or
+to name the Craft MCP integration.
 
-- **Craft** (word mark)
-- **Craft Agents** (word mark)
-- The Craft logo and icon
-- The Craft Agents logo and icon
+**"ARCHstudio" is the name of this project.** It is not a Craft Docs Ltd.
+trademark, and this project does not license it under the Apache 2.0 grant that
+covers the source code.
 
 ## What You Can Do
 
 ### Use the Code Freely
 
-The Craft Agents source code is licensed under the Apache License 2.0. You are free to:
+The ARCHstudio source code is licensed under the Apache License 2.0. You are
+free to:
 
 - Use, modify, and distribute the code
 - Create derivative works
@@ -23,78 +35,84 @@ The Craft Agents source code is licensed under the Apache License 2.0. You are f
 
 ### Make Factual Statements
 
-You may make accurate, factual statements about your relationship to the project:
+You may make accurate, factual statements about your relationship to the
+project:
 
-- "Based on Craft Agents"
-- "Built with Craft Agents technology"
-- "Compatible with Craft Agents"
-- "Fork of Craft Agents"
-
-### Contribute to the Project
-
-Contributors to the official Craft Agents repository may use the trademarks when discussing their contributions.
+- "Based on ARCHstudio"
+- "Built with ARCHstudio technology"
+- "Compatible with ARCHstudio"
+- "Fork of ARCHstudio"
 
 ## What You Cannot Do
 
-### Use Craft Branding for Forks
+### Use ARCHstudio Branding for Your Own Fork
 
-If you create a fork or derivative work, you **must**:
+If you fork this project, you **must**:
 
-- Choose a different name that does not include "Craft"
-- Remove or replace all Craft logos and icons
-- Update the bundle identifier (e.g., `com.lukilabs.craft-agent`) to your own
-- Remove references to `craft.do` domains unless connecting to official Craft services
+- Choose a different name that does not include "ARCHstudio"
+- Remove or replace the ARCHstudio logo and icons
+- Update the bundle identifier (`com.skobez.archstudio` in
+  `apps/electron/electron-builder.yml`) to your own
+- Update the repository and service URLs in
+  `packages/shared/src/branding.ts`
+
+The same obligations that this project inherited from the upstream policy apply
+to anyone forking this project.
+
+### Use Craft Branding
+
+Independently of this project's own policy, you may not use "Craft", "Craft
+Agents", or Craft logos for your product, and you may not suggest that Craft
+Docs Ltd. produces or endorses it.
 
 ### Imply Official Endorsement
 
 You may not:
 
-- Use "Craft" or "Craft Agents" as your product name
-- Use the Craft logo as your application icon
+- Use "ARCHstudio" as your own product name
+- Use the ARCHstudio logo as your application icon
 - Suggest that your fork is the official version
-- Imply that Craft Docs Ltd. or Craft endorses your product
-
-### Create Confusion
-
-You may not use the trademarks in any way that:
-
-- Suggests your product is created by or affiliated with Craft Docs Ltd.
-- Could cause confusion between your product and the official Craft Agents
-- Disparages Craft Docs Ltd. or the Craft Agents project
+- Imply that this project endorses your product
 
 ## Branding Locations
 
-For those creating forks, the following files contain branding that should be updated:
+For those creating forks, the following files contain branding that should be
+updated:
 
 | File | Contains |
 |------|----------|
 | `apps/electron/electron-builder.yml` | Product name, bundle ID, copyright |
 | `apps/electron/resources/` | Application icons |
-| `packages/shared/src/branding.ts` | Service URLs |
+| `packages/shared/src/branding.ts` | Repository and service URLs |
 
 ## Examples
 
 ### Acceptable
 
-- "MyAgent - based on Craft Agents"
-- "This project is a fork of Craft Agents"
-- "Compatible with the Craft Agents ecosystem"
+- "MyAgent - based on ARCHstudio"
+- "This project is a fork of ARCHstudio"
+- "Compatible with the ARCHstudio ecosystem"
 
 ### Not Acceptable
 
-- "Craft Agents Pro"
-- "Craft Agent for Linux"
-- "Better Craft Agents"
-- Using the Craft logo for your fork
+- "ARCHstudio Pro"
+- "Better ARCHstudio"
+- Using the ARCHstudio logo for your fork
+- Any use of Craft branding for your fork
 
 ## Questions
 
-If you have questions about this trademark policy or would like to request permission for a specific use, please open an issue in the repository or contact us at legal@craft.do.
+If you have questions about this policy, please open an issue in this
+repository. Questions about Craft trademarks should go to Craft Docs Ltd., not
+to this project.
 
 ## Changes
 
-This policy may be updated from time to time. The current version will always be available in this repository.
+This policy may be updated from time to time. The current version will always be
+available in this repository.
 
 ---
 
-*This trademark policy is inspired by similar policies from Mozilla, WordPress, and the Apache Software Foundation.*
+*This trademark policy is inspired by similar policies from Mozilla, WordPress,
+and the Apache Software Foundation. It is not legal advice; have it reviewed by
+counsel if trademark use matters to your deployment.*

@@ -198,10 +198,10 @@ describe('createBrowserTools', () => {
     })
 
     it('uses focus fallback when foreground open visibility does not settle in wait loop', async () => {
-      const previousTimeout = process.env.CRAFT_BROWSER_OPEN_SETTLE_TIMEOUT_MS
-      const previousPoll = process.env.CRAFT_BROWSER_OPEN_SETTLE_POLL_MS
-      process.env.CRAFT_BROWSER_OPEN_SETTLE_TIMEOUT_MS = '120'
-      process.env.CRAFT_BROWSER_OPEN_SETTLE_POLL_MS = '20'
+      const previousTimeout = process.env.ARCHSTUDIO_BROWSER_OPEN_SETTLE_TIMEOUT_MS
+      const previousPoll = process.env.ARCHSTUDIO_BROWSER_OPEN_SETTLE_POLL_MS
+      process.env.ARCHSTUDIO_BROWSER_OPEN_SETTLE_TIMEOUT_MS = '120'
+      process.env.ARCHSTUDIO_BROWSER_OPEN_SETTLE_POLL_MS = '20'
 
       try {
         let focusCalls = 0
@@ -235,11 +235,11 @@ describe('createBrowserTools', () => {
         expect(result.content[0].text).toContain('Visibility settle: timeout + focus retry')
         expect(result.content[0].text).toContain('Visible: true')
       } finally {
-        if (previousTimeout === undefined) delete process.env.CRAFT_BROWSER_OPEN_SETTLE_TIMEOUT_MS
-        else process.env.CRAFT_BROWSER_OPEN_SETTLE_TIMEOUT_MS = previousTimeout
+        if (previousTimeout === undefined) delete process.env.ARCHSTUDIO_BROWSER_OPEN_SETTLE_TIMEOUT_MS
+        else process.env.ARCHSTUDIO_BROWSER_OPEN_SETTLE_TIMEOUT_MS = previousTimeout
 
-        if (previousPoll === undefined) delete process.env.CRAFT_BROWSER_OPEN_SETTLE_POLL_MS
-        else process.env.CRAFT_BROWSER_OPEN_SETTLE_POLL_MS = previousPoll
+        if (previousPoll === undefined) delete process.env.ARCHSTUDIO_BROWSER_OPEN_SETTLE_POLL_MS
+        else process.env.ARCHSTUDIO_BROWSER_OPEN_SETTLE_POLL_MS = previousPoll
       }
     })
 

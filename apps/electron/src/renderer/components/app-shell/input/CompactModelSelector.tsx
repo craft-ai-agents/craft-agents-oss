@@ -2,18 +2,20 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   AlertCircle,
+  Bolt,
   Check,
   ChevronDown,
   ChevronRight,
   Image as ImageIcon,
 } from 'lucide-react'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@archstudio/ui'
 import {
   Drawer,
   DrawerTrigger,
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
+  DrawerDescription,
   DrawerClose,
 } from '@/components/ui/drawer'
 import { cn } from '@/lib/utils'
@@ -34,11 +36,12 @@ import {
 import {
   THINKING_LEVELS,
   type ThinkingLevel,
-} from '@craft-agent/shared/agent/thinking-levels'
+} from '@archstudio/shared/agent/thinking-levels'
 import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { derivePickerMode } from './picker-mode'
 import {
   formatTokenCount,
+  getConnectionDisplayName,
   groupConnectionsByProvider,
   stripPiPrefixForDisplay,
 } from './model-picker-helpers'
@@ -203,6 +206,9 @@ export function CompactModelSelector({
       <DrawerContent>
         <DrawerHeader>
           <DrawerTitle>{t('common.model')}</DrawerTitle>
+          <DrawerDescription className="sr-only">
+            Choose the model and connection used by this session.
+          </DrawerDescription>
         </DrawerHeader>
 
         <div className="px-2 pb-4 flex flex-col gap-0.5 max-h-[55vh] overflow-y-auto">
@@ -260,7 +266,10 @@ export function CompactModelSelector({
                       >
                         <ConnectionIcon connection={conn} size={14} />
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{conn.name}</div>
+                          <div className="text-sm font-medium truncate flex items-center gap-1">
+                            {conn.isLocalModel && <Bolt size={12} className="shrink-0" style={{ color: 'var(--ds-success)' }} />}
+                            <span className="truncate">{getConnectionDisplayName(conn)}</span>
+                          </div>
                           {!isAuthenticated && (
                             <div className="text-xs text-muted-foreground">
                               {t('settings.ai.notAuthenticated')}

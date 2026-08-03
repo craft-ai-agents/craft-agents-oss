@@ -1,7 +1,7 @@
 {
-  "name": "@craft-agent/server",
+  "name": "@archstudio/server",
   "version": "0.11.2",
-  "description": "Standalone headless Craft Agent server (Bun runtime)",
+  "description": "Standalone headless ARCHstudio server (Bun runtime)",
   "type": "module",
   "main": "src/index.ts",
   "bin": {
@@ -25,10 +25,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@craft-agent/core": "workspace:*",
-    "@craft-agent/messaging-gateway": "workspace:*",
-    "@craft-agent/server-core": "workspace:*",
-    "@craft-agent/shared": "workspace:*"
+    "@archstudio/core": "workspace:*",
+    "@archstudio/messaging-gateway": "workspace:*",
+    "@archstudio/server-core": "workspace:*",
+    "@archstudio/shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.2",

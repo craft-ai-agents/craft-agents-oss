@@ -1,0 +1,770 @@
+/**
+ * apps/electron/playwright/affordances/styles.css
+ *
+ * Aggregated CSS rules from apps/electron/src/renderer/shell/LayoutShell.css
+ * that drive the three affordances captured by visual regression tests:
+ *   1. Depth-selector popover (.wd-depth-popover*)
+ *   2. Gated-row tooltip banner (.wd-files-gated-banner*)
+ *   3. Open-dir cap badge (.wd-files-capped-badge)
+ *
+ * KEPT IN SYNC WITH LayoutShell.css.  If any of the source rules change
+ * (selector, property, or value), regenerate this file by running:
+ *
+ *   bun run playwright:rebake-css
+ *
+ * (the rebake script lives at scripts/extract-affordance-css.ts and
+ * copies the relevant selector blocks out of LayoutShell.css).
+ *
+ * Why a separate file instead of `<link>`-ing the real LayoutShell.css?
+ * The harness pages are static HTML — they have no React, no Jotai,
+ * no ThemeContext.  Linking the full LayoutShell.css would pull in
+ * hundreds of unused rules, slightly bloating snapshots and making
+ * diffs noisy.  Curating the rules here keeps each snapshot as small
+ * as the affordance itself.
+ *
+ * Test-local tokens substitute for the design-system CSS variables
+ * (--shell-border, --foreground, var(--destructive), etc.) so the
+ * snapshots render visually similar to production without standing
+ * up the entire pipeline.
+ */
+
+/**
+ * apps/electron/playwright/affordances/styles.css
+ *
+ * Aggregated CSS rules from apps/electron/src/renderer/shell/LayoutShell.css
+ * that drive the three affordances captured by visual regression tests:
+ *   1. Depth-selector popover (.wd-depth-popover*)
+ *   2. Gated-row tooltip banner (.wd-files-gated-banner*)
+ *   3. Open-dir cap badge (.wd-files-capped-badge)
+ *
+ * KEPT IN SYNC WITH LayoutShell.css.  When any of the source rules
+ * change (selector, property, or value), update this file to mirror
+ * the change.  Until we auto-generate this file from LayoutShell.css
+ * (open follow-up), update it manually when LayoutShell.css changes.
+ *
+ * Why a separate file instead of `<link>`-ing the real LayoutShell.css?
+ * The harness pages are static HTML — they have no React, no Jotai,
+ * no ThemeContext.  Linking the full LayoutShell.css would pull in
+ * hundreds of unused rules, slightly bloating snapshots and making
+ * diffs noisy.  Curating the rules here keeps each snapshot as small
+ * as the affordance itself.
+ *
+ * Test-local tokens substitute for the design-system CSS variables
+ * (--shell-border, --foreground, var(--destructive), etc.) so the
+ * snapshots render visually similar to production without standing
+ * up the entire pipeline.
+ */
+   These mimic the production tokens at the time this file was
+   extracted.  When the design system changes, update the values
+   here in lockstep.  Use exact hex / rgb so pixel-perfect diffs
+   stay stable. */
+:root {
+  --shell-border-soft: rgba(0, 0, 0, 0.08);
+  --shell-border: rgba(0, 0, 0, 0.14);
+  --shell-text-dim: rgba(0, 0, 0, 0.55);
+  --shell-text-muted: rgba(0, 0, 0, 0.62);
+  --shell-fill-strong: rgba(0, 0, 0, 0.06);
+  --shell-surface: #ffffff;
+  --foreground: #111111;
+  --brand-purple: #6366f1;
+  --destructive: #dc2626;
+}
+
+/* ── Depth popover ─────────────────────────────────────────────────
+   Source: LayoutShell.css 956–~1018 (selector block):
+     .wd-depth-popover, .wd-depth-popover__trigger,
+     .wd-depth-popover__trigger:hover/.is-open, .wd-depth-popover__trigger-label,
+     .wd-depth-popover__trigger-chevron--open, .wd-depth-popover__menu,
+     @keyframes wd-depth-popover-enter, .wd-depth-popover__item,
+     .wd-depth-popover__item:hover/.is-active, .wd-depth-popover__item-label,
+     .wd-depth-popover__item-check, .wd-depth-popover__item-shortcut
+*/
+
+.wd-depth-popover {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 2px;
+}
+
+.wd-depth-popover__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 26px;
+  height: 16px;
+  padding: 0 4px 0 6px;
+  border: 1px solid var(--shell-border-soft);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--shell-text-dim);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 100ms ease, color 100ms ease, border-color 100ms ease;
+}
+
+.wd-depth-popover__trigger:hover,
+.wd-depth-popover__trigger.is-open {
+  color: var(--foreground);
+  background: var(--shell-fill-strong);
+  border-color: var(--shell-border);
+}
+
+.wd-depth-popover__trigger-label {
+  line-height: 1;
+}
+
+.wd-depth-popover__trigger-chevron--open {
+  transform: rotate(180deg);
+  transition: transform 140ms ease;
+}
+
+.wd-depth-popover__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--shell-border);
+  border-radius: 8px;
+  background: color-mix(in oklch, #ffffff 95%, #111111);
+  /* Mirrors production LayoutShell.css:1010.  backdrop-filter has
+     Chromium-version dependency; when this test fails on a Chromium
+     upgrade with a math change in the blur shader, raise
+     maxDiffPixelRatio to absorb. */
+  backdrop-filter: blur(18px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+  animation: wd-depth-popover-enter 120ms ease;
+}
+
+@keyframes wd-depth-popover-enter {
+  from { opacity: 0; transform: translateY(-4px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.wd-depth-popover__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 100ms ease;
+}
+
+.wd-depth-popover__item:hover {
+  background: var(--shell-fill-strong);
+}
+
+.wd-depth-popover__item.is-active {
+  background: color-mix(in oklch, var(--brand-purple) 14%, transparent);
+}
+
+.wd-depth-popover__item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.wd-depth-popover__item-check {
+  color: var(--brand-purple);
+  /* Mirrors the production flex-shrink rule on small icons inside
+     label spans. Without this, the check svg would collapse under
+     tight column widths and the snapshot would drift. */
+  flex-shrink: 0;
+}
+
+.wd-depth-popover__item-shortcut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--shell-fill-strong);
+  color: var(--shell-text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+/* ── Gated-row banner ───────────────────────────────────────────────
+   Source: LayoutShell.css 1336–1366
+     .wd-files-gated-banner, .wd-files-gated-banner__icon,
+     @keyframes wd-files-gated-banner__pulse,
+     @media (prefers-reduced-motion: reduce) .wd-files-gated-banner__icon
+*/
+
+.wd-files-gated-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--shell-text-muted);
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.wd-files-gated-banner__icon {
+  color: var(--destructive);
+  flex-shrink: 0;
+  animation: wd-files-gated-banner__pulse 1.6s ease infinite;
+}
+
+@keyframes wd-files-gated-banner__pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+/* Reduced-motion override — production rule, retained so any future
+   change to this branch surfaces in the snapshot. The Playwright
+   spec sets `animations: 'disabled'`, which freezes the animation
+   in its end-frame; the override below means that if someone later
+   edits the reduced-motion branch in LayoutShell.css without also
+   editing this file, the snapshot won't accidentally drift because
+   it tests the same final state. The companion reduced-motion spec
+   (planned) would exercise the static fallback explicitly. */
+@media (prefers-reduced-motion: reduce) {
+  .wd-files-gated-banner__icon {
+    animation: none;
+    opacity: 0.85;
+  }
+}
+
+/* ── Tree row (gated affordance requires the row container) ─────────
+   Source: LayoutShell.css around the .wd-files-block block (~700).
+   Only the pieces used by the gated-row .arch-tree-tooltip-wrap and
+   the row's hover dim are included. */
+
+.wd-files-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wd-files-item[data-gated="true"] .wd-files-tree__arrow {
+  opacity: 0.45;
+}
+
+.wd-files-tree__arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  color: var(--shell-text-dim);
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+
+.wd-files-item__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--shell-text-muted);
+}
+
+.wd-files-item__name {
+  font-size: 12px;
+  color: var(--foreground);
+}
+
+.arch-tree-tooltip-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  min-width: 180px;
+  border: 1px solid var(--shell-border);
+  border-radius: 6px;
+  background: var(--shell-surface);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.10);
+  font-size: 11px;
+  color: var(--foreground);
+}
+
+/* ── Open-dir cap badge ─────────────────────────────────────────────
+   Source: LayoutShell.css 740–768
+     .wd-files-capped-badge,
+     @keyframes wd-files-cap-pulse,
+     @media (prefers-reduced-motion: reduce) .wd-files-capped-badge
+*/
+
+.wd-files-capped-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 0 7px;
+  height: 14px;
+  border-radius: 7px;
+  background: color-mix(in oklch, var(--destructive) 18%, transparent);
+  color: var(--destructive);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 14px;
+  text-transform: uppercase;
+  vertical-align: middle;
+  transform-origin: center;
+  animation: wd-files-cap-pulse 600ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes wd-files-cap-pulse {
+  0%   { transform: scale(0.85); opacity: 0; }
+  35%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Mirrors production rule; same rationale as the gated-banner
+     override above. */
+  .wd-files-capped-badge {
+    animation: none;
+  }
+}
+
+/* ── Test-page wrappers (give every affordance a stable viewport) ─── */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #fafafa;
+  /* Use a portable stack that exists on every Chromium build.
+     system-ui resolves to a stable fallback on Windows / macOS / Linux
+     (Segoe UI / San Francisco / Cantarell respectively).  Arial is the
+     common-denominator glyph metric set so baseline widths match
+     across machines — matters because diffs are pixel-based. */
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  color: var(--foreground);
+}
+
+body {
+  /* Padding so the popover has room without overlapping the edge. */
+  padding: 24px;
+}
+
+.affordance-stage {
+  /* Common box sizer — locators target this and rely on its bounds. */
+  display: inline-block;
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid var(--shell-border);
+  border-radius: 6px;
+}
+
+.affordance-stage__label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--shell-text-dim);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.popover-affordance,
+.gated-row-affordance,
+.cap-badge-affordance,
+.drill-chip-affordance,
+.refreshing-badge-affordance,
+.lightbox-scrim-affordance {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Drill-mode chip ───────────────────────────────────────────────
+   Source: LayoutShell.css 1288–1335
+     .wd-files-drill-chip, .wd-files-drill-chip__icon,
+     .wd-files-drill-chip__cancel, .wd-files-drill-chip__cancel:hover,
+     .wd-files-drill-chip__cancel:focus-visible
+*/
+
+.wd-files-drill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 14px;
+  padding: 0 4px 0 6px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--shell-text-muted);
+  background: color-mix(in oklch, var(--shell-text-muted) 12%, transparent);
+  border: 1px solid color-mix(in oklch, var(--shell-text-muted) 25%, transparent);
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.wd-files-drill-chip__icon {
+  flex-shrink: 0;
+  color: var(--shell-text-muted);
+}
+
+.wd-files-drill-chip__cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  margin-left: 2px;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--shell-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 120ms var(--ds-ease-standard, ease);
+}
+
+.wd-files-drill-chip__cancel:hover {
+  background: color-mix(in oklch, var(--shell-text-muted) 25%, transparent);
+  color: var(--shell-text);
+}
+
+.wd-files-drill-chip__cancel:focus-visible {
+  outline: 2px solid var(--shell-focus-ring, currentColor);
+  outline-offset: 1px;
+}
+
+/* ── Refreshing badge ───────────────────────────────────────────────
+   Source: LayoutShell.css 697–728
+     .wd-files-refreshing-badge,
+     .wd-files-refreshing-badge .arch-changes-spinner,
+     @keyframes arch-changes-spinner-rotate,
+     .arch-changes-spinner
+*/
+
+.wd-files-refreshing-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 14px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 7px;
+  background: var(--shell-fill-strong);
+  color: var(--shell-text-dim);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 14px;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.wd-files-refreshing-badge .arch-changes-spinner {
+  color: var(--shell-text-dim);
+  /* Animations disabled in Playwright config — keep the rule so any
+     future flip to "animations: allow" picks up a deterministic
+     rotation, and so the baseline matches production. */
+  animation: arch-changes-spinner-rotate 900ms linear infinite;
+}
+
+.arch-changes-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--shell-text-dim);
+  flex-shrink: 0;
+  animation: arch-changes-spinner-rotate 900ms linear infinite;
+}
+
+@keyframes arch-changes-spinner-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Keep the badge visible but freeze the spinner — the user still wants
+     to know a refresh is in flight, but the rotation itself is the
+     motion they opted out of. */
+  .wd-files-refreshing-badge .arch-changes-spinner {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* ── Thumbnail hover-preview popover ───────────────────────────────
+   Source: LayoutShell.css 2228–2370
+     .thumbnail-hover-preview__anchor,
+     .thumbnail-hover-preview__popover,
+     .thumbnail-hover-preview__popover[data-pinned='true'],
+     .thumbnail-hover-preview__frame,
+     .thumbnail-hover-preview__frame[data-loading='true']::after,
+     .thumbnail-hover-preview__img,
+     .thumbnail-hover-preview__caption,
+     .thumbnail-hover-preview__name,
+     .thumbnail-hover-preview__error,
+     .thumbnail-hover-preview__pin-close
+*/
+
+.thumbnail-hover-preview__anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.thumbnail-hover-preview__popover {
+  z-index: 60;
+  display: grid;
+  gap: 6px;
+  max-width: min(480px, 90vw);
+  padding: 6px;
+  border: 1px solid color-mix(in oklch, var(--foreground) 8%, transparent);
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--shell-surface) 92%, transparent);
+  box-shadow:
+    0 16px 48px -10px color-mix(in oklch, var(--ds-shadow-color, #000) 70%, transparent),
+    0 0 0 1px color-mix(in oklch, var(--foreground) 4%, transparent) inset;
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  pointer-events: auto;
+  user-select: none;
+  transform-origin: right center;
+}
+
+.thumbnail-hover-preview__frame {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 200px;
+  max-width: 480px;
+  min-height: 120px;
+  max-height: 360px;
+  background: var(--shell-bg-secondary, color-mix(in oklch, var(--background) 90%, var(--foreground)));
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.thumbnail-hover-preview__frame[data-loading='true']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    color-mix(in oklch, var(--foreground) 8%, transparent) 45%,
+    color-mix(in oklch, var(--foreground) 14%, transparent) 55%,
+    transparent 100%
+  );
+  animation: arch-shimmer 1.4s linear infinite;
+  pointer-events: none;
+}
+
+.thumbnail-hover-preview__img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+}
+
+.thumbnail-hover-preview__caption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px 4px;
+  font-size: 11px;
+  color: var(--shell-text-dim);
+  pointer-events: none;
+}
+
+.thumbnail-hover-preview__name {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  max-width: 38ch;
+}
+
+.thumbnail-hover-preview__error {
+  display: grid;
+  place-items: center;
+  min-height: 80px;
+  padding: 0 12px;
+  color: var(--shell-text-dim);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.thumbnail-hover-preview__pin-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--foreground) 8%, transparent);
+  color: var(--foreground);
+  cursor: pointer;
+  z-index: 1;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.thumbnail-hover-preview__pin-close:hover {
+  background: color-mix(in oklch, var(--destructive) 18%, transparent);
+  color: var(--destructive);
+}
+
+@keyframes arch-shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+/* ── Image lightbox scrim ───────────────────────────────────────────
+   Source: packages/ui/src/components/chat/AttachmentGrid.tsx:225–310.
+   The production component uses Tailwind utilities — these rules
+   are the curated equivalent for the harness.  Catches regressions
+   in: scrim opacity, backdrop-filter, chevron + position pill +
+   action-button styling, rounded image frame.
+
+   When the production token `--popover-scrim` exists, swap the
+   hard-coded `rgba(0,0,0,0.70)` on `.lightbox-scrim` to
+   `color-mix(in oklch, var(--popover-scrim, <fallback>) 70%, transparent)`.
+*/
+
+.lightbox-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.70);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 32px;
+}
+
+.lightbox-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 6px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+  user-select: none;
+}
+
+.lightbox-chevron {
+  position: absolute;
+  top: 50%;
+  height: 40px;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.30);
+  color: #ffffff;
+  border: 0;
+  cursor: pointer;
+  transform: translateY(-50%);
+  backdrop-filter: blur(8px);
+  transition: background-color 120ms ease;
+}
+
+.lightbox-chevron--left  { left: 16px; }
+.lightbox-chevron--right { right: 16px; }
+
+.lightbox-chevron:hover {
+  background: rgba(0, 0, 0, 0.50);
+}
+
+.lightbox-position {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.30);
+  backdrop-filter: blur(8px);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.lightbox-actions {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  display: flex;
+  gap: 12px;
+}
+
+.lightbox-open-in-app {
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.10);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  border: 0;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  transition: background-color 120ms ease;
+}
+
+.lightbox-open-in-app:hover {
+  background: rgba(255, 255, 255, 0.20);
+}
+
+.lightbox-close {
+  height: 32px;
+  width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.10);
+  color: #ffffff;
+  border: 0;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  transition: background-color 120ms ease;
+}
+
+.lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.20);
+}
+
+@media (prefers-color-scheme: dark) {
+  /* Lightbox scrim already dims via fixed rgba(0,0,0,0.70); we
+     leave the foreground tones the same.  Reduced-motion override
+     kept inline in html for simplicity. */
+}

@@ -11,7 +11,7 @@ import { Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@archstudio/ui'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 export interface ModelOption {

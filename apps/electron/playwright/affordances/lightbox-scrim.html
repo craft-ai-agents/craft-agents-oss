@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<!--
+  apps/electron/playwright/affordances/lightbox-scrim.html
+
+  Captures the attachment-grid image lightbox scrim opened from
+  packages/ui/src/components/chat/AttachmentGrid.tsx:225. The page
+  mirrors what `createPortal(...)` produces in production:
+
+    <div class="fixed inset-0 z-[100] flex items-center
+                justify-center bg-scrim/70 backdrop-blur-sm p-8"
+         role="dialog" aria-modal="true"
+         onClick={() => setZoomedIndex(null)}>
+      <button class="…rounded-full bg-black/30 hover:bg-black/50">
+        <ChevronLeft class="h-6 w-6" />
+      </button>
+      <button class="…right side">
+        <ChevronRight class="h-6 w-6" />
+      </button>
+      {zoomedIndex + 1} / {imageCount}        // 2+ images only
+      <img class="max-w-full max-h-full object-contain rounded-md" />
+      "Open in app" button (when storedPath exists)
+      "Close" X button
+    </div>
+
+  The harness inlines the Tailwind-equivalent CSS for the classes
+  used by AttachmentGrid.tsx (production component uses Tailwind
+  utilities; the harness needs an embeddable equivalent that the
+  snapshot understood). Mirror image as an alt-shaped div to avoid
+  embedding the real asset.
+
+  Multi-image scenario (zoomedIndex=1, imageCount=3) so both chevrons
+  and the position indicator render — a richer baseline that catches
+  future regressions in any of the four overlays.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Image lightbox — 2 / 3 with chevrons and scrim</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      /* Tailwind-class equivalents used by AttachmentGrid.tsx's
+         lightbox overlay.  Kept local to the harness so the curated
+         affordances/styles.css stays focused on LayoutShell-derived
+         selectors. */
+      html, body {
+        background: #fafafa;
+      }
+      .lightbox-scrim {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        /* `bg-scrim/70` — production token.  When --popover-scrim
+           exists, swap to var(--popover-scrim).  Until then this is
+           the closest analog. */
+        background: rgba(0, 0, 0, 0.70);
+        backdrop-filter: blur(8px);
+        padding: 32px;
+      }
+      .lightbox-image {
+        max-width: 100%;
+        max-height: 100%;
+        border-radius: 6px;
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+        background: #ffffff;
+        /* Stand-in for the actual image. */
+        width: 480px;
+        height: 320px;
+        background-image: linear-gradient(135deg, #6366f133, #dc262633);
+      }
+      .lightbox-chevron {
+        position: absolute;
+        top: 50%;
+        height: 40px;
+        width: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.30);
+        color: #ffffff;
+        backdrop-filter: blur(8px);
+        border: 0;
+        cursor: pointer;
+        transform: translateY(-50%);
+        transition: background-color 120ms ease;
+      }
+      .lightbox-chevron:hover {
+        background: rgba(0, 0, 0, 0.50);
+      }
+      .lightbox-chevron--left {
+        left: 16px;
+      }
+      .lightbox-chevron--right {
+        right: 16px;
+      }
+      .lightbox-position {
+        position: absolute;
+        top: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 4px 12px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.30);
+        backdrop-filter: blur(8px);
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 500;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+      }
+      .lightbox-actions {
+        position: absolute;
+        top: 24px;
+        right: 24px;
+        display: flex;
+        gap: 12px;
+      }
+      .lightbox-open-in-app {
+        padding: 6px 12px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.10);
+        color: #ffffff;
+        font-size: 14px;
+        font-weight: 500;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+        border: 0;
+        cursor: pointer;
+        backdrop-filter: blur(12px);
+        transition: background-color 120ms ease;
+      }
+      .lightbox-open-in-app:hover {
+        background: rgba(255, 255, 255, 0.20);
+      }
+      .lightbox-close {
+        height: 32px;
+        width: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.10);
+        color: #ffffff;
+        border: 0;
+        cursor: pointer;
+        backdrop-filter: blur(12px);
+        transition: background-color 120ms ease;
+      }
+      .lightbox-close:hover {
+        background: rgba(255, 255, 255, 0.20);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="affordance-stage">
+      <span class="affordance-stage__label">Image lightbox — open, position 2 / 3</span>
+
+      <div class="lightbox-scrim-affordance">
+        <div class="lightbox-scrim" role="dialog" aria-modal="true">
+          <!-- Prev chevron — visible when zoomedIndex > 0 -->
+          <button type="button" aria-label="Previous image" class="lightbox-chevron lightbox-chevron--left">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m15 18-6-6 6-6"></path>
+            </svg>
+          </button>
+
+          <!-- Position indicator — visible when imageCount > 1 -->
+          <div class="lightbox-position">2 / 3</div>
+
+          <img class="lightbox-image" alt="preview-image.png" />
+
+          <!-- Next chevron — visible when zoomedIndex < imageCount - 1 -->
+          <button type="button" aria-label="Next image" class="lightbox-chevron lightbox-chevron--right">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m9 18 6-6-6-6"></path>
+            </svg>
+          </button>
+
+          <!-- Action row: Open in app + Close X -->
+          <div class="lightbox-actions">
+            <button type="button" class="lightbox-open-in-app">Open in app</button>
+            <button type="button" aria-label="Close" class="lightbox-close">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M18 6 6 18"></path>
+                <path d="m6 6 12 12"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

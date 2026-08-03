@@ -21,7 +21,7 @@ import { useSessionSelection } from '@/hooks/useSession'
 import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from '@/atoms/sessions'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { getStateColor, getStateIcon, type SessionStatusId } from '@/config/session-status-config'
-import { extractLabelId } from '@craft-agent/shared/labels'
+import { extractLabelId } from '@archstudio/shared/labels'
 import { LabelMenuItems, StatusMenuItems } from './SessionMenuParts'
 import { hasTransferTargets } from './transfer-targets'
 

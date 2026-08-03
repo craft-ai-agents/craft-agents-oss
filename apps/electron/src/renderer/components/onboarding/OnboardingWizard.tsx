@@ -1,23 +1,29 @@
+import { useMemo } from 'react'
 import { cn } from "@/lib/utils"
-import { WelcomeStep } from "./WelcomeStep"
+import { OnboardingMural, type MuralScene } from "./OnboardingMural"
+import { WelcomeScene } from "./WelcomeScene"
 import type { ApiSetupMethod } from "./APISetupStep"
 import { ProviderSelectStep, type ProviderChoice } from "./ProviderSelectStep"
 import { CredentialsStep, type CredentialStatus } from "./CredentialsStep"
 import { LocalModelStep, type LocalModelSubmitData } from "./LocalModelStep"
-import { CompletionStep } from "./CompletionStep"
+import { CompletionScene } from "./CompletionScene"
 import { GitBashWarning, type GitBashStatus } from "./GitBashWarning"
 import type { ApiKeySubmitData } from "../apisetup"
 import type { CustomEndpointApi } from '@config/llm-connections'
 
-export type OnboardingStep =
-  | 'welcome'
-  | 'git-bash'
-  | 'provider-select'
-  | 'local-model'
-  | 'credentials'
-  | 'complete'
+export type OnboardingStep = MuralScene
 
 export type LoginStatus = 'idle' | 'waiting' | 'success' | 'error'
+
+/** A single validated detail shown on the completion scene */
+export interface ProviderDetail {
+  /** Human-readable label, e.g. "Provider" */
+  label: string
+  /** The value that passed validation, e.g. "Ollama" */
+  value: string
+  /** Whether this detail was validated successfully */
+  passed: boolean
+}
 
 export interface OnboardingState {
   step: OnboardingStep
@@ -25,6 +31,8 @@ export interface OnboardingState {
   credentialStatus: CredentialStatus
   completionStatus: 'saving' | 'complete'
   apiSetupMethod: ApiSetupMethod | null
+  isLocalModel?: boolean
+  connectionDetails?: ProviderDetail[]
   isExistingUser: boolean
   errorMessage?: string
   gitBashStatus?: GitBashStatus
@@ -82,7 +90,7 @@ interface OnboardingWizardProps {
 /**
  * OnboardingWizard - Full-screen onboarding flow container
  *
- * Manages the step-by-step flow for setting up Craft Agent:
+ * Manages the step-by-step flow for setting up ARCHstudio:
  * 1. Welcome
  * 2. Provider Select (Claude / ChatGPT / Copilot / API Key / Local)
  * 3. Credentials (API Key or OAuth) or Local Model
@@ -116,11 +124,28 @@ export function OnboardingWizard({
   editInitialValues,
   className
 }: OnboardingWizardProps) {
+  // Derive a human-readable provider name from the API setup method.
+  // Used by CompletionScene to show "Connected to Claude" instead of a generic message.
+  const providerName = useMemo(() => {
+    // Local-model (Ollama) path uses anthropic_api_key internally — check the flag first
+    if (state.isLocalModel) return 'Ollama'
+
+    const method = state.apiSetupMethod
+    if (!method) return undefined
+    switch (method) {
+      case 'claude_oauth': return 'Claude'
+      case 'anthropic_api_key': return 'Anthropic API'
+      case 'pi_chatgpt_oauth': return 'ChatGPT'
+      case 'pi_copilot_oauth': return 'GitHub Copilot'
+      case 'pi_api_key': return 'API Key'
+    }
+  }, [state.apiSetupMethod, state.isLocalModel])
+
   const renderStep = () => {
     switch (state.step) {
       case 'welcome':
         return (
-          <WelcomeStep
+          <WelcomeScene
             isExistingUser={state.isExistingUser}
             onContinue={onContinue}
             isLoading={state.isCheckingGitBash}
@@ -178,8 +203,10 @@ export function OnboardingWizard({
 
       case 'complete':
         return (
-          <CompletionStep
+          <CompletionScene
             status={state.completionStatus}
+            providerName={providerName}
+            connectionDetails={state.connectionDetails}
             onFinish={onFinish}
           />
         )
@@ -190,9 +217,10 @@ export function OnboardingWizard({
   }
 
   return (
-    <div
+    <OnboardingMural
+      scene={state.step}
+      sceneKey={state.step}
       className={cn(
-        "bg-foreground-2 overflow-y-auto",
         !className?.includes('h-full') && "h-dvh",
         className
       )}
@@ -200,11 +228,9 @@ export function OnboardingWizard({
       {/* Draggable title bar region for transparent window (macOS) */}
       <div className="titlebar-drag-region fixed top-0 left-0 right-0 h-[50px] z-titlebar" />
 
-      {/* Main content — min-h-full + flex center means: center when content fits,
-          natural flow + scroll when content is taller than the viewport (mobile). */}
-      <main className="flex min-h-full items-center justify-center p-4 sm:p-8">
+      <div className="onboarding-mural__scene-content">
         {renderStep()}
-      </main>
-    </div>
+      </div>
+    </OnboardingMural>
   )
 }

@@ -39,6 +39,12 @@ export interface UserPreferences {
    * Not user-editable; not exposed via the `update_user_preferences` tool.
    */
   uiLanguage?: LanguageCode;
+  /**
+   * Whether quitting the app asks for confirmation first (default: true).
+   * Read/written by the `app:getConfirmBeforeExit` / `app:setConfirmBeforeExit`
+   * IPC handlers in the Electron main process.
+   */
+  confirmBeforeExit?: boolean;
   // When the preferences were last updated
   updatedAt?: number;
 }

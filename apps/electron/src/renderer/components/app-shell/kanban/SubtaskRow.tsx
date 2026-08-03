@@ -1,6 +1,6 @@
 import { CheckCircle2, Circle, XCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@archstudio/ui'
 import { cn } from '@/lib/utils'
 import { ModelChip } from './ModelChip'
 import type { KanbanSubtask, SubtaskRunState } from './types'

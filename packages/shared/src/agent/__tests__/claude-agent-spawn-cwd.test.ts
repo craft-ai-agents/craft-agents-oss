@@ -43,7 +43,9 @@ describe('isExistingDirectory', () => {
     expect(isExistingDirectory(filePath)).toBe(false);
   });
 
-  it('returns false for a broken symlink (target missing)', () => {
+  // Creating a symlink on Windows requires admin / Developer Mode (EPERM otherwise),
+  // so the broken-symlink case can only be exercised on POSIX hosts.
+  it.skipIf(process.platform === 'win32')('returns false for a broken symlink (target missing)', () => {
     const linkPath = join(tempDir, 'broken-link');
     symlinkSync(join(tempDir, 'no-such-target'), linkPath);
     // lstatSync returns SymbolicLink stats, isDirectory() is false → "missing"
@@ -190,9 +192,9 @@ describe('extractSdkReportedBinaryPath', () => {
 
   it('captures macOS .app bundle paths without truncating at the first dot', () => {
     const msg =
-      'Claude Code native binary not found at /Applications/Craft Agents.app/Contents/Resources/app/node_modules/@anthropic-ai/claude-agent-sdk-binary/claude';
+      'Claude Code native binary not found at /Applications/ARCHstudio.app/Contents/Resources/app/node_modules/@anthropic-ai/claude-agent-sdk-binary/claude';
     expect(extractSdkReportedBinaryPath(msg)).toBe(
-      '/Applications/Craft Agents.app/Contents/Resources/app/node_modules/@anthropic-ai/claude-agent-sdk-binary/claude',
+      '/Applications/ARCHstudio.app/Contents/Resources/app/node_modules/@anthropic-ai/claude-agent-sdk-binary/claude',
     );
   });
 

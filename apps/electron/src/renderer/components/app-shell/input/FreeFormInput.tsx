@@ -2,17 +2,18 @@ import * as React from 'react'
 import { useTranslation } from "react-i18next"
 import { AnimatePresence, motion } from 'motion/react'
 import {
-  Paperclip,
+  Plus,
   ArrowUp,
   Square,
   Check,
+  Bolt,
   DatabaseZap,
   ChevronDown,
   ChevronUp,
   AlertCircle,
   Image as ImageIcon,
 } from 'lucide-react'
-import { Icon_Home, Spinner } from '@craft-agent/ui'
+import { Icon_Home, Spinner } from '@archstudio/ui'
 
 import * as storage from '@/lib/local-storage'
 import { Button } from '@/components/ui/button'
@@ -31,10 +32,10 @@ import {
   InlineLabelMenu,
   useInlineLabelMenu,
 } from '@/components/ui/label-menu'
-import type { LabelConfig } from '@craft-agent/shared/labels'
+import type { LabelConfig } from '@archstudio/shared/labels'
 import { parseMentions } from '@/lib/mentions'
 import { RichTextInput, type RichTextInputHandle } from '@/components/ui/rich-text-input'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@archstudio/ui'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -70,8 +71,8 @@ import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import { derivePickerMode } from './picker-mode'
 import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
-import type { PermissionMode } from '@craft-agent/shared/agent/modes'
-import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelNameKey } from '@craft-agent/shared/agent/thinking-levels'
+import type { PermissionMode } from '@archstudio/shared/agent/modes'
+import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelNameKey } from '@archstudio/shared/agent/thinking-levels'
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { hasOpenOverlay } from '@/lib/overlay-detection'
 import { ToolbarStatusSlot } from './ToolbarStatusSlot'
@@ -87,6 +88,7 @@ import { CompactPermissionModeSelector } from './CompactPermissionModeSelector'
 import { CompactModelSelector } from './CompactModelSelector'
 import {
   formatTokenCount,
+  getConnectionDisplayName,
   groupConnectionsByProvider,
   stripPiPrefixForDisplay,
 } from './model-picker-helpers'
@@ -1630,7 +1632,7 @@ export function FreeFormInput({
             `displayLabel`, and `displayLabelKey` reach the popover. The previous
             cherry-pick dropped `inlineExecution: true`, which made the popover
             fall back to the same-window deep-link path; that worked inside
-            Electron but launched the desktop app from the WebUI via `craftagents://`.
+            Electron but launched the desktop app from the WebUI via `archstudio://`.
             Match the AppShell pattern (which already uses spread). */}
         {addLabelEditConfig && (
           <EditPopover
@@ -1825,7 +1827,7 @@ export function FreeFormInput({
             />
           )}
           <FreeFormInputContextBadge
-            icon={<Paperclip className="h-4 w-4" />}
+            icon={<Plus className="h-4 w-4" />}
             label={attachments.length > 0
               ? t("chat.filesCount", { count: attachments.length })
               : t("chat.attach")
@@ -1925,7 +1927,7 @@ export function FreeFormInput({
           <div className="flex items-center gap-1 min-w-32 shrink overflow-hidden">
           {/* 1. Attach Files Badge */}
           <FreeFormInputContextBadge
-            icon={<Paperclip className="h-4 w-4" />}
+            icon={<Plus className="h-4 w-4" />}
             label={attachments.length > 0
               ? t("chat.filesCount", { count: attachments.length })
               : t("chat.attachFiles")
@@ -2173,7 +2175,8 @@ export function FreeFormInput({
                             <div className="text-left flex-1">
                               <div className="font-medium text-sm flex items-center gap-1.5">
                                 <ConnectionIcon connection={conn} size={14} />
-                                {conn.name}
+                                {conn.isLocalModel && <Bolt size={12} className="shrink-0" style={{ color: 'var(--ds-success)' }} />}
+                                {getConnectionDisplayName(conn)}
                                 {isCurrentConnection && <Check className="h-3 w-3 text-foreground" />}
                               </div>
                               {!isAuthenticated && (

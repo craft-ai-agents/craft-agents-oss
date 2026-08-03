@@ -1,7 +1,4 @@
 import { describe, expect, it } from 'bun:test'
-import { mkdtempSync, rmSync, writeFileSync } from 'fs'
-import { join } from 'path'
-import { tmpdir } from 'os'
 import type { Stats } from 'fs'
 import {
   validatePathFormat,
@@ -50,27 +47,25 @@ describe('validatePathFormat', () => {
 
 describe('isValidWorkingDirectory', () => {
   it('accepts an existing Unix directory', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'craft-agent-path-validation-'))
-    try {
-      expect(isValidWorkingDirectory(dir, 'darwin')).toEqual({ valid: true })
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
+    const statFn = (path: string) => {
+      expect(path).toBe('/tmp/craft-agent-path-validation')
+      return directoryStats()
     }
+
+    expect(isValidWorkingDirectory('/tmp/craft-agent-path-validation', 'darwin', statFn)).toEqual({ valid: true })
   })
 
   it('rejects a file path', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'craft-agent-path-validation-'))
-    const file = join(dir, 'file.txt')
-    writeFileSync(file, 'x')
-
-    try {
-      expect(isValidWorkingDirectory(file, 'darwin')).toEqual({
-        valid: false,
-        reason: `Not a directory: ${file}`,
-      })
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
+    const file = '/tmp/craft-agent-path-validation/file.txt'
+    const statFn = (path: string) => {
+      expect(path).toBe(file)
+      return fileStats()
     }
+
+    expect(isValidWorkingDirectory(file, 'darwin', statFn)).toEqual({
+      valid: false,
+      reason: `Not a directory: ${file}`,
+    })
   })
 
   it('rejects invalid Windows paths before filesystem checks', () => {

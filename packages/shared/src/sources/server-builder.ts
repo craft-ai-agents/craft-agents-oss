@@ -152,6 +152,33 @@ export class SourceServerBuilder {
   }
 
   /**
+   * Build a stdio MCP server config for a `type: 'local'` source.
+   *
+   * Local sources expose a directory to the agent through the reference
+   * filesystem MCP server (`@modelcontextprotocol/server-filesystem`), scoped
+   * to the configured path. The server is spawned on demand via npx, so no
+   * credential/auth is involved. Returns null (→ failed build) when the source
+   * is misconfigured (missing path).
+   */
+  buildLocalServer(source: LoadedSource): McpServerConfig | null {
+    if (source.config.type !== 'local' || !source.config.local?.path) {
+      debug(`[SourceServerBuilder] Local source ${source.config.slug} missing path`);
+      return null;
+    }
+
+    const dir = source.config.local.path;
+    // npx resolves to a platform-specific shim; Windows needs the .cmd wrapper
+    // for child_process.spawn to find it on PATH.
+    const command = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+
+    return {
+      type: 'stdio',
+      command,
+      args: ['-y', '@modelcontextprotocol/server-filesystem', dir],
+    };
+  }
+
+  /**
    * Build API server from a source
    *
    * @param source - The source configuration
@@ -354,6 +381,12 @@ export class SourceServerBuilder {
           );
           if (server) {
             apiServers[source.config.slug] = server;
+          }
+        } else if (source.config.type === 'local') {
+          const config = this.buildLocalServer(source);
+          if (config) {
+            debug(`[SourceServerBuilder] Built local server for ${source.config.slug}`);
+            mcpServers[source.config.slug] = config;
           }
         }
       } catch (error) {

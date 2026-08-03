@@ -5,6 +5,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -12,7 +13,7 @@ import { Input } from '@/components/ui/input'
 import { useRegisterModal } from '@/context/ModalContext'
 import type { DirectoryListingResult } from '../../shared/types'
 import { FolderIcon, FolderSymlinkIcon, ChevronRightIcon } from 'lucide-react'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@archstudio/ui'
 
 /**
  * Detect paths that are clearly from the wrong platform.
@@ -294,6 +295,9 @@ export function ServerDirectoryBrowser({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{t("settings.server.selectDirectory")}</DialogTitle>
+          <DialogDescription className="sr-only">
+            Browse the remote server filesystem and choose a working directory.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-2">

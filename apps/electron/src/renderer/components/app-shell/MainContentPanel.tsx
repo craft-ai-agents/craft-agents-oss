@@ -32,10 +32,13 @@ import {
   isSkillsNavigation,
   isAutomationsNavigation,
   isProjectsNavigation,
+  isRunsNavigation,
+  isMemoryNavigation,
+  isMediaLabNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
-import { extractLabelId } from '@craft-agent/shared/labels'
+import { extractLabelId } from '@archstudio/shared/labels'
 import type { SessionStatusId } from '@/config/session-status-config'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
@@ -43,6 +46,9 @@ import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { AutomationInfoPage } from '../automations/AutomationInfoPage'
 import ProjectInfoPage from '@/pages/ProjectInfoPage'
 import { KanbanBoardContainer } from './kanban/KanbanBoardContainer'
+import { RunsPanel } from '../../panels/runs'
+import { MemoryPanel } from '../../panels/memory'
+import { MediaLabPanel } from '../../panels/media-lab'
 import type { ExecutionEntry } from '../automations/types'
 import { automationsAtom } from '@/atoms/automations'
 import { SendResourceToWorkspaceDialog, type SendResourceType } from './SendResourceToWorkspaceDialog'
@@ -373,6 +379,33 @@ export function MainContentPanel({
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">{t("projectsList.noProjectSelected")}</p>
         </div>
+      </Panel>
+    )
+  }
+
+  // Runs navigator - live jobs across sessions
+  if (isRunsNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <RunsPanel />
+      </Panel>
+    )
+  }
+
+  // Memory navigator - owner memory (SQLite-backed)
+  if (isMemoryNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <MemoryPanel selectedMemoryId={navState.details?.memoryId} />
+      </Panel>
+    )
+  }
+
+  // Media Lab navigator - media artifacts across sessions
+  if (isMediaLabNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <MediaLabPanel />
       </Panel>
     )
   }

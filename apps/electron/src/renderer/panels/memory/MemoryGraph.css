@@ -1,0 +1,180 @@
+.memory-graph__container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  overflow: hidden;
+  user-select: none;
+}
+
+.memory-graph {
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  cursor: grab;
+}
+
+.memory-graph:active {
+  cursor: grabbing;
+}
+
+.memory-graph__empty {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  place-items: center;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.memory-graph g[role='button']:focus-visible circle {
+  stroke: var(--color-accent);
+  stroke-width: 3px;
+}
+
+/* ── Zoom controls ─────────────────────────────────────────────────── */
+
+.memory-graph__controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: calc(4px * var(--density-scale));
+  z-index: 10;
+}
+
+.memory-graph__zoom-btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.memory-graph__zoom-btn:hover {
+  background: var(--color-surface-muted);
+}
+
+/* ── Legend ────────────────────────────────────────────────────────── */
+
+.memory-graph__legend {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  display: flex;
+  gap: calc(12px * var(--density-scale));
+  padding: calc(8px * var(--density-scale)) calc(10px * var(--density-scale));
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 10px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.memory-graph__legend-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.memory-graph__legend-title {
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+}
+
+.memory-graph__legend-item {
+  display: flex;
+  align-items: center;
+  gap: calc(5px * var(--density-scale));
+  color: var(--color-text);
+}
+
+.memory-graph__legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.memory-graph__legend-line {
+  width: 16px;
+  height: 2px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+/* ── Link mode indicator ───────────────────────────────────────────── */
+
+.memory-graph__link-mode {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: calc(6px * var(--density-scale)) calc(14px * var(--density-scale));
+  background: var(--color-accent);
+  color: #fff;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  z-index: 10;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Context menu ──────────────────────────────────────────────────── */
+
+.memory-graph__context-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+
+.memory-graph__context-menu {
+  position: fixed;
+  z-index: 21;
+  min-width: 160px;
+  padding: calc(4px * var(--density-scale));
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.memory-graph__context-menu-item {
+  display: block;
+  width: 100%;
+  padding: calc(8px * var(--density-scale)) calc(12px * var(--density-scale));
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--color-text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.memory-graph__context-menu-item:hover {
+  background: var(--color-surface-muted);
+}
+
+.memory-graph__context-menu-item--danger {
+  color: #ef4444;
+}
+
+.memory-graph__context-menu-item--danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+}

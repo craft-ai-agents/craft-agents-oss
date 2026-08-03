@@ -1,6 +1,6 @@
-appId: com.lukilabs.craft-agent
-productName: Craft Agents
-copyright: Copyright © 2026 Craft Docs Ltd.
+appId: com.skobez.archstudio
+productName: ARCHstudio
+copyright: Copyright © 2026 Skobez
 
 electronVersion: "39.2.7"
 
@@ -73,11 +73,6 @@ files:
 extraMetadata:
   main: dist/main.cjs
 
-# Auto-update: electron-updater fetches from this URL for update manifests (.yml files)
-publish:
-  provider: generic
-  url: https://agents.craft.do/electron/latest
-
 # Disable ASAR to avoid decompression overhead and click delays
 asar: false
 
@@ -91,7 +86,7 @@ mac:
     # Required for macOS to list the app under Privacy & Security > Local Network
     # and prompt for permission. Without it the app is silently denied LAN access
     # and never appears in the privacy pane (craft-agents-oss#938).
-    NSLocalNetworkUsageDescription: "Craft Agents uses your local network to reach LAN addresses and devices you ask an agent to access, such as local servers or APIs."
+    NSLocalNetworkUsageDescription: "ARCHstudio uses your local network to reach LAN addresses and devices you ask an agent to access, such as local servers or APIs."
   target:
     - target: dmg
       arch:
@@ -118,6 +113,11 @@ mac:
     # ripgrep (used by packages/server-core/src/services/search.ts).
     - from: node_modules/@vscode/ripgrep
       to: app/node_modules/@vscode/ripgrep
+    # Native SQLite runtime used by the Memory repository. The main bundle
+    # externalizes this package, so it must be copied explicitly because the
+    # global files rules exclude node_modules.
+    - from: ../../node_modules/better-sqlite3
+      to: app/node_modules/better-sqlite3
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs
@@ -126,21 +126,21 @@ mac:
     - "!**/resources/bin/win32-*/**"
     - "!**/resources/bin/linux-*/**"
   # Use predictable naming for macOS packages (applies to zip; dmg uses its own config below)
-  artifactName: "Craft-Agents-${arch}.${ext}"
+  artifactName: "ARCHstudio-${arch}.${ext}"
   # Code signing & notarization (disabled by default for local builds)
   # To enable: set CSC_LINK, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
   # notarize:
   #   teamId: ${APPLE_TEAM_ID}
 
 dmg:
-  # Use predictable naming: Craft-Agents-arm64.dmg, Craft-Agents-x64.dmg
-  artifactName: "Craft-Agents-${arch}.dmg"
+  # Use predictable naming: ARCHstudio-arm64.dmg, ARCHstudio-x64.dmg
+  artifactName: "ARCHstudio-${arch}.dmg"
   # Custom background (multi-resolution TIFF with 1x+2x for retina support)
   background: resources/dmg-background.tiff
   # Use app icon as the mounted volume icon in Finder
   icon: resources/icon.icns
   iconSize: 80
-  title: "Craft Agents"
+  title: "ARCHstudio"
   contents:
     - x: 130
       y: 200
@@ -158,8 +158,11 @@ win:
     - target: nsis
       arch:
         - x64
-  # Use predictable naming: Craft-Agents-x64.exe
-  artifactName: "Craft-Agents-${arch}.${ext}"
+  # Use predictable naming: ARCHstudio-x64.exe
+  artifactName: "ARCHstudio-${arch}.${ext}"
+  # Disable code signing (no elevated privileges needed for local builds)
+  signAndEditExecutable: false
+  verifyUpdateCodeSignature: false
   files:
     # Exclude binaries for other platforms
     - "!**/resources/bin/darwin-*/**"
@@ -179,6 +182,8 @@ win:
       to: app/node_modules/@anthropic-ai/claude-agent-sdk-binary
     - from: node_modules/@vscode/ripgrep
       to: app/node_modules/@vscode/ripgrep
+    - from: ../../node_modules/better-sqlite3
+      to: app/node_modules/better-sqlite3
     - from: vendor/bun/bun.exe
       to: vendor/bun/bun.exe
     - from: resources/bin/win32-x64
@@ -188,21 +193,45 @@ win:
       to: messaging-whatsapp-worker/worker.cjs
 
 nsis:
-  oneClick: true
-  # Per-user install to %LOCALAPPDATA%\Programs\ (not Program Files).
-  # Bun subprocess cannot read/write files in Program Files due to Windows permissions.
+  # Assisted (multi-step) installer so the install directory can be chosen at
+  # install time — the packaged app is ~1.1 GB and users may want it off the
+  # system drive. allowToChangeInstallationDirectory REQUIRES oneClick: false.
+  #
+  # TRADE-OFF: electron-updater cannot install an assisted NSIS package
+  # silently, so auto-updates now surface this same wizard instead of applying
+  # in the background on quit. autoDownload/autoInstallOnAppQuit in
+  # src/main/auto-update.ts still work; the install step is just no longer
+  # invisible.
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  # Per-user install (default root stays %LOCALAPPDATA%\Programs\, but the user
+  # can redirect it). Bun subprocess cannot read/write files in Program Files
+  # due to Windows permissions — avoid installing there.
   perMachine: false
-  deleteAppDataOnUninstall: true
+  # Keep the Electron userData directory on uninstall. The rebrand left several
+  # userData dirs side by side, so any migration that reinstalls under the new
+  # brand runs an uninstall step first — with this true, that step silently
+  # destroys the user's sessions and settings. Uninstalling should not be a
+  # data-loss event either way; ~/.archstudio is untouched by NSIS regardless.
+  deleteAppDataOnUninstall: false
+  # Name the Start Menu entry explicitly so it cannot drift from productName.
+  shortcutName: ARCHstudio
+  # `always` recreates the desktop shortcut on update. The default (true) only
+  # creates it on first install, so anyone whose shortcut was lost across the
+  # rebrand never gets one back.
+  createDesktopShortcut: always
+  # Removes pre-rebrand shortcuts that the new appId cannot detect. See the file.
+  include: build/installer.nsh
 
 linux:
   icon: resources/icon.png
   category: Utility
-  maintainer: "Craft Docs Ltd. <support@craft.do>"
+  maintainer: "Skobez <skobeponga@gmail.com>"
   target:
     - target: AppImage
       arch:
         - x64
-  artifactName: "Craft-Agents-${arch}.${ext}"
+  artifactName: "ARCHstudio-${arch}.${ext}"
   extraResources:
     - from: node_modules/@anthropic-ai/claude-agent-sdk
       to: app/node_modules/@anthropic-ai/claude-agent-sdk
@@ -210,6 +239,8 @@ linux:
       to: app/node_modules/@anthropic-ai/claude-agent-sdk-binary
     - from: node_modules/@vscode/ripgrep
       to: app/node_modules/@vscode/ripgrep
+    - from: ../../node_modules/better-sqlite3
+      to: app/node_modules/better-sqlite3
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs

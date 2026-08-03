@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { ClaudeEventAdapter, buildWindowsSkillsDirError, type ClaudeAdapterCallbacks } from '../backend/claude/event-adapter.ts';
-import type { AgentEvent } from '@craft-agent/core/types';
+import type { AgentEvent } from '@archstudio/core/types';
 
 // Helper: create default callbacks
 function createCallbacks(overrides?: Partial<ClaudeAdapterCallbacks>): ClaudeAdapterCallbacks {

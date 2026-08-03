@@ -65,7 +65,7 @@ done
 # Configuration
 BUN_VERSION="bun-v1.3.9"  # Pinned version for reproducible builds
 
-echo "=== Building Craft Agents AppImage (${ARCH}) using electron-builder ==="
+echo "=== Building ARCHstudio AppImage (${ARCH}) using electron-builder ==="
 if [ "$UPLOAD" = true ]; then
     echo "Will upload to S3 after build"
 fi
@@ -193,6 +193,39 @@ cd "$ELECTRON_DIR"
 # Note: electron-builder may build both archs due to config, but we only use the requested one
 npx electron-builder --linux --${ARCH}
 
+# 7b. Verify the native SQLite runtime made it into the unpacked app.
+# main.cjs externalizes better-sqlite3, so if electron-builder.yml did not copy
+# the package + binding the Memory repository dies at runtime with a bare
+# MODULE_NOT_FOUND. Same guard as build-win.ps1 / build-dmg.sh.
+echo "Verifying native runtime dependencies in packaged app..."
+if [ "$ARCH" = "x64" ]; then
+    UNPACKED_DIR="$ELECTRON_DIR/release/linux-unpacked"
+else
+    UNPACKED_DIR="$ELECTRON_DIR/release/linux-arm64-unpacked"
+fi
+
+if [ ! -d "$UNPACKED_DIR" ]; then
+    echo "  $UNPACKED_DIR not found, skipping native dependency verification"
+else
+    SQLITE_PKG="$UNPACKED_DIR/resources/app/node_modules/better-sqlite3"
+    SQLITE_BINDING="$SQLITE_PKG/prebuilds/linux-${ARCH}.node"
+
+    if [ ! -f "$SQLITE_PKG/package.json" ]; then
+        echo "CRITICAL: better-sqlite3 not bundled! Expected at: $SQLITE_PKG"
+        exit 1
+    fi
+    if [ ! -f "$SQLITE_BINDING" ]; then
+        echo "CRITICAL: better-sqlite3 Linux binding not bundled! Expected at: $SQLITE_BINDING"
+        exit 1
+    fi
+    BINDING_SIZE="$(wc -c < "$SQLITE_BINDING" | tr -d ' ')"
+    if [ "$BINDING_SIZE" -lt 1000000 ]; then
+        echo "CRITICAL: better-sqlite3 binding too small (${BINDING_SIZE} bytes)"
+        exit 1
+    fi
+    echo "  SQLite bundled: linux-${ARCH}.node is $((BINDING_SIZE / 1024 / 1024)) MB"
+fi
+
 # 8. Verify the AppImage was built
 # electron-builder uses Linux-style arch names: x86_64 for x64, aarch64 for arm64
 if [ "$ARCH" = "x64" ]; then
@@ -201,22 +234,32 @@ else
     LINUX_ARCH="aarch64"
 fi
 
-# electron-builder outputs: Craft-Agents-x86_64.AppImage or Craft-Agents-aarch64.AppImage
-BUILT_APPIMAGE_NAME="Craft-Agents-${LINUX_ARCH}.AppImage"
-BUILT_APPIMAGE_PATH="$ELECTRON_DIR/release/$BUILT_APPIMAGE_NAME"
+# electron-builder.yml sets artifactName, so the AppImage normally lands on our
+# naming already. Without that template electron-builder falls back to its own
+# arch spelling (x86_64 / aarch64), so accept that form too and rename it.
+APPIMAGE_NAME="ARCHstudio-${ARCH}.AppImage"
+BUILT_APPIMAGE_NAME=""
+for candidate in "ARCHstudio-${ARCH}.AppImage" "ARCHstudio-${LINUX_ARCH}.AppImage"; do
+    if [ -f "$ELECTRON_DIR/release/$candidate" ]; then
+        BUILT_APPIMAGE_NAME="$candidate"
+        break
+    fi
+done
 
-if [ ! -f "$BUILT_APPIMAGE_PATH" ]; then
-    echo "ERROR: Expected AppImage not found at $BUILT_APPIMAGE_PATH"
+if [ -z "$BUILT_APPIMAGE_NAME" ]; then
+    echo "ERROR: Expected AppImage not found in $ELECTRON_DIR/release/"
+    echo "Looked for: ARCHstudio-${ARCH}.AppImage, ARCHstudio-${LINUX_ARCH}.AppImage"
     echo "Contents of release directory:"
     ls -la "$ELECTRON_DIR/release/"
     exit 1
 fi
 
-# Rename to our standard naming convention: Craft-Agents-x64.AppImage, Craft-Agents-arm64.AppImage
-APPIMAGE_NAME="Craft-Agents-${ARCH}.AppImage"
+BUILT_APPIMAGE_PATH="$ELECTRON_DIR/release/$BUILT_APPIMAGE_NAME"
 APPIMAGE_PATH="$ELECTRON_DIR/release/$APPIMAGE_NAME"
-mv "$BUILT_APPIMAGE_PATH" "$APPIMAGE_PATH"
-echo "Renamed $BUILT_APPIMAGE_NAME -> $APPIMAGE_NAME"
+if [ "$BUILT_APPIMAGE_PATH" != "$APPIMAGE_PATH" ]; then
+    mv "$BUILT_APPIMAGE_PATH" "$APPIMAGE_PATH"
+    echo "Renamed $BUILT_APPIMAGE_NAME -> $APPIMAGE_NAME"
+fi
 
 echo ""
 echo "=== Build Complete ==="

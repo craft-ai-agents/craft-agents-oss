@@ -1,6 +1,14 @@
 import type { PreparedOAuthFlow } from './oauth-flow-types.ts';
 
-export const OAUTH_RELAY_CALLBACK_URL = 'https://agents.craft.do/auth/callback';
+// OAuth callback relay. Only used for the WebUI / headless deployment, where
+// the browser and callback server may be on different machines so a localhost
+// redirect won't work. The Electron desktop app does NOT use this — it passes
+// a callbackPort and redirects straight to http://localhost:<port>.
+//
+// Defaults to upstream's relay so existing WebUI installs keep working. Point
+// ARCHSTUDIO_OAUTH_RELAY_URL at your own relay to drop the craft.do dependency.
+export const OAUTH_RELAY_CALLBACK_URL =
+  process.env.ARCHSTUDIO_OAUTH_RELAY_URL || 'https://agents.craft.do/auth/callback';
 const OAUTH_RELAY_STATE_PREFIX = 'ca1.';
 const OAUTH_RELAY_STATE_VERSION = 1;
 

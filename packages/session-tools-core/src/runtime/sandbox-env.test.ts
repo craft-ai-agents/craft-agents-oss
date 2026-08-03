@@ -40,10 +40,22 @@ describe('sandbox-env', () => {
     }, {
       SAFE_VAR: 'ok',
       OPENAI_API_KEY: 'secret',
+      PYTHONPATH: 'C:\\contaminated\\site-packages',
+      PYTHONHOME: 'C:\\wrong-python-home',
+      VIRTUAL_ENV: 'C:\\foreign-venv',
+      PyThOnPaTh: 'C:\\mixed-case-site-packages',
+      pythonhome: 'C:\\mixed-case-python-home',
+      Virtual_Env: 'C:\\mixed-case-venv',
     });
 
     expect(env.SAFE_VAR).toBe('ok');
     expect(env.OPENAI_API_KEY).toBeUndefined();
+    expect(env.PYTHONPATH).toBeUndefined();
+    expect(env.PYTHONHOME).toBeUndefined();
+    expect(env.VIRTUAL_ENV).toBeUndefined();
+    expect(Object.keys(env).some((key) => key.toUpperCase() === 'PYTHONPATH')).toBe(false);
+    expect(Object.keys(env).some((key) => key.toUpperCase() === 'PYTHONHOME')).toBe(false);
+    expect(Object.keys(env).some((key) => key.toUpperCase() === 'VIRTUAL_ENV')).toBe(false);
 
     expect(env.TMPDIR).toBe(join(dataDir, '.tmp'));
     expect(env.TMP).toBe(join(dataDir, '.tmp'));

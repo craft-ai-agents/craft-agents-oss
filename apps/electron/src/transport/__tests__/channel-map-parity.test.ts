@@ -22,12 +22,18 @@ type ApiToChannelMapKeys = Exclude<
   | 'isChannelAvailable'
   | 'getSystemWarnings' // reads env var set at startup — no IPC needed
   | 'relaunchApp' // direct IPC to main process — not through WS RPC
+  | 'getLaunchAtLogin' // direct IPC to main process
+  | 'setLaunchAtLogin' // direct IPC to main process
+  | 'getConfirmBeforeExit' // direct IPC to main process
+  | 'setConfirmBeforeExit' // direct IPC to main process
   | 'removeWorkspace' // direct IPC to main process — modifies local config
   | 'invokeOnServer' // direct IPC to main process — cross-server RPC
   | 'transferSessionToWorkspace' // direct IPC to main process — orchestrated remote transfer
   | 'onTransferProgress' // direct IPC listener — chunk upload progress
   | 'changeLanguage' // direct IPC to main process — syncs i18n language
   | 'getFilePath' // renderer-local — webUtils.getPathForFile, no IPC round-trip
+  | 'exportSettings' // direct IPC — opens save dialog in main process
+  | 'importSettings' // direct IPC — opens open dialog in main process
 > | BrowserPaneKeys
 type ChannelMapKeys = keyof typeof CHANNEL_MAP & string
 

@@ -4,12 +4,12 @@
  * These error types map HTTP status codes and error patterns to
  * actionable error information that can be displayed to users.
  *
- * The `ErrorCode` union is owned by `@craft-agent/core` so the wire
+ * The `ErrorCode` union is owned by `@archstudio/core` so the wire
  * format (which crosses package boundaries) stays in one place; this
  * file owns the user-facing text and recovery actions for each code.
  */
 
-import type { ErrorCode } from '@craft-agent/core/types';
+import type { ErrorCode } from '@archstudio/core/types';
 import { getProviderMetadata } from '../config/provider-metadata.ts';
 
 export type { ErrorCode };
@@ -175,7 +175,7 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
   },
   model_no_tool_support: {
     title: 'Model Does Not Support Tools',
-    message: 'The selected model does not support tool/function calling, which is required for Craft Agent. Please choose a model with tool support (e.g., Claude, GPT-4, Gemini).',
+    message: 'The selected model does not support tool/function calling, which is required for ARCHstudio. Please choose a model with tool support (e.g., Claude, GPT-4, Gemini).',
     actions: [
       { key: 's', label: 'Change model', command: '/settings', action: 'settings' },
     ],
@@ -233,7 +233,7 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
     message:
       'The Claude Agent SDK binary expected on disk is not present. ' +
       'This usually means the app bundle is incomplete (interrupted download, partial update, ' +
-      'or a security tool removed it). Reinstalling Craft Agents typically fixes this.',
+      'or a security tool removed it). Reinstalling ARCHstudio typically fixes this.',
     actions: [
       { key: 'r', label: 'Retry', action: 'retry' },
     ],
@@ -483,7 +483,7 @@ export function parseError(
       return {
         code,
         ...definition,
-        message: `Model "${modelMatch[1]}" does not support tool/function calling, which is required for Craft Agent. Please choose a different model with tool support in Settings.`,
+        message: `Model "${modelMatch[1]}" does not support tool/function calling, which is required for ARCHstudio. Please choose a different model with tool support in Settings.`,
         originalError: errorMessage,
         providerInfo,
       };

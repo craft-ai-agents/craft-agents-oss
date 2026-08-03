@@ -27,7 +27,7 @@ export function getBuiltinSources(_workspaceId: string, _workspaceRootPath: stri
 }
 
 /**
- * Get the built-in Craft Agents docs source.
+ * Get the built-in ARCHstudio docs source.
  *
  * @deprecated craft-agents-docs is now an always-available MCP server
  * configured directly in craft-agent.ts. This function is kept for
@@ -37,17 +37,19 @@ export function getDocsSource(workspaceId: string, workspaceRootPath: string): L
   // Return a placeholder - this shouldn't be called anymore
   const placeholderConfig: FolderSourceConfig = {
     id: 'builtin-craft-agents-docs',
-    name: 'Craft Agents Docs',
+    name: 'ARCHstudio Docs',
     slug: 'craft-agents-docs',
     enabled: false,
     provider: 'mintlify',
     type: 'mcp',
     mcp: {
+      // Deprecated placeholder (this function is no longer called). The live
+      // docs MCP url is set in claude-agent.ts via ARCHSTUDIO_DOCS_MCP_URL.
       transport: 'http',
-      url: 'https://agents.craft.do/docs/mcp',
+      url: process.env.ARCHSTUDIO_DOCS_MCP_URL || 'https://agents.craft.do/docs/mcp',
       authType: 'none',
     },
-    tagline: 'Search Craft Agents documentation and source setup guides',
+    tagline: 'Search ARCHstudio documentation and source setup guides',
     icon: '📚',
     isAuthenticated: true,
     connectionStatus: 'connected',

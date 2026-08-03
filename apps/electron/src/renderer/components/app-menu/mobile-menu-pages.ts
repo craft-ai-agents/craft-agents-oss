@@ -1,13 +1,12 @@
 import {
   ROOT_MENU,
-  HELP_LINKS,
   DEBUG_MENU,
   SETTINGS_ITEMS,
   type SettingsMenuItem,
 } from '../../../shared/menu-schema'
 
 /** Identifies one of the mobile menu pages. */
-export type MobileMenuPageId = 'root' | 'settings' | 'help' | 'debug'
+export type MobileMenuPageId = 'root' | 'settings' | 'debug'
 
 /**
  * What a mobile menu row does on tap.
@@ -80,13 +79,9 @@ export function buildMobileMenuPages({ hasNewWindow, isDebugMode }: BuildOptions
       labelKey: 'sidebar.settings',
       action: { kind: 'navigate', to: 'settings' },
     },
-    {
-      id: 'help',
-      iconName: 'HelpCircle',
-      labelKey: 'menu.help',
-      action: { kind: 'navigate', to: 'help' },
-    },
   )
+  // No 'help' entry: its only rows were upstream doc links (see HELP_LINKS),
+  // which this fork does not host. Restore alongside HELP_LINKS if docs return.
   if (isDebugMode) {
     rootRows.push({
       id: 'debug',
@@ -112,13 +107,6 @@ export function buildMobileMenuPages({ hasNewWindow, isDebugMode }: BuildOptions
     })),
   ]
 
-  const helpRows: MobileMenuRow[] = HELP_LINKS.map<MobileMenuRow>((link) => ({
-    id: link.id,
-    iconName: link.icon,
-    labelKey: link.labelKey,
-    action: { kind: 'url', url: link.url },
-  }))
-
   const debugRows: MobileMenuRow[] = DEBUG_MENU.items
     .filter((item) => item.type === 'action')
     .map<MobileMenuRow>((item) => {
@@ -141,7 +129,6 @@ export function buildMobileMenuPages({ hasNewWindow, isDebugMode }: BuildOptions
   return [
     { id: 'root', titleKey: 'menu.craftMenu', rows: rootRows },
     { id: 'settings', titleKey: 'sidebar.settings', rows: settingsRows },
-    { id: 'help', titleKey: 'menu.help', rows: helpRows },
     { id: 'debug', titleKey: DEBUG_MENU.labelKey, rows: debugRows },
   ]
 }

@@ -1,13 +1,13 @@
 import { readFile, writeFile, stat } from 'fs/promises'
-import { join } from 'path'
-import { RPC_CHANNELS, type FileAttachment, type SendMessageOptions, type SessionEvent } from '@craft-agent/shared/protocol'
-import type { StoredAttachment } from '@craft-agent/core/types'
-import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { perf } from '@craft-agent/shared/utils'
-import { isValidThinkingLevel, THINKING_LEVEL_IDS } from '@craft-agent/shared/agent/thinking-levels'
+import { join, resolve, sep } from 'path'
+import { RPC_CHANNELS, type FileAttachment, type SendMessageOptions, type SessionEvent } from '@archstudio/shared/protocol'
+import type { StoredAttachment } from '@archstudio/core/types'
+import { getWorkspaceByNameOrId } from '@archstudio/shared/config'
+import { perf } from '@archstudio/shared/utils'
+import { isValidThinkingLevel, THINKING_LEVEL_IDS } from '@archstudio/shared/agent/thinking-levels'
 
 const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
-import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
+import { pushTyped, type RpcServer } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { setTransferableHandler } from './transfer'
 
@@ -21,6 +21,22 @@ interface ClientSessionWatchState {
 const clientSessionWatches = new Map<string, ClientSessionWatchState>()
 
 const SESSION_GET_LOG_ID_LIMIT = 25
+
+/**
+ * Build an Error that matches the standard `DOMException('AbortError')`
+ * shape without depending on the DOMException global (which is host-defined
+ * and not available in plain Node before v17). The handler checks
+ * `error.name === 'AbortError'` so this matches the same contract without
+ * coupling to the DOM.
+ *
+ * Exported so sibling handlers (./media.ts uses it via the shared recursive
+ * scanner) can produce the same shape on cancel paths.
+ */
+export function makeAbortError(): Error {
+  const err = new Error('Aborted')
+  err.name = 'AbortError'
+  return err
+}
 
 function summarizeIds(ids: Iterable<string>, limit = SESSION_GET_LOG_ID_LIMIT) {
   const all = Array.from(ids)
@@ -60,12 +76,30 @@ export function cleanupSessionFileWatchForClient(clientId: string): void {
 // Recursive directory scanner for session files
 // Filters out internal files (session.jsonl) and hidden files (. prefix)
 // Returns only non-empty directories
-async function scanSessionDirectory(dirPath: string): Promise<import('@craft-agent/shared/protocol').SessionFile[]> {
+//
+// `signal` (optional): AbortSignal from the originating RPC. Checked between
+// directory entries so a cancelled request can bail out of deep recursions
+// before they finish walking the whole tree. Throws an Error with name
+// 'AbortError' when signalled — the RPC layer will translate that into a
+// HANDLER_ERROR reply (the renderer's pending promise was already rejected
+// locally by its AbortSignal listener).
+//
+// `kindFilter` (optional): when provided, only files whose extension matches
+// the requested media kind are emitted. Used by `media:list` (see ./media.ts)
+// to short-circuit before the per-session tree walker marshals into the
+// renderer's `walk()` + `classify()` flow.
+export async function scanSessionDirectory(
+  dirPath: string,
+  signal?: AbortSignal,
+  kindFilter?: import('@archstudio/shared/protocol').MediaKind,
+): Promise<import('@archstudio/shared/protocol').SessionFile[]> {
   const { readdir, stat } = await import('fs/promises')
+  if (signal?.aborted) throw makeAbortError()
   const entries = await readdir(dirPath, { withFileTypes: true })
-  const files: import('@craft-agent/shared/protocol').SessionFile[] = []
+  const files: import('@archstudio/shared/protocol').SessionFile[] = []
 
   for (const entry of entries) {
+    if (signal?.aborted) throw makeAbortError()
     // Skip internal and hidden files
     if (entry.name === 'session.jsonl' || entry.name.startsWith('.')) continue
 
@@ -73,8 +107,10 @@ async function scanSessionDirectory(dirPath: string): Promise<import('@craft-age
 
     if (entry.isDirectory()) {
       // Recursively scan subdirectory
-      const children = await scanSessionDirectory(fullPath)
-      // Only include non-empty directories
+      const children = await scanSessionDirectory(fullPath, signal, kindFilter)
+      // Only include non-empty directories (empty after the kind filter is
+      // also empty for our purposes — prune so the renderer's tree view
+      // doesn't show ghost parent directories)
       if (children.length > 0) {
         files.push({
           name: entry.name,
@@ -84,12 +120,15 @@ async function scanSessionDirectory(dirPath: string): Promise<import('@craft-age
         })
       }
     } else {
+      // Cheap pre-classify when a filter is requested; skip without stat.
+      if (kindFilter && !matchesMediaKind(entry.name, kindFilter)) continue
       const stats = await stat(fullPath)
       files.push({
         name: entry.name,
         path: fullPath,
         type: 'file',
         size: stats.size,
+        mtime: stats.mtimeMs,
       })
     }
   }
@@ -99,6 +138,42 @@ async function scanSessionDirectory(dirPath: string): Promise<import('@craft-age
     if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
     return a.name.localeCompare(b.name)
   })
+}
+
+/**
+ * Cheap extension check used by `scanSessionDirectory` to short-circuit when
+ * the renderer has asked for a single kind. Centralizing the EXT map server-
+ * side also keeps the renderer's `classify()` and the server's classification
+ * in sync (single source of truth).
+ */
+export const MEDIA_KIND_EXTENSIONS: Record<import('@archstudio/shared/protocol').MediaKind, readonly string[]> = {
+  image: ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.avif'],
+  video: ['.mp4', '.mov', '.webm', '.mkv', '.avi'],
+  audio: ['.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac'],
+  doc: ['.pdf', '.docx', '.pptx', '.xlsx', '.csv', '.md'],
+}
+
+export function matchesMediaKind(
+  fileName: string,
+  kind: import('@archstudio/shared/protocol').MediaKind,
+): boolean {
+  const lower = fileName.toLowerCase()
+  return MEDIA_KIND_EXTENSIONS[kind].some((ext) => lower.endsWith(ext))
+}
+
+/**
+ * Classify a basename into a media kind, or null when the file isn't a known
+ * media extension. Mirror of the renderer's old `classify()` — kept here so
+ * the `media:list` handler can tag every emitted `MediaItem` with its kind
+ * in a single pass, without shipping the EXT map to the renderer.
+ */
+export function classifyMedia(
+  fileName: string,
+): import('@archstudio/shared/protocol').MediaKind | null {
+  for (const kind of Object.keys(MEDIA_KIND_EXTENSIONS) as import('@archstudio/shared/protocol').MediaKind[]) {
+    if (matchesMediaKind(fileName, kind)) return kind
+  }
+  return null
 }
 
 export const HANDLED_CHANNELS = [
@@ -185,7 +260,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   })
 
   // Create a new session
-  server.handle(RPC_CHANNELS.sessions.CREATE, async (_ctx, workspaceId: string, options?: import('@craft-agent/shared/protocol').CreateSessionOptions) => {
+  server.handle(RPC_CHANNELS.sessions.CREATE, async (_ctx, workspaceId: string, options?: import('@archstudio/shared/protocol').CreateSessionOptions) => {
     const end = perf.start('rpc.createSession', { workspaceId })
     // The renderer adds the session synchronously from this return value (App.tsx handleCreateSession),
     // so suppress the broadcast to avoid a redundant hydrate round-trip.
@@ -287,7 +362,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
 
   // Respond to a credential request (secure auth input)
   // Returns true if the response was delivered, false if agent/session is gone
-  server.handle(RPC_CHANNELS.sessions.RESPOND_TO_CREDENTIAL, async (_ctx, sessionId: string, requestId: string, response: import('@craft-agent/shared/protocol').CredentialResponse) => {
+  server.handle(RPC_CHANNELS.sessions.RESPOND_TO_CREDENTIAL, async (_ctx, sessionId: string, requestId: string, response: import('@archstudio/shared/protocol').CredentialResponse) => {
     return sessionManager.respondToCredential(sessionId, requestId, response)
   })
 
@@ -299,7 +374,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   server.handle(RPC_CHANNELS.sessions.COMMAND, async (
     _ctx,
     sessionId: string,
-    command: import('@craft-agent/shared/protocol').SessionCommand
+    command: import('@archstudio/shared/protocol').SessionCommand
   ) => {
     switch (command.type) {
       case 'flag':
@@ -379,6 +454,40 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
         return sessionManager.removeMessageAnnotation(sessionId, command.messageId, command.annotationId)
       case 'updateAnnotation':
         return sessionManager.updateMessageAnnotation(sessionId, command.messageId, command.annotationId, command.patch)
+      case 'removeAttachment':
+        return sessionManager.removeMessageAttachment(sessionId, command.messageId, command.attachmentId)
+      case 'clearAttachments':
+        return sessionManager.clearMessageAttachments(sessionId)
+      case 'gitCheckout': {
+        // Discard working-tree changes for an unstaged modified file. Mirrors
+        // `git checkout -- <path>` semantics: doesn't touch staged or the
+        // index, just reverts the file on disk to HEAD.
+        const session = await sessionManager.getSession(sessionId)
+        if (!session) return { success: false, error: 'Session not found' }
+        const cwd = session.workingDirectory
+        if (!cwd) return { success: false, error: 'No working directory set for this session' }
+        const filePath = command.filePath
+        if (!filePath) {
+          return { success: false, error: 'Invalid file path' }
+        }
+        // Resolve-and-containment check defends against concat-time escape
+        // (e.g. 'goodDir/../badDir') that a string-level filter would miss.
+        // Server runs with full user privileges, so this is a hard guard.
+        const absCwd = resolve(cwd)
+        const absFile = resolve(cwd, filePath)
+        if (absFile !== absCwd && !absFile.startsWith(absCwd + sep)) {
+          return { success: false, error: 'Invalid file path' }
+        }
+        const result = Bun.spawnSync(['git', 'checkout', '--', filePath], {
+          cwd,
+          env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }, // never prompt for credentials
+        })
+        if (result.exitCode !== 0) {
+          const stderr = result.stderr instanceof Buffer ? result.stderr.toString() : String(result.stderr ?? '')
+          return { success: false, error: stderr.trim() || 'git checkout failed' }
+        }
+        return { success: true }
+      }
       default: {
         const _exhaustive: never = command
         throw new Error(`Unknown session command: ${JSON.stringify(command)}`)
@@ -417,8 +526,8 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
       return []
     }
 
-    const { searchSessions } = await import('@craft-agent/server-core/services')
-    const { getWorkspaceSessionsPath } = await import('@craft-agent/shared/workspaces')
+    const { searchSessions } = await import('@archstudio/server-core/services')
+    const { getWorkspaceSessionsPath } = await import('@archstudio/shared/workspaces')
 
     const sessionsDir = getWorkspaceSessionsPath(workspace.rootPath)
     log.debug(`SEARCH_SESSIONS: Searching "${query}" in ${sessionsDir}`)
@@ -446,13 +555,16 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   // ============================================================
 
   // Get files in session directory (recursive tree structure)
-  server.handle(RPC_CHANNELS.sessions.GET_FILES, async (_ctx, sessionId: string) => {
+  server.handle(RPC_CHANNELS.sessions.GET_FILES, async (ctx, sessionId: string) => {
     const sessionPath = sessionManager.getSessionPath(sessionId)
     if (!sessionPath) return []
 
     try {
-      return await scanSessionDirectory(sessionPath)
+      return await scanSessionDirectory(sessionPath, ctx.signal)
     } catch (error) {
+      // Re-throw aborts so the RPC layer can surface them as HANDLER_ERROR;
+      // swallow everything else as an empty tree (preserves prior behavior).
+      if ((error as { name?: string } | null)?.name === 'AbortError') throw error
       log.error('Failed to get session files:', error)
       return []
     }
@@ -556,7 +668,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
     if (!targetWorkspaceId || typeof targetWorkspaceId !== 'string') throw new Error('targetWorkspaceId is required')
     if (mode !== 'move' && mode !== 'fork') throw new Error(`Invalid dispatch mode: ${mode}`)
 
-    return sessionManager.importSession(targetWorkspaceId, bundle as import('@craft-agent/shared/sessions').SessionBundle, mode)
+    return sessionManager.importSession(targetWorkspaceId, bundle as import('@archstudio/shared/sessions').SessionBundle, mode)
   }
   server.handle(RPC_CHANNELS.sessions.IMPORT, importHandler)
   // Also register as transferable so chunked transfer can invoke it on commit
@@ -574,7 +686,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   })
 
   // Import a summarized remote-transfer payload into a target workspace.
-  server.handle(RPC_CHANNELS.sessions.IMPORT_REMOTE_TRANSFER, async (_ctx, targetWorkspaceId: string, payload: import('@craft-agent/shared/protocol').RemoteSessionTransferPayload) => {
+  server.handle(RPC_CHANNELS.sessions.IMPORT_REMOTE_TRANSFER, async (_ctx, targetWorkspaceId: string, payload: import('@archstudio/shared/protocol').RemoteSessionTransferPayload) => {
     await sessionManager.waitForInit()
     if (!targetWorkspaceId || typeof targetWorkspaceId !== 'string') throw new Error('targetWorkspaceId is required')
     return sessionManager.importRemoteSessionTransfer(targetWorkspaceId, payload)

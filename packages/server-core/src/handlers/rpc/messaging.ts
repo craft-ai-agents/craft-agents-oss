@@ -2,7 +2,7 @@
  * Messaging RPC handlers — UI ↔ Server communication for messaging config and bindings.
  */
 
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { RPC_CHANNELS } from '@archstudio/shared/protocol'
 import type { RpcServer } from '../../transport/types'
 import type { HandlerDeps } from '../handler-deps'
 import type {

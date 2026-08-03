@@ -1,11 +1,24 @@
 // =============================================================================
 // Protocol re-exports (channels, DTOs, events, wire types)
 // =============================================================================
-export * from '@craft-agent/shared/protocol'
+export * from '@archstudio/shared/protocol'
 
 // =============================================================================
 // Package re-exports (convenience for renderer imports)
 // =============================================================================
+
+// `GitFileDiffResult` is a protocol DTO, not a core type. The `export *` above
+// re-exports it publicly but does not bring it into this module's scope, so the
+// local annotation below needs an explicit import.
+import type {
+  ComfyHealth,
+  ComfyJobStatus,
+  ComfyJobStatusRequest,
+  ComfyRunRequest,
+  ComfyRunResult,
+  ComfyWorkflowList,
+  GitFileDiffResult,
+} from '@archstudio/shared/protocol'
 
 // Core types
 import type {
@@ -20,17 +33,17 @@ import type {
   ContentBadge,
   ToolDisplayMeta,
   AnnotationV1,
-} from '@craft-agent/core/types';
+} from '@archstudio/core/types';
 
 // Mode types from dedicated subpath export (avoids pulling in SDK)
-import type { PermissionMode } from '@craft-agent/shared/agent/modes';
+import type { PermissionMode } from '@archstudio/shared/agent/modes';
 export type { PermissionMode };
-export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
+export { PERMISSION_MODE_CONFIG } from '@archstudio/shared/agent/modes';
 
 // Thinking level types
-import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels';
+import type { ThinkingLevel } from '@archstudio/shared/agent/thinking-levels';
 export type { ThinkingLevel };
-export { THINKING_LEVELS, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels';
+export { THINKING_LEVELS, DEFAULT_THINKING_LEVEL } from '@archstudio/shared/agent/thinking-levels';
 
 export type {
   CoreMessage as Message,
@@ -47,28 +60,28 @@ export type {
 };
 
 // Auth types for onboarding
-import type { AuthState, SetupNeeds } from '@craft-agent/shared/auth/types';
-import type { AuthType } from '@craft-agent/shared/config/types';
+import type { AuthState, SetupNeeds } from '@archstudio/shared/auth/types';
+import type { AuthType } from '@archstudio/shared/config/types';
 export type { AuthState, SetupNeeds, AuthType };
 
 // Credential health types
-import type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType } from '@craft-agent/shared/credentials/types';
+import type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType } from '@archstudio/shared/credentials/types';
 export type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType };
 
 // Source types for session source selection
-import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@craft-agent/shared/sources/types';
+import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@archstudio/shared/sources/types';
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 
 // Skill types
-import type { LoadedSkill, SkillMetadata } from '@craft-agent/shared/skills/types';
+import type { LoadedSkill, SkillMetadata } from '@archstudio/shared/skills/types';
 export type { LoadedSkill, SkillMetadata };
 
 // Resource bundle types (cross-workspace export/import)
-import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
+import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@archstudio/shared/resources';
 export type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult };
 
 // LLM connection types
-import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, NetworkProxySettings } from '@craft-agent/shared/config';
+import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, NetworkProxySettings } from '@archstudio/shared/config';
 export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, NetworkProxySettings };
 
 // =============================================================================
@@ -173,7 +186,7 @@ export interface TransportConnectionState {
 // =============================================================================
 
 // Re-import types for ElectronAPI
-import type { WorkspaceInfo, Workspace, SessionMetadata, StoredAttachment as StoredAttachmentType } from '@craft-agent/core/types';
+import type { WorkspaceInfo, Workspace, SessionMetadata, StoredAttachment as StoredAttachmentType } from '@archstudio/core/types';
 
 // Import protocol types used by ElectronAPI (they come through the `export *` above,
 // but we need them in scope for the interface definition)
@@ -206,9 +219,13 @@ import type {
   TestLlmConnectionResult,
   SkillFile,
   SessionFile,
+  MediaItem,
+  MediaListPage,
+  MediaListRequest,
   OAuthResult,
   McpToolsResult,
   GitBashStatus,
+  GitStatusResult,
   ClaudeOAuthResult,
   UpdateInfo,
   WorkspaceSettings,
@@ -219,9 +236,10 @@ import type {
   TestAutomationResult,
   WindowCloseRequest,
   DirectoryListingResult,
+  ReadDirectoryResult,
   RemoteSessionTransferPayload,
   ImportRemoteSessionTransferResult,
-} from '@craft-agent/shared/protocol'
+} from '@archstudio/shared/protocol'
 
 export interface ElectronAPI {
   // Session management
@@ -260,12 +278,20 @@ export interface ElectronAPI {
   getServerHomeDir(): Promise<string>
 
   // Server mode configuration
-  getServerConfig(): Promise<import('@craft-agent/shared/config/server-config').ServerConfig>
-  setServerConfig(config: import('@craft-agent/shared/config/server-config').ServerConfig): Promise<void>
-  getServerStatus(): Promise<import('@craft-agent/shared/config/server-config').ServerStatus>
+  getServerConfig(): Promise<import('@archstudio/shared/config/server-config').ServerConfig>
+  setServerConfig(config: import('@archstudio/shared/config/server-config').ServerConfig): Promise<void>
+  getServerStatus(): Promise<import('@archstudio/shared/config/server-config').ServerStatus>
 
   // App lifecycle
   relaunchApp(): Promise<void>
+  getLaunchAtLogin(): Promise<boolean>
+  setLaunchAtLogin(openAtLogin: boolean): Promise<void>
+  getConfirmBeforeExit(): Promise<boolean>
+  setConfirmBeforeExit(value: boolean): Promise<void>
+  /** Export all settings (config, preferences, themes) to a user-chosen JSON file. */
+  exportSettings(): Promise<{ success: boolean; path?: string; error?: string; canceled?: boolean }>
+  /** Import settings from a user-chosen JSON file and restore them. */
+  importSettings(): Promise<{ success: boolean; error?: string; canceled?: boolean }>
   removeWorkspace(workspaceId: string): Promise<boolean>
   invokeOnServer(url: string, token: string, channel: string, ...args: any[]): Promise<any>
 
@@ -325,6 +351,8 @@ export interface ElectronAPI {
 
   // File operations
   readFile(path: string): Promise<string>
+  /** Write UTF-8 content to a file on disk (save-back for editor). */
+  writeFile(path: string, content: string): Promise<{ success: boolean; error?: string }>
   /** Read a file as binary data (Uint8Array) */
   readFileBinary(path: string): Promise<Uint8Array>
   /** Read a file as a data URL (data:{mime};base64,...) for binary preview (images, PDFs) */
@@ -346,6 +374,8 @@ export interface ElectronAPI {
 
   // Server filesystem browsing (remote mode)
   listServerDirectory(dirPath: string): Promise<DirectoryListingResult>
+  // Working-directory file browser (lists files + dirs with metadata)
+  listDirectoryFiles(dirPath: string): Promise<ReadDirectoryResult>
   // Debug: send renderer logs to main process log file
   debugLog(...args: unknown[]): void
 
@@ -358,6 +388,11 @@ export interface ElectronAPI {
   /** Returns the renderer host environment without going through RPC. */
   getRuntimeEnvironment(): 'electron' | 'web'
   getHomeDir(): Promise<string>
+  /**
+   * Resolved app config directory (honors ARCHSTUDIO_CONFIG_DIR). Use this for any
+   * path under the app's data root — never build one from getHomeDir().
+   */
+  getConfigDir(): Promise<string>
   isDebugMode(): Promise<boolean>
 
   // Transport connection status (preload-local, not RPC channels)
@@ -399,7 +434,7 @@ export interface ElectronAPI {
   onMenuToggleFocusMode(callback: () => void): () => void
   onMenuToggleSidebar(callback: () => void): () => void
 
-  // Deep link navigation listener (for external craftagents:// URLs)
+  // Deep link navigation listener (for external archstudio:// URLs)
   onDeepLinkNavigate(callback: (nav: DeepLinkNavigation) => void): () => void
 
   // Auth
@@ -421,6 +456,11 @@ export interface ElectronAPI {
   clearClaudeOAuthState(): Promise<{ success: boolean }>
   /** Defer onboarding setup — user chose "Setup later" */
   deferSetup(): Promise<{ success: boolean }>
+
+  /** Get the last connected provider name from onboarding (for QuickStart overlay) */
+  getLastConnectedProvider(): Promise<string | null>
+  /** Persist the connected provider name (set from onboarding completion) */
+  setLastConnectedProvider(name: string): Promise<{ success: boolean }>
 
   // ChatGPT OAuth (for Codex chatgptAuthTokens mode)
   startChatGptOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>
@@ -460,13 +500,38 @@ export interface ElectronAPI {
   writePreferences(content: string): Promise<{ success: boolean; error?: string }>
 
   // Session Drafts (persisted composer state — text + attachment refs)
-  getDraft(sessionId: string): Promise<import('@craft-agent/shared/config').SessionDraft | null>
-  setDraft(sessionId: string, draft: import('@craft-agent/shared/config').SessionDraft): Promise<void>
+  getDraft(sessionId: string): Promise<import('@archstudio/shared/config').SessionDraft | null>
+  setDraft(sessionId: string, draft: import('@archstudio/shared/config').SessionDraft): Promise<void>
   deleteDraft(sessionId: string): Promise<void>
-  getAllDrafts(): Promise<Record<string, import('@craft-agent/shared/config').SessionDraft>>
+  getAllDrafts(): Promise<Record<string, import('@archstudio/shared/config').SessionDraft>>
 
   // Session Info Panel
-  getSessionFiles(sessionId: string): Promise<SessionFile[]>
+  /**
+   * Recursively list files in a session's working directory.
+   *
+   * Pass an `AbortSignal` as the second arg to cancel an in-flight scan (e.g.,
+   * when the consumer unmounts or the active session changes). The signal is
+   * consumed locally — it never crosses the wire — and triggers a `cancel`
+   * envelope on the transport, which the server uses to flip its per-request
+   * AbortController so deep readdir/ststat loops exit promptly.
+   */
+  getSessionFiles(sessionId: string, signal?: AbortSignal): Promise<SessionFile[]>
+  /**
+   * Server-side cursor-paginated media list. Replaces the previous
+   * N x getSessionFiles fan-out with a single typed request that does
+   * the scan + classify + filter + cursor-paginate server-side.
+   *
+   * `signal` is duck-typed and stripped before serialization by the
+   * transport; it never crosses the wire.
+   */
+  mediaList(request: MediaListRequest, signal?: AbortSignal): Promise<MediaListPage>
+  comfyHealth(): Promise<ComfyHealth>
+  comfyStart(): Promise<ComfyHealth>
+  comfyWorkflows(): Promise<ComfyWorkflowList>
+  comfyArtifacts(request: MediaListRequest, signal?: AbortSignal): Promise<MediaListPage>
+  comfyRun(request: ComfyRunRequest): Promise<ComfyRunResult>
+  comfyStatus(request: ComfyJobStatusRequest): Promise<ComfyJobStatus>
+  comfyCancel(): Promise<void>
   getSessionNotes(sessionId: string): Promise<string>
   setSessionNotes(sessionId: string, content: string): Promise<void>
   watchSessionFiles(sessionId: string): Promise<void>
@@ -479,9 +544,9 @@ export interface ElectronAPI {
   deleteSource(workspaceId: string, sourceSlug: string): Promise<void>
   startSourceOAuth(workspaceId: string, sourceSlug: string): Promise<{ success: boolean; error?: string }>
   saveSourceCredentials(workspaceId: string, sourceSlug: string, credential: string): Promise<void>
-  getSourcePermissionsConfig(workspaceId: string, sourceSlug: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
-  getWorkspacePermissionsConfig(workspaceId: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
-  getDefaultPermissionsConfig(): Promise<{ config: import('@craft-agent/shared/agent').PermissionsConfigFile | null; path: string }>
+  getSourcePermissionsConfig(workspaceId: string, sourceSlug: string): Promise<import('@archstudio/shared/agent').PermissionsConfigFile | null>
+  getWorkspacePermissionsConfig(workspaceId: string): Promise<import('@archstudio/shared/agent').PermissionsConfigFile | null>
+  getDefaultPermissionsConfig(): Promise<{ config: import('@archstudio/shared/agent').PermissionsConfigFile | null; path: string }>
   getMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
 
   // OAuth (server-owned credentials, client-orchestrated flow)
@@ -508,13 +573,13 @@ export interface ElectronAPI {
   onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void
 
   // Statuses (workspace-scoped)
-  listStatuses(workspaceId: string): Promise<import('@craft-agent/shared/statuses').StatusConfig[]>
+  listStatuses(workspaceId: string): Promise<import('@archstudio/shared/statuses').StatusConfig[]>
   reorderStatuses(workspaceId: string, orderedIds: string[]): Promise<void>
   onStatusesChanged(callback: (workspaceId: string) => void): () => void
 
   // Labels (workspace-scoped)
-  listLabels(workspaceId: string): Promise<import('@craft-agent/shared/labels').LabelConfig[]>
-  createLabel(workspaceId: string, input: import('@craft-agent/shared/labels').CreateLabelInput): Promise<import('@craft-agent/shared/labels').LabelConfig>
+  listLabels(workspaceId: string): Promise<import('@archstudio/shared/labels').LabelConfig[]>
+  createLabel(workspaceId: string, input: import('@archstudio/shared/labels').CreateLabelInput): Promise<import('@archstudio/shared/labels').LabelConfig>
   deleteLabel(workspaceId: string, labelId: string): Promise<{ stripped: number }>
   onLabelsChanged(callback: (workspaceId: string) => void): () => void
 
@@ -522,8 +587,8 @@ export interface ElectronAPI {
   onLlmConnectionsChanged(callback: () => void): () => void
 
   // Views (workspace-scoped, stored in views.json)
-  listViews(workspaceId: string): Promise<import('@craft-agent/shared/views').ViewConfig[]>
-  saveViews(workspaceId: string, views: import('@craft-agent/shared/views').ViewConfig[]): Promise<void>
+  listViews(workspaceId: string): Promise<import('@archstudio/shared/views').ViewConfig[]>
+  saveViews(workspaceId: string, views: import('@archstudio/shared/views').ViewConfig[]): Promise<void>
 
   // Generic workspace image loading/saving
   readWorkspaceImage(workspaceId: string, relativePath: string): Promise<string>
@@ -568,6 +633,10 @@ export interface ElectronAPI {
   // Tools settings
   getBrowserToolEnabled(): Promise<boolean>
   setBrowserToolEnabled(enabled: boolean): Promise<void>
+  getLocalMcpEnabled(): Promise<boolean>
+  setLocalMcpEnabled(enabled: boolean): Promise<void>
+  getAllowRemoteEvaluate(): Promise<boolean>
+  setAllowRemoteEvaluate(allowed: boolean): Promise<void>
 
   // Appearance settings
   getRichToolDescriptions(): Promise<boolean>
@@ -607,11 +676,120 @@ export interface ElectronAPI {
 
   // Git operations
   getGitBranch(dirPath: string): Promise<string | null>
+  getGitStatus(dirPath: string): Promise<GitStatusResult>
+  getFileGitDiff(dirPath: string, relPath: string): Promise<GitFileDiffResult>
+  getGitUserName(): Promise<string | null>
 
   // Git Bash (Windows)
   checkGitBash(): Promise<GitBashStatus>
   browseForGitBash(): Promise<string | null>
   setGitBashPath(path: string): Promise<{ success: boolean; error?: string }>
+
+  // ARCH Command panel
+  runArchCommand(args: {
+    id: string
+    command: string
+    cwd?: string
+  }): Promise<{ code: number | null; output: string; durationMs: number; killed: boolean }>
+  killArchCommand(id: string): Promise<{ success: boolean }>
+
+  // Memory
+  listMemories(): Promise<import('@archstudio/shared/memory/types').AnyMemory[]>
+  getMemory(id: string): Promise<import('@archstudio/shared/memory/types').AnyMemory | null>
+  createMemory(memory: import('@archstudio/shared/memory/types').AnyMemory): Promise<import('@archstudio/shared/memory/types').AnyMemory>
+  updateMemory(id: string, patch: Partial<import('@archstudio/shared/memory/types').AnyMemory>): Promise<import('@archstudio/shared/memory/types').AnyMemory>
+  archiveMemory(id: string): Promise<import('@archstudio/shared/memory/types').AnyMemory>
+  restoreMemory(id: string): Promise<import('@archstudio/shared/memory/types').AnyMemory>
+  deleteMemory(id: string): Promise<{ success: boolean }>
+  /**
+   * FTS5 + bm25 search. Empty `query.query` lets the server fall back to a
+   * filtered memory list (no FTS overhead). Results are ranked snippets —
+   * the panel renders `<mark>` tags from the FTS5 `snippet(...)` call.
+   */
+  searchMemories(query: import('@archstudio/shared/memory/types').MemoryQuery): Promise<import('@archstudio/shared/memory/types').MemorySearchResult[]>
+  getMemoryGraph(): Promise<import('@archstudio/shared/memory/types').MemoryGraphData>
+  /**
+   * Return aggregate statistics about the memory store: class distribution,
+   * FTS health (memoriesTable vs ftsIndex row count parity), vault status.
+   */
+  getMemoryStats(): Promise<{
+    classDistribution: Record<string, number>
+    totalActive: number
+    totalArchived: number
+    ftsHealth: { memoriesRows: number; ftsRows: number; healthy: boolean }
+    vault: { root: string; filesOnDisk: number; lastImportAt: string | null }
+    graph: { edgeCount: number; edgeTypeDistribution: Record<string, number> }
+  }>
+  /**
+   * Bulk-import memories from the Obsidian vault on disk. Reads every
+   * `.md` file in the four class folders and `INSERT`s each into the
+   * SQLite memory store with skip-dedupe by `memory_id`. Audit rows are
+   * stamped `action: 'import'` with `actor: 'obsidian-vault-sync'`.
+   *
+   * Stats response surfaces both vault-read failures (malformed frontmatter)
+   * and import-time failures (parse / DB errors) so the renderer can render
+   * a single stats card.
+   */
+  importMemoriesFromVault(): Promise<{
+    read: number
+    imported: number
+    skipped: number
+    errors: Array<{ message: string; filePath?: string }>
+  }>
+  /** Return the current vault path and whether it's user-configured. */
+  getVaultInfo(): Promise<{ path: string; isCustom: boolean; exists: boolean }>
+  /** Set the vault path (re-creates the vault sync singleton). */
+  setVaultPath(path: string): Promise<{ success: boolean; path: string }>
+  /** Open the vault root in the OS file manager. */
+  openVaultFolder(): Promise<{ success: boolean }>
+  /** Perform a full bidirectional sync between DB and vault. */
+  syncVault(): Promise<Array<{ filePath: string; action: string; memoryId?: string; error?: string }>>
+  /** Get vault watcher status. */
+  getVaultWatcherStatus(): Promise<{ active: boolean }>
+  /** Create a user-defined edge between two memories. */
+  createMemoryEdge(sourceId: string, targetId: string, type: string, weight?: number): Promise<import('@archstudio/shared/memory/types').MemoryEdge>
+  /** Delete an edge by its ID. */
+  deleteMemoryEdge(edgeId: string): Promise<{ success: boolean }>
+  /** List all edges involving a given memory. */
+  getMemoryEdges(memoryId: string): Promise<import('@archstudio/shared/memory/types').MemoryEdge[]>
+
+  // Knowledge Galaxy (second brain)
+  buildGraph(workspaceId: string): Promise<import('@archstudio/shared/knowledge').WorkspaceGraph>
+  getGraph(workspaceId: string): Promise<import('@archstudio/shared/knowledge').WorkspaceGraph | null>
+  graphStatus(workspaceId: string): Promise<{ built: boolean; nodeCount: number; edgeCount: number; builtAt: number | null }>
+  ask(workspaceId: string, query: string): Promise<{ answer: string; nodeIds: number[] }>
+  getConversation(workspaceId: string): Promise<Array<{ role: 'user' | 'assistant'; content: string }>>
+
+  // Prompt Compiler
+  /**
+   * Compile a prompt from the given options using the real PromptCompiler.
+   * Fetches memories from the shared MemoryRepository automatically if the
+   * memory layer is included and no memories were explicitly supplied.
+   */
+  compilePrompt(options: import('@archstudio/shared/prompts/owner/types').CompileOptions): Promise<import('@archstudio/shared/prompts/owner/types').CompileResult>
+  /**
+   * Invalidate the PromptCompiler's internal layer cache. The next
+   * `compilePrompt()` call will re-read workspace context files
+   * (AGENTS.md/CLAUDE.md) from disk and rebuild all stable layers
+   * from scratch.
+   */
+  invalidatePromptCache(): Promise<{ success: boolean }>
+  /**
+   * Resolve the workspace root directory and scan for AGENTS.md / CLAUDE.md.
+   * Returns the working directory and any context files found, or `null` if
+   * the workspace cannot be resolved.
+   */
+  resolveWorkspaceContext(): Promise<{
+    workingDirectory?: string
+    contextFiles?: { filename: string; content: string }[]
+  } | null>
+  /**
+   * Fired when AGENTS.md or CLAUDE.md changes on disk. The main process
+   * watches the workspace root directory via fs.watch and pushes this
+   * event so the Prompt Studio automatically invalidates its cache and
+   * re-compiles the prompt with fresh context file content.
+   */
+  onContextFilesChanged(callback: () => void): () => void
 
   // Menu actions (from renderer to main)
   menuQuit(): Promise<void>
@@ -659,14 +837,25 @@ export interface ElectronAPI {
   setDefaultThinkingLevel(level: ThinkingLevel): Promise<{ success: boolean; error?: string }>
   setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>
 
+  // LLM Inference history — real request success/failure for ProvidersPanel sparkline
+  getLlmInferenceHistory(slug: string): Promise<import('@archstudio/shared/agent/core/index').InferenceHistoryResult>
+  getLlmInferenceHistoryAll(): Promise<Record<string, import('@archstudio/shared/agent/core/index').InferenceHistoryResult>>
+  /** Push channel: fired when a new inference event is recorded (turn or tool call). */
+  onLlmInferenceChanged: (listener: (payload: { slug: string }) => void) => () => void
+
+  // Health check persistence + heatmap — SQLite-backed uptime tracking
+  recordHealthCheck(slug: string, success: boolean, latencyMs?: number): Promise<{ success: boolean }>
+  getHealthHeatmap(slug: string, days?: number): Promise<Array<{ hour: string; checks: number; successRate: number }>>
+  getHealthHeatmapAll(days?: number): Promise<Record<string, Array<{ hour: string; checks: number; successRate: number }>>>
+
   // Projects (workspace-scoped)
   getProjects(workspaceId: string): Promise<unknown>
   getProject(workspaceId: string, projectIdOrSlug: string): Promise<unknown | null>
-  createProject(workspaceId: string, input: import('@craft-agent/shared/projects/types').CreateProjectInput): Promise<import('@craft-agent/shared/projects/types').ProjectConfig>
-  updateProject(workspaceId: string, projectSlug: string, patch: Partial<Omit<import('@craft-agent/shared/projects/types').ProjectConfig, 'id' | 'slug' | 'createdAt'>>): Promise<import('@craft-agent/shared/projects/types').ProjectConfig>
+  createProject(workspaceId: string, input: import('@archstudio/shared/projects/types').CreateProjectInput): Promise<import('@archstudio/shared/projects/types').ProjectConfig>
+  updateProject(workspaceId: string, projectSlug: string, patch: Partial<Omit<import('@archstudio/shared/projects/types').ProjectConfig, 'id' | 'slug' | 'createdAt'>>): Promise<import('@archstudio/shared/projects/types').ProjectConfig>
   deleteProject(workspaceId: string, projectSlug: string): Promise<void>
   listProjectAssets(workspaceId: string, projectSlug: string): Promise<unknown>
-  uploadProjectAsset(workspaceId: string, projectSlug: string, input: { filename: string; base64?: string; text?: string; sourcePath?: string }): Promise<import('@craft-agent/shared/projects/types').ProjectAsset>
+  uploadProjectAsset(workspaceId: string, projectSlug: string, input: { filename: string; base64?: string; text?: string; sourcePath?: string }): Promise<import('@archstudio/shared/projects/types').ProjectAsset>
   deleteProjectAsset(workspaceId: string, projectSlug: string, filename: string): Promise<void>
   onProjectsChanged(callback: (workspaceId: string, projects: unknown) => void): () => void
 
@@ -751,7 +940,7 @@ export interface MessagingPlatformRuntimeInfo {
 
 /**
  * Workspace-level access policy for a messaging platform.
- * Mirrors the canonical type in `@craft-agent/messaging-gateway`.
+ * Mirrors the canonical type in `@archstudio/messaging-gateway`.
  */
 export type MessagingPlatformAccessMode = 'open' | 'owner-only'
 
@@ -903,6 +1092,33 @@ export interface ProjectsNavigationState {
 }
 
 /**
+ * Runs navigation state — foreground/background jobs and subagents.
+ */
+export interface RunsNavigationState {
+  navigator: 'runs'
+  details: { type: 'run'; runId: string } | null
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
+ * Memory navigation state — owner profile, facts, episodes, skills.
+ */
+export interface MemoryNavigationState {
+  navigator: 'memory'
+  details: { type: 'memory'; memoryId: string } | null
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
+ * Media Lab navigation state — ComfyUI generations, workflows, queue, outputs.
+ */
+export interface MediaLabNavigationState {
+  navigator: 'media-lab'
+  details: { type: 'artifact'; artifactId: string } | null
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state
  */
 export type NavigationState =
@@ -912,6 +1128,9 @@ export type NavigationState =
   | SkillsNavigationState
   | AutomationsNavigationState
   | ProjectsNavigationState
+  | RunsNavigationState
+  | MemoryNavigationState
+  | MediaLabNavigationState
 
 export const isSessionsNavigation = (
   state: NavigationState
@@ -936,6 +1155,18 @@ export const isAutomationsNavigation = (
 export const isProjectsNavigation = (
   state: NavigationState
 ): state is ProjectsNavigationState => state.navigator === 'projects'
+
+export const isRunsNavigation = (
+  state: NavigationState
+): state is RunsNavigationState => state.navigator === 'runs'
+
+export const isMemoryNavigation = (
+  state: NavigationState
+): state is MemoryNavigationState => state.navigator === 'memory'
+
+export const isMediaLabNavigation = (
+  state: NavigationState
+): state is MediaLabNavigationState => state.navigator === 'media-lab'
 
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
   navigator: 'sessions',
@@ -967,6 +1198,24 @@ export const getNavigationStateKey = (state: NavigationState): string => {
       return `projects/project/${state.details.projectSlug}`
     }
     return 'projects'
+  }
+  if (state.navigator === 'runs') {
+    if (state.details?.type === 'run') {
+      return `runs/run/${state.details.runId}`
+    }
+    return 'runs'
+  }
+  if (state.navigator === 'memory') {
+    if (state.details?.type === 'memory') {
+      return `memory/entry/${state.details.memoryId}`
+    }
+    return 'memory'
+  }
+  if (state.navigator === 'media-lab') {
+    if (state.details?.type === 'artifact') {
+      return `media-lab/artifact/${state.details.artifactId}`
+    }
+    return 'media-lab'
   }
   if (state.navigator === 'settings') {
     if (state.subpage === null) return 'settings'

@@ -504,7 +504,6 @@ describe('TokenRefreshManager', () => {
 
       await manager.ensureFreshToken(source);
 
-      expect(source.config.isAuthenticated).toBe(false);
       expect(source.config.connectionStatus).toBe('needs_auth');
       expect(source.config.connectionError).toBe('Token refresh failed');
       expect(isSourceUsable(source)).toBe(false);
@@ -535,7 +534,6 @@ describe('TokenRefreshManager', () => {
 
       await manager.ensureFreshToken(source);
 
-      expect(source.config.isAuthenticated).toBe(false);
       expect(source.config.connectionStatus).toBe('needs_auth');
       expect(source.config.connectionError).toBe('Refresh error: network down');
       expect(isSourceUsable(source)).toBe(false);

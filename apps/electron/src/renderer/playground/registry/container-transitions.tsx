@@ -10,7 +10,7 @@ import {
   type IslandActiveViewSize,
   type IslandMorphTarget,
   type IslandNavigation,
-} from '@craft-agent/ui'
+} from '@archstudio/ui'
 import type { ComponentEntry } from './types'
 
 type IslandViewId = 'compact' | 'confirm-follow-up' | 'confirm-ask-inline'

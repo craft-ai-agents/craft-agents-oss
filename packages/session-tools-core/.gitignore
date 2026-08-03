@@ -1,0 +1,6 @@
+# ESLint restriction test fixtures (src/__tests__/__eslint-fixtures__/)
+# These are temporary files created by the eslint-restrictions.test.ts
+# positive test and cleaned up in afterAll.  If the test crashes
+# mid-run the afterAll cleanup won't fire, so gitignore prevents
+# accidental commits of orphaned fixture files.
+src/__tests__/__eslint-fixtures__/

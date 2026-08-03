@@ -4,10 +4,12 @@ import { join, resolve, sep } from 'path'
 import { existsSync } from 'fs'
 import { release } from 'os'
 import { fileURLToPath } from 'url'
-import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { classifyExternalUrl, formatBlockedUrlError } from '@craft-agent/shared/utils/url-safety'
+import { getWorkspaceByNameOrId } from '@archstudio/shared/config'
+import { loadPreferences } from '@archstudio/shared/config/preferences.ts'
+import { classifyExternalUrl, formatBlockedUrlError } from '@archstudio/shared/utils/url-safety'
 import { RPC_CHANNELS, type WindowCloseRequestSource } from '../shared/types'
 import type { SavedWindow } from './window-state'
+import { CONFIG_DIR } from '@archstudio/shared/config/paths.ts'
 
 // Vite dev server URL for hot reload
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
@@ -57,7 +59,7 @@ export class WindowManager {
   private windows: Map<number, ManagedWindow> = new Map()  // webContents.id → ManagedWindow
   private focusedModeWindows: Set<number> = new Set()  // webContents.id of windows in focused mode
   private pendingCloseTimeouts: Map<number, NodeJS.Timeout> = new Map()  // Fallback timeouts for window close
-  private eventSink: ((channel: string, target: import('@craft-agent/shared/protocol').PushTarget, ...args: any[]) => void) | null = null
+  private eventSink: ((channel: string, target: import('@archstudio/shared/protocol').PushTarget, ...args: any[]) => void) | null = null
   private clientResolver: ((wcId: number) => string | undefined) | null = null
   private keyboardCloseIntents: Set<number> = new Set()  // webContents.id flagged by Cmd/Ctrl+W before close
   private keyboardCloseIntentTimeouts: Map<number, NodeJS.Timeout> = new Map()  // Auto-clear stale keyboard-close intents
@@ -68,7 +70,7 @@ export class WindowManager {
    * instead of webContents.send. Called after server creation.
    */
   setRpcEventSink(
-    sink: (channel: string, target: import('@craft-agent/shared/protocol').PushTarget, ...args: any[]) => void,
+    sink: (channel: string, target: import('@archstudio/shared/protocol').PushTarget, ...args: any[]) => void,
     resolver: (wcId: number) => string | undefined
   ): void {
     this.eventSink = sink
@@ -76,7 +78,7 @@ export class WindowManager {
   }
 
   /** Return current RPC event sink, if transport has been initialized. */
-  getRpcEventSink(): ((channel: string, target: import('@craft-agent/shared/protocol').PushTarget, ...args: any[]) => void) | null {
+  getRpcEventSink(): ((channel: string, target: import('@archstudio/shared/protocol').PushTarget, ...args: any[]) => void) | null {
     return this.eventSink
   }
 
@@ -161,22 +163,24 @@ export class WindowManager {
 
   /**
    * Apply the window-title policy across all managed windows:
-   *   1 window  → app name ("Craft Agents") on the lone window
-   *   ≥2 windows → workspace name on each window, app-name fallback when the
-   *                workspace can't be resolved (e.g. onboarding window).
+   *   workspace window → workspace name
+   *   unresolved/onboarding window → app name fallback
+   *
+   * The workspace name is useful context even when only one window is open;
+   * repeating the app brand in the native frame adds no information because
+   * the shell already carries ARCHstudio branding.
    *
    * Called after createWindow() registers a new window and after the closed
-   * handler removes one, so titles always reflect the current window count.
-   * Renderer-driven page-title-updated events are suppressed in createWindow
-   * so these setTitle() calls aren't clobbered by the static <title> tag.
+   * handler removes one. Renderer-driven page-title-updated events are
+   * suppressed in createWindow so these setTitle() calls aren't clobbered by
+   * the static <title> tag.
    */
   private refreshWindowTitles(): void {
     const defaultTitle = app.getName()
-    const showWorkspaceName = this.windows.size > 1
     for (const { window, workspaceId } of this.windows.values()) {
       if (window.isDestroyed()) continue
       let title = defaultTitle
-      if (showWorkspaceName && workspaceId) {
+      if (workspaceId) {
         try {
           const ws = getWorkspaceByNameOrId(workspaceId)
           if (ws?.name) title = ws.name
@@ -299,7 +303,7 @@ export class WindowManager {
       })
     }
 
-    // The renderer's index.html ships with `<title>Craft Agents</title>`, so
+    // The renderer's index.html ships with `<title>ARCHstudio</title>`, so
     // without this Electron auto-syncs every window's title back to that on
     // load — clobbering the workspace-name policy applied below. Suppress the
     // default sync so setTitle() calls from refreshWindowTitles() stick.
@@ -387,6 +391,18 @@ export class WindowManager {
       }
     })
 
+    // Renderer console forwarding is owned by electron-log's explicitly
+    // enabled spyRendererConsole pipeline in main/index.ts. Do not add a second
+    // console-message listener here or every renderer console call is logged
+    // twice. BrowserPaneManager has a separate listener for browser-pane
+    // capture and theme-color signaling; it is intentionally unaffected.
+    window.webContents.on('render-process-gone', (_event, details) => {
+      windowLog.error('[renderer-console] render-process-gone', details)
+    })
+    window.webContents.on('unresponsive', () => {
+      windowLog.error('[renderer-console] unresponsive')
+    })
+
     // If an initial deep link was provided, navigate to it after the window is ready
     if (initialDeepLink) {
       window.once('ready-to-show', () => {
@@ -452,6 +468,23 @@ export class WindowManager {
       // This preserves expected Cmd+Q semantics (quit app instead of closing overlays/panels first).
       if (this.isAppQuitting) {
         return
+      }
+
+      // Check the confirm-before-exit preference. If false, close directly
+      // without querying the renderer for confirmation.
+      //
+      // Use loadPreferences() rather than rebuilding the path here: preferences
+      // live at CONFIG_DIR/preferences.json, and a hand-rolled
+      // CONFIG_DIR/config/preferences.json never existed, so this opt-out was
+      // silently dead and every close took the confirmation path.
+      try {
+        const prefs = loadPreferences()
+        if (prefs.confirmBeforeExit === false) {
+          // User opted out of confirmation — allow default close behavior
+          return
+        }
+      } catch {
+        // preferences unreadable — proceed with confirmation flow
       }
 
       // Check if renderer is ready (mainFrame exists) - if not, allow close directly

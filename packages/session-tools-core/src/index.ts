@@ -150,6 +150,8 @@ export {
   handleSkillValidate,
   // Mermaid Validate
   handleMermaidValidate,
+  // LSP
+  handleLsp,
   // Source Test
   handleSourceTest,
   // OAuth Triggers
@@ -176,6 +178,8 @@ export type {
   ConfigValidateArgs,
   SkillValidateArgs,
   MermaidValidateArgs,
+  LspArgs,
+  LspOperation,
   SourceTestArgs,
   SourceOAuthTriggerArgs,
   GoogleOAuthTriggerArgs,
@@ -196,6 +200,7 @@ export {
   ConfigValidateSchema,
   SkillValidateSchema,
   MermaidValidateSchema,
+  LspSchema,
   SourceTestSchema,
   SourceOAuthTriggerSchema,
   CredentialPromptSchema,

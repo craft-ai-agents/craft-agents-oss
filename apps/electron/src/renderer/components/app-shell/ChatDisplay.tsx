@@ -39,12 +39,12 @@ import {
   type ActivityItem,
   type FileChange,
   type DiffViewerSettings,
-} from "@craft-agent/ui"
+} from "@archstudio/ui"
 import { useFocusZone } from "@/hooks/keyboard"
 import { useTheme } from "@/hooks/useTheme"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
-import type { PermissionMode } from "@craft-agent/shared/agent/modes"
-import type { ThinkingLevel } from "@craft-agent/shared/agent/thinking-levels"
+import type { PermissionMode } from "@archstudio/shared/agent/modes"
+import type { ThinkingLevel } from "@archstudio/shared/agent/thinking-levels"
 import {
   TurnCard,
   UserMessageBubble,
@@ -62,7 +62,7 @@ import {
   type UserTurn,
   type SystemTurn,
   type AuthRequestTurn,
-} from "@craft-agent/ui"
+} from "@archstudio/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
 import { ChatInputZone, type StructuredInputState, type StructuredResponse, type PermissionResponse, type AdminApprovalResponse } from "./input"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
@@ -75,6 +75,10 @@ import { CHAT_LAYOUT } from "@/config/layout"
 import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } from "@/lib/file-changes"
 import { resolveBranchNewPanelOption } from "./branching"
 import { handleErrorMessageAction } from "./error-message-actions"
+
+// Studio surface styling
+import './ChatSurface.css'
+import { ChatEmptyState } from '../chat/ChatEmptyState'
 
 // ============================================================================
 // CSS Custom Highlight API helper
@@ -188,7 +192,7 @@ interface ChatDisplayProps {
   skills?: LoadedSkill[]
   // Label selection (for #labels)
   /** Available label configs (tree) for label menu and badge display */
-  labels?: import('@craft-agent/shared/labels').LabelConfig[]
+  labels?: import('@archstudio/shared/labels').LabelConfig[]
   /** Callback when labels change */
   onLabelsChange?: (labels: string[]) => void
   // State/status selection (for # menu and ActiveOptionBadges)
@@ -376,7 +380,7 @@ function ProcessingIndicator({ startTime, statusMessage }: ProcessingIndicatorPr
   const displayMessage = statusMessage || t(PROCESSING_MESSAGE_KEYS[messageIndex])
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1 -mb-1 text-[13px] text-muted-foreground">
+    <div data-chat-thinking className="flex items-center gap-2 px-3 py-1 -mb-1 text-[13px] text-muted-foreground">
       {/* Spinner in same location as TurnCard chevron */}
       <div className="w-3 h-3 flex items-center justify-center shrink-0">
         <Spinner className="text-[10px]" />
@@ -511,8 +515,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Reverse pagination: show last N turns initially, load more on scroll up
   const TURNS_PER_PAGE = 20
   const [visibleTurnCount, setVisibleTurnCount] = React.useState(TURNS_PER_PAGE)
-  // Sticky-bottom: When true, auto-scroll on content changes. Toggled by user scroll behavior.
+  // Sticky-bottom: the ref is read by high-frequency observers; state drives the
+  // jump-to-latest affordance without forcing streaming callbacks to rebind.
   const isStickToBottomRef = React.useRef(true)
+  const [isAtBottom, setIsAtBottom] = React.useState(true)
   // Mirror isFocusedPanel into a ref so the ResizeObserver closure reads the latest value
   const isFocusedPanelRef = React.useRef(isFocusedPanel)
   isFocusedPanelRef.current = isFocusedPanel
@@ -976,7 +982,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const [overlayState, setOverlayState] = useState<OverlayState>(null)
 
   // Diff viewer settings - loaded from user preferences on mount, persisted on change
-  // These settings are stored in ~/.craft-agent/preferences.json (not localStorage)
+  // These settings are stored in ~/.archstudio/preferences.json (not localStorage)
   const [diffViewerSettings, setDiffViewerSettings] = useState<Partial<DiffViewerSettings>>({})
 
   // Load diff viewer settings from preferences on mount
@@ -1102,8 +1108,11 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     if (!viewport) return
     const { scrollTop, scrollHeight, clientHeight } = viewport
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-    // 20px threshold for "at bottom" detection
-    isStickToBottomRef.current = distanceFromBottom < 20
+    // Keep a forgiving threshold for fractional layout changes while markdown
+    // streams. Moving beyond it is treated as an intentional reading position.
+    const atBottom = distanceFromBottom < 64
+    isStickToBottomRef.current = atBottom
+    setIsAtBottom(atBottom)
 
     // Load more turns when scrolling near top (within 100px)
     if (scrollTop < 100) {
@@ -1146,6 +1155,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     // On session switch: reset UI state (scroll handled by ScrollOnMount)
     if (isSessionSwitch) {
       isStickToBottomRef.current = true
+      setIsAtBottom(true)
       setVisibleTurnCount(TURNS_PER_PAGE)
     }
 
@@ -1155,6 +1165,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     const resizeObserver = new ResizeObserver(() => {
       // Unfocused panels: always scroll to bottom instantly (user isn't reading them)
       if (!isFocusedPanelRef.current) {
+        isStickToBottomRef.current = true
+        setIsAtBottom(true)
         messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
         return
       }
@@ -1211,6 +1223,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
     // Sending a message should always re-stick to bottom.
     isStickToBottomRef.current = true
+    setIsAtBottom(true)
 
     requestAnimationFrame(() => {
       messagesEndRef.current?.scrollIntoView({
@@ -1233,6 +1246,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
     // Force stick-to-bottom when user sends a message
     isStickToBottomRef.current = true
+    setIsAtBottom(true)
     onSendMessage(normalizedMessage, attachments, skillSlugs)
 
     // Persist sent marker on follow-up annotations so TurnCard can distinguish
@@ -1316,6 +1330,12 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       console.error('[ChatDisplay] Failed to cancel processing:', error)
     })
   }
+
+  const scrollToLatest = React.useCallback(() => {
+    isStickToBottomRef.current = true
+    setIsAtBottom(true)
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [])
 
   // Per-frame scroll compensation during input height animation
   // Only compensate when user is "stuck to bottom" - otherwise let them control their scroll position
@@ -1488,7 +1508,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     && ((session?.messages?.length ?? 0) > 0 || (session?.messageCount ?? 0) > 0)
 
   return (
-    <div ref={zoneRef} className="flex h-full flex-col min-w-0" data-focus-zone="chat">
+    <div ref={zoneRef} className="flex h-full flex-col min-w-0 bg-paper" data-focus-zone="chat">
       {session ? (
         <div className="flex flex-1 flex-col min-h-0 min-w-0 relative">
           {/* Content layer */}
@@ -1589,6 +1609,14 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                       <span className="text-xs text-muted-foreground/50">{t("editPopover.justDescribe")}</span>
                     </div>
                   )}
+                  {/* Empty state for the desktop chat. The transcript is
+                      bottom-anchored, so without this a fresh session renders a
+                      full-height void above the composer. */}
+                  {!compactMode && !messagesLoading && turns.length === 0 && !hasUnrenderedLoadedMessages && (
+                    <div className="absolute inset-0 pointer-events-none">
+                      <ChatEmptyState />
+                    </div>
+                  )}
                   {!compactMode && hasUnrenderedLoadedMessages && (
                     <div className="flex h-64 items-center justify-center px-4 text-center">
                       <div className="max-w-sm rounded-[8px] border border-border/50 bg-foreground/[0.03] px-4 py-3">
@@ -1617,6 +1645,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         <div
                           key={turnKey}
                           ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
+                          data-chat-turn="user"
                           className={cn(
                             compactMode ? "pt-2 pb-1" : CHAT_LAYOUT.userMessagePadding,
                             "rounded-lg transition-all duration-200",
@@ -1641,6 +1670,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         <div
                           key={turnKey}
                           ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
+                          data-chat-turn="system"
                           className={cn(
                             "rounded-lg transition-all duration-200",
                             isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
@@ -1910,6 +1940,25 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               </div>
               </ScrollArea>
             </div>
+
+            <AnimatePresence>
+              {!compactMode && isFocusedPanel && !isAtBottom && (
+                <motion.button
+                  type="button"
+                  initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  onClick={scrollToLatest}
+                  aria-label={t('chat.jumpToLatest')}
+                  title={t('chat.jumpToLatest')}
+                  className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border/70 bg-background/95 px-3 py-1.5 text-xs font-medium text-foreground shadow-modal-small backdrop-blur-md transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{t('chat.jumpToLatest')}</span>
+                </motion.button>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* === INPUT CONTAINER: FreeForm or Structured Input === */}
@@ -2242,6 +2291,7 @@ function MessageBubble({
         onUrlClick={onOpenUrl}
         onFileClick={onOpenFile}
         compactMode={compactMode}
+        loadImageFallback={(path) => window.electronAPI.readFileDataUrl(path)}
       />
     )
   }

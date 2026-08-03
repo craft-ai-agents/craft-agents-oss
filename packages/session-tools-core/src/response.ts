@@ -10,10 +10,13 @@ import type { ToolResult, TextContent } from './types.ts';
 /**
  * Create a successful text response
  */
-export function successResponse(text: string): ToolResult {
+export function successResponse(
+  text: string,
+  structured?: Record<string, unknown>,
+): ToolResult {
   return {
     content: [{ type: 'text', text }],
-    structuredContent: {},
+    structuredContent: structured ?? {},
     isError: false,
   };
 }

@@ -1,6 +1,6 @@
 {
-  "name": "Craft Agents",
-  "short_name": "Craft Agents",
+  "name": "ARCHstudio",
+  "short_name": "ARCHstudio",
   "description": "AI agent interface",
   "start_url": "./",
   "display": "standalone",

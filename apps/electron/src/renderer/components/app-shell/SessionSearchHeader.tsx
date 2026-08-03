@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Search, X } from 'lucide-react'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@archstudio/ui'
 
 /**
  * SessionSearchHeader - Presentational component for session list search UI.
@@ -59,11 +59,11 @@ export function SessionSearchHeader({
 }: SessionSearchHeaderProps) {
   const { t } = useTranslation()
   return (
-    <div className="shrink-0 px-2 pt-2 pb-1.5 border-b border-border/50">
+    <div className="shrink-0 px-3 pt-3 pb-2 border-b border-border/45 bg-background/80 backdrop-blur-sm">
       {/* Search input */}
-      <div className="relative rounded-[8px] shadow-minimal bg-muted/50 has-[:focus-visible]:bg-background">
+      <div className="relative rounded-[9px] border border-border/55 bg-foreground/[0.022] shadow-minimal transition-[background-color,border-color,box-shadow] has-[:focus-visible]:border-ring/45 has-[:focus-visible]:bg-background has-[:focus-visible]:shadow-sm">
         {/* Search icon - always static, never changes to spinner */}
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/38" />
         <input
           ref={inputRef}
           type="text"
@@ -74,12 +74,12 @@ export function SessionSearchHeader({
           onBlur={onBlur}
           readOnly={readOnly}
           placeholder={placeholder}
-          className="w-full h-8 pl-8 pr-8 text-sm bg-transparent border-0 rounded-[8px] outline-none focus-visible:ring-0 focus-visible:outline-none placeholder:text-muted-foreground/50"
+          className="w-full h-8 pl-8 pr-8 text-[12px] bg-transparent border-0 rounded-[9px] outline-none focus-visible:ring-0 focus-visible:outline-none placeholder:text-foreground/35"
         />
         {onSearchClose && (
           <button
             onClick={onSearchClose}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-foreground/10 rounded"
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-foreground/[0.07] rounded-[6px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             title={t("session.closeSearch")}
           >
             <X className="h-3.5 w-3.5 text-muted-foreground" />
@@ -89,7 +89,7 @@ export function SessionSearchHeader({
 
       {/* Search status row - shown when search mode is active (2+ characters) */}
       {searchQuery.length >= 2 && (
-        <div className="px-2 pt-2.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className="px-1 pt-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-foreground/42 tabular-nums">
           {isSearching ? (
             <>
               <Spinner className="text-[9px] text-foreground/50" />

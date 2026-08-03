@@ -1,9 +1,10 @@
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { loadWorkspaceSources } from '@craft-agent/shared/sources'
-import { safeJsonParse } from '@craft-agent/shared/utils/files'
-import { getCredentialManager } from '@craft-agent/shared/credentials'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import { RPC_CHANNELS } from '@archstudio/shared/protocol'
+import { getWorkspaceByNameOrId } from '@archstudio/shared/config'
+import { loadWorkspaceSources } from '@archstudio/shared/sources'
+import { safeJsonParse } from '@archstudio/shared/utils/files'
+import { getCredentialManager } from '@archstudio/shared/credentials'
+import { normalizeMcpErrorMessage } from '@archstudio/shared/mcp'
+import type { RpcServer } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
 export const HANDLED_CHANNELS = [
@@ -32,10 +33,10 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
   })
 
   // Create a new source
-  server.handle(RPC_CHANNELS.sources.CREATE, async (_ctx, workspaceId: string, config: Partial<import('@craft-agent/shared/sources').CreateSourceInput>) => {
+  server.handle(RPC_CHANNELS.sources.CREATE, async (_ctx, workspaceId: string, config: Partial<import('@archstudio/shared/sources').CreateSourceInput>) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { createSource } = await import('@craft-agent/shared/sources')
+    const { createSource } = await import('@archstudio/shared/sources')
     return createSource(workspace.rootPath, {
       name: config.name || 'New Source',
       provider: config.provider || 'custom',
@@ -51,11 +52,11 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
   server.handle(RPC_CHANNELS.sources.DELETE, async (_ctx, workspaceId: string, sourceSlug: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { deleteSource } = await import('@craft-agent/shared/sources')
+    const { deleteSource } = await import('@archstudio/shared/sources')
     deleteSource(workspace.rootPath, sourceSlug)
 
     // Clean up stale slug from workspace default sources
-    const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@craft-agent/shared/workspaces')
+    const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@archstudio/shared/workspaces')
     const config = loadWorkspaceConfig(workspace.rootPath)
     if (config?.defaults?.enabledSourceSlugs?.includes(sourceSlug)) {
       config.defaults.enabledSourceSlugs = config.defaults.enabledSourceSlugs.filter(s => s !== sourceSlug)
@@ -76,7 +77,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
   server.handle(RPC_CHANNELS.sources.SAVE_CREDENTIALS, async (_ctx, workspaceId: string, sourceSlug: string, credential: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { loadSource, getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+    const { loadSource, getSourceCredentialManager } = await import('@archstudio/shared/sources')
 
     const source = loadSource(workspace.rootPath, sourceSlug)
     if (!source) {
@@ -96,7 +97,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     if (!workspace) return null
 
     const { existsSync, readFileSync } = await import('fs')
-    const { getSourcePermissionsPath } = await import('@craft-agent/shared/agent')
+    const { getSourcePermissionsPath } = await import('@archstudio/shared/agent')
     const path = getSourcePermissionsPath(workspace.rootPath, sourceSlug)
 
     if (!existsSync(path)) return null
@@ -116,7 +117,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     if (!workspace) return null
 
     const { existsSync, readFileSync } = await import('fs')
-    const { getWorkspacePermissionsPath } = await import('@craft-agent/shared/agent')
+    const { getWorkspacePermissionsPath } = await import('@archstudio/shared/agent')
     const path = getWorkspacePermissionsPath(workspace.rootPath)
 
     if (!existsSync(path)) return null
@@ -130,10 +131,10 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     }
   })
 
-  // Get default permissions from ~/.craft-agent/permissions/default.json
+  // Get default permissions from ~/.archstudio/permissions/default.json
   server.handle(RPC_CHANNELS.permissions.GET_DEFAULTS, async () => {
     const { existsSync, readFileSync } = await import('fs')
-    const { getAppPermissionsDir } = await import('@craft-agent/shared/agent')
+    const { getAppPermissionsDir } = await import('@archstudio/shared/agent')
     const { join } = await import('path')
 
     const defaultPath = join(getAppPermissionsDir(), 'default.json')
@@ -161,16 +162,16 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       if (!source.config.mcp) return { success: false, error: 'MCP config not found' }
 
       if (source.config.connectionStatus === 'needs_auth') {
-        return { success: false, error: 'Source requires authentication' }
+        return { success: false, error: normalizeMcpErrorMessage('Source requires authentication') }
       }
       if (source.config.connectionStatus === 'failed') {
-        return { success: false, error: source.config.connectionError || 'Connection failed' }
+        return { success: false, error: normalizeMcpErrorMessage(source.config.connectionError || 'Connection failed') }
       }
       if (source.config.connectionStatus === 'untested') {
-        return { success: false, error: 'Source has not been tested yet' }
+        return { success: false, error: normalizeMcpErrorMessage('Source has not been tested yet') }
       }
 
-      const { CraftMcpClient } = await import('@craft-agent/shared/mcp')
+      const { CraftMcpClient } = await import('@archstudio/shared/mcp')
       let client: InstanceType<typeof CraftMcpClient>
 
       if (source.config.mcp.transport === 'stdio') {
@@ -210,7 +211,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       const tools = await client.listTools()
       await client.close()
 
-      const { loadSourcePermissionsConfig, permissionsConfigCache } = await import('@craft-agent/shared/agent')
+      const { loadSourcePermissionsConfig, permissionsConfigCache } = await import('@archstudio/shared/agent')
       const permissionsConfig = loadSourcePermissionsConfig(workspace.rootPath, sourceSlug)
 
       const mergedConfig = permissionsConfigCache.getMergedConfig({
@@ -231,13 +232,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     } catch (error) {
       log.error('Failed to get MCP tools:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch tools'
-      if (errorMessage.includes('404')) {
-        return { success: false, error: 'MCP server endpoint not found. The server may be offline or the URL may be incorrect.' }
-      }
-      if (errorMessage.includes('401') || errorMessage.includes('403')) {
-        return { success: false, error: 'Authentication failed. Please re-authenticate with this source.' }
-      }
-      return { success: false, error: errorMessage }
+      return { success: false, error: normalizeMcpErrorMessage(errorMessage) }
     }
   })
 }

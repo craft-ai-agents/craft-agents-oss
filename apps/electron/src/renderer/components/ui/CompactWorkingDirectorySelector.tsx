@@ -2,12 +2,13 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, X, Search } from 'lucide-react'
 
-import { Icon_Home, Icon_Folder } from '@craft-agent/ui'
+import { Icon_Home, Icon_Folder } from '@archstudio/ui'
 import {
   Drawer,
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
+  DrawerDescription,
   DrawerClose,
 } from '@/components/ui/drawer'
 import { FreeFormInputContextBadge } from '../app-shell/input/FreeFormInputContextBadge'
@@ -117,6 +118,9 @@ export function CompactWorkingDirectorySelector({
         <DrawerContent>
           <DrawerHeader>
             <DrawerTitle>{t('chat.workingDirectory')}</DrawerTitle>
+            <DrawerDescription className="sr-only">
+              Choose the working directory used by this session.
+            </DrawerDescription>
           </DrawerHeader>
 
           {showFilter && (

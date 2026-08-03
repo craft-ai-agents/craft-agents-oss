@@ -1,7 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
+import { CONFIG_FILE } from '../interceptor-common.ts';
 
 let injectMetadataIntoToolSchema: typeof import('../unified-network-interceptor.ts').injectMetadataIntoToolSchema;
 let sanitizeEmptyTextCacheControl: typeof import('../unified-network-interceptor.ts').sanitizeEmptyTextCacheControl;
@@ -10,7 +11,7 @@ let _resetConfigCacheForTesting: typeof import('../interceptor-common.ts')._rese
 
 describe('unified-network-interceptor schema metadata injection', () => {
   beforeAll(async () => {
-    process.env.CRAFT_INTERCEPTOR_DISABLE_AUTO_INSTALL = '1';
+    process.env.ARCHSTUDIO_INTERCEPTOR_DISABLE_AUTO_INSTALL = '1';
     ({ injectMetadataIntoToolSchema, sanitizeEmptyTextCacheControl, upgradePromptCacheTtl } = await import('../unified-network-interceptor.ts'));
     ({ _resetConfigCacheForTesting } = await import('../interceptor-common.ts'));
   });
@@ -123,7 +124,10 @@ describe('sanitizeEmptyTextCacheControl', () => {
 });
 
 describe('upgradePromptCacheTtl', () => {
-  const configFile = join(homedir(), '.craft-agent', 'config.json');
+  // Match the config file the interceptor actually reads (CONFIG_DIR may be
+  // overridden via CRAFT_CONFIG_DIR / ARCHSTUDIO_CONFIG_DIR).
+  const configFile = CONFIG_FILE;
+  const configDir = dirname(configFile);
   let originalConfig: string | null = null;
 
   beforeEach(() => {
@@ -146,16 +150,14 @@ describe('upgradePromptCacheTtl', () => {
   });
 
   function enableExtendedCache() {
-    const dir = join(homedir(), '.craft-agent');
-    mkdirSync(dir, { recursive: true });
+    mkdirSync(configDir, { recursive: true });
     const existing = originalConfig ? JSON.parse(originalConfig) : {};
     writeFileSync(configFile, JSON.stringify({ ...existing, extendedPromptCache: true }));
     _resetConfigCacheForTesting();
   }
 
   function disableExtendedCache() {
-    const dir = join(homedir(), '.craft-agent');
-    mkdirSync(dir, { recursive: true });
+    mkdirSync(configDir, { recursive: true });
     const existing = originalConfig ? JSON.parse(originalConfig) : {};
     writeFileSync(configFile, JSON.stringify({ ...existing, extendedPromptCache: false }));
     _resetConfigCacheForTesting();

@@ -41,7 +41,7 @@ import { toast } from 'sonner'
 import { useAtomValue, useSetAtom, useStore } from 'jotai'
 import { useSession } from '@/hooks/useSession'
 import { useLabels } from '@/hooks/useLabels'
-import { matchesLabelFilter } from '@craft-agent/shared/labels'
+import { matchesLabelFilter } from '@archstudio/shared/labels'
 import {
   parseRoute,
   parseRouteToNavigationState,
@@ -50,7 +50,7 @@ import {
   type ParsedRoute,
 } from '../../shared/route-parser'
 import { routes, type Route, type ViewRoute } from '../../shared/routes'
-import { parsePermissionMode } from '@craft-agent/shared/agent/mode-types'
+import { parsePermissionMode } from '@archstudio/shared/agent/mode-types'
 import { NAVIGATE_EVENT, type NavigateOptions } from '../lib/navigate'
 import { normalizePanelRouteForReconcile } from './navigation-reconcile'
 import { buildSemanticHistoryKey, canRunInitialRestore } from './navigation-history'
@@ -71,6 +71,9 @@ import {
   isSkillsNavigation,
   isAutomationsNavigation,
   isProjectsNavigation,
+  isRunsNavigation,
+  isMemoryNavigation,
+  isMediaLabNavigation,
   DEFAULT_NAVIGATION_STATE,
 } from '../../shared/types'
 import { sessionMetaMapAtom, updateSessionMetaAtom, type SessionMeta } from '@/atoms/sessions'
@@ -93,7 +96,7 @@ export type { Route }
 
 // Re-export navigation state types for consumers
 export type { NavigationState, SessionFilter }
-export { isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isAutomationsNavigation, isProjectsNavigation }
+export { isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isAutomationsNavigation, isProjectsNavigation, isRunsNavigation, isMemoryNavigation, isMediaLabNavigation }
 
 // =============================================================================
 // Context

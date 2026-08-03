@@ -19,7 +19,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@archstudio/ui'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { NetworkProxySettings } from '../../../shared/types'
 
@@ -103,6 +103,10 @@ export default function AppSettingsPage() {
 
   // Tools state
   const [browserToolEnabled, setBrowserToolEnabled] = useState(true)
+  const [allowRemoteEvaluate, setAllowRemoteEvaluate] = useState(true)
+
+  // Backup state — cleared on a timer so the result does not linger forever.
+  const [backupMessage, setBackupMessage] = useState<{ tone: 'info' | 'error'; text: string } | null>(null)
 
   // Proxy state
   const [proxyForm, setProxyForm] = useState<ProxyFormState>(EMPTY_PROXY_FORM)
@@ -128,15 +132,18 @@ export default function AppSettingsPage() {
   const loadSettings = useCallback(async () => {
     if (!window.electronAPI) return
     try {
-      const [notificationsOn, keepAwakeOn, browserToolOn, proxySettings] = await Promise.all([
+      const [notificationsOn, keepAwakeOn, browserToolOn, remoteEvaluateOn, proxySettings] = await Promise.all([
         window.electronAPI.getNotificationsEnabled(),
         window.electronAPI.getKeepAwakeWhileRunning(),
         window.electronAPI.getBrowserToolEnabled(),
+        window.electronAPI.getAllowRemoteEvaluate?.(),
         window.electronAPI.getNetworkProxySettings(),
       ])
       setNotificationsEnabled(notificationsOn)
       setKeepAwakeEnabled(keepAwakeOn)
       setBrowserToolEnabled(browserToolOn)
+      // Defaults to true in storage; treat an unavailable RPC the same way.
+      setAllowRemoteEvaluate(remoteEvaluateOn ?? true)
       const form = toProxyFormState(proxySettings)
       setProxyForm(form)
       setSavedProxyForm(form)
@@ -148,6 +155,13 @@ export default function AppSettingsPage() {
   useEffect(() => {
     loadSettings()
   }, [])
+
+  // Auto-dismiss the backup result; errors linger longer than successes.
+  useEffect(() => {
+    if (!backupMessage) return
+    const timer = setTimeout(() => setBackupMessage(null), backupMessage.tone === 'error' ? 5000 : 3000)
+    return () => clearTimeout(timer)
+  }, [backupMessage])
 
   const handleNotificationsEnabledChange = useCallback(async (enabled: boolean) => {
     setNotificationsEnabled(enabled)
@@ -163,6 +177,45 @@ export default function AppSettingsPage() {
     setBrowserToolEnabled(enabled)
     await window.electronAPI.setBrowserToolEnabled(enabled)
   }, [])
+
+  const handleAllowRemoteEvaluateChange = useCallback(async (allowed: boolean) => {
+    setAllowRemoteEvaluate(allowed)
+    await window.electronAPI.setAllowRemoteEvaluate?.(allowed)
+  }, [])
+
+  // Both dialogs report `canceled` separately from `error`; a cancel is not a
+  // failure and should say nothing at all.
+  const handleExportSettings = useCallback(async () => {
+    try {
+      const result = await window.electronAPI.exportSettings()
+      if (result.success) {
+        setBackupMessage({ tone: 'info', text: t("settings.backup.exported", { path: result.path }) })
+      } else if (!result.canceled) {
+        setBackupMessage({ tone: 'error', text: t("settings.backup.exportFailed", { error: result.error }) })
+      }
+    } catch (error) {
+      setBackupMessage({
+        tone: 'error',
+        text: t("settings.backup.exportFailed", { error: error instanceof Error ? error.message : String(error) }),
+      })
+    }
+  }, [t])
+
+  const handleImportSettings = useCallback(async () => {
+    try {
+      const result = await window.electronAPI.importSettings()
+      if (result.success) {
+        setBackupMessage({ tone: 'info', text: t("settings.backup.imported") })
+      } else if (!result.canceled) {
+        setBackupMessage({ tone: 'error', text: t("settings.backup.importFailed", { error: result.error }) })
+      }
+    } catch (error) {
+      setBackupMessage({
+        tone: 'error',
+        text: t("settings.backup.importFailed", { error: error instanceof Error ? error.message : String(error) }),
+      })
+    }
+  }, [t])
 
   // Proxy handlers
   const isProxyDirty = useMemo(() => {
@@ -239,6 +292,12 @@ export default function AppSettingsPage() {
                     checked={browserToolEnabled}
                     onCheckedChange={handleBrowserToolEnabledChange}
                   />
+                  <SettingsToggle
+                    label={t("settings.tools.allowRemoteEvaluate")}
+                    description={t("settings.tools.allowRemoteEvaluateDesc")}
+                    checked={allowRemoteEvaluate}
+                    onCheckedChange={handleAllowRemoteEvaluateChange}
+                  />
                 </SettingsCard>
               </SettingsSection>
 
@@ -303,6 +362,46 @@ export default function AppSettingsPage() {
                           t("common.save")
                         )}
                       </Button>
+                    </SettingsCardFooter>
+                  )}
+                </SettingsCard>
+              </SettingsSection>
+
+              {/* Backup — moved here from the shell-only settings panel, which
+                  was the single place export/import was reachable from. */}
+              <SettingsSection title={t("settings.backup.title")}>
+                <SettingsCard>
+                  <SettingsRow
+                    label={t("settings.backup.exportLabel")}
+                    description={t("settings.backup.exportDesc")}
+                    action={
+                      <Button variant="ghost" size="sm" onClick={handleExportSettings}>
+                        {t("settings.backup.exportAction")}
+                      </Button>
+                    }
+                    inCard
+                  />
+                  <SettingsRow
+                    label={t("settings.backup.importLabel")}
+                    description={t("settings.backup.importDesc")}
+                    action={
+                      <Button variant="ghost" size="sm" onClick={handleImportSettings}>
+                        {t("settings.backup.importAction")}
+                      </Button>
+                    }
+                    inCard
+                  />
+                  {backupMessage && (
+                    <SettingsCardFooter>
+                      <span
+                        className={
+                          backupMessage.tone === 'error'
+                            ? 'text-destructive text-sm mr-auto'
+                            : 'text-muted-foreground text-sm mr-auto'
+                        }
+                      >
+                        {backupMessage.text}
+                      </span>
                     </SettingsCardFooter>
                   )}
                 </SettingsCard>

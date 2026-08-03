@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { groupMessagesByTurn } from '../turn-utils'
-import type { Message } from '@craft-agent/core'
+import type { Message } from '@archstudio/core'
 
 describe('groupMessagesByTurn plan annotations', () => {
   it('keeps plan message id and annotations on plan activity payload', () => {

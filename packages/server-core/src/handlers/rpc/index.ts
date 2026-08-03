@@ -1,4 +1,4 @@
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import type { RpcServer } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
 import { registerAuthHandlers } from './auth'
@@ -11,6 +11,10 @@ import { registerResourcesHandlers } from './resources'
 import { registerOnboardingHandlers } from './onboarding'
 import { registerSessionsHandlers } from './sessions'
 export { registerSessionsHandlers, cleanupSessionFileWatchForClient } from './sessions'
+import { registerMediaHandlers } from './media'
+export { registerMediaHandlers } from './media'
+import { registerComfyUIHandlers } from './comfyui'
+export { registerComfyUIHandlers } from './comfyui'
 import { registerServerHandlers } from './server'
 import type { ServerHandlerContext } from '../../bootstrap/headless-start'
 export type { ServerHandlerContext } from '../../bootstrap/headless-start'
@@ -25,6 +29,7 @@ import { registerTasksHandlers } from './tasks'
 import { registerTransferHandlers } from './transfer'
 import { registerWorkspaceCoreHandlers } from './workspace'
 import { registerMessagingHandlers } from './messaging'
+import { registerInferenceHandlers } from './inference'
 
 export function registerCoreRpcHandlers(
   server: RpcServer,
@@ -40,6 +45,8 @@ export function registerCoreRpcHandlers(
   registerOnboardingHandlers(server, deps)
   registerResourcesHandlers(server, deps)
   registerSessionsHandlers(server, deps)
+  registerMediaHandlers(server, deps)
+  registerComfyUIHandlers(server, deps)
   if (serverCtx) registerServerHandlers(server, deps, serverCtx)
   registerSettingsHandlers(server, deps)
   registerProjectsHandlers(server, deps)
@@ -51,4 +58,5 @@ export function registerCoreRpcHandlers(
   registerTransferHandlers(server)
   registerWorkspaceCoreHandlers(server, deps)
   registerMessagingHandlers(server, deps)
+  registerInferenceHandlers(server, deps)
 }

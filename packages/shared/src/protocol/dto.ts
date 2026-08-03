@@ -2,8 +2,8 @@
  * Server DTO types — data shapes used by RPC handlers and SessionManager.
  *
  * These were previously in apps/electron/src/shared/types.ts.
- * Extracted here so handler code in @craft-agent/server-core can import
- * from @craft-agent/shared/protocol without reaching into the app.
+ * Extracted here so handler code in @archstudio/server-core can import
+ * from @archstudio/shared/protocol without reaching into the app.
  */
 
 import type {
@@ -13,7 +13,7 @@ import type {
   ToolDisplayMeta,
   AnnotationV1,
   PermissionRequest as BasePermissionRequest,
-} from '@craft-agent/core/types'
+} from '@archstudio/core/types'
 import type { PermissionMode } from '../agent/mode-types'
 import type { ThinkingLevel } from '../agent/thinking-levels'
 import type { CustomEndpointConfig } from '../config/llm-connections'
@@ -24,7 +24,7 @@ import type {
 } from '../agent/index'
 
 // Re-export generateMessageId for handler convenience
-export { generateMessageId } from '@craft-agent/core/types'
+export { generateMessageId } from '@archstudio/core/types'
 
 // ---------------------------------------------------------------------------
 // Session types
@@ -276,7 +276,7 @@ export interface TaskGenerateResult {
   orchestratorSessionId: string
   /** Slug of the authored spec; empty when generation produced an invalid spec. */
   slug: string
-  /** Parsed TaskSpec when valid (consumers cast to TaskSpec from @craft-agent/shared/tasks). */
+  /** Parsed TaskSpec when valid (consumers cast to TaskSpec from @archstudio/shared/tasks). */
   spec?: unknown
   /** The raw task.yaml the orchestrator produced — shown and editable in the editor. */
   yaml: string
@@ -315,7 +315,7 @@ export interface TaskRunSnapshotDto {
 export interface TaskGetResult {
   slug: string
   validation: TaskValidationResultDto
-  /** The parsed TaskSpec (from @craft-agent/shared/tasks) when valid; consumers cast. */
+  /** The parsed TaskSpec (from @archstudio/shared/tasks) when valid; consumers cast. */
   spec?: unknown
   /** Active run snapshot when a runId was supplied and known; otherwise null. */
   run?: TaskRunSnapshotDto | null
@@ -468,6 +468,9 @@ export type SessionCommand =
   | { type: 'addAnnotation'; messageId: string; annotation: AnnotationV1 }
   | { type: 'removeAnnotation'; messageId: string; annotationId: string }
   | { type: 'updateAnnotation'; messageId: string; annotationId: string; patch: Partial<AnnotationV1> }
+  | { type: 'removeAttachment'; messageId: string; attachmentId: string }
+  | { type: 'clearAttachments' }
+  | { type: 'gitCheckout'; filePath: string }
 
 export interface NewChatActionParams {
   input?: string
@@ -547,7 +550,139 @@ export interface SessionFile {
   path: string
   type: 'file' | 'directory'
   size?: number
+  /** File modification timestamp (ms since epoch), populated when stat succeeded */
+  mtime?: number
   children?: SessionFile[]
+}
+
+// ---------------------------------------------------------------------------
+// Media list (Media Lab) — server-side cursor pagination over classified files
+// ---------------------------------------------------------------------------
+
+/**
+ * Kinds of media the server classifies in `media:list`. Mirrors the EXT map
+ * the renderer used to own; the server now classifies so a single RPC can
+ * return a page of items instead of N fan-out calls.
+ *
+ * `'all'` is a renderer-side pseudo-filter (sent as undefined to the server)
+ * so consumers don't need a sentinel value.
+ */
+export type MediaKind = 'image' | 'video' | 'audio' | 'doc'
+
+/**
+ * A single media item as returned by `media:list`. The renderer uses
+ * `sessionId` + `path` as a stable key for dedupe across pages.
+ */
+export interface MediaItem {
+  /** 'image' | 'video' | 'audio' | 'doc' — server-classified */
+  kind: MediaKind
+  /** File basename */
+  name: string
+  /** Absolute filesystem path (renderer's `file://` source for previews) */
+  path: string
+  /** File size in bytes, when stat succeeded */
+  size?: number
+  /** File modification timestamp (ms since epoch), when stat succeeded */
+  mtime?: number
+  /** Owning session id — reuses the renderer-side dedupe key */
+  sessionId: string
+  /** Human-readable session title (for the card subtitle) */
+  sessionTitle: string
+  /** Owning session's lastMessageAt, for ordering + empty-state debug */
+  lastMessageAt: number
+}
+
+/**
+ * Cursor + filter args for `media:list`. All fields optional — a request
+ * with `{}` returns the first page of every kind for the calling workspace.
+ *
+ * `cursor` is opaque to the client; the server encodes the most recent
+ * `lastMessageAt` + `sessionId` it finished scanning. Pass it back to fetch
+ * the next page; the server returns `nextCursor: null` when no more pages
+ * remain in the workspace.
+ */
+export interface MediaListRequest {
+  kind?: MediaKind
+  cursor?: string
+  /** Soft cap on returned items. Server may emit slightly fewer when
+   *  crossing a session boundary. Defaults to 200 server-side. */
+  limit?: number
+}
+
+/**
+ * One page of `media:list`. `items` is ordered by session-recency desc
+ * (matches the existing Media Lab UX). `nextCursor` is null when the
+ * server exhausted its scan.
+ */
+export interface MediaListPage {
+  items: MediaItem[]
+  hasMore: boolean
+  nextCursor: string | null
+}
+
+// ---------------------------------------------------------------------------
+// ComfyUI Media Lab generation
+// ---------------------------------------------------------------------------
+
+export type ComfyWorkflowKind = 'image' | 'video' | 'audio' | 'unknown'
+export type ComfyParameterKind = 'text' | 'number' | 'seed' | 'image' | 'model' | 'select'
+
+export interface ComfyHealth {
+  connected: boolean
+  baseUrl: string
+  version?: string
+  device?: string
+  vramTotal?: number
+  vramFree?: number
+  queueRunning?: number
+  queuePending?: number
+  error?: string
+}
+
+export interface ComfyWorkflowParameterDto {
+  id: string
+  label: string
+  kind: ComfyParameterKind
+  value: string | number
+  options?: Array<string | number>
+}
+
+export interface ComfyWorkflowSummary {
+  id: string
+  name: string
+  kind: ComfyWorkflowKind
+  nodeClasses: string[]
+  parameters: ComfyWorkflowParameterDto[]
+}
+
+export interface ComfyWorkflowList {
+  workflows: ComfyWorkflowSummary[]
+  rejectedCount: number
+}
+
+export interface ComfyRunRequest {
+  workflowId: string
+  parameters?: Record<string, string | number>
+}
+
+export interface ComfyRunResult {
+  promptId: string
+  queueNumber?: number
+}
+
+export interface ComfyJobStatusRequest {
+  promptId: string
+}
+
+export interface ComfyJobStatus {
+  promptId: string
+  state: 'queued' | 'running' | 'completed' | 'failed' | 'unknown'
+  stage?: 'queued' | 'executing' | 'saving' | 'completed' | 'failed'
+  currentNode?: string
+  progress?: number
+  startedAt?: number
+  finishedAt?: number
+  error?: string
 }
 
 export interface FileSearchResult {
@@ -594,6 +729,12 @@ export interface LlmConnectionSetup {
   awsRegion?: string
   /** Bedrock authentication method — determines auth type for Pi+Bedrock connections */
   bedrockAuthMethod?: 'iam_credentials' | 'environment'
+  /**
+   * When true, this connection was set up through the local-model (Ollama) onboarding path.
+   * Used by the UI to show a more specific display name (e.g. "Ollama" vs "Anthropic API").
+   */
+  isLocalModel?: boolean
+
   /**
    * Resolved Anthropic OAuth identity (issue #838), threaded through setup so it
    * persists for both new and re-auth connections. Optional and fail-soft.
@@ -714,6 +855,60 @@ export interface Plan {
 // System types
 // ---------------------------------------------------------------------------
 
+/**
+ * Result of a git status check in a working directory.
+ */
+export interface GitStatusResult {
+  /** Current branch name, or null if not a git repository. */
+  branch: string | null
+  /** Working directory the status was fetched for. */
+  dirPath: string
+  /** Parsed entries from `git diff --stat` + `git status --porcelain`. */
+  files: GitStatusFileEntry[]
+}
+
+/**
+ * A single file entry in a git status result.
+ */
+export interface GitStatusFileEntry {
+  /** File path relative to the repository root. */
+  path: string
+  /** Status classification. */
+  status: 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'copied'
+  /** Which side of `git status --porcelain` produced this entry. A single
+   *  path may appear in both staged and unstaged when its XY code has
+   *  non-space on both sides (e.g. `AM` = staged-add + working-tree-modify). */
+  bucket: 'staged' | 'unstaged' | 'untracked'
+  /** Lines inserted (0 for non-tracked or non-diff entries). */
+  insertions: number
+  /** Lines deleted (0 for non-tracked or non-diff entries). */
+  deletions: number
+  /** Previous path when status is 'renamed'. */
+  previousPath?: string
+}
+
+/**
+ * Per-file diff payload returned by `git:fileDiff`.
+ *
+ * For a `modified/renamed/copied` file both `original` and `modified` are
+ * typically non-null and Shiki-diff-renderable. For an untracked/`added` file
+ * `original` is null. For a `deleted` file `modified` is null. For binary
+ * files both may populate but `isBinary` is true and the renderer should
+ * skip ShikiDiffViewer and just show the +/- counts.
+ */
+export interface GitFileDiffResult {
+  /** HEAD version of the file (full content). null for untracked/added. */
+  original: string | null
+  /** Working-tree version of the file (full content). null for deleted. */
+  modified: string | null
+  /** Total insertions from `git diff --numstat`. 0 for binary/untracked. */
+  additions: number
+  /** Total deletions from `git diff --numstat`. 0 for binary/untracked. */
+  deletions: number
+  /** True when first ~8KB contains NUL bytes — ShikiDiffViewer can't render these. */
+  isBinary: boolean
+}
+
 export interface GitBashStatus {
   found: boolean
   path: string | null
@@ -743,6 +938,20 @@ export interface WorkspaceSettings {
   localMcpEnabled?: boolean
   defaultLlmConnection?: string
   enabledSourceSlugs?: string[]
+  /**
+   * Cumulative open-directory cap for the working-directory tree's right
+   * rail. Limits the number of directories that can be simultaneously
+   * expanded (across any combination of manual clicks, file-watch
+   * re-expands, drill-mode bumps, or the bulk BFS). When exceeded, leaf-most
+   * entries are silently collapsed until under the cap. Undefined falls
+   * back to a renderer-side default of 50.
+   *
+   * Promote-to-setting path for `MAX_OPEN_DIRS` in LayoutShell — see the
+   * count-cap useEffect there. Power users with wide monorepos can bump
+   * this to 100 or 200 without paying the cost of the default for
+   * typical repos.
+   */
+  maxOpenDirs?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -796,6 +1005,44 @@ export type WindowCloseRequestSource = 'keyboard-shortcut' | 'window-button' | '
 
 export interface WindowCloseRequest {
   source: WindowCloseRequestSource
+}
+
+// ---------------------------------------------------------------------------
+// Read directory types (working directory file browser)
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of reading a directory with file metadata.
+ * Used by the working-directory file browser in the LayoutShell rail.
+ */
+export interface ReadDirectoryResult {
+  /** Normalized absolute path of the listed directory. */
+  currentPath: string
+  /** Parent directory path, or null if at root. */
+  parentPath: string | null
+  /** Child entries (files and directories) with metadata. */
+  entries: ReadDirectoryEntry[]
+}
+
+/**
+ * A single entry in a directory listing.
+ */
+export interface ReadDirectoryEntry {
+  name: string
+  path: string
+  type: 'file' | 'directory'
+  /** File size in bytes (0 for directories). */
+  size?: number
+  /** File modification timestamp (ms since epoch). */
+  mtime?: number
+  /**
+   * File birth / creation timestamp (ms since epoch).  Undefined on
+   * filesystems that do not track birthtime reliably (pre-Linux-4.11
+   * ext4, FAT32, network mounts).  Renderers should treat absence as
+   * "unknown" rather than synthesizing a value from mtime.
+   */
+  ctime?: number
+  isSymlink: boolean
 }
 
 // ---------------------------------------------------------------------------

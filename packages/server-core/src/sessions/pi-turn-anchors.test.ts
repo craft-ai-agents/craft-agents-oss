@@ -27,37 +27,37 @@ const sessionDir = (name: string): string => {
 describe('pi-turn-anchors sidecar', () => {
   it('savePiTurnAnchor then loadPiTurnAnchors round-trips', async () => {
     const session = sessionDir('s1')
-    await savePiTurnAnchor(session, 'craft-msg-1', 'entry_pi_aaa')
-    await savePiTurnAnchor(session, 'craft-msg-2', 'entry_pi_bbb')
+    await savePiTurnAnchor(session, 'archstudio-msg-1', 'entry_pi_aaa')
+    await savePiTurnAnchor(session, 'archstudio-msg-2', 'entry_pi_bbb')
 
     const index = await loadPiTurnAnchors(session)
     expect(index.version).toBe(1)
     expect(index.anchors).toEqual({
-      'craft-msg-1': 'entry_pi_aaa',
-      'craft-msg-2': 'entry_pi_bbb',
+      'archstudio-msg-1': 'entry_pi_aaa',
+      'archstudio-msg-2': 'entry_pi_bbb',
     })
   })
 
   it('savePiTurnAnchor is idempotent for the same value', async () => {
     const session = sessionDir('s2')
-    await savePiTurnAnchor(session, 'craft-msg-1', 'entry_pi_aaa')
-    await savePiTurnAnchor(session, 'craft-msg-1', 'entry_pi_aaa')
+    await savePiTurnAnchor(session, 'archstudio-msg-1', 'entry_pi_aaa')
+    await savePiTurnAnchor(session, 'archstudio-msg-1', 'entry_pi_aaa')
     const index = await loadPiTurnAnchors(session)
-    expect(Object.keys(index.anchors)).toEqual(['craft-msg-1'])
+    expect(Object.keys(index.anchors)).toEqual(['archstudio-msg-1'])
   })
 
   it('savePiTurnAnchor overwrites when the anchor changes', async () => {
     const session = sessionDir('s3')
-    await savePiTurnAnchor(session, 'craft-msg-1', 'entry_pi_old')
-    await savePiTurnAnchor(session, 'craft-msg-1', 'entry_pi_new')
+    await savePiTurnAnchor(session, 'archstudio-msg-1', 'entry_pi_old')
+    await savePiTurnAnchor(session, 'archstudio-msg-1', 'entry_pi_new')
     const index = await loadPiTurnAnchors(session)
-    expect(index.anchors['craft-msg-1']).toBe('entry_pi_new')
+    expect(index.anchors['archstudio-msg-1']).toBe('entry_pi_new')
   })
 
   it('savePiTurnAnchor with empty arguments is a no-op', async () => {
     const session = sessionDir('s4')
     await savePiTurnAnchor(session, '', 'entry_pi_aaa')
-    await savePiTurnAnchor(session, 'craft-msg-1', '')
+    await savePiTurnAnchor(session, 'archstudio-msg-1', '')
     const index = await loadPiTurnAnchors(session)
     expect(index.anchors).toEqual({})
   })
@@ -83,45 +83,45 @@ describe('copyPiTurnAnchorsForBranch', () => {
     const dst = sessionDir('branch')
 
     // Seed the source sidecar with 4 anchors.
-    await savePiTurnAnchor(src, 'craft-msg-1', 'entry_pi_111')
-    await savePiTurnAnchor(src, 'craft-msg-2', 'entry_pi_222')
-    await savePiTurnAnchor(src, 'craft-msg-3', 'entry_pi_333')
-    await savePiTurnAnchor(src, 'craft-msg-4', 'entry_pi_444')
+    await savePiTurnAnchor(src, 'archstudio-msg-1', 'entry_pi_111')
+    await savePiTurnAnchor(src, 'archstudio-msg-2', 'entry_pi_222')
+    await savePiTurnAnchor(src, 'archstudio-msg-3', 'entry_pi_333')
+    await savePiTurnAnchor(src, 'archstudio-msg-4', 'entry_pi_444')
 
-    // Branch cutoff includes only craft-msg-1 and craft-msg-2.
-    await copyPiTurnAnchorsForBranch(src, dst, ['craft-msg-1', 'craft-msg-2'])
+    // Branch cutoff includes only archstudio-msg-1 and archstudio-msg-2.
+    await copyPiTurnAnchorsForBranch(src, dst, ['archstudio-msg-1', 'archstudio-msg-2'])
 
     const branched = await loadPiTurnAnchors(dst)
     expect(branched.anchors).toEqual({
-      'craft-msg-1': 'entry_pi_111',
-      'craft-msg-2': 'entry_pi_222',
+      'archstudio-msg-1': 'entry_pi_111',
+      'archstudio-msg-2': 'entry_pi_222',
     })
   })
 
   it('does not write a file when the source has no anchors', async () => {
     const src = sessionDir('source-empty')
     const dst = sessionDir('branch-empty')
-    await copyPiTurnAnchorsForBranch(src, dst, ['craft-msg-1'])
+    await copyPiTurnAnchorsForBranch(src, dst, ['archstudio-msg-1'])
     expect(existsSync(join(dst, 'meta', 'pi-turn-anchors.json'))).toBe(false)
   })
 
   it('does not write a file when no source anchor matches the branched ids', async () => {
     const src = sessionDir('source-mismatch')
     const dst = sessionDir('branch-mismatch')
-    await savePiTurnAnchor(src, 'craft-msg-99', 'entry_pi_xxx')
-    await copyPiTurnAnchorsForBranch(src, dst, ['craft-msg-1'])
+    await savePiTurnAnchor(src, 'archstudio-msg-99', 'entry_pi_xxx')
+    await copyPiTurnAnchorsForBranch(src, dst, ['archstudio-msg-1'])
     expect(existsSync(join(dst, 'meta', 'pi-turn-anchors.json'))).toBe(false)
   })
 
   it('writes a sidecar in the documented v1 shape', async () => {
     const src = sessionDir('source-shape')
     const dst = sessionDir('branch-shape')
-    await savePiTurnAnchor(src, 'craft-msg-1', 'entry_pi_111')
-    await copyPiTurnAnchorsForBranch(src, dst, ['craft-msg-1'])
+    await savePiTurnAnchor(src, 'archstudio-msg-1', 'entry_pi_111')
+    await copyPiTurnAnchorsForBranch(src, dst, ['archstudio-msg-1'])
 
     const raw = readFileSync(join(dst, 'meta', 'pi-turn-anchors.json'), 'utf-8')
     const parsed = JSON.parse(raw) as { version: number; anchors: Record<string, string> }
     expect(parsed.version).toBe(1)
-    expect(parsed.anchors).toEqual({ 'craft-msg-1': 'entry_pi_111' })
+    expect(parsed.anchors).toEqual({ 'archstudio-msg-1': 'entry_pi_111' })
   })
 })

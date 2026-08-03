@@ -1,0 +1,195 @@
+/* Command Panel
+   - Terminal-like interface for executing commands
+   - Matches shell aesthetic with accent colors
+*/
+
+.command-panel {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-surface);
+  color: var(--color-text);
+  flex-direction: column;
+}
+
+.command-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(16px * var(--density-scale));
+  border-bottom: 1px solid var(--color-border);
+}
+
+.command-panel__title {
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--density-scale));
+  color: var(--color-accent);
+}
+
+.command-panel__title h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.command-panel__actions {
+  display: flex;
+  gap: calc(8px * var(--density-scale));
+}
+
+.command-panel__stop {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6px * var(--density-scale));
+  height: 32px;
+  padding: 0 calc(12px * var(--density-scale));
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.command-panel__stop:hover {
+  background: var(--color-surface-hover);
+}
+
+.command-panel__output {
+  flex: 1;
+  overflow-y: auto;
+  padding: calc(16px * var(--density-scale));
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.command-panel__empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(12px * var(--density-scale));
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.command-panel__empty p {
+  margin: 0;
+  font-size: 15px;
+}
+
+.command-panel__entry {
+  margin-bottom: calc(16px * var(--density-scale));
+  padding: calc(12px * var(--density-scale));
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+.command-panel__entry-header {
+  margin-bottom: calc(8px * var(--density-scale));
+}
+
+.command-panel__entry-status {
+  display: flex;
+  align-items: center;
+  gap: calc(8px * var(--density-scale));
+}
+
+.command-panel__spinner {
+  animation: spin 1s linear infinite;
+  color: var(--color-accent);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.command-panel__success {
+  color: var(--ds-success);
+}
+
+.command-panel__error {
+  color: var(--ds-error);
+}
+
+.command-panel__entry-command {
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.command-panel__entry-output {
+  padding-top: calc(8px * var(--density-scale));
+  border-top: 1px solid var(--color-border);
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.command-panel__entry-output pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.command-panel__input {
+  display: flex;
+  align-items: center;
+  gap: calc(8px * var(--density-scale));
+  padding: calc(12px * var(--density-scale)) calc(16px * var(--density-scale));
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+.command-panel__input-icon {
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.command-panel__input input {
+  flex: 1;
+  height: 36px;
+  padding: 0 calc(12px * var(--density-scale));
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.command-panel__input input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.command-panel__input input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.command-panel__send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  width: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.command-panel__send:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.command-panel__send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

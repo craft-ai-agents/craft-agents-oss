@@ -1,0 +1,122 @@
+/* ===========================================================================
+   Empty chat state — centred in the transcript void.
+
+   Colours come from the theme tokens only; the brand ramp supplies the mark's
+   gradient halo so this reads as ARCHstudio in any theme.
+=========================================================================== */
+
+.chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ds-space-2, 8px);
+  height: 100%;
+  padding: var(--ds-space-6, 28px) var(--ds-space-5, 20px);
+  text-align: center;
+  user-select: none;
+  animation: chat-empty-enter var(--ds-duration-slow, 360ms) var(--ds-ease-decelerate, ease-out) both;
+}
+
+/* Brand mark with a soft brand halo behind it. */
+.chat-empty__mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  margin-bottom: var(--ds-space-3, 12px);
+}
+
+.chat-empty__mark::before {
+  content: '';
+  position: absolute;
+  inset: -18px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in oklch, var(--brand-purple) 22%, transparent) 0%,
+    transparent 68%
+  );
+  animation: chat-empty-halo 6s var(--ds-ease-standard, ease-in-out) infinite;
+}
+
+.chat-empty__symbol {
+  position: relative;
+  width: 52px;
+  height: 52px;
+}
+
+.chat-empty__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 560;
+  color: var(--ds-text, var(--foreground));
+  letter-spacing: -0.01em;
+}
+
+.chat-empty__subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ds-text-muted, color-mix(in oklch, var(--foreground) 45%, transparent));
+}
+
+/* The rotating workflow suggestion. Each rotation remounts the child, so the
+   fade runs per hint rather than once on mount. */
+.chat-empty__hint {
+  margin-top: var(--ds-space-5, 20px);
+  max-width: 520px;
+  padding: 10px 16px;
+  border: 1px solid var(--ds-panel-border, color-mix(in oklch, var(--foreground) 12%, transparent));
+  border-radius: var(--ds-radius-pill, 999px);
+  background: color-mix(in oklch, var(--foreground) 3%, transparent);
+  font-size: 12.5px;
+  color: var(--ds-text-secondary, color-mix(in oklch, var(--foreground) 68%, transparent));
+  animation: chat-empty-hint-in var(--ds-duration-slow, 360ms) var(--ds-ease-decelerate, ease-out) both;
+}
+
+@keyframes chat-empty-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes chat-empty-hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes chat-empty-halo {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-empty,
+  .chat-empty__hint {
+    animation: none;
+  }
+
+  .chat-empty__mark::before {
+    animation: none;
+    opacity: 0.7;
+  }
+}

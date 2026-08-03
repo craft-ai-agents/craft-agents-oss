@@ -26,7 +26,7 @@ export const browserInstanceCountAtom = atom<number>(
  *
  * Renderers in remote-connected workspaces have TWO relevant workspace IDs:
  *
- * - `activeWorkspaceId` — the local Craft Agents window's workspace identity
+ * - `activeWorkspaceId` — the local ARCHstudio window's workspace identity
  *   (used to stamp locally-opened manual tabs).
  * - `remoteWorkspaceId` — the remote server's workspace identity for the same
  *   conceptual workspace (used by the remote agent when it stamps tabs

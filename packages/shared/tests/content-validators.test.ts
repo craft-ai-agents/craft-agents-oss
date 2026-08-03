@@ -352,7 +352,7 @@ describe('validatePermissionsContent', () => {
 // ============================================================
 
 describe('detectConfigFileType', () => {
-  const workspaceRoot = '/Users/test/.craft-agent/workspaces/ws-123';
+  const workspaceRoot = '/Users/test/.archstudio/workspaces/ws-123';
 
   it('detects source config files', () => {
     const result = detectConfigFileType(

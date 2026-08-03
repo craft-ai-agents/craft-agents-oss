@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'projects' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'projects' | 'settings' | 'runs' | 'memory' | 'media-lab'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -63,7 +63,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'board', 'sources', 'skills', 'automations', 'projects', 'settings'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'board', 'sources', 'skills', 'automations', 'projects', 'settings', 'runs', 'memory', 'media-lab'
 ]
 
 /**
@@ -175,6 +175,39 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       }
     }
 
+    return null
+  }
+
+  // Runs navigator - all foreground/background jobs and subagents
+  if (first === 'runs') {
+    if (segments.length === 1) {
+      return { navigator: 'runs', details: null }
+    }
+    if (segments[1] === 'run' && segments[2]) {
+      return { navigator: 'runs', details: { type: 'run', id: segments[2] } }
+    }
+    return null
+  }
+
+  // Memory navigator - profile, facts, episodes, skills
+  if (first === 'memory') {
+    if (segments.length === 1) {
+      return { navigator: 'memory', details: null }
+    }
+    if (segments[1] === 'entry' && segments[2]) {
+      return { navigator: 'memory', details: { type: 'memory', id: segments[2] } }
+    }
+    return null
+  }
+
+  // Media Lab navigator - ComfyUI generations, workflows, queue, outputs
+  if (first === 'media-lab') {
+    if (segments.length === 1) {
+      return { navigator: 'media-lab', details: null }
+    }
+    if (segments[1] === 'artifact' && segments[2]) {
+      return { navigator: 'media-lab', details: { type: 'artifact', id: segments[2] } }
+    }
     return null
   }
 
@@ -323,6 +356,21 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   if (parsed.navigator === 'projects') {
     if (!parsed.details) return 'projects'
     return `projects/project/${parsed.details.id}`
+  }
+
+  if (parsed.navigator === 'runs') {
+    if (!parsed.details) return 'runs'
+    return `runs/run/${parsed.details.id}`
+  }
+
+  if (parsed.navigator === 'memory') {
+    if (!parsed.details) return 'memory'
+    return `memory/entry/${parsed.details.id}`
+  }
+
+  if (parsed.navigator === 'media-lab') {
+    if (!parsed.details) return 'media-lab'
+    return `media-lab/artifact/${parsed.details.id}`
   }
 
   // Sessions navigator
@@ -605,6 +653,30 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
+  // Runs
+  if (compound.navigator === 'runs') {
+    if (!compound.details) {
+      return { navigator: 'runs', details: null }
+    }
+    return { navigator: 'runs', details: { type: 'run', runId: compound.details.id } }
+  }
+
+  // Memory
+  if (compound.navigator === 'memory') {
+    if (!compound.details) {
+      return { navigator: 'memory', details: null }
+    }
+    return { navigator: 'memory', details: { type: 'memory', memoryId: compound.details.id } }
+  }
+
+  // Media Lab
+  if (compound.navigator === 'media-lab') {
+    if (!compound.details) {
+      return { navigator: 'media-lab', details: null }
+    }
+    return { navigator: 'media-lab', details: { type: 'artifact', artifactId: compound.details.id } }
+  }
+
   // Sessions
   const filter = compound.sessionFilter || { kind: 'allSessions' as const }
   if (compound.details) {
@@ -805,6 +877,27 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
     return {
       navigator: 'projects',
       details: state.details ? { type: 'project', id: state.details.projectSlug } : null,
+    }
+  }
+
+  if (state.navigator === 'runs') {
+    return {
+      navigator: 'runs',
+      details: state.details ? { type: 'run', id: state.details.runId } : null,
+    }
+  }
+
+  if (state.navigator === 'memory') {
+    return {
+      navigator: 'memory',
+      details: state.details ? { type: 'memory', id: state.details.memoryId } : null,
+    }
+  }
+
+  if (state.navigator === 'media-lab') {
+    return {
+      navigator: 'media-lab',
+      details: state.details ? { type: 'artifact', id: state.details.artifactId } : null,
     }
   }
 

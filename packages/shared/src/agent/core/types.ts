@@ -53,10 +53,50 @@ export interface PermissionManagerConfig {
   plansFolderPath?: string;
   /** Data folder path (writes to this folder are allowed in Explore mode for transform_data output) */
   dataFolderPath?: string;
+  /**
+   * Retry defaults for tool calls that fail transiently.
+   * These encode the retry directive from the compiled prompt's execution-policy
+   * layer ("On tool failure: retry up to 3 times with exponential backoff before
+   * asking") and are exposed via ToolPermissionResult.retryHint so the agent
+   * runtime can implement retry-with-backoff without browsing the prompt text.
+   */
+  retryDefaults?: RetryConfig;
 }
 
 /**
- * Result of a tool permission check with detailed information
+ * Retry configuration for handling transient tool failures.
+ * Aligned with the execution-policy layer's retry directive.
+ */
+export interface RetryConfig {
+  /** Maximum number of retry attempts before escalating to the user (default 3) */
+  maxRetries: number;
+  /**
+   * Base delay in milliseconds for exponential backoff (doubles each attempt).
+   * Default 1000 (1 second).
+   */
+  backoffMs: number;
+}
+
+/**
+ * Retry hint attached to a tool permission check result.
+ * Tells the agent runtime whether a tool call CAN be retried on transient
+ * failure and, if so, how to back off before escalating.
+ */
+export interface RetryHint {
+  /** Whether the tool call can be retried on transient failure */
+  retryable: boolean;
+  /** Maximum number of retry attempts before escalating (only when retryable) */
+  maxRetries: number;
+  /** Base delay in ms for exponential backoff (doubles each attempt) */
+  backoffMs: number;
+  /** Human-readable explanation of why retry is or isn't appropriate */
+  reason?: string;
+}
+
+/**
+ * Result of a tool permission check with detailed information.
+ * Includes a retryHint that encodes the compiled prompt's retry directive for
+ * the agent runtime.
  */
 export interface ToolPermissionResult {
   /** Whether the tool is allowed */
@@ -67,6 +107,13 @@ export interface ToolPermissionResult {
   requiresPermission?: boolean;
   /** Description for permission prompt */
   description?: string;
+  /**
+   * Retry hint for the agent runtime.
+   * - Allowed tools: retryable=true with configured backoff (default 3 retries, 1s)
+   * - Permission-required tools: retryable=true, maxRetries=1 (user can try once more)
+   * - Blocked tools: retryable=false (retrying a permission block won't help)
+   */
+  retryHint?: RetryHint;
 }
 
 /**

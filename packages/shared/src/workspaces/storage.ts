@@ -3,26 +3,25 @@
  *
  * CRUD operations for workspaces.
  * Workspaces can be stored anywhere on disk via rootPath.
- * Default location: ~/.craft-agent/workspaces/
+ * Default location: ~/.archstudio/workspaces/
  */
 
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-} from 'fs';
+// Namespace imports (not `{ existsSync, ... }` / `{ homedir }` / `{ randomUUID }`):
+// a named import destructures the property at module top-level, before any
+// try/catch can run. This module is transitively reachable from the Electron
+// renderer bundle, where Vite externalizes `os`/`fs`/`crypto` behind a proxy
+// that throws on property access. The renderer never calls the fs-backed
+// workspace functions below, but merely importing this file must not crash
+// the app.
+import * as fs from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
-import { randomUUID } from 'crypto';
+import * as nodeCrypto from 'crypto';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
+import { CONFIG_DIR } from '../config/paths.ts';
 import { atomicWriteFileSync, readJsonFileSync } from '../utils/files.ts';
 import { getDefaultStatusConfig, saveStatusConfig, ensureDefaultIconFiles } from '../statuses/storage.ts';
 import { getDefaultLabelConfig, saveLabelConfig } from '../labels/storage.ts';
-import { loadConfigDefaults } from '../config/storage.ts';
+import { loadConfigDefaults, getLocalMcpEnabled } from '../config/storage.ts';
 import { parsePermissionMode, PERMISSION_MODE_ORDER } from '../agent/mode-types.ts';
 import { normalizeThinkingLevel } from '../agent/thinking-levels.ts';
 import type {
@@ -32,7 +31,6 @@ import type {
   WorkspaceSummary,
 } from './types.ts';
 
-const CONFIG_DIR = join(homedir(), '.craft-agent');
 const DEFAULT_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces');
 
 // ============================================================
@@ -40,7 +38,7 @@ const DEFAULT_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces');
 // ============================================================
 
 /**
- * Get the default workspaces directory (~/.craft-agent/workspaces/)
+ * Get the default workspaces directory (~/.archstudio/workspaces/)
  */
 export function getDefaultWorkspacesDir(): string {
   return DEFAULT_WORKSPACES_DIR;
@@ -50,8 +48,8 @@ export function getDefaultWorkspacesDir(): string {
  * Ensure default workspaces directory exists
  */
 export function ensureDefaultWorkspacesDir(): void {
-  if (!existsSync(DEFAULT_WORKSPACES_DIR)) {
-    mkdirSync(DEFAULT_WORKSPACES_DIR, { recursive: true });
+  if (!fs.existsSync(DEFAULT_WORKSPACES_DIR)) {
+    fs.mkdirSync(DEFAULT_WORKSPACES_DIR, { recursive: true });
   }
 }
 
@@ -65,27 +63,41 @@ export function getWorkspacePath(workspaceId: string): string {
 }
 
 /**
+ * Resolve a workspace root that may still be in portable form.
+ *
+ * Workspace roots are persisted via toPortablePath(), so a rootPath read back
+ * from config.json or a session header starts with `~`. Most callers expand it
+ * first, but a root that round-trips through a session header can reach these
+ * helpers unexpanded — join() then treats `~` as a literal directory name and
+ * produces paths like `<cwd>/~/.archstudio/workspaces/...`, which fail ENOENT.
+ * Expanding here makes every workspace path helper safe regardless of caller.
+ */
+function resolveWorkspaceRoot(rootPath: string): string {
+  return expandPath(rootPath);
+}
+
+/**
  * Get path to workspace sources directory
- * @param rootPath - Absolute path to workspace root folder
+ * @param rootPath - Workspace root folder (absolute, or portable `~`-prefixed)
  */
 export function getWorkspaceSourcesPath(rootPath: string): string {
-  return join(rootPath, 'sources');
+  return join(resolveWorkspaceRoot(rootPath), 'sources');
 }
 
 /**
  * Get path to workspace sessions directory
- * @param rootPath - Absolute path to workspace root folder
+ * @param rootPath - Workspace root folder (absolute, or portable `~`-prefixed)
  */
 export function getWorkspaceSessionsPath(rootPath: string): string {
-  return join(rootPath, 'sessions');
+  return join(resolveWorkspaceRoot(rootPath), 'sessions');
 }
 
 /**
  * Get path to workspace skills directory
- * @param rootPath - Absolute path to workspace root folder
+ * @param rootPath - Workspace root folder (absolute, or portable `~`-prefixed)
  */
 export function getWorkspaceSkillsPath(rootPath: string): string {
-  return join(rootPath, 'skills');
+  return join(resolveWorkspaceRoot(rootPath), 'skills');
 }
 
 // ============================================================
@@ -98,7 +110,7 @@ export function getWorkspaceSkillsPath(rootPath: string): string {
  */
 export function loadWorkspaceConfig(rootPath: string): WorkspaceConfig | null {
   const configPath = join(rootPath, 'config.json');
-  if (!existsSync(configPath)) return null;
+  if (!fs.existsSync(configPath)) return null;
 
   try {
     const config = readJsonFileSync<WorkspaceConfig>(configPath);
@@ -142,8 +154,8 @@ export function loadWorkspaceConfig(rootPath: string): WorkspaceConfig | null {
  * @param rootPath - Absolute path to workspace root folder
  */
 export function saveWorkspaceConfig(rootPath: string, config: WorkspaceConfig): void {
-  if (!existsSync(rootPath)) {
-    mkdirSync(rootPath, { recursive: true });
+  if (!fs.existsSync(rootPath)) {
+    fs.mkdirSync(rootPath, { recursive: true });
   }
 
   // Convert paths to portable form for cross-machine compatibility
@@ -171,9 +183,9 @@ export function saveWorkspaceConfig(rootPath: string, config: WorkspaceConfig): 
  * Count subdirectories in a path
  */
 function countSubdirs(dirPath: string): number {
-  if (!existsSync(dirPath)) return 0;
+  if (!fs.existsSync(dirPath)) return 0;
   try {
-    return readdirSync(dirPath, { withFileTypes: true }).filter((d) => d.isDirectory()).length;
+    return fs.readdirSync(dirPath, { withFileTypes: true }).filter((d) => d.isDirectory()).length;
   } catch {
     return 0;
   }
@@ -183,9 +195,9 @@ function countSubdirs(dirPath: string): number {
  * List subdirectory names in a path
  */
 function listSubdirNames(dirPath: string): string[] {
-  if (!existsSync(dirPath)) return [];
+  if (!fs.existsSync(dirPath)) return [];
   try {
-    return readdirSync(dirPath, { withFileTypes: true })
+    return fs.readdirSync(dirPath, { withFileTypes: true })
       .filter((d) => d.isDirectory())
       .map((d) => d.name);
   } catch {
@@ -206,8 +218,8 @@ export function loadWorkspace(rootPath: string): LoadedWorkspace | null {
 
   // Ensure skills directory exists (migration for existing workspaces)
   const skillsPath = getWorkspaceSkillsPath(rootPath);
-  if (!existsSync(skillsPath)) {
-    mkdirSync(skillsPath, { recursive: true });
+  if (!fs.existsSync(skillsPath)) {
+    fs.mkdirSync(skillsPath, { recursive: true });
   }
 
   return {
@@ -262,20 +274,20 @@ export function generateSlug(name: string): string {
  * E.g., "my-workspace", "my-workspace-2", "my-workspace-3", ...
  *
  * @param name - Display name to derive the slug from
- * @param baseDir - Parent directory where workspace folders live (e.g., ~/.craft-agent/workspaces/)
+ * @param baseDir - Parent directory where workspace folders live (e.g., ~/.archstudio/workspaces/)
  * @returns Full path to a unique, non-existing folder
  */
 export function generateUniqueWorkspacePath(name: string, baseDir: string): string {
   const slug = generateSlug(name);
   let candidate = join(baseDir, slug);
 
-  if (!existsSync(candidate)) {
+  if (!fs.existsSync(candidate)) {
     return candidate;
   }
 
   // Append numeric suffix until we find a non-existing path
   let counter = 2;
-  while (existsSync(join(baseDir, `${slug}-${counter}`))) {
+  while (fs.existsSync(join(baseDir, `${slug}-${counter}`))) {
     counter++;
   }
 
@@ -315,7 +327,7 @@ export function createWorkspaceAtPath(
   };
 
   const config: WorkspaceConfig = {
-    id: `ws_${randomUUID().slice(0, 8)}`,
+    id: `ws_${nodeCrypto.randomUUID().slice(0, 8)}`,
     name,
     slug,
     defaults: workspaceDefaults,
@@ -325,10 +337,10 @@ export function createWorkspaceAtPath(
   };
 
   // Create workspace directory structure
-  mkdirSync(rootPath, { recursive: true });
-  mkdirSync(getWorkspaceSourcesPath(rootPath), { recursive: true });
-  mkdirSync(getWorkspaceSessionsPath(rootPath), { recursive: true });
-  mkdirSync(getWorkspaceSkillsPath(rootPath), { recursive: true });
+  fs.mkdirSync(rootPath, { recursive: true });
+  fs.mkdirSync(getWorkspaceSourcesPath(rootPath), { recursive: true });
+  fs.mkdirSync(getWorkspaceSessionsPath(rootPath), { recursive: true });
+  fs.mkdirSync(getWorkspaceSkillsPath(rootPath), { recursive: true });
 
   // Save config
   saveWorkspaceConfig(rootPath, config);
@@ -351,10 +363,10 @@ export function createWorkspaceAtPath(
  * @param rootPath - Absolute path to workspace root folder
  */
 export function deleteWorkspaceFolder(rootPath: string): boolean {
-  if (!existsSync(rootPath)) return false;
+  if (!fs.existsSync(rootPath)) return false;
 
   try {
-    rmSync(rootPath, { recursive: true });
+    fs.rmSync(rootPath, { recursive: true });
     return true;
   } catch {
     return false;
@@ -366,7 +378,7 @@ export function deleteWorkspaceFolder(rootPath: string): boolean {
  * @param rootPath - Absolute path to check
  */
 export function isValidWorkspace(rootPath: string): boolean {
-  return existsSync(join(rootPath, 'config.json'));
+  return fs.existsSync(join(rootPath, 'config.json'));
 }
 
 /**
@@ -389,17 +401,17 @@ export function renameWorkspaceFolder(rootPath: string, newName: string): boolea
 
 /**
  * Discover workspace folders in the default location that have valid config.json
- * Returns paths to valid workspaces found in ~/.craft-agent/workspaces/
+ * Returns paths to valid workspaces found in ~/.archstudio/workspaces/
  */
 export function discoverWorkspacesInDefaultLocation(): string[] {
   const discovered: string[] = [];
 
-  if (!existsSync(DEFAULT_WORKSPACES_DIR)) {
+  if (!fs.existsSync(DEFAULT_WORKSPACES_DIR)) {
     return discovered;
   }
 
   try {
-    const entries = readdirSync(DEFAULT_WORKSPACES_DIR, { withFileTypes: true });
+    const entries = fs.readdirSync(DEFAULT_WORKSPACES_DIR, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
 
@@ -471,14 +483,14 @@ export function setWorkspaceColorTheme(rootPath: string, themeId: string | undef
 
 /**
  * Check if local (stdio) MCP servers are enabled for a workspace.
- * Resolution order: ENV (CRAFT_LOCAL_MCP_ENABLED) > workspace config > default (true)
+ * Resolution order: ENV (ARCHSTUDIO_LOCAL_MCP_ENABLED) > workspace config > global config > default (true)
  *
  * @param rootPath - Absolute path to workspace root folder
  * @returns true if local MCP servers should be enabled
  */
 export function isLocalMcpEnabled(rootPath: string): boolean {
   // 1. Environment variable override (highest priority)
-  const envValue = process.env.CRAFT_LOCAL_MCP_ENABLED;
+  const envValue = process.env.ARCHSTUDIO_LOCAL_MCP_ENABLED;
   if (envValue !== undefined) {
     return envValue.toLowerCase() === 'true';
   }
@@ -489,8 +501,8 @@ export function isLocalMcpEnabled(rootPath: string): boolean {
     return config.localMcpServers.enabled;
   }
 
-  // 3. Default: enabled
-  return true;
+  // 3. Global app config (Settings drawer "Local MCP servers" toggle)
+  return getLocalMcpEnabled();
 }
 
 // ============================================================
@@ -513,11 +525,11 @@ export function ensurePluginManifest(rootPath: string, workspaceName: string): v
   const pluginDir = join(rootPath, '.claude-plugin');
   const manifestPath = join(pluginDir, 'plugin.json');
 
-  if (existsSync(manifestPath)) return;
+  if (fs.existsSync(manifestPath)) return;
 
   // Create .claude-plugin directory
-  if (!existsSync(pluginDir)) {
-    mkdirSync(pluginDir, { recursive: true });
+  if (!fs.existsSync(pluginDir)) {
+    fs.mkdirSync(pluginDir, { recursive: true });
   }
 
   // Create minimal plugin manifest
@@ -526,7 +538,7 @@ export function ensurePluginManifest(rootPath: string, workspaceName: string): v
     version: '1.0.0',
   };
 
-  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
 }
 
 export { CONFIG_DIR, DEFAULT_WORKSPACES_DIR };

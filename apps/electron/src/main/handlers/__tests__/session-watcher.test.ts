@@ -12,7 +12,7 @@ import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { mkdtempSync, writeFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import type { RpcServer, RequestContext } from '@craft-agent/server-core/transport'
+import type { RpcServer, RequestContext } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { RPC_CHANNELS } from '../../../shared/types'
 
@@ -89,7 +89,9 @@ function createTestHarness(sessionPaths: Map<string, string>) {
 }
 
 function makeCtx(clientId: string, workspaceId = 'ws-1'): RequestContext {
-  return { clientId, workspaceId, webContentsId: null }
+  // Never-aborted signal: tests don't exercise cancellation, but every
+  // RequestContext must carry an AbortSignal now that handlers can subscribe.
+  return { clientId, workspaceId, webContentsId: null, signal: new AbortController().signal }
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +112,7 @@ describe('session file watcher isolation', () => {
     const sessionPaths = new Map([['s1', dir1], ['s2', dir2]])
     const { server, deps, handlers, pushCalls } = createTestHarness(sessionPaths)
 
-    const { registerSessionsHandlers, cleanupSessionFileWatchForClient } = await import('@craft-agent/server-core/handlers/rpc')
+    const { registerSessionsHandlers, cleanupSessionFileWatchForClient } = await import('@archstudio/server-core/handlers/rpc')
     registerSessionsHandlers(server, deps)
 
     const watchHandler = handlers.get(RPC_CHANNELS.sessions.WATCH_FILES)!
@@ -163,7 +165,7 @@ describe('session file watcher isolation', () => {
     const sessionPaths = new Map([['s1', dir1], ['s2', dir2]])
     const { server, deps, handlers, pushCalls } = createTestHarness(sessionPaths)
 
-    const { registerSessionsHandlers, cleanupSessionFileWatchForClient } = await import('@craft-agent/server-core/handlers/rpc')
+    const { registerSessionsHandlers, cleanupSessionFileWatchForClient } = await import('@archstudio/server-core/handlers/rpc')
     registerSessionsHandlers(server, deps)
 
     const watchHandler = handlers.get(RPC_CHANNELS.sessions.WATCH_FILES)!
@@ -200,7 +202,7 @@ describe('session file watcher isolation', () => {
     const sessionPaths = new Map([['s1', dir]])
     const { server, deps, handlers, pushCalls } = createTestHarness(sessionPaths)
 
-    const { registerSessionsHandlers, cleanupSessionFileWatchForClient } = await import('@craft-agent/server-core/handlers/rpc')
+    const { registerSessionsHandlers, cleanupSessionFileWatchForClient } = await import('@archstudio/server-core/handlers/rpc')
     registerSessionsHandlers(server, deps)
 
     const watchHandler = handlers.get(RPC_CHANNELS.sessions.WATCH_FILES)!

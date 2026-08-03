@@ -1,0 +1,376 @@
+/* ─── Shared surface styles ────────────────────────────────────────── */
+.workspace-surface,
+.tasks-workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--color-surface);
+}
+
+.workspace-surface__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.workspace-surface__header > div:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.workspace-surface__header strong { font-size: 13px; }
+
+.workspace-surface__header small {
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-surface__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ─── Buttons ────────────────────────────────────────────────────────── */
+.workspace-surface button,
+.workspace-empty button,
+.task-row button,
+.editor-list button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 9px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.workspace-surface button:hover,
+.workspace-empty button:hover,
+.task-row button:hover,
+.editor-list button:hover {
+  border-color: color-mix(in oklch, var(--brand-purple) 55%, transparent);
+}
+
+.workspace-surface button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+button.danger { color: var(--ds-error); }
+
+/* Dirty save indicator */
+.editor-save--dirty {
+  border-color: color-mix(in oklch, var(--brand-purple) 60%, transparent);
+  background: color-mix(in oklch, var(--brand-purple) 12%, var(--color-surface));
+  color: var(--brand-purple);
+  font-weight: 600;
+}
+
+/* ─── Body / preview areas ───────────────────────────────────────────── */
+.workspace-surface__body,
+.workspace-preview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.workspace-code,
+.workspace-preview > pre,
+.workspace-document pre {
+  box-sizing: border-box;
+  min-height: 100%;
+  margin: 0;
+  padding: 18px;
+  overflow: auto;
+  color: var(--color-text);
+  font: 12px/1.55 var(--font-mono, monospace);
+  white-space: pre-wrap;
+  tab-size: 2;
+}
+
+.workspace-preview {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  background: var(--color-surface-muted);
+}
+
+.workspace-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.workspace-preview iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.workspace-preview .workspace-document {
+  width: min(850px, 100%);
+  min-height: 100%;
+  background: var(--color-surface);
+}
+
+/* Markdown rendering in preview */
+.workspace-document--markdown {
+  padding: 24px 28px;
+  font: 14px/1.65 var(--font-sans, system-ui, sans-serif);
+  color: var(--color-text);
+}
+
+/* ─── Empty / state lines ─────────────────────────────────────────────── */
+.workspace-empty {
+  display: flex;
+  height: 100%;
+  min-height: 240px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  text-align: center;
+  color: var(--color-muted);
+}
+
+.workspace-empty > svg {
+  width: 38px;
+  height: 38px;
+  margin-bottom: 12px;
+  opacity: 0.55;
+}
+
+.workspace-empty strong { color: var(--color-text); }
+
+.workspace-empty p {
+  max-width: 430px;
+  margin: 6px 0 16px;
+  font-size: 12px;
+}
+
+.workspace-state-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 220px;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.workspace-state-line svg,
+.task-row__status svg {
+  width: 16px;
+  height: 16px;
+}
+
+.spin {
+  animation: workspace-spin 1s linear infinite;
+}
+
+@keyframes workspace-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Editor workspace (replaces canvas-workspace) ───────────────────── */
+.editor-workspace {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-columns: 200px minmax(0, 1fr);
+}
+
+.editor-list {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border-right: 1px solid var(--color-border);
+  overflow: auto;
+  background: var(--color-surface-muted);
+}
+
+.editor-list button {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.editor-list button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-list button.is-active {
+  border-color: var(--brand-purple);
+  background: color-mix(in oklch, var(--brand-purple) 12%, var(--color-surface));
+}
+
+.editor-list__new {
+  margin-bottom: 6px;
+}
+
+.editor-list__section {
+  padding: 8px 4px 4px;
+  color: var(--color-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Editor main area */
+.editor-tiptap-wrapper {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.editor-artifact-meta {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.editor-artifact-title {
+  flex: 1;
+  padding: 7px 9px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.editor-artifact-kind {
+  padding: 7px 9px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.editor-textarea {
+  flex: 1;
+  min-height: 0;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 18px;
+  border: 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: 13px/1.6 var(--font-mono, monospace);
+  resize: none;
+  outline: none;
+  tab-size: 2;
+}
+
+.editor-textarea:focus {
+  background: var(--color-surface);
+}
+
+.editor-artifact-saved {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  color: var(--color-muted);
+  font-size: 10px;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Shiki code viewer wrapper */
+.editor-shiki-wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.editor-shiki {
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+/* ─── Tasks (unchanged) ──────────────────────────────────────────────── */
+.tasks-workspace__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  overflow: auto;
+}
+
+.task-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface-muted);
+}
+
+.task-row > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.task-row strong { font-size: 12px; }
+.task-row small { color: var(--color-muted); font-size: 10px; }
+.task-row p { margin: 6px 0 0; color: var(--color-muted); font-size: 11px; }
+.task-row__actions { flex-direction: row !important; gap: 6px; }
+.task-row__status.is-running { color: var(--ds-warning); }
+.task-row__status.is-completed { color: var(--ds-success); }
+.task-row__status.is-failed,
+.task-row__status.is-orphaned { color: var(--ds-error); }
+
+/* ─── Responsive ──────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .workspace-surface__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .editor-workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .editor-list {
+    flex-direction: row;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+    overflow-x: auto;
+  }
+
+  .editor-list button { width: auto; }
+
+  .task-row {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .task-row__actions { grid-column: 2; }
+}

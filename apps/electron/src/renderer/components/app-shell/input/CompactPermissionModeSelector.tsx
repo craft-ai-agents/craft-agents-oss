@@ -7,6 +7,7 @@ import {
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
+  DrawerDescription,
   DrawerClose,
 } from '@/components/ui/drawer'
 import { cn } from '@/lib/utils'
@@ -14,7 +15,7 @@ import {
   PERMISSION_MODE_CONFIG,
   PERMISSION_MODE_ORDER,
   type PermissionMode,
-} from '@craft-agent/shared/agent/modes'
+} from '@archstudio/shared/agent/modes'
 
 // ============================================================================
 // Mode Icon (same SVG pattern as ActiveOptionBadges.PermissionModeIcon)
@@ -114,6 +115,9 @@ export function CompactPermissionModeSelector({
       <DrawerContent>
         <DrawerHeader>
           <DrawerTitle>{t('mode.permissionMode')}</DrawerTitle>
+          <DrawerDescription className="sr-only">
+            Choose how much permission the agent has to perform actions.
+          </DrawerDescription>
         </DrawerHeader>
 
         <div className="px-4 pb-6 flex flex-col gap-1">

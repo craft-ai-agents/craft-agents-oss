@@ -18,7 +18,7 @@
  * - All other fields return the raw registry callback directly (signatures match)
  */
 
-import type { SessionToolContext } from '@craft-agent/session-tools-core';
+import type { SessionToolContext } from '@archstudio/session-tools-core';
 import { getSessionScopedToolCallbacks } from './session-scoped-tool-callback-registry.ts';
 
 /**

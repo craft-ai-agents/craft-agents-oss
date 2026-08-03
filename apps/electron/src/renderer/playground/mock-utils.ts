@@ -5,6 +5,7 @@ import type {
   MessagingPlatformRuntimeInfo,
   WhatsAppUiEvent,
 } from '../../shared/types'
+import type { AnyMemory, MemoryQuery } from '@archstudio/shared/memory/types'
 import type { MessagingBinding } from '../atoms/messaging'
 import type {
   BindingAccess,
@@ -211,6 +212,11 @@ export const mockElectronAPI = {
   openFileDialog: async () => {
     console.log('[Playground] openFileDialog called')
     return [] // Let user use file input or drag-drop
+  },
+
+  writeFile: async (path: string, _content: string) => {
+    console.log('[Playground] writeFile called:', path)
+    return { success: true }
   },
 
   readFileAttachment: async (path: string) => {
@@ -660,6 +666,92 @@ export const mockElectronAPI = {
     return () => {
       messagingMockState.waEventListeners.delete(callback)
     }
+  },
+
+  // Memory panel mocks
+  listMemories: async () => {
+    console.log('[Playground] listMemories called')
+    return [
+      {
+        id: 'mem-1',
+        class: 'semantic',
+        title: 'User prefers dark mode',
+        content: 'User consistently chooses dark theme across all apps.',
+        confidence: 0.95,
+        tags: ['preferences', 'ui'],
+        createdAt: '2026-07-20T10:00:00Z',
+        updatedAt: '2026-07-22T08:30:00Z',
+        source: { sessionId: 's1', messageId: 'm1' },
+        scope: 'user',
+        scopeId: 'u1',
+        sensitivity: 'internal',
+        archived: false,
+        supersedesIds: [],
+        expiry: { archiveOnSupersede: false },
+      },
+      {
+        id: 'mem-2',
+        class: 'episodic',
+        title: 'Fixed build error in LayoutShell',
+        content: 'Resolved TypeScript error by changing db.pragma to db.run for SQLite pragmas.',
+        confidence: 0.88,
+        tags: ['debug', 'typescript', 'sqlite'],
+        createdAt: '2026-07-22T14:15:00Z',
+        updatedAt: '2026-07-22T14:15:00Z',
+        source: { sessionId: 's2', messageId: 'm2' },
+        scope: 'project',
+        scopeId: 'p1',
+        sensitivity: 'internal',
+        archived: false,
+        supersedesIds: [],
+        expiry: { archiveOnSupersede: false },
+      },
+      {
+        id: 'mem-3',
+        class: 'procedural',
+        title: 'Deploy workflow for Electron app',
+        content: '1. Build shared package. 2. Run electron typecheck. 3. Package with electron-builder.',
+        confidence: 0.92,
+        tags: ['deployment', 'electron', 'workflow'],
+        createdAt: '2026-07-21T09:00:00Z',
+        updatedAt: '2026-07-21T09:00:00Z',
+        source: { sessionId: 's3', messageId: 'm3' },
+        scope: 'workspace',
+        scopeId: 'w1',
+        sensitivity: 'internal',
+        archived: false,
+        supersedesIds: [],
+        expiry: { archiveOnSupersede: false },
+      },
+    ]
+  },
+  getMemory: async (id: string) => {
+    console.log('[Playground] getMemory called:', id)
+    return null
+  },
+  createMemory: async (memory: AnyMemory) => {
+    console.log('[Playground] createMemory called:', memory)
+    return memory
+  },
+  updateMemory: async (id: string, patch: Partial<AnyMemory>) => {
+    console.log('[Playground] updateMemory called:', id, patch)
+    return { id, ...patch } as AnyMemory
+  },
+  archiveMemory: async (id: string) => {
+    console.log('[Playground] archiveMemory called:', id)
+    return { id, archived: true } as AnyMemory
+  },
+  restoreMemory: async (id: string) => {
+    console.log('[Playground] restoreMemory called:', id)
+    return { id, archived: false } as AnyMemory
+  },
+  deleteMemory: async (id: string) => {
+    console.log('[Playground] deleteMemory called:', id)
+    return { success: true }
+  },
+  searchMemories: async (query: MemoryQuery) => {
+    console.log('[Playground] searchMemories called:', query)
+    return []
   },
 }
 

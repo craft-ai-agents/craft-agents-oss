@@ -1,0 +1,403 @@
+/* Runs Panel
+   - Status board for command/workflow runs
+*/
+
+.runs-panel {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-surface);
+  color: var(--color-text);
+  flex-direction: column;
+}
+
+.runs-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(16px * var(--density-scale));
+  border-bottom: 1px solid var(--color-border);
+}
+
+.runs-panel__title {
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--density-scale));
+  color: var(--color-accent);
+}
+
+.runs-panel__title h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Responsive card grid.
+   This was a single full-width flex column, so with only a handful of runs
+   each card stretched edge-to-edge and three of them filled the viewport.
+   `auto-fill` (not `auto-fit`) keeps the track width stable when there are
+   fewer runs than columns — with `auto-fit` a single run would collapse the
+   empty tracks and stretch that one card back across the full width, which is
+   the exact problem being fixed. */
+.runs-panel__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: calc(16px * var(--density-scale));
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-auto-rows: min-content;
+  align-content: start;
+  gap: calc(12px * var(--density-scale));
+}
+
+/* The empty state is a single cell in a multi-column grid — span every track
+   so it stays centred instead of hugging the first column. */
+.runs-panel__empty {
+  grid-column: 1 / -1;
+}
+
+.runs-panel__empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(12px * var(--density-scale));
+  color: var(--color-muted);
+}
+
+.runs-panel__item {
+  padding: calc(14px * var(--density-scale));
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+/* Rows are only interactive when an `onOpenSession` handler is supplied, so the
+   affordance is never shown for a click that would do nothing. */
+.runs-panel__item--interactive {
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
+}
+
+.runs-panel__item--interactive:hover {
+  border-color: color-mix(in oklch, var(--brand-purple) 45%, transparent);
+  background: color-mix(in srgb, var(--color-surface-muted) 88%, var(--foreground));
+  transform: translateY(-1px);
+}
+
+.runs-panel__item--interactive:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--brand-purple) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* Workspace-wide spend, pinned opposite the title. */
+.runs-panel__totals {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6px * var(--density-scale));
+  padding: calc(4px * var(--density-scale)) calc(10px * var(--density-scale));
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+  font-size: 12px;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.runs-panel__totals-cost {
+  color: var(--brand-lime, var(--foreground));
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runs-panel__item--interactive {
+    transition: none;
+  }
+  .runs-panel__item--interactive:hover {
+    transform: none;
+  }
+}
+
+.runs-panel__item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(12px * var(--density-scale));
+  margin-bottom: calc(8px * var(--density-scale));
+}
+
+.runs-panel__item-title {
+  font-weight: 500;
+}
+
+.runs-panel__item-meta {
+  display: flex;
+  align-items: center;
+  gap: calc(8px * var(--density-scale));
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+.runs-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(6px * var(--density-scale));
+  margin-top: calc(12px * var(--density-scale));
+  padding-top: calc(10px * var(--density-scale));
+  border-top: 1px solid var(--color-border);
+}
+
+.runs-panel__actions button,
+.runs-agent-dialog button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(5px * var(--density-scale));
+  min-height: 30px;
+  padding: calc(5px * var(--density-scale)) calc(8px * var(--density-scale));
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.runs-panel__actions button:hover:not(:disabled),
+.runs-agent-dialog button:hover:not(:disabled) {
+  border-color: color-mix(in oklch, var(--brand-purple) 55%, transparent);
+  background: color-mix(in srgb, var(--color-surface-muted) 80%, var(--foreground));
+}
+
+.runs-panel__actions button:focus-visible,
+.runs-agent-dialog button:focus-visible,
+.runs-agent-dialog select:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--brand-purple) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.runs-panel__actions button:disabled,
+.runs-agent-dialog button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.runs-panel__actions .runs-panel__delete {
+  margin-left: auto;
+  color: var(--ds-error);
+}
+
+.runs-agent-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: calc(20px * var(--density-scale));
+  background: color-mix(in srgb, black 38%, transparent);
+}
+
+.runs-agent-dialog__card {
+  width: min(440px, 100%);
+  padding: calc(18px * var(--density-scale));
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 30%);
+}
+
+.runs-agent-dialog__header,
+.runs-agent-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(12px * var(--density-scale));
+}
+
+.runs-agent-dialog__header h3,
+.runs-agent-dialog__header p {
+  margin: 0;
+}
+
+.runs-agent-dialog__header p {
+  margin-top: calc(4px * var(--density-scale));
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.runs-agent-dialog label {
+  display: block;
+  margin: calc(18px * var(--density-scale)) 0 calc(6px * var(--density-scale));
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.runs-agent-dialog select {
+  width: 100%;
+  min-height: 36px;
+  padding: calc(6px * var(--density-scale)) calc(9px * var(--density-scale));
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.runs-agent-dialog__footer {
+  justify-content: flex-end;
+  margin-top: calc(18px * var(--density-scale));
+}
+
+.runs-agent-dialog .runs-agent-dialog__primary {
+  border-color: color-mix(in oklch, var(--brand-purple) 60%, transparent);
+  background: var(--brand-purple);
+  color: white;
+}
+
+@media (max-width: 420px) {
+  .runs-panel__actions button span { display: none; }
+  .runs-panel__actions button { min-width: 32px; padding-inline: calc(7px * var(--density-scale)); }
+}
+
+/* ===== Save to Memory dialog ===== */
+
+.runs-memory-dialog__card {
+  width: min(560px, 100%);
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: calc(18px * var(--density-scale));
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 30%);
+}
+
+.runs-memory-dialog__input {
+  width: 100%;
+  min-height: 36px;
+  padding: calc(6px * var(--density-scale)) calc(10px * var(--density-scale));
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.runs-memory-dialog__input:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--brand-purple) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.runs-memory-dialog__textarea {
+  width: 100%;
+  padding: calc(10px * var(--density-scale));
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', 'Source Code Pro', monospace;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 160px;
+}
+
+.runs-memory-dialog__textarea:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--brand-purple) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.runs-memory-dialog__warning {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(8px * var(--density-scale));
+  margin-top: calc(12px * var(--density-scale));
+  padding: calc(10px * var(--density-scale)) calc(12px * var(--density-scale));
+  border-radius: 8px;
+  border: 1px solid color-mix(in oklch, var(--ds-warning) 40%, transparent);
+  background: color-mix(in srgb, var(--ds-warning) 8%, var(--color-surface));
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.runs-memory-dialog__warning svg {
+  color: var(--ds-warning);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.runs-memory-dialog__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(12px * var(--density-scale));
+  padding: calc(40px * var(--density-scale)) 0;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.runs-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6px * var(--density-scale));
+  padding: calc(4px * var(--density-scale)) calc(10px * var(--density-scale));
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.runs-badge--running {
+  color: var(--ds-warning);
+  border-color: var(--ds-warning);
+}
+
+.runs-badge--completed {
+  color: var(--ds-success);
+  border-color: var(--ds-success);
+}
+
+.runs-badge--failed {
+  color: var(--ds-error);
+  border-color: var(--ds-error);
+}
+
+.runs-badge--cancelled {
+  color: var(--ds-text-secondary);
+  border-color: var(--ds-text-secondary);
+}
+
+.runs-panel__live {
+  margin-left: calc(8px * var(--density-scale));
+  padding: 2px calc(8px * var(--density-scale));
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--brand-lime);
+  background: color-mix(in oklch, var(--brand-lime) 12%, transparent);
+  border: 1px solid color-mix(in oklch, var(--brand-lime) 35%, transparent);
+}
+
+.runs-panel__empty {
+  padding: calc(32px * var(--density-scale)) calc(16px * var(--density-scale));
+  text-align: center;
+  color: var(--ds-text-muted);
+  font-size: 13px;
+}
+
+.runs-badge__spin {
+  animation: runs-spin 1s linear infinite;
+}
+
+@keyframes runs-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

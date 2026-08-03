@@ -1,4 +1,4 @@
-import type { AnnotationV1 } from '@craft-agent/core'
+import type { AnnotationV1 } from '@archstudio/core'
 import { annotationColorToCss } from './annotation-style-tokens'
 
 export function clearBlockAnnotationMarkers(root: HTMLElement): void {

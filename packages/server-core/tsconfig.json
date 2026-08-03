@@ -19,8 +19,8 @@
     "noUnusedParameters": false,
     "baseUrl": ".",
     "paths": {
-      "@craft-agent/shared": ["../shared/src/index.ts"],
-      "@craft-agent/shared/*": ["../shared/src/*"]
+      "@archstudio/shared": ["../shared/src/index.ts"],
+      "@archstudio/shared/*": ["../shared/src/*"]
     }
   },
   "include": ["src/**/*", "../shared/src/agent/bash-parser.d.ts"],

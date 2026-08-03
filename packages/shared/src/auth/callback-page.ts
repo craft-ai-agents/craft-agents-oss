@@ -4,7 +4,7 @@
  * in both the callback server and the playground preview.
  */
 
-import { CRAFT_LOGO_HTML } from '../branding.ts';
+import { ARCHSTUDIO_LOGO_HTML } from '../branding.ts';
 
 export type AppType = 'terminal' | 'electron';
 
@@ -170,12 +170,12 @@ export function generateCallbackPage(options: {
 </head>
 <body>
   <div class="content">
-    <pre class="logo">${CRAFT_LOGO_HTML}</pre>
+    <pre class="logo">${ARCHSTUDIO_LOGO_HTML}</pre>
     <div class="card">
       <div class="status">${statusMessage}</div>
     </div>
     <div class="hint">${isSuccess ? 'You can now return to the application.' : 'Please close this window and try again.'}</div>
-    ${deeplinkUrl ? `<a href="${deeplinkUrl}" class="return-link">Craft Agents</a>` : ''}
+    ${deeplinkUrl ? `<a href="${deeplinkUrl}" class="return-link">ARCHstudio</a>` : ''}
   </div>
   <script>${autoCloseScript}</script>
 </body>

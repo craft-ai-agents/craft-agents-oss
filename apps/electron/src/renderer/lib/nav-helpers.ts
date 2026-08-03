@@ -32,5 +32,9 @@ export function isDetailNavState(navState: NavigationState | null): boolean {
     case 'automations':
     case 'projects':
       return navState.details !== null
+    case 'runs':
+    case 'memory':
+    case 'media-lab':
+      return navState.details !== null
   }
 }

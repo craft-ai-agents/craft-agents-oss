@@ -12,11 +12,11 @@ import { useProjectColorTreatment } from '@/hooks/useProjectColorTreatment'
 import { useLabels } from '@/hooks/useLabels'
 import { getSessionTitle } from '@/utils/session'
 import { routes } from '@/lib/navigate'
-import { resolveTaskScopeLabelId } from '@craft-agent/shared/labels'
+import { resolveTaskScopeLabelId } from '@archstudio/shared/labels'
 import { DEFAULT_MODEL, getModelShortName } from '@config/models'
 import { getDefaultModelsForConnection, type LlmConnectionWithStatus } from '@config/llm-connections'
 import type { SessionStatus } from '@/config/session-status-config'
-import type { KanbanColumnDef } from '@craft-agent/shared/projects/types'
+import type { KanbanColumnDef } from '@archstudio/shared/projects/types'
 import { KanbanBoard } from './KanbanBoard'
 import { KANBAN_COLUMNS, statusToColumn } from './status-column'
 import { BoardListToggle } from './BoardListToggle'
@@ -93,7 +93,7 @@ function buildModelCatalog(connections: LlmConnectionWithStatus[]): {
  * persisted `kanbanColumn`, falling back to the session status' default column;
  * the status badge is independent from the column.
  */
-export function KanbanBoardContainer() {
+export function KanbanBoardContainer({ onViewChange }: { onViewChange?: (view: 'list' | 'board') => void } = {}) {
   const { activeWorkspaceId, llmConnections, sessionStatuses, onCreateSession, onSendMessage, onJumpToTaskSessions } =
     useAppShellContext()
   const { t } = useTranslation()
@@ -582,7 +582,8 @@ export function KanbanBoardContainer() {
           <BoardListToggle
             value="board"
             onChange={view => {
-              if (view === 'list') navigate(routes.view.allSessions())
+              if (onViewChange) onViewChange(view)
+              else if (view === 'list') navigate(routes.view.allSessions())
             }}
           />
         </div>

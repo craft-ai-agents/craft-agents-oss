@@ -1,4 +1,4 @@
-import type { MessageEnvelope } from '@craft-agent/shared/protocol'
+import type { MessageEnvelope } from '@archstudio/shared/protocol'
 
 const WIRE_TYPE_KEY = '__craftRpcType'
 const WIRE_BASE64_KEY = 'base64'
@@ -12,6 +12,7 @@ const MESSAGE_TYPES = new Set([
   'event',
   'error',
   'sequence_ack',
+  'cancel',
 ])
 
 type EncodedUint8Array = {
@@ -139,6 +140,11 @@ export function validateEnvelopeShape(value: unknown): value is MessageEnvelope 
   if (value.type === 'error' && !isWireError(value.error)) {
     return false
   }
+
+  // 'cancel' envelopes are minimal: id (correlates to the request to abort) +
+  // type. Server keeps any extra fields as-is for forward compatibility.
+  // No channel, args, result, or error is required — the cancel payload is
+  // pure control-plane, not data-plane.
 
   return true
 }

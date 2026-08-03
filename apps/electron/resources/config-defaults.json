@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "description": "Default configuration values for Craft Agents",
+  "description": "Default configuration values for ARCHstudio",
   "defaults": {
     "notificationsEnabled": true,
     "colorTheme": "default",
@@ -11,7 +11,8 @@
     "richToolDescriptions": true,
     "extendedPromptCache": false,
     "browserToolEnabled": true,
-    "allowRemoteEvaluate": true
+    "allowRemoteEvaluate": true,
+    "localMcpEnabled": true
   },
   "workspaceDefaults": {
     "thinkingLevel": "think",

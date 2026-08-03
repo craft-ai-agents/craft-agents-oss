@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 /**
- * craft-cli — Terminal client for Craft Agent server.
+ * archstudio-cli — Terminal client for ARCHstudio server.
  *
- * Connects over WebSocket (ws:// or wss://) to a running Craft Agent server
+ * Connects over WebSocket (ws:// or wss://) to a running ARCHstudio server
  * and provides commands for listing resources, managing sessions, sending
  * messages with real-time streaming, and validating server health.
  */
@@ -146,9 +146,9 @@ export function parseArgs(argv: string[]): CliArgs {
   }
 
   // Env var fallbacks
-  if (!url) url = process.env.CRAFT_SERVER_URL ?? ''
-  if (!token) token = process.env.CRAFT_SERVER_TOKEN ?? ''
-  if (!tlsCa) tlsCa = process.env.CRAFT_TLS_CA
+  if (!url) url = process.env.ARCHSTUDIO_SERVER_URL ?? ''
+  if (!token) token = process.env.ARCHSTUDIO_SERVER_TOKEN ?? ''
+  if (!tlsCa) tlsCa = process.env.ARCHSTUDIO_TLS_CA
   if (!provider) provider = process.env.LLM_PROVIDER ?? 'anthropic'
   if (!model) model = process.env.LLM_MODEL ?? ''
   if (!apiKey) apiKey = process.env.LLM_API_KEY ?? ''
@@ -1339,7 +1339,7 @@ export function getValidateSteps(): ValidateStep[] {
           sourceSlugs: enableSlugs,
         })
         return await waitForSendEvents(client, ctx.createdSessionId,
-          `[source:craft-public] List the documents under the "CraftAgents E2E Test" folder inside the "CraftAgents" folder. Just list their names.`,
+          `[source:craft-public] List the documents under the "ARCHstudio E2E Test" folder inside the "ARCHstudio" folder. Just list their names.`,
           180_000, false, undefined, ctx.onEvent)
       },
     },
@@ -1376,7 +1376,7 @@ export function getValidateSteps(): ValidateStep[] {
 mkdir -p "${skillDir}" && cat > "${skillDir}/SKILL.md" << 'SKILLEOF'
 ---
 name: "CLI Validate Skill"
-description: "Validation skill created by craft-cli"
+description: "Validation skill created by archstudio-cli"
 requiredSources:
   - "${sourceSlug}"
 ---
@@ -1891,13 +1891,13 @@ export async function runValidation(
 // ---------------------------------------------------------------------------
 
 function printHelp(): void {
-  process.stdout.write(`craft-cli — Terminal client for Craft Agent server
+  process.stdout.write(`archstudio-cli — Terminal client for ARCHstudio server
 
-Usage: craft-cli [options] <command> [args...]
+Usage: archstudio-cli [options] <command> [args...]
 
 Connection:
-  --url <ws[s]://...>    Server URL (default: $CRAFT_SERVER_URL)
-  --token <secret>       Auth token (default: $CRAFT_SERVER_TOKEN)
+  --url <ws[s]://...>    Server URL (default: $ARCHSTUDIO_SERVER_URL)
+  --token <secret>       Auth token (default: $ARCHSTUDIO_SERVER_TOKEN)
   --workspace <id>       Workspace ID (auto-detected if omitted)
   --timeout <ms>         Request timeout (default: 10000)
   --tls-ca <path>        Custom CA cert for self-signed TLS
@@ -1936,21 +1936,21 @@ Commands:
                          --verbose, -v       Show server stderr output
 
 Examples:
-  craft-cli run "What files are in the current directory?"
-  craft-cli run --source craft-kb "Summarize today's daily note"
-  craft-cli run --workspace-dir .github/agents --source craft-public "Read the doc"
-  craft-cli run --provider openai --model gpt-4o "Summarize this repo"
-  OPENAI_API_KEY=sk-... craft-cli run --provider openai "Hello"
-  GOOGLE_API_KEY=... craft-cli run --provider google --model gemini-2.0-flash "Hello"
-  DEEPSEEK_API_KEY=sk-... craft-cli run --provider deepseek --model deepseek-v4-flash "Hello"
-  echo "Analyze this code" | craft-cli run
-  craft-cli ping
-  craft-cli sessions
-  craft-cli send abc-123 "What files are in the current directory?"
-  echo "Summarize this" | craft-cli send abc-123
-  craft-cli --validate-server
-  craft-cli invoke system:homeDir
-  craft-cli --json workspaces | jq '.[].name'
+  archstudio-cli run "What files are in the current directory?"
+  archstudio-cli run --source craft-kb "Summarize today's daily note"
+  archstudio-cli run --workspace-dir .github/agents --source craft-public "Read the doc"
+  archstudio-cli run --provider openai --model gpt-4o "Summarize this repo"
+  OPENAI_API_KEY=sk-... archstudio-cli run --provider openai "Hello"
+  GOOGLE_API_KEY=... archstudio-cli run --provider google --model gemini-2.0-flash "Hello"
+  DEEPSEEK_API_KEY=sk-... archstudio-cli run --provider deepseek --model deepseek-v4-flash "Hello"
+  echo "Analyze this code" | archstudio-cli run
+  archstudio-cli ping
+  archstudio-cli sessions
+  archstudio-cli send abc-123 "What files are in the current directory?"
+  echo "Summarize this" | archstudio-cli send abc-123
+  archstudio-cli --validate-server
+  archstudio-cli invoke system:homeDir
+  archstudio-cli --json workspaces | jq '.[].name'
 `)
 }
 
@@ -1991,7 +1991,7 @@ export async function main(argv: string[] = process.argv): Promise<void> {
 
   // All other commands need a server URL
   if (!args.url) {
-    err('No server URL. Use --url <ws://...> or set $CRAFT_SERVER_URL')
+    err('No server URL. Use --url <ws://...> or set $ARCHSTUDIO_SERVER_URL')
     process.exit(1)
   }
 

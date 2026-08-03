@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { isGitBashExecutablePath, isUsableGitBashPath, validateGitBashPath } from '@craft-agent/server-core/services'
+import { isGitBashExecutablePath, isUsableGitBashPath, validateGitBashPath } from '@archstudio/server-core/services'
 
 let tempDir: string
 

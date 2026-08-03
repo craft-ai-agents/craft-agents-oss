@@ -12,7 +12,7 @@
  * The legacy `tasks:getOutput` (background-task remnant) is handled in sessions.ts
  * and intentionally left untouched; retiring it is a separate cleanup.
  */
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { RPC_CHANNELS } from '@archstudio/shared/protocol'
 import type {
   TaskCreateRequest,
   TaskCreateResult,
@@ -24,8 +24,8 @@ import type {
   TaskGetResult,
   TaskResultsDto,
   TaskResultNodeDto,
-} from '@craft-agent/shared/protocol'
-import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+} from '@archstudio/shared/protocol'
+import { getWorkspaceByNameOrId } from '@archstudio/shared/config'
 import {
   parseTaskYaml,
   saveTaskSpec,
@@ -40,9 +40,9 @@ import {
   nodeTitle,
   DEFAULT_REPAIR_ATTEMPTS,
   MAX_REPAIR_ATTEMPTS_CAP,
-} from '@craft-agent/shared/tasks'
-import { createLogger } from '@craft-agent/shared/utils'
-import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
+} from '@archstudio/shared/tasks'
+import { createLogger } from '@archstudio/shared/utils'
+import { pushTyped, type RpcServer } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { TaskRunner, createTaskFromSpec, finishTaskOrchestrator } from '../../tasks'
 

@@ -9,7 +9,7 @@ import { setPathToClaudeCodeExecutable } from '../../options.ts';
  * interceptor, and bun in the monorepo / on the system PATH.
  * Intended for local `electron:dist:mac` builds that skip `build-dmg.sh`.
  */
-const IS_DEV_RUNTIME = !!process.env.CRAFT_DEV_RUNTIME;
+const IS_DEV_RUNTIME = !!process.env.ARCHSTUDIO_DEV_RUNTIME;
 
 export interface ResolvedBackendRuntimePaths {
   /**

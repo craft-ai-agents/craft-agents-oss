@@ -8,11 +8,11 @@ function createConfig(): BackendConfig {
     workspace: {
       id: 'ws-test',
       name: 'Test Workspace',
-      rootPath: '/tmp/craft-agent-test',
+      rootPath: '/tmp/archstudio-test',
     } as any,
     session: {
       id: 'session-test',
-      workspaceRootPath: '/tmp/craft-agent-test',
+      workspaceRootPath: '/tmp/archstudio-test',
       createdAt: Date.now(),
       lastUsedAt: Date.now(),
     } as any,

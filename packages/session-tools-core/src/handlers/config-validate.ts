@@ -1,17 +1,17 @@
 /**
  * Config Validate Handler
  *
- * Validates Craft Agent configuration files.
+ * Validates ARCHstudio configuration files.
  * Uses full validators if available (Claude), otherwise basic validation (Codex).
  */
 
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 
 const AUTOMATIONS_CONFIG_FILE = 'automations.json';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
+import { CONFIG_DIR } from '@archstudio/shared/config/paths';
 import {
   formatValidationResult,
   validateJsonFileHasFields,
@@ -35,7 +35,7 @@ export async function handleConfigValidate(
   args: ConfigValidateArgs
 ): Promise<ToolResult> {
   const { target, sourceSlug } = args;
-  const craftAgentRoot = join(homedir(), '.craft-agent');
+  const craftAgentRoot = CONFIG_DIR;
 
   // If full validators available (Claude), use them
   if (ctx.validators) {

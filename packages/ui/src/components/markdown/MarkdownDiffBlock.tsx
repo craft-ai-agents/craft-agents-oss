@@ -90,7 +90,7 @@ export interface MarkdownDiffBlockProps {
 
 export function MarkdownDiffBlock({ code, className }: MarkdownDiffBlockProps) {
   const dark = isDarkMode()
-  const themeName = dark ? 'craft-dark' : 'craft-light'
+  const themeName = dark ? 'archstudio-dark' : 'archstudio-light'
 
   // Build the same options used in ShikiDiffViewer for visual consistency
   const options: PatchDiffProps<undefined>['options'] = React.useMemo(() => ({

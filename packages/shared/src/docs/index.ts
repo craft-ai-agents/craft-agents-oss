@@ -4,17 +4,21 @@
  * Provides access to built-in documentation that Claude can reference
  * when performing configuration tasks (sources, agents, permissions, etc.).
  *
- * Docs are stored at ~/.craft-agent/docs/ and synced from bundled assets.
+ * Docs are stored at ~/.archstudio/docs/ and synced from bundled assets.
  * Source content lives in apps/electron/resources/docs/*.md for easier editing.
  */
 
 import { join } from 'path';
-import { homedir } from 'os';
-import { existsSync, mkdirSync, writeFileSync, readdirSync, readFileSync } from 'fs';
+// Namespace imports (not `{ existsSync, ... }`): a named
+// import destructures the property at module top-level, before any
+// try/catch can run. This module is transitively reachable from the
+// Electron renderer bundle, where Vite externalizes `os`/`fs` behind a proxy
+// that throws on property access. The renderer never calls the doc-writing
+// functions below, but merely importing this file must not crash the app.
+import * as fs from 'fs';
 import { getBundledAssetsDir } from '../utils/paths.ts';
 import { debug } from '../utils/debug.ts';
-
-const CONFIG_DIR = join(homedir(), '.craft-agent');
+import { CONFIG_DIR } from '../config/paths.ts';
 const DOCS_DIR = join(CONFIG_DIR, 'docs');
 
 // Track if docs have been initialized this session (prevents re-init on hot reload)
@@ -42,7 +46,7 @@ function loadBundledDocs(): Record<string, string> {
   // No hardcoded list — any file dropped into resources/docs/ is synced automatically.
   let files: string[];
   try {
-    files = existsSync(assetsDir) ? readdirSync(assetsDir) : [];
+    files = fs.existsSync(assetsDir) ? fs.readdirSync(assetsDir) : [];
   } catch {
     console.warn(`[docs] Could not read assets dir: ${assetsDir}`);
     return docs;
@@ -51,7 +55,7 @@ function loadBundledDocs(): Record<string, string> {
   for (const filename of files) {
     const filePath = join(assetsDir, filename);
     try {
-      docs[filename] = readFileSync(filePath, 'utf-8');
+      docs[filename] = fs.readFileSync(filePath, 'utf-8');
     } catch (error) {
       console.error(`[docs] Failed to load ${filename}:`, error);
     }
@@ -94,7 +98,7 @@ export function getDocPath(filename: string): string {
 // IMPORTANT: This is intentionally a human-readable, non-instance-aware path.
 // Do NOT use APP_ROOT for real filesystem reads/writes.
 // For runtime filesystem paths, use CONFIG_DIR from config/paths.ts.
-export const APP_ROOT = '~/.craft-agent';
+export const APP_ROOT = '~/.archstudio';
 
 /**
  * Documentation file references for use in error messages and tool descriptions.
@@ -120,7 +124,7 @@ export const DOC_REFS = {
   markdownPreview: `${APP_ROOT}/docs/markdown-preview.md`,
   llmTool: `${APP_ROOT}/docs/llm-tool.md`,
   browserTools: `${APP_ROOT}/docs/browser-tools.md`,
-  craftCli: `${APP_ROOT}/docs/craft-cli.md`,
+  craftCli: `${APP_ROOT}/docs/archstudio-cli.md`,
   docsDir: `${APP_ROOT}/docs/`,
 } as const;
 
@@ -128,15 +132,15 @@ export const DOC_REFS = {
  * Check if docs directory exists
  */
 export function docsExist(): boolean {
-  return existsSync(DOCS_DIR);
+  return fs.existsSync(DOCS_DIR);
 }
 
 /**
  * List available doc files
  */
 export function listDocs(): string[] {
-  if (!existsSync(DOCS_DIR)) return [];
-  return readdirSync(DOCS_DIR).filter(f => f.endsWith('.md'));
+  if (!fs.existsSync(DOCS_DIR)) return [];
+  return fs.readdirSync(DOCS_DIR).filter(f => f.endsWith('.md'));
 }
 
 /**
@@ -150,8 +154,8 @@ export function initializeDocs(): void {
   }
   docsInitialized = true;
 
-  if (!existsSync(DOCS_DIR)) {
-    mkdirSync(DOCS_DIR, { recursive: true });
+  if (!fs.existsSync(DOCS_DIR)) {
+    fs.mkdirSync(DOCS_DIR, { recursive: true });
   }
 
   // Load bundled docs lazily (after setBundledAssetsRoot has been called)
@@ -162,7 +166,7 @@ export function initializeDocs(): void {
   // docs are always up-to-date with the running version.
   for (const [filename, content] of Object.entries(bundledDocs)) {
     const docPath = join(DOCS_DIR, filename);
-    writeFileSync(docPath, content, 'utf-8');
+    fs.writeFileSync(docPath, content, 'utf-8');
   }
 
   debug(`[docs] Synced ${Object.keys(bundledDocs).length} docs`);

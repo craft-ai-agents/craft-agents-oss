@@ -14,6 +14,7 @@ import {
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
+  DrawerDescription,
   DrawerClose,
 } from "@/components/ui/drawer"
 import { WorkspaceAvatar } from "@/components/ui/workspace-avatar"
@@ -201,6 +202,9 @@ export function CompactWorkspaceSwitcher({
         <DrawerContent>
           <DrawerHeader>
             <DrawerTitle>{t('workspace.selectWorkspace')}</DrawerTitle>
+            <DrawerDescription className="sr-only">
+              Choose, create, open, or remove an ARCHstudio workspace.
+            </DrawerDescription>
           </DrawerHeader>
 
           <div className="px-2 pb-2 flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto">

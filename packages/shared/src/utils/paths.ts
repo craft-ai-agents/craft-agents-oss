@@ -5,9 +5,13 @@
  * Supports ~ and ${HOME} path variables for cross-machine compatibility.
  */
 
-import { homedir } from 'os';
-import { resolve, join, normalize, isAbsolute } from 'path';
-import { existsSync } from 'fs';
+// Namespace imports (not `{ homedir }` / `{ existsSync }`): a named import
+// destructures the property at module top-level. This module is transitively
+// reachable from the Electron renderer bundle, where Vite externalizes
+// `os`/`fs` behind a proxy that throws on property access.
+import * as os from 'os';
+import * as nodePath from 'path';
+import * as fs from 'fs';
 
 /**
  * Expand path variables (~, ${HOME}, $HOME) to absolute paths.
@@ -26,16 +30,19 @@ export function expandPath(inputPath: string, basePath?: string): string {
   if (!inputPath) return inputPath;
 
   let expanded = inputPath;
-  const home = homedir();
+  const home = os.homedir();
 
   // Handle ~ alone
   if (expanded === '~') {
     return home;
   }
 
-  // Handle ~/ prefix
+  // Handle ~/ prefix (and the Windows portable-path ~\ variant, which
+  // toPortablePath() produces on win32)
   if (expanded.startsWith('~/')) {
-    expanded = join(home, expanded.slice(2));
+    expanded = nodePath.join(home, expanded.slice(2));
+  } else if (expanded.startsWith('~\\')) {
+    expanded = nodePath.join(home, expanded.slice(2));
   }
 
   // Handle ${HOME} and $HOME variables
@@ -43,12 +50,12 @@ export function expandPath(inputPath: string, basePath?: string): string {
   expanded = expanded.replace(/\$HOME(?=\/|$)/g, home);
 
   // If still not absolute, resolve from base path
-  if (!isAbsolute(expanded)) {
+  if (!nodePath.isAbsolute(expanded)) {
     const base = basePath || process.cwd();
-    expanded = resolve(base, expanded);
+    expanded = nodePath.resolve(base, expanded);
   }
 
-  return normalize(expanded);
+  return nodePath.normalize(expanded);
 }
 
 /**
@@ -66,8 +73,8 @@ export function expandPath(inputPath: string, basePath?: string): string {
 export function toPortablePath(absolutePath: string): string {
   if (!absolutePath) return absolutePath;
 
-  const home = homedir();
-  const normalized = normalize(absolutePath);
+  const home = os.homedir();
+  const normalized = nodePath.normalize(absolutePath);
 
   // Exact match with home directory
   if (normalized === home) {
@@ -107,7 +114,7 @@ export function hasPathVariables(path: string): boolean {
  */
 export function isPortablePath(path: string): boolean {
   if (!path) return false;
-  return path.startsWith('~') || path.startsWith('./') || !isAbsolute(path);
+  return path.startsWith('~') || path.startsWith('./') || !nodePath.isAbsolute(path);
 }
 
 // ============================================================
@@ -133,7 +140,7 @@ export function normalizePath(path: string): string {
  * - Lowercase on Windows
  */
 export function normalizePathForComparison(path: string): string {
-  const normalized = normalizePath(resolve(path));
+  const normalized = normalizePath(nodePath.resolve(path));
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
@@ -207,11 +214,11 @@ export function setBundledAssetsRoot(dir: string): void {
 export function getBundledAssetsDir(subfolder: string): string | undefined {
   const candidates = [
     // Electron packaged app (set via setBundledAssetsRoot at startup)
-    ...(_assetsRoot ? [join(_assetsRoot, 'resources', subfolder)] : []),
+    ...(_assetsRoot ? [nodePath.join(_assetsRoot, 'resources', subfolder)] : []),
     // Dev: electron app resources folder (when cwd is apps/electron)
-    join(process.cwd(), 'resources', subfolder),
+    nodePath.join(process.cwd(), 'resources', subfolder),
     // Dev: dist output (after build:copy)
-    join(process.cwd(), 'dist', 'resources', subfolder),
+    nodePath.join(process.cwd(), 'dist', 'resources', subfolder),
   ];
-  return candidates.find(p => existsSync(p));
+  return candidates.find(p => fs.existsSync(p));
 }

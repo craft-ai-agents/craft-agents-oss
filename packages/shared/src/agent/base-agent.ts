@@ -16,7 +16,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { AgentEvent } from '@craft-agent/core/types';
+import type { AgentEvent } from '@archstudio/core/types';
 import type { FileAttachment } from '../utils/files.ts';
 import { expandPath } from '../utils/paths.ts';
 import { buildTransferredSessionContext } from './conversation-summary.ts';
@@ -55,6 +55,7 @@ import { PathProcessor } from './core/path-processor.ts';
 import { ConfigWatcherManager, type ConfigWatcherManagerCallbacks } from './core/config-watcher-manager.ts';
 import { UsageTracker, type UsageUpdate } from './core/usage-tracker.ts';
 import { PrerequisiteManager } from './core/prerequisite-manager.ts';
+import { inferenceStore, type InferenceEventType } from './core/inference-store.ts';
 
 // Automation system for agent events
 import type { AutomationSystem } from '../automations/automation-system.ts';
@@ -678,6 +679,57 @@ export abstract class BaseAgent implements AgentBackend {
   // Manager Accessors (for advanced queries)
   // ============================================================
 
+  // ============================================================
+  // Inference Recording
+  // ============================================================
+
+  /**
+   * Compute the connection slug to use for inference event recording.
+   * Falls back from connectionSlug to session.llmConnection to 'unknown'.
+   * Subclasses can override to provide a more specific slug.
+   */
+  protected get inferenceSlug(): string {
+    // Prefer the explicit connectionSlug on BackendConfig
+    if (this.config.connectionSlug) return this.config.connectionSlug
+    // Fall back to session-level llmConnection (set by session manager)
+    if (this.config.session?.llmConnection) return this.config.session.llmConnection
+    return 'unknown'
+  }
+
+  /**
+   * Record an inference event in the shared LlmInferenceStore.
+   * Called by subclasses when a turn or tool call completes (or fails).
+   */
+  protected recordInferenceEvent(
+    type: InferenceEventType,
+    success: boolean,
+    label?: string,
+    totalTokens?: number,
+    latencyMs?: number,
+  ): void {
+    const slug = this.inferenceSlug
+    if (slug === 'unknown') return
+    inferenceStore.push(slug, { type, success, label, totalTokens, latencyMs })
+  }
+
+  /**
+   * Record a turn completion event. Sugar over recordInferenceEvent.
+   */
+  protected recordTurnComplete(success: boolean, model?: string, totalTokens?: number, latencyMs?: number): void {
+    this.recordInferenceEvent('turn', success, model ?? this._model, totalTokens, latencyMs)
+  }
+
+  /**
+   * Record a tool call event. Sugar over recordInferenceEvent.
+   */
+  protected recordToolCall(success: boolean, toolName: string, latencyMs?: number): void {
+    this.recordInferenceEvent('tool_call', success, toolName, undefined, latencyMs)
+  }
+
+  // ============================================================
+  // Manager Accessors (for advanced queries)
+  // ============================================================
+
   /**
    * Get SourceManager for advanced source state queries.
    */
@@ -1046,11 +1098,26 @@ ${formattedMessages}
     // Capture the raw user message for source-activation auto-retry. `cleanMessage`
     // has skill paths stripped but otherwise matches what the user typed — exactly
     // what we want to resend when an activation forces a turn restart.
+    //
+    // Track turn success/failure and wall-clock duration for inference event recording.
+    const turnStart = performance.now();
+    let turnSucceeded = false;
     this.setCurrentTurnUserMessage(cleanMessage);
     try {
       yield* this.chatImpl(effectiveMessage, attachments, options);
+      turnSucceeded = true;
     } finally {
       this.setCurrentTurnUserMessage(null);
+      // Record turn completion in the inference store.
+      // If `chatImpl` completed normally, the turn succeeded. If an exception
+      // propagated (abort, error), it failed. The inference slug is derived
+      // from the active LLM connection so the ProvidersPanel can attribute
+      // events to the correct provider.
+      // Wall-clock duration is included as latencyMs for the sparkline latency view.
+      if (this.inferenceSlug !== 'unknown') {
+        const elapsed = Math.round(performance.now() - turnStart);
+        this.recordTurnComplete(turnSucceeded, undefined, undefined, elapsed);
+      }
     }
   }
 

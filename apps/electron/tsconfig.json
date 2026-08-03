@@ -23,10 +23,13 @@
     "paths": {
       "@/*": ["src/renderer/*"],
       "@config/*": ["../../packages/shared/src/config/*"],
-      "@craft-agent/shared": ["../../packages/shared/src/index.ts"],
-      "@craft-agent/shared/*": ["../../packages/shared/src/*"]
+      "@resources/*": ["resources/*"],
+      "@archstudio/shared": ["../../packages/shared/src/index.ts"],
+      "@archstudio/shared/*": ["../../packages/shared/src/*"],
+      "@archstudio/ui": ["../../packages/ui/src/index.ts"],
+      "@archstudio/ui/*": ["../../packages/ui/src/*"]
     }
   },
-  "include": ["src/**/*", "../../packages/shared/src/**/*.d.ts"],
+  "include": ["src/**/*", "../../packages/shared/src/**/*.d.ts", "../../packages/ui/src/**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
 }

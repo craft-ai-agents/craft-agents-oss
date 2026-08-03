@@ -9,9 +9,9 @@
  * applies its own pre-binding access gate.)
  */
 
-import type { ISessionManager } from '@craft-agent/server-core/handlers'
-import { readFileAttachment } from '@craft-agent/shared/utils'
-import type { FileAttachment } from '@craft-agent/shared/protocol'
+import type { ISessionManager } from '@archstudio/server-core/handlers'
+import { readFileAttachment } from '@archstudio/shared/utils'
+import type { FileAttachment } from '@archstudio/shared/protocol'
 import {
   evaluateBindingAccess,
   executeRejection,

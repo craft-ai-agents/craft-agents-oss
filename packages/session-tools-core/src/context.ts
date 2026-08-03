@@ -16,6 +16,7 @@ import type {
   MicrosoftService,
   McpSourceConfig,
 } from './types.ts';
+import type { MemoryRepository } from '@archstudio/shared/memory/repository.ts';
 
 // ============================================================
 // Source Credential Types
@@ -56,6 +57,15 @@ export interface SessionToolCallbacks {
    * Codex: sends __CALLBACK__ message to stderr
    */
   onAuthRequest(request: AuthRequest): void;
+
+  /**
+   * Optional: yields a per-workspace MemoryRepository for the
+   * memory_search / memory_recall agent-callable tools. When this
+   * callback is absent (e.g. headless server, CI), those tools
+   * surface "not available in this context" rather than throwing,
+   * keeping the registry wiring uniform across environments.
+   */
+  getMemoryRepository?(workspaceId?: string): Promise<MemoryRepository>;
 }
 
 // ============================================================
@@ -156,7 +166,7 @@ export interface SessionToolContext {
   /** Unique session identifier */
   sessionId: string;
 
-  /** Absolute path to workspace folder (~/.craft-agent/workspaces/{id}) */
+  /** Absolute path to workspace folder (~/.archstudio/workspaces/{id}) */
   workspacePath: string;
 
   /** Path to sources folder within workspace */
@@ -293,7 +303,7 @@ export interface SessionToolContext {
 
   /**
    * Submit developer feedback. Injected by each backend:
-   * - Claude: writes JSON files to ~/.craft-agent/feedback/
+   * - Claude: writes JSON files to ~/.archstudio/feedback/
    * - Codex/Pi: could send over IPC or write directly
    */
   submitFeedback?(feedback: import('./types.ts').DeveloperFeedback): void;
@@ -337,7 +347,7 @@ export interface SessionToolContext {
   resolveStatus?(status: string): ResolvedStatusResult;
 
   /**
-   * Create a Craft Agents Task (board card + task.yaml + orchestrator session)
+   * Create a ARCHstudio Task (board card + task.yaml + orchestrator session)
    * WITHOUT running it. Slug derivation, node synthesis, and spec validation
    * happen behind this callback where the task primitives live. Injected by
    * backend (SessionManager); undefined in backends that don't run alongside
@@ -425,7 +435,7 @@ export interface ResolvedLabelsResult {
   available: string[];
   /**
    * Optional per-input rejection reason, keyed by the original input string.
-   * Populated by `resolveSessionLabels()` from `@craft-agent/shared/labels`.
+   * Populated by `resolveSessionLabels()` from `@archstudio/shared/labels`.
    * Handlers use this to build clearer errors (e.g. "label X doesn't accept a value").
    */
   reasons?: Record<string, string>;

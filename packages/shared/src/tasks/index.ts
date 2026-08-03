@@ -1,5 +1,5 @@
 /**
- * @craft-agent/shared/tasks
+ * @archstudio/shared/tasks
  *
  * task.yaml spec (schema + types), reference grammar, graph validation, and
  * filesystem persistence for the Tasks feature. The in-process Conductor lives

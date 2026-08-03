@@ -2,8 +2,8 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AlertCircle, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@craft-agent/ui"
-import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
+import { Spinner } from "@archstudio/ui"
+import { ARCHstudioSymbol } from "@/components/icons/ARCHstudioSymbol"
 import { StepFormLayout } from "./primitives"
 
 interface ReauthScreenProps {

@@ -1,55 +1,55 @@
 #!/usr/bin/env bun
 /**
- * @craft-agent/server — standalone headless Craft Agent server.
+ * @archstudio/server — standalone headless ARCHstudio server.
  *
  * Usage:
- *   CRAFT_SERVER_TOKEN=<secret> bun run packages/server/src/index.ts
+ *   ARCHSTUDIO_SERVER_TOKEN=<secret> bun run packages/server/src/index.ts
  *
  * Environment:
- *   CRAFT_SERVER_TOKEN         — required bearer token for client auth
- *   CRAFT_RPC_HOST             — bind address (default: 127.0.0.1)
- *   CRAFT_RPC_PORT             — bind port (default: 9100)
- *   CRAFT_RPC_TLS_CERT         — path to PEM certificate file (enables TLS/wss)
- *   CRAFT_RPC_TLS_KEY          — path to PEM private key file (required with cert)
- *   CRAFT_RPC_TLS_CA           — path to PEM CA chain file (optional)
- *   CRAFT_APP_ROOT             — app root path (default: cwd)
- *   CRAFT_RESOURCES_PATH       — resources path (default: cwd/resources)
- *   CRAFT_IS_PACKAGED          — 'true' for production (default: false)
- *   CRAFT_VERSION              — app version (default: 0.0.0-dev)
- *   CRAFT_DEBUG                — 'true' for debug logging
- *   CRAFT_WEBUI_DIR            — path to built web UI assets (enables web UI on RPC port)
- *   CRAFT_WEBUI_PASSWORD       — optional shorter password for web login (falls back to CRAFT_SERVER_TOKEN)
- *   CRAFT_WEBUI_SECURE_COOKIE  — optional true/false override for the session cookie Secure flag
- *   CRAFT_WEBUI_WS_URL         — optional browser-facing ws:// or wss:// URL returned by /api/config
- *   CRAFT_MESSAGING_WA_WORKER  — absolute path to worker.cjs (default: packages/messaging-whatsapp-worker/dist/worker.cjs)
- *   CRAFT_MESSAGING_NODE_BIN   — Node binary used to spawn the WhatsApp worker (default: node)
+ *   ARCHSTUDIO_SERVER_TOKEN         — required bearer token for client auth
+ *   ARCHSTUDIO_RPC_HOST             — bind address (default: 127.0.0.1)
+ *   ARCHSTUDIO_RPC_PORT             — bind port (default: 9100)
+ *   ARCHSTUDIO_RPC_TLS_CERT         — path to PEM certificate file (enables TLS/wss)
+ *   ARCHSTUDIO_RPC_TLS_KEY          — path to PEM private key file (required with cert)
+ *   ARCHSTUDIO_RPC_TLS_CA           — path to PEM CA chain file (optional)
+ *   ARCHSTUDIO_APP_ROOT             — app root path (default: cwd)
+ *   ARCHSTUDIO_RESOURCES_PATH       — resources path (default: cwd/resources)
+ *   ARCHSTUDIO_IS_PACKAGED          — 'true' for production (default: false)
+ *   ARCHSTUDIO_VERSION              — app version (default: 0.0.0-dev)
+ *   ARCHSTUDIO_DEBUG                — 'true' for debug logging
+ *   ARCHSTUDIO_WEBUI_DIR            — path to built web UI assets (enables web UI on RPC port)
+ *   ARCHSTUDIO_WEBUI_PASSWORD       — optional shorter password for web login (falls back to ARCHSTUDIO_SERVER_TOKEN)
+ *   ARCHSTUDIO_WEBUI_SECURE_COOKIE  — optional true/false override for the session cookie Secure flag
+ *   ARCHSTUDIO_WEBUI_WS_URL         — optional browser-facing ws:// or wss:// URL returned by /api/config
+ *   ARCHSTUDIO_MESSAGING_WA_WORKER  — absolute path to worker.cjs (default: packages/messaging-whatsapp-worker/dist/worker.cjs)
+ *   ARCHSTUDIO_MESSAGING_NODE_BIN   — Node binary used to spawn the WhatsApp worker (default: node)
  */
 
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { readFileSync, existsSync } from 'node:fs'
 import { version as packageVersion } from '../package.json'
-import { enableDebug } from '@craft-agent/shared/utils/debug'
-import { bootstrapServer, startHealthHttpServer, generateServerToken } from '@craft-agent/server-core/bootstrap'
-import { validateSession, createWebuiHandler, nodeHttpAdapter } from '@craft-agent/server-core/webui'
-import type { WebuiHandler } from '@craft-agent/server-core/webui'
-import { getCredentialManager } from '@craft-agent/shared/credentials'
-import { getWorkspaces } from '@craft-agent/shared/config'
-import { createMessagingBootstrap, type MessagingBootstrapHandle } from '@craft-agent/messaging-gateway'
+import { enableDebug } from '@archstudio/shared/utils/debug'
+import { bootstrapServer, startHealthHttpServer, generateServerToken } from '@archstudio/server-core/bootstrap'
+import { validateSession, createWebuiHandler, nodeHttpAdapter } from '@archstudio/server-core/webui'
+import type { WebuiHandler } from '@archstudio/server-core/webui'
+import { getCredentialManager } from '@archstudio/shared/credentials'
+import { getWorkspaces } from '@archstudio/shared/config'
+import { CONFIG_DIR } from '@archstudio/shared/config/paths.ts'
+import { createMessagingBootstrap, type MessagingBootstrapHandle } from '@archstudio/messaging-gateway'
 
 // --generate-token: print a crypto-random token and exit
 if (process.argv.includes('--generate-token')) {
   console.log(generateServerToken())
   process.exit(0)
 }
-import type { WsRpcTlsOptions } from '@craft-agent/server-core/transport'
-import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
-import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
-import { initModelRefreshService, setFetcherPlatform } from '@craft-agent/server-core/model-fetchers'
-import { setSearchPlatform, setImageProcessor } from '@craft-agent/server-core/services'
-import type { HandlerDeps } from '@craft-agent/server-core/handlers'
+import type { WsRpcTlsOptions } from '@archstudio/server-core/transport'
+import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient } from '@archstudio/server-core/handlers/rpc'
+import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@archstudio/server-core/sessions'
+import { initModelRefreshService, setFetcherPlatform } from '@archstudio/server-core/model-fetchers'
+import { setSearchPlatform, setImageProcessor } from '@archstudio/server-core/services'
+import type { HandlerDeps } from '@archstudio/server-core/handlers'
 
-process.env.CRAFT_IS_PACKAGED ??= 'false'
+process.env.ARCHSTUDIO_IS_PACKAGED ??= 'false'
 
 // Prevent unhandled rejections from crashing the server.
 // SDK subprocess abort can reject promises that propagate up unhandled;
@@ -59,7 +59,7 @@ process.on('unhandledRejection', (reason) => {
   console.error(`[server] Unhandled rejection (caught, not crashing): ${msg}`)
 })
 
-if (process.env.CRAFT_DEBUG === 'true' || process.env.CRAFT_DEBUG === '1') {
+if (process.env.ARCHSTUDIO_DEBUG === 'true' || process.env.ARCHSTUDIO_DEBUG === '1') {
   enableDebug()
 }
 
@@ -91,32 +91,32 @@ function parseOptionalWebSocketUrl(name: string, value: string | undefined): str
 }
 
 // In dev (monorepo), bundled assets root is the repo root (4 levels up from this file).
-// In packaged mode, use CRAFT_BUNDLED_ASSETS_ROOT env or cwd.
-const bundledAssetsRoot = process.env.CRAFT_BUNDLED_ASSETS_ROOT
+// In packaged mode, use ARCHSTUDIO_BUNDLED_ASSETS_ROOT env or cwd.
+const bundledAssetsRoot = process.env.ARCHSTUDIO_BUNDLED_ASSETS_ROOT
   ?? join(import.meta.dir, '..', '..', '..', '..')
 
 // TLS configuration — when cert + key paths are provided, server listens on wss://
 let tls: WsRpcTlsOptions | undefined
-const tlsCertPath = process.env.CRAFT_RPC_TLS_CERT
-const tlsKeyPath = process.env.CRAFT_RPC_TLS_KEY
+const tlsCertPath = process.env.ARCHSTUDIO_RPC_TLS_CERT
+const tlsKeyPath = process.env.ARCHSTUDIO_RPC_TLS_KEY
 if (tlsCertPath || tlsKeyPath) {
   if (!tlsCertPath || !tlsKeyPath) {
-    console.error('TLS requires both CRAFT_RPC_TLS_CERT and CRAFT_RPC_TLS_KEY.')
+    console.error('TLS requires both ARCHSTUDIO_RPC_TLS_CERT and ARCHSTUDIO_RPC_TLS_KEY.')
     process.exit(1)
   }
   tls = {
     cert: readFileSync(tlsCertPath),
     key: readFileSync(tlsKeyPath),
-    ...(process.env.CRAFT_RPC_TLS_CA ? { ca: readFileSync(process.env.CRAFT_RPC_TLS_CA) } : {}),
+    ...(process.env.ARCHSTUDIO_RPC_TLS_CA ? { ca: readFileSync(process.env.ARCHSTUDIO_RPC_TLS_CA) } : {}),
   }
 }
 
 // Web UI configuration
-const webuiDir = process.env.CRAFT_WEBUI_DIR || undefined
+const webuiDir = process.env.ARCHSTUDIO_WEBUI_DIR || undefined
 const webuiEnabled = webuiDir && existsSync(webuiDir)
-const webuiSecureCookies = parseOptionalBooleanEnv('CRAFT_WEBUI_SECURE_COOKIE', process.env.CRAFT_WEBUI_SECURE_COOKIE)
-const webuiWsUrl = parseOptionalWebSocketUrl('CRAFT_WEBUI_WS_URL', process.env.CRAFT_WEBUI_WS_URL)
-const serverToken = process.env.CRAFT_SERVER_TOKEN
+const webuiSecureCookies = parseOptionalBooleanEnv('ARCHSTUDIO_WEBUI_SECURE_COOKIE', process.env.ARCHSTUDIO_WEBUI_SECURE_COOKIE)
+const webuiWsUrl = parseOptionalWebSocketUrl('ARCHSTUDIO_WEBUI_WS_URL', process.env.ARCHSTUDIO_WEBUI_WS_URL)
+const serverToken = process.env.ARCHSTUDIO_SERVER_TOKEN
 
 // ---------------------------------------------------------------------------
 // Create WebUI handler early so it can be embedded in the WsRpcServer.
@@ -132,13 +132,13 @@ let webuiNodeHandler: ReturnType<typeof nodeHttpAdapter> | undefined
 let healthCheckFn: (() => { status: string }) | null = null
 
 if (webuiEnabled && serverToken) {
-  const rpcPort = parseInt(process.env.CRAFT_RPC_PORT ?? '9100', 10)
+  const rpcPort = parseInt(process.env.ARCHSTUDIO_RPC_PORT ?? '9100', 10)
   const rpcProtocol = tls ? 'wss' as const : 'ws' as const
 
   webuiHandler = createWebuiHandler({
     webuiDir: webuiDir!,
     secret: serverToken,
-    password: process.env.CRAFT_WEBUI_PASSWORD || undefined,
+    password: process.env.ARCHSTUDIO_WEBUI_PASSWORD || undefined,
     secureCookies: webuiSecureCookies,
     publicWsUrl: webuiWsUrl,
     wsProtocol: rpcProtocol,
@@ -155,9 +155,9 @@ if (webuiEnabled && serverToken) {
 // The worker is a Node subprocess — Bun cannot run it directly — so we must
 // pass an explicit `nodeBin` (Electron defaults nodeBin to process.execPath
 // which is correct there but wrong under Bun).
-const waWorkerEntry = process.env.CRAFT_MESSAGING_WA_WORKER
+const waWorkerEntry = process.env.ARCHSTUDIO_MESSAGING_WA_WORKER
   ?? join(bundledAssetsRoot, 'packages', 'messaging-whatsapp-worker', 'dist', 'worker.cjs')
-const waNodeBin = process.env.CRAFT_MESSAGING_NODE_BIN ?? 'node'
+const waNodeBin = process.env.ARCHSTUDIO_MESSAGING_NODE_BIN ?? 'node'
 
 // Built inside createHandlerDeps (needs sessionManager), populated with the WS
 // publisher after bootstrapServer resolves.
@@ -167,7 +167,7 @@ const instance = await (async () => {
   try {
     return await bootstrapServer<SessionManager, HandlerDeps>({
       bundledAssetsRoot,
-      serverVersion: process.env.CRAFT_VERSION ?? packageVersion,
+      serverVersion: process.env.ARCHSTUDIO_VERSION ?? packageVersion,
       tls,
       // When web UI is enabled, accept JWT session cookies on WebSocket upgrade
       validateSessionCookie: webuiEnabled && serverToken
@@ -211,7 +211,7 @@ const instance = await (async () => {
           sessionManager,
           credentialManager: getCredentialManager(),
           getMessagingDir: (wsId: string) =>
-            join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
+            join(CONFIG_DIR, 'workspaces', wsId, 'messaging'),
           // Headless has no legacy messaging dir — workspaces start clean.
           whatsapp: {
             workerEntry: waWorkerEntry,
@@ -259,9 +259,9 @@ const instance = await (async () => {
 // workspaces. Remote-owned workspaces are skipped because their messaging
 // runs on the remote server.
 // ---------------------------------------------------------------------------
-// CRAFT_DISABLE_MESSAGING lets a dev/test server share a config dir with a live app
+// ARCHSTUDIO_DISABLE_MESSAGING lets a dev/test server share a config dir with a live app
 // without both processes fighting over the same Telegram/WhatsApp connections (409s).
-const messagingDisabled = process.env.CRAFT_DISABLE_MESSAGING === 'true' || process.env.CRAFT_DISABLE_MESSAGING === '1'
+const messagingDisabled = process.env.ARCHSTUDIO_DISABLE_MESSAGING === 'true' || process.env.ARCHSTUDIO_DISABLE_MESSAGING === '1'
 if (messagingHandle !== null && !messagingDisabled) {
   const handle: MessagingBootstrapHandle = messagingHandle
   handle.setPublisher(instance.wsServer.push.bind(instance.wsServer))
@@ -274,20 +274,20 @@ if (messagingHandle !== null && !messagingDisabled) {
     console.error('[messaging] Workspace initialization failed:', error)
   }
 } else if (messagingDisabled) {
-  console.log('[messaging] Disabled via CRAFT_DISABLE_MESSAGING — skipping workspace messaging init')
+  console.log('[messaging] Disabled via ARCHSTUDIO_DISABLE_MESSAGING — skipping workspace messaging init')
 }
 
 // Wire up the lazy health check now that the session manager is ready
 if (webuiHandler) {
-  const { getHealthCheck } = await import('@craft-agent/server-core/handlers/rpc/server')
+  const { getHealthCheck } = await import('@archstudio/server-core/handlers/rpc/server')
   const depsLike = { sessionManager: instance.sessionManager } as any
   healthCheckFn = () => getHealthCheck(depsLike)
 
   // Wire up OAuth callback deps so /api/oauth/callback works
-  const { getSourceCredentialManager, loadWorkspaceSources } = await import('@craft-agent/shared/sources')
-  const { getWorkspaceByNameOrId } = await import('@craft-agent/shared/config')
-  const { pushTyped } = await import('@craft-agent/server-core/transport')
-  const { RPC_CHANNELS } = await import('@craft-agent/shared/protocol')
+  const { getSourceCredentialManager, loadWorkspaceSources } = await import('@archstudio/shared/sources')
+  const { getWorkspaceByNameOrId } = await import('@archstudio/shared/config')
+  const { pushTyped } = await import('@archstudio/server-core/transport')
+  const { RPC_CHANNELS } = await import('@archstudio/shared/protocol')
 
   webuiHandler.setOAuthCallbackDeps({
     flowStore: instance.oauthFlowStore,
@@ -301,8 +301,8 @@ if (webuiHandler) {
   })
 }
 
-// Start HTTP health endpoint if CRAFT_HEALTH_PORT is set
-const healthPort = parseInt(process.env.CRAFT_HEALTH_PORT ?? '0', 10)
+// Start HTTP health endpoint if ARCHSTUDIO_HEALTH_PORT is set
+const healthPort = parseInt(process.env.ARCHSTUDIO_HEALTH_PORT ?? '0', 10)
 const healthServer = await startHealthHttpServer({
   port: healthPort,
   deps: { sessionManager: instance.sessionManager },
@@ -311,10 +311,10 @@ const healthServer = await startHealthHttpServer({
 })
 
 const serverProto = instance.protocol === 'wss' ? 'https' : 'http'
-console.log(`CRAFT_SERVER_URL=${instance.protocol}://${instance.host}:${instance.port}`)
-console.log(`CRAFT_SERVER_TOKEN=${instance.token}`)
+console.log(`ARCHSTUDIO_SERVER_URL=${instance.protocol}://${instance.host}:${instance.port}`)
+console.log(`ARCHSTUDIO_SERVER_TOKEN=${instance.token}`)
 if (webuiHandler) {
-  console.log(`CRAFT_WEBUI_URL=${serverProto}://0.0.0.0:${instance.port}`)
+  console.log(`ARCHSTUDIO_WEBUI_URL=${serverProto}://0.0.0.0:${instance.port}`)
 }
 
 // Block binding to a non-localhost address without TLS — tokens would be sent in cleartext.
@@ -325,14 +325,14 @@ if (!isLocalBind && instance.protocol === 'ws') {
     console.warn(
       '\n⚠️  WARNING: Server is listening on a network address without TLS.\n' +
       '   Authentication tokens will be sent in cleartext.\n' +
-      '   Set CRAFT_RPC_TLS_CERT and CRAFT_RPC_TLS_KEY to enable wss://.\n'
+      '   Set ARCHSTUDIO_RPC_TLS_CERT and ARCHSTUDIO_RPC_TLS_KEY to enable wss://.\n'
     )
   } else {
     console.error(
       '\n❌  Refusing to bind to a network address without TLS.\n' +
       '   Authentication tokens would be sent in cleartext.\n\n' +
       '   Options:\n' +
-      '     1. Set CRAFT_RPC_TLS_CERT and CRAFT_RPC_TLS_KEY to enable wss://\n' +
+      '     1. Set ARCHSTUDIO_RPC_TLS_CERT and ARCHSTUDIO_RPC_TLS_KEY to enable wss://\n' +
       '     2. Pass --allow-insecure-bind to override (NOT recommended for production)\n'
     )
     await instance.stop()

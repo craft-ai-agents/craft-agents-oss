@@ -10,11 +10,13 @@
 
 import { describe, it, expect } from 'bun:test'
 import {
+  groupMessagesByTurn,
   groupActivitiesByParent,
   computeLastChildSet,
   isActivityGroup,
   type ActivityGroup,
 } from '../turn-utils'
+import type { Message } from '@archstudio/core'
 import type { ActivityItem } from '../TurnCard'
 
 // ============================================================================
@@ -503,6 +505,29 @@ describe('groupActivitiesByParent', () => {
       expect(isActivityGroup(result[2]!)).toBe(false)
       expect((result[2] as ActivityItem).toolName).toBe('Write')
     })
+  })
+})
+
+describe('groupMessagesByTurn MCP error cleanup', () => {
+  it('normalizes wrapped MCP transport errors for tool activities', () => {
+    const turns = groupMessagesByTurn([
+      {
+        id: 'tool-1',
+        role: 'tool',
+        timestamp: 1,
+        toolName: 'source_test',
+        toolStatus: 'completed',
+        isError: true,
+        toolResult: '[ERROR] <error><tool_use_error>MCP connection failed health check: 404 Not Found</tool_use_error></error>',
+      } as Message,
+    ])
+
+    expect(turns).toHaveLength(1)
+    expect(turns[0]?.type).toBe('assistant')
+    const assistantTurn = turns[0]?.type === 'assistant' ? turns[0] : null
+    expect(assistantTurn?.activities[0]?.error).toBe(
+      'MCP server endpoint not found. Check that the URL is correct and the server is online.',
+    )
   })
 })
 

@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { ChatDisplay } from '@/components/app-shell/ChatDisplay'
-import type { Message } from '@craft-agent/core/types'
+import type { Message } from '@archstudio/core/types'
 import type { PermissionMode } from '../../../../shared/types'
 import { MobileWebUIFrame, type MobileDevice } from './MobileWebUIFrame'
 import { MobilePlaygroundProviders } from './MobilePlaygroundProviders'

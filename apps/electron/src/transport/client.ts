@@ -1,5 +1,5 @@
 /**
- * Re-export WsRpcClient from @craft-agent/server-core.
+ * Re-export WsRpcClient from @archstudio/server-core.
  *
  * The implementation was extracted to server-core so any package
  * (subprocesses, services, bridges) can use it without depending
@@ -14,4 +14,4 @@ export {
   type TransportConnectionError,
   type TransportCloseInfo,
   type TransportConnectionState,
-} from '@craft-agent/server-core/transport'
+} from '@archstudio/server-core/transport'

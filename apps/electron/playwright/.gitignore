@@ -1,0 +1,10 @@
+# Playwright test output (CI leave-behind; baselines live in
+# tests/__screenshots__/ which is intentionally NOT excluded so that
+# the snapshot diffs ARE the regression detector).
+test-results/
+playwright-report/
+
+# Trace + video + screenshot artefacts from `bun run playwright:test`.
+# Snapshots captured BY the tests live in tests/__screenshots__/ and
+# ARE checked in.
+playwright/.cache/

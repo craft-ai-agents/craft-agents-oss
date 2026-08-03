@@ -16,8 +16,8 @@ coverage
 
 # logs
 logs
-_.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+*.log
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # dotenv environment variable files
 .env
@@ -56,7 +56,7 @@ __pycache__/
 pnpm-lock.yaml
 
 # Craft Agent local data (sessions, credentials, config)
-.craft-agent/
+.archstudio/
 
 # SSH keys and secrets
 *.pem
@@ -72,3 +72,31 @@ credentials.enc
 # act (local GitHub Actions runner)
 .secrets
 .actrc
+
+# Local agent/tooling scratch state (databases, logs, downloaded binaries).
+# Nothing here is reproducible or reviewable — it must not be committed.
+.abacusai/
+.freebuff/
+.tmp-tools/
+
+# Stray driver/tooling logs that land in the repo root on Windows
+NVIDIA Corporation/
+
+
+# Built subprocess bundles, staged by electron:build:subprocess-servers.
+# Regenerated on every electron:build; bridge-mcp-server is committed instead.
+apps/electron/resources/pi-agent-server/
+apps/electron/resources/session-mcp-server/
+
+# Packaged Electron build output (electron-builder). Never reviewable.
+apps/electron/release/
+ARCHstudioTEST/
+
+# Dev-server log written by electron:dev
+dev.log
+
+# Stray test output captured from full-suite runs (scratch, not source)
+_testout.txt
+
+# MCP server nested repositories
+mcp-servers/*/repo/

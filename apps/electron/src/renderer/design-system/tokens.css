@@ -1,0 +1,146 @@
+/* =============================================================================
+   ARCHSTUDIO DESIGN TOKENS — semantic layer
+
+   Raw values live HERE and nowhere else. Components must consume the semantic
+   vars below, never literal colours, shadows, or z-indexes.
+
+   This layer sits ON TOP of the existing theme pipeline
+   (packages/shared/src/config/theme.ts -> themeToCSS -> index.css), which owns
+   --background/--foreground/--accent/--info/--success/--destructive and the
+   surface vars. Anything derived with color-mix() inherits theme + light/dark
+   automatically, so we only declare literals for the brand ramp.
+============================================================================= */
+
+:root {
+  /* --- Brand ramp: the only literal colours in the system --------------- */
+  --brand-lime: oklch(0.82 0.24 133);
+  --brand-lime-deep: oklch(0.68 0.21 140);
+  --brand-purple: oklch(0.58 0.24 295);
+  --brand-purple-deep: oklch(0.44 0.22 292);
+
+  --brand-gradient: linear-gradient(135deg, var(--brand-lime) 0%, var(--brand-purple) 100%);
+  --brand-gradient-subtle: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--brand-lime) 18%, transparent) 0%,
+    color-mix(in oklch, var(--brand-purple) 18%, transparent) 100%
+  );
+}
+
+:root {
+  /* --- Canvas & panels -------------------------------------------------- */
+  --ds-canvas: var(--background);
+  --ds-panel: var(--paper, var(--background));
+  --ds-panel-raised: color-mix(in oklch, var(--paper, var(--background)) 92%, var(--foreground));
+  --ds-panel-border: color-mix(in oklch, var(--foreground) 14%, transparent);
+  --ds-panel-border-strong: color-mix(in oklch, var(--foreground) 26%, transparent);
+  --ds-navigator: var(--navigator, var(--background));
+
+  /* --- Text ------------------------------------------------------------- */
+  --ds-text: var(--foreground);
+  --ds-text-secondary: color-mix(in oklch, var(--foreground) 68%, transparent);
+  --ds-text-muted: color-mix(in oklch, var(--foreground) 45%, transparent);
+  --ds-text-on-brand: oklch(0.99 0 0);
+
+  /* --- Command surface (composer / terminal) ---------------------------- */
+  --ds-command-surface: var(--input, var(--paper, var(--background)));
+  --ds-command-border: var(--ds-panel-border);
+  --ds-command-border-focus: var(--brand-purple);
+  --ds-command-ring: color-mix(in oklch, var(--brand-purple) 35%, transparent);
+}
+
+:root {
+  /* --- Status: success / warning / error / neutral ---------------------- */
+  --ds-success: var(--success);
+  --ds-success-bg: color-mix(in oklch, var(--success) 14%, transparent);
+  --ds-success-border: color-mix(in oklch, var(--success) 34%, transparent);
+
+  --ds-warning: var(--info);
+  --ds-warning-bg: color-mix(in oklch, var(--info) 14%, transparent);
+  --ds-warning-border: color-mix(in oklch, var(--info) 34%, transparent);
+
+  --ds-error: var(--destructive);
+  --ds-error-bg: color-mix(in oklch, var(--destructive) 14%, transparent);
+  --ds-error-border: color-mix(in oklch, var(--destructive) 34%, transparent);
+
+  --ds-neutral: var(--ds-text-muted);
+  --ds-neutral-bg: color-mix(in oklch, var(--foreground) 6%, transparent);
+  --ds-neutral-border: var(--ds-panel-border);
+
+  /* Deeper warning step — for the far end of a warning ramp (amber -> orange),
+     where a single --ds-warning would collapse two distinct states into one. */
+  --ds-warning-deep: color-mix(in oklch, var(--info) 70%, var(--destructive));
+
+  /* Hover wash for rows and tiles. Sits between --ds-neutral-bg and a full
+     raised panel, and inverts correctly because it mixes the foreground. */
+  --ds-hover-bg: color-mix(in oklch, var(--foreground) 7%, transparent);
+
+  /* --- Tool / run states ------------------------------------------------ */
+  --ds-state-running: var(--brand-lime);
+  --ds-state-running-bg: color-mix(in oklch, var(--brand-lime) 14%, transparent);
+  --ds-state-queued: var(--ds-text-muted);
+  --ds-state-done: var(--ds-success);
+  --ds-state-failed: var(--ds-error);
+  --ds-state-cancelled: var(--ds-neutral);
+}
+
+:root {
+  /* --- Owner policy modes (Explore / Owner Auto / Unrestricted / Sandbox)
+         Colour carries risk: calm -> brand -> warning -> info. -------------- */
+  --ds-mode-explore: var(--ds-text-muted);
+  --ds-mode-owner-auto: var(--brand-purple);
+  --ds-mode-unrestricted: var(--ds-warning);
+  --ds-mode-sandbox: var(--brand-lime-deep);
+
+  /* --- Provider / model identity ---------------------------------------- */
+  --ds-provider-local: var(--brand-lime);
+  --ds-provider-cloud: var(--brand-purple);
+  --ds-provider-unknown: var(--ds-text-muted);
+
+  /* --- Focused work vs background jobs ----------------------------------
+         Foreground work uses full contrast; background jobs stay recessive
+         so a running batch never competes with the active turn. ----------- */
+  --ds-focus-accent: var(--brand-purple);
+  --ds-focus-ring: 0 0 0 2px var(--ds-command-ring);
+  --ds-background-job: color-mix(in oklch, var(--foreground) 55%, transparent);
+  --ds-background-job-bg: color-mix(in oklch, var(--foreground) 5%, transparent);
+
+  /* --- Media assets ------------------------------------------------------ */
+  --ds-media-frame: color-mix(in oklch, var(--foreground) 10%, transparent);
+  --ds-media-image: var(--brand-lime);
+  --ds-media-video: var(--brand-purple);
+  --ds-media-audio: var(--ds-success);
+  --ds-media-doc: var(--ds-text-muted);
+}
+
+:root {
+  /* --- Radii & spacing rhythm ------------------------------------------- */
+  --ds-radius-sm: 6px;
+  --ds-radius-md: 9px;
+  --ds-radius-lg: 12px;
+  --ds-radius-pill: 999px;
+
+  --ds-space-1: 4px;
+  --ds-space-2: 8px;
+  --ds-space-3: 12px;
+  --ds-space-4: 16px;
+  --ds-space-5: 20px;
+  --ds-space-6: 28px;
+
+  /* --- Z-index scale: never hardcode a z-index -------------------------- */
+  --ds-z-base: 0;
+  --ds-z-raised: 10;
+  --ds-z-sticky: 100;
+  --ds-z-overlay: 500;
+  --ds-z-popover: 800;
+  --ds-z-toast: 900;
+  --ds-z-modal: 1000;
+}
+
+/* Dark mode: panels lift away from canvas instead of sinking, and the brand
+   ramp gains a little chroma so the gradient survives on a near-black field. */
+.dark {
+  --ds-panel-raised: color-mix(in oklch, var(--paper, var(--background)) 88%, oklch(1 0 0));
+  --ds-panel-border: color-mix(in oklch, oklch(1 0 0) 12%, transparent);
+  --ds-panel-border-strong: color-mix(in oklch, oklch(1 0 0) 22%, transparent);
+  --ds-brand-glow: 0 0 24px color-mix(in oklch, var(--brand-purple) 30%, transparent);
+}

@@ -4,7 +4,7 @@
  * Provides mock factories and helpers for testing agent implementations.
  */
 
-import type { AgentEvent } from '@craft-agent/core/types';
+import type { AgentEvent } from '@archstudio/core/types';
 import type { BackendConfig, ChatOptions } from '../backend/types.ts';
 import { AbortReason } from '../backend/types.ts';
 import type { Workspace } from '../../config/storage.ts';

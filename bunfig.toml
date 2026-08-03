@@ -1,5 +1,14 @@
 preload = ["./packages/shared/src/unified-network-interceptor.ts"]
 
+# Renderer tests pull in Vite-only imports (?url, ?worker, .css) plus
+# import.meta.glob inside ThemeContext.tsx — see scripts/test-setup.ts.
+[test]
+preload = ["./scripts/test-setup.ts"]
+# NOTE: no `pathIgnorePatterns` here — bun 1.3.10 does not implement it (the
+# key is absent from the binary, so it is silently ignored, not enforced).
+# Directories that must stay out of test discovery are excluded by listing the
+# owned roots explicitly in the `test` script in package.json instead.
+
 # Use the hoisted linker so transitive deps resolve at top-level node_modules.
 # Vite + esbuild bundling expects this layout; bun's default isolated linker
 # leaves only declared deps at the workspace root, which breaks renderer imports

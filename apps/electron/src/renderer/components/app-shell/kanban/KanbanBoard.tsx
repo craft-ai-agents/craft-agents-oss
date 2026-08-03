@@ -10,7 +10,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import type { KanbanColumnDef } from '@craft-agent/shared/projects/types'
+import type { KanbanColumnDef } from '@archstudio/shared/projects/types'
 import { SmartPointerSensor } from '@/components/ui/sortable-list'
 import type { ProjectColorTreatment } from '@/utils/project-colors'
 import type { SessionStatus } from '@/config/session-status-config'

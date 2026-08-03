@@ -8,8 +8,8 @@
  * Uses centralized core mappers (single source of truth, no Electron imports needed).
  */
 import { describe, it, expect, beforeEach } from 'bun:test'
-import { messageToStored, storedToMessage } from '@craft-agent/core'
-import type { Message, StoredMessage, MessageRole } from '@craft-agent/core'
+import { messageToStored, storedToMessage } from '@archstudio/core'
+import type { Message, StoredMessage, MessageRole } from '@archstudio/core'
 
 // ============================================================================
 // Test Helpers

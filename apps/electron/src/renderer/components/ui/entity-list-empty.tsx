@@ -8,7 +8,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from './empty'
-import { getDocUrl, type DocFeature } from '@craft-agent/shared/docs/doc-links'
+import { getDocUrl, type DocFeature } from '@archstudio/shared/docs/doc-links'
 
 export interface EntityListEmptyScreenProps {
   icon: React.ReactNode

@@ -1,0 +1,29 @@
+/**
+ * HighlightedDiffViewer — token colour classes.
+ *
+ * One CSS class per tokenizer `tk-*` token kind. The component renders
+ * spans as `hl-tk-<kind>` (HighlightedLine prepends `hl-` to whatever
+ * `className` tokenizeLine returns), and this stylesheet is self-imported
+ * by the component so every consumer — Electron renderer, web viewer,
+ * playground — picks up syntax colours without manual wiring.
+ *
+ * Tokens reuse the shell design tokens (--brand-purple, --brand-lime,
+ * --accent, --info, --shell-text-dim) so colours stay in lockstep with
+ * the rest of the design system across theme switches.
+ */
+
+.hl-tk-keyword   { color: var(--brand-purple); font-weight: 600; }
+.hl-tk-string    { color: var(--brand-lime); }
+.hl-tk-comment   { color: var(--shell-text-dim); font-style: italic; }
+.hl-tk-number    { color: var(--info); }
+.hl-tk-boolean   { color: var(--info); font-weight: 550; }
+.hl-tk-builtin   { color: var(--accent); }
+.hl-tk-function  { color: var(--foreground); font-weight: 550; }
+.hl-tk-decorator { color: var(--accent); font-weight: 550; }
+.hl-tk-tag       { color: var(--brand-purple); }
+.hl-tk-entity    { color: var(--info); }
+.hl-tk-property  { color: var(--foreground); }
+.hl-tk-selector  { color: var(--brand-purple); }
+.hl-tk-hexcolor  { color: var(--brand-lime); }
+.hl-tk-variable  { color: var(--info); }
+.hl-tk-option    { color: var(--accent); }

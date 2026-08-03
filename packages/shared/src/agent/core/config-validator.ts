@@ -27,26 +27,26 @@ const CONFIG_FILE_PATTERNS: { pattern: RegExp; type: ConfigFileType }[] = [
 ];
 
 /**
- * Craft Agent specific config files that have known schemas.
+ * ARCHstudio specific config files that have known schemas.
  */
-const CRAFT_AGENT_CONFIG_PATTERNS = [
+const ARCHSTUDIO_AGENT_CONFIG_PATTERNS = [
   // Main config
-  /\.craft-agent\/config\.json$/,
+  /\.archstudio\/config\.json$/,
   // Preferences
-  /\.craft-agent\/preferences\.json$/,
+  /\.archstudio\/preferences\.json$/,
   // Source configs
-  /\.craft-agent\/workspaces\/[^/]+\/sources\/[^/]+\/config\.json$/,
+  /\.archstudio\/workspaces\/[^/]+\/sources\/[^/]+\/config\.json$/,
   // Permissions
-  /\.craft-agent\/workspaces\/[^/]+\/permissions\.json$/,
-  /\.craft-agent\/permissions\/[^/]+\.json$/,
+  /\.archstudio\/workspaces\/[^/]+\/permissions\.json$/,
+  /\.archstudio\/permissions\/[^/]+\.json$/,
   // Theme
-  /\.craft-agent\/workspaces\/[^/]+\/theme\.json$/,
+  /\.archstudio\/workspaces\/[^/]+\/theme\.json$/,
   // Statuses
-  /\.craft-agent\/workspaces\/[^/]+\/statuses\/config\.json$/,
+  /\.archstudio\/workspaces\/[^/]+\/statuses\/config\.json$/,
   // Labels
-  /\.craft-agent\/workspaces\/[^/]+\/labels\.json$/,
+  /\.archstudio\/workspaces\/[^/]+\/labels\.json$/,
   // Tool icons
-  /\.craft-agent\/tool-icons\/tool-icons\.json$/,
+  /\.archstudio\/tool-icons\/tool-icons\.json$/,
 ];
 
 /**
@@ -98,16 +98,16 @@ export class ConfigValidator {
   }
 
   /**
-   * Check if a file path is a Craft Agent config file.
+   * Check if a file path is a ARCHstudio config file.
    *
    * @param filePath - Path to check
-   * @returns true if this is a Craft Agent config
+   * @returns true if this is a ARCHstudio config
    */
   isCraftAgentConfig(filePath: string): boolean {
     const normalizedPath = process.platform === 'win32'
       ? filePath.replace(/\\/g, '/').toLowerCase()
       : filePath.replace(/\\/g, '/');
-    return CRAFT_AGENT_CONFIG_PATTERNS.some((pattern) => pattern.test(normalizedPath));
+    return ARCHSTUDIO_AGENT_CONFIG_PATTERNS.some((pattern) => pattern.test(normalizedPath));
   }
 
   // ============================================================

@@ -16,7 +16,7 @@
  */
 
 import type { SettingsSubpage } from './settings-registry'
-import type { PermissionMode } from '@craft-agent/shared/agent/mode-types'
+import type { PermissionMode } from '@archstudio/shared/agent/mode-types'
 
 // Helper to build query strings from params
 function toQueryString(params?: Record<string, string | undefined>): string {
@@ -122,6 +122,18 @@ export const routes = {
       sessionId
         ? `view/${encodeURIComponent(viewId)}/session/${sessionId}` as const
         : `view/${encodeURIComponent(viewId)}` as const,
+
+    /** Runs view (runs navigator) — foreground/background jobs and subagents */
+    runs: (runId?: string) =>
+      runId ? `runs/run/${runId}` as const : 'runs' as const,
+
+    /** Memory view (memory navigator) — profile, facts, episodes, skills */
+    memory: (entryId?: string) =>
+      entryId ? `memory/entry/${encodeURIComponent(entryId)}` as const : 'memory' as const,
+
+    /** Media Lab view (media-lab navigator) — generations, workflows, queue, outputs */
+    mediaLab: (artifactId?: string) =>
+      artifactId ? `media-lab/artifact/${encodeURIComponent(artifactId)}` as const : 'media-lab' as const,
 
     /** Sources view (sources navigator) - supports type filtering */
     sources: (params?: { sourceSlug?: string; type?: 'api' | 'mcp' | 'local' }) => {

@@ -11,7 +11,7 @@
 import { afterAll, beforeAll, describe, it, expect } from 'bun:test';
 import { shouldAllowToolInMode } from '../../agent/mode-manager.ts';
 
-const FLAG_ENV = 'CRAFT_FEATURE_DEVELOPER_FEEDBACK';
+const FLAG_ENV = 'ARCHSTUDIO_FEATURE_DEVELOPER_FEEDBACK';
 
 describe('send_developer_feedback permission mode handling', () => {
   const toolName = 'mcp__session__send_developer_feedback';

@@ -75,7 +75,7 @@ function runMigration(configDir: string) {
   ], {
     env: {
       ...process.env,
-      CRAFT_CONFIG_DIR: configDir,
+      ARCHSTUDIO_CONFIG_DIR: configDir,
     },
     stdout: 'pipe',
     stderr: 'pipe',
@@ -87,6 +87,47 @@ function runMigration(configDir: string) {
     )
   }
 }
+
+describe('provider connection name migration', () => {
+  it('migrates generated names and preserves user names', () => {
+    const { configDir, workspaceRoot, configPath } = setupWorkspaceConfigDir()
+    writeRootConfig(configPath, workspaceRoot, [
+      {
+        slug: 'pi-api-key-2',
+        name: 'ARCHstudio Backend (API Key) 2',
+        providerType: 'pi',
+        authType: 'api_key',
+        piAuthProvider: 'openrouter',
+        createdAt: Date.now(),
+      },
+      {
+        slug: 'pi-api-key-3',
+        name: 'My OpenRouter',
+        providerType: 'pi',
+        authType: 'api_key',
+        piAuthProvider: 'openrouter',
+        createdAt: Date.now(),
+      },
+      {
+        slug: 'pi-api-key-4',
+        name: 'ARCHstudio Backend (API Key) 4',
+        providerType: 'pi_compat',
+        authType: 'api_key_with_endpoint',
+        piAuthProvider: 'openai',
+        baseUrl: 'https://apihub.agnes-ai.com/v1',
+        customEndpoint: { api: 'openai-completions' },
+        createdAt: Date.now(),
+      },
+    ])
+
+    runMigration(configDir)
+
+    const stored = JSON.parse(readFileSync(configPath, 'utf-8'))
+    expect(stored.llmConnections[0].name).toBe('OpenRouter')
+    expect(stored.llmConnections[1].name).toBe('My OpenRouter')
+    expect(stored.llmConnections[2].name).toBe('Agnes AI')
+  })
+})
 
 function readPiApiKeyConnection(configPath: string): any {
   const migrated = JSON.parse(readFileSync(configPath, 'utf-8'))
@@ -104,7 +145,7 @@ describe('startup migration (integration)', () => {
     writeRootConfig(configPath, workspaceRoot, [
       {
         slug: 'pi-api-key',
-        name: 'Craft Agents Backend (OpenAI)',
+        name: 'ARCHstudio Backend (OpenAI)',
         providerType: 'pi',
         authType: 'api_key',
         piAuthProvider: 'openai-codex',
@@ -130,7 +171,7 @@ describe('startup migration (integration)', () => {
     writeRootConfig(configPath, workspaceRoot, [
       {
         slug: 'pi-api-key',
-        name: 'Craft Agents Backend (Anthropic)',
+        name: 'ARCHstudio Backend (Anthropic)',
         providerType: 'pi',
         authType: 'api_key',
         piAuthProvider: 'anthropic',
@@ -156,7 +197,7 @@ describe('startup migration (integration)', () => {
     writeRootConfig(configPath, workspaceRoot, [
       {
         slug: 'pi-api-key',
-        name: 'Craft Agents Backend (Anthropic)',
+        name: 'ARCHstudio Backend (Anthropic)',
         providerType: 'pi',
         authType: 'api_key',
         piAuthProvider: 'anthropic',
@@ -184,7 +225,7 @@ describe('startup migration (integration)', () => {
     writeRootConfig(configPath, workspaceRoot, [
       {
         slug: 'pi-api-key',
-        name: 'Craft Agents Backend (Anthropic)',
+        name: 'ARCHstudio Backend (Anthropic)',
         providerType: 'pi',
         authType: 'api_key',
         piAuthProvider: 'anthropic',
@@ -210,7 +251,7 @@ describe('startup migration (integration)', () => {
     writeRootConfig(configPath, workspaceRoot, [
       {
         slug: 'pi-api-key',
-        name: 'Craft Agents Backend (Anthropic)',
+        name: 'ARCHstudio Backend (Anthropic)',
         providerType: 'pi',
         authType: 'api_key',
         piAuthProvider: 'anthropic',
@@ -250,7 +291,7 @@ describe('startup migration (integration)', () => {
     writeRootConfig(configPath, workspaceRoot, [
       {
         slug: 'pi-api-key',
-        name: 'Craft Agents Backend (OpenRouter)',
+        name: 'ARCHstudio Backend (OpenRouter)',
         providerType: 'pi',
         authType: 'api_key',
         piAuthProvider: 'openrouter',
@@ -357,7 +398,7 @@ describe('legacy Opus migration to default Opus (integration)', () => {
       },
       {
         slug: 'pi-api-key',
-        name: 'Craft Agents Backend (Anthropic)',
+        name: 'ARCHstudio Backend (Anthropic)',
         providerType: 'pi',
         authType: 'api_key',
         piAuthProvider: 'anthropic',
@@ -435,7 +476,7 @@ describe('legacy Opus migration to default Opus (integration)', () => {
     writeRootConfig(configPath, workspaceRoot, [
       {
         slug: 'pi-api-key',
-        name: 'Craft Agents Backend (Anthropic)',
+        name: 'ARCHstudio Backend (Anthropic)',
         providerType: 'pi',
         authType: 'api_key',
         piAuthProvider: 'anthropic',
@@ -463,7 +504,7 @@ describe('legacy Opus migration to default Opus (integration)', () => {
     writeRootConfig(configPath, workspaceRoot, [
       {
         slug: 'pi-api-key',
-        name: 'Craft Agents Backend (Bedrock)',
+        name: 'ARCHstudio Backend (Bedrock)',
         providerType: 'pi',
         authType: 'iam_credentials',
         piAuthProvider: 'amazon-bedrock',
@@ -491,7 +532,7 @@ describe('legacy Opus migration to default Opus (integration)', () => {
     writeRootConfig(configPath, workspaceRoot, [
       {
         slug: 'pi-api-key',
-        name: 'Craft Agents Backend (Anthropic)',
+        name: 'ARCHstudio Backend (Anthropic)',
         providerType: 'pi',
         authType: 'api_key',
         piAuthProvider: 'anthropic',

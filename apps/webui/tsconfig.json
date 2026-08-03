@@ -17,8 +17,8 @@
       "@/*": ["../electron/src/renderer/*"],
       "@webui/*": ["./src/*"],
       "@config/*": ["../../packages/shared/src/config/*"],
-      "@craft-agent/shared": ["../../packages/shared/src/index.ts"],
-      "@craft-agent/shared/*": ["../../packages/shared/src/*"]
+      "@archstudio/shared": ["../../packages/shared/src/index.ts"],
+      "@archstudio/shared/*": ["../../packages/shared/src/*"]
     },
     "baseUrl": "."
   },

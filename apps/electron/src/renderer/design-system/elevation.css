@@ -1,0 +1,30 @@
+/* =============================================================================
+   ELEVATION — shadow scale.
+
+   Shadows are tinted with the theme foreground rather than pure black so they
+   read correctly in both light and scenic/dark modes. Never inline a box-shadow
+   in a component; pick a level here.
+============================================================================= */
+
+:root {
+  --ds-shadow-color: color-mix(in oklch, var(--foreground) 40%, transparent);
+
+  /* Level 0 — flush with the canvas (list rows, inline chips) */
+  --ds-elevation-0: none;
+
+  /* Level 1 — cards, panels resting on canvas */
+  --ds-elevation-1: 0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 30%, transparent);
+
+  /* Level 2 — hovered/active cards, raised toolbars */
+  --ds-elevation-2:
+    0 2px 4px color-mix(in oklch, var(--ds-shadow-color) 28%, transparent),
+    0 1px 2px color-mix(in oklch, var(--ds-shadow-color) 20%, transparent);
+
+  /* Level 3 — popovers, dropdowns, command palette */
+  --ds-elevation-3:
+    0 8px 24px color-mix(in oklch, var(--ds-shadow-color) 34%, transparent),
+    0 2px 6px color-mix(in oklch, var(--ds-shadow-color) 22%, transparent);
+
+  /* Level 4 — modals, full overlays */
+  --ds-elevation-4: 0 24px 64px color-mix(in oklch, var(--ds-shadow-color) 45%, transparent);
+}

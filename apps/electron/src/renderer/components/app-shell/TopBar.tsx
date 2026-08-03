@@ -9,7 +9,7 @@
 
 import { useTranslation } from "react-i18next"
 import * as Icons from "lucide-react"
-import { Tooltip, TooltipTrigger, TooltipContent } from "@craft-agent/ui"
+import { Tooltip, TooltipTrigger, TooltipContent } from "@archstudio/ui"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
 import { TopBarButton } from "../ui/TopBarButton"
 import { cn } from "@/lib/utils"
@@ -20,7 +20,6 @@ import {
   DropdownMenuTrigger,
   StyledDropdownMenuContent,
   StyledDropdownMenuItem,
-  StyledDropdownMenuSeparator,
 } from "@/components/ui/styled-dropdown"
 import type { SettingsMenuItem } from "../../../shared/menu-schema"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
@@ -29,7 +28,7 @@ import { BrowserTabStrip } from "../browser/BrowserTabStrip"
 import type { Workspace } from "../../../shared/types"
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher"
 import { CompactWorkspaceSwitcher } from "./CompactWorkspaceSwitcher"
-import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
+import { getDocUrl } from "@archstudio/shared/docs/doc-links"
 import { AppMenu } from "../AppMenu"
 
 const RIGHT_SLOT_FULL_BADGES_THRESHOLD = 420
@@ -282,11 +281,6 @@ export function TopBar({
               <Icons.MessageSquare className="h-3.5 w-3.5" />
               <span className="flex-1">{t("settings.messaging.title")}</span>
               <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
-            </StyledDropdownMenuItem>
-            <StyledDropdownMenuSeparator />
-            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}>
-              <Icons.ExternalLink className="h-3.5 w-3.5" />
-              <span className="flex-1">{t("menu.allDocumentation")}</span>
             </StyledDropdownMenuItem>
           </StyledDropdownMenuContent>
         </DropdownMenu>

@@ -11,10 +11,11 @@
  */
 
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { expandPath } from './path-processor.ts';
+import { isBrowserToolNameOrAlias } from '../browser-tool-names.ts';
 import { getBrowserToolEnabled } from '../../config/storage.ts';
+import { CONFIG_DIR } from '../../config/paths.ts';
 
 // ============================================================
 // Types
@@ -49,7 +50,7 @@ export interface PrerequisiteManagerConfig {
 const EXEMPT_SLUGS = new Set(['session', 'craft-agents-docs']);
 
 /** Global browser tools docs path required before browser tool usage. */
-const BROWSER_TOOLS_DOC_PATH = resolve(join(homedir(), '.craft-agent', 'docs', 'browser-tools.md'));
+const BROWSER_TOOLS_DOC_PATH = resolve(join(CONFIG_DIR, 'docs', 'browser-tools.md'));
 
 // ============================================================
 // Rules
@@ -101,7 +102,7 @@ const RULES: PrerequisiteRule[] = [
   {
     toolMatcher: (toolName: string) =>
       getBrowserToolEnabled() &&
-      (toolName === 'browser_tool' || toolName === 'mcp__session__browser_tool'),
+      (isBrowserToolNameOrAlias(toolName) || toolName === 'mcp__session__browser_tool'),
     resolveRequiredPath: () => {
       return existsSync(BROWSER_TOOLS_DOC_PATH) ? BROWSER_TOOLS_DOC_PATH : null;
     },
@@ -239,9 +240,13 @@ export class PrerequisiteManager {
     const command = input.command as string;
     if (!command || this.pendingSkillPaths.size === 0) return false;
 
+    // Compare in a normalized form: expandPath() already stored the path with
+    // platform separators (backslashes on Windows), while the incoming Bash
+    // command may use forward slashes. Normalize both so they still match.
+    const commandNorm = command.replace(/\\/g, '/');
     let matched = false;
     for (const path of this.pendingSkillPaths) {
-      if (command.includes(path)) {
+      if (commandNorm.includes(path.replace(/\\/g, '/'))) {
         this.pendingSkillPaths.delete(path);
         this.readFiles.add(path);
         this.onDebug?.(`Prerequisite: cleared skill prerequisite via Bash: ${path}`);

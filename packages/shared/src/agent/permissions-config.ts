@@ -5,22 +5,22 @@
  * Users can create permissions.json files to extend the default rules.
  *
  * File locations:
- * - Workspace: ~/.craft-agent/workspaces/{slug}/permissions.json
- * - Per-source: ~/.craft-agent/workspaces/{slug}/sources/{sourceSlug}/permissions.json
+ * - Workspace: ~/.archstudio/workspaces/{slug}/permissions.json
+ * - Per-source: ~/.archstudio/workspaces/{slug}/sources/{sourceSlug}/permissions.json
  *
  * Rules are additive - custom configs extend the defaults (more permissive).
  */
 
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs';
-import { homedir } from 'os';
 import { join } from 'path';
 import { debug } from '../utils/debug.ts';
 import { readJsonFileSync, safeJsonParse } from '../utils/files.ts';
 import { CONFIG_DIR } from '../config/paths.ts';
 import { getBundledAssetsDir } from '../utils/paths.ts';
-import { getSourcePath } from '../sources/storage.ts';
+import { getSourcePath } from '../sources/paths.ts';
 import { isValidPermissionsFile } from '../config/validators.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
+import { CLI_BASH_PATTERN_PREFIX } from '../config/cli-domains.ts';
 import {
   SAFE_MODE_CONFIG,
   PermissionsConfigSchema,
@@ -42,11 +42,14 @@ let permissionsInitialized = false;
 
 /**
  * Get the app-level permissions directory.
- * Default permissions are stored at ~/.craft-agent/permissions/
- * Reads env var dynamically so tests can override via CRAFT_CONFIG_DIR.
+ * Default permissions are stored at ~/.archstudio/permissions/
+ * Reads env var dynamically so tests can override via ARCHSTUDIO_CONFIG_DIR.
  */
 export function getAppPermissionsDir(): string {
-  const configDir = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.craft-agent');
+  // ARCHSTUDIO_CONFIG_DIR is read dynamically so tests (and multi-instance dev)
+  // can override it without relying on CONFIG_DIR having been captured at
+  // module load in this process.
+  const configDir = process.env.ARCHSTUDIO_CONFIG_DIR || CONFIG_DIR;
   return join(configDir, 'permissions');
 }
 
@@ -182,7 +185,7 @@ function migratePermissions(
 }
 
 /**
- * Load default permissions from ~/.craft-agent/permissions/default.json
+ * Load default permissions from ~/.archstudio/permissions/default.json
  * Returns null if file doesn't exist or is invalid.
  */
 export function loadDefaultPermissions(): PermissionsCustomConfig | null {
@@ -376,7 +379,7 @@ function compileBlockedCommandHint(hint: BlockedCommandHintRule): CompiledBlocke
 }
 
 function shouldCompileBashPattern(pattern: string): boolean {
-  if (!FEATURE_FLAGS.craftAgentsCli && pattern.startsWith('^craft-agent\\s')) {
+  if (!FEATURE_FLAGS.craftAgentsCli && pattern.startsWith(CLI_BASH_PATTERN_PREFIX)) {
     return false;
   }
   return true;
@@ -576,12 +579,12 @@ class PermissionsConfigCache {
   private sourceConfigs: Map<string, PermissionsCustomConfig | null> = new Map();
   private mergedConfigs: Map<string, MergedPermissionsConfig> = new Map();
 
-  // App-level default permissions (loaded from ~/.craft-agent/permissions/default.json)
+  // App-level default permissions (loaded from ~/.archstudio/permissions/default.json)
   private defaultConfig: PermissionsCustomConfig | null | undefined = undefined; // undefined = not loaded yet
 
   /**
    * Get or load app-level default permissions
-   * These come from ~/.craft-agent/permissions/default.json
+   * These come from ~/.archstudio/permissions/default.json
    */
   private getDefaultConfig(): PermissionsCustomConfig | null {
     if (this.defaultConfig === undefined) {

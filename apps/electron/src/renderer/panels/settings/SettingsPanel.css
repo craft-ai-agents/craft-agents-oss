@@ -1,0 +1,56 @@
+/**
+ * SettingsPanel — shell Settings view.
+ *
+ * Layout only. The panel is a two-pane host (navigator + selected page); every
+ * control inside it is rendered by the shared settings page components and
+ * styled by those, not from here.
+ *
+ * This file previously carried ~470 lines styling a bespoke flat toggle list
+ * that duplicated the settings pages. That list is gone, and so are its styles
+ * — leaving them behind would have kept leaking global `.settings-row`,
+ * `.settings-switch` and `.settings-button` rules into the rest of the app.
+ */
+
+.settings-panel {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  min-height: 0;
+}
+
+.settings-panel__nav {
+  flex: 0 0 clamp(220px, 24%, 320px);
+  min-width: 0;
+  overflow-y: auto;
+  border-right: 1px solid color-mix(in oklch, var(--ds-shadow-color) 10%, transparent);
+}
+
+.settings-panel__detail {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The pages own their internal scrolling (each wraps content in a ScrollArea),
+   so the detail pane must not introduce a second scroll container. */
+.settings-panel__detail > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Narrow shell: stack the navigator above the page rather than squeezing both. */
+@media (max-width: 720px) {
+  .settings-panel {
+    flex-direction: column;
+  }
+
+  .settings-panel__nav {
+    flex: 0 0 auto;
+    max-height: 40%;
+    border-right: none;
+    border-bottom: 1px solid color-mix(in oklch, var(--ds-shadow-color) 10%, transparent);
+  }
+}

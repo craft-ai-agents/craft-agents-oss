@@ -3,7 +3,7 @@ import type { ComponentEntry } from './types'
 import { SquareSlash } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FreeFormInput } from '@/components/app-shell/input/FreeFormInput'
-import type { PermissionMode } from '@craft-agent/shared/agent/modes'
+import type { PermissionMode } from '@archstudio/shared/agent/modes'
 import { ensureMockElectronAPI } from '../mock-utils'
 import {
   SlashCommandMenu,

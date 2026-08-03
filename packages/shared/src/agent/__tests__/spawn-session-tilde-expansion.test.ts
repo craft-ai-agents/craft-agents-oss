@@ -49,8 +49,8 @@ describe('preExecuteSpawnSession workingDirectory normalization', () => {
   });
 
   it('expands `~/foo` to an absolute path under home', async () => {
-    await agent.invokeSpawn({ prompt: 'hi', workingDirectory: '~/Documents/CraftAgents' });
-    expect(captured[0]?.workingDirectory).toBe(join(homedir(), 'Documents/CraftAgents'));
+    await agent.invokeSpawn({ prompt: 'hi', workingDirectory: '~/Documents/ARCHstudio' });
+    expect(captured[0]?.workingDirectory).toBe(join(homedir(), 'Documents/ARCHstudio'));
   });
 
   it('expands `${HOME}/foo`', async () => {
@@ -64,8 +64,11 @@ describe('preExecuteSpawnSession workingDirectory normalization', () => {
   });
 
   it('leaves absolute paths unchanged (aside from normalization)', async () => {
-    await agent.invokeSpawn({ prompt: 'hi', workingDirectory: '/tmp/abs/path' });
-    expect(captured[0]?.workingDirectory).toBe('/tmp/abs/path');
+    // '/tmp/abs/path' is only an absolute path on POSIX; on Windows an absolute
+    // path must carry a drive letter, so use a platform-appropriate input.
+    const absPath = process.platform === 'win32' ? 'C:\\tmp\\abs\\path' : '/tmp/abs/path';
+    await agent.invokeSpawn({ prompt: 'hi', workingDirectory: absPath });
+    expect(captured[0]?.workingDirectory).toBe(absPath);
   });
 
   it('resolves relative paths against cwd', async () => {

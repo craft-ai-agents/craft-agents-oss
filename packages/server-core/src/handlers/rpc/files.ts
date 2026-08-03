@@ -3,17 +3,17 @@ import { isAbsolute, join, resolve, dirname, parse as parsePath } from 'path'
 import { homedir } from 'os'
 import { validatePathFormat } from '../../utils/path-validation'
 import { randomUUID } from 'crypto'
-import { RPC_CHANNELS, type FileAttachment, type DirectoryListingResult } from '@craft-agent/shared/protocol'
-import type { StoredAttachment } from '@craft-agent/core/types'
-import { readFileAttachment, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
-import { getSessionAttachmentsPath, validateSessionId } from '@craft-agent/shared/sessions'
-import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { resizeImageForAPI, inspectImageBuffer } from '@craft-agent/server-core/services'
-import { sanitizeFilename, validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
+import { RPC_CHANNELS, type FileAttachment, type DirectoryListingResult, type ReadDirectoryResult, type SessionFile } from '@archstudio/shared/protocol'
+import type { StoredAttachment } from '@archstudio/core/types'
+import { readFileAttachment, validateImageForClaudeAPI, IMAGE_LIMITS } from '@archstudio/shared/utils'
+import { getSessionAttachmentsPath, validateSessionId } from '@archstudio/shared/sessions'
+import { getWorkspaceByNameOrId } from '@archstudio/shared/config'
+import { resizeImageForAPI, inspectImageBuffer } from '@archstudio/server-core/services'
+import { sanitizeFilename, validateFilePath, getWorkspaceAllowedDirs } from '@archstudio/server-core/handlers'
 import { MarkItDown } from 'markitdown-js'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import type { RpcServer } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
-import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
+import { requestClientOpenFileDialog } from '@archstudio/server-core/transport'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.file.READ,
@@ -25,9 +25,20 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.file.READ_USER_ATTACHMENT,
   RPC_CHANNELS.file.STORE_ATTACHMENT,
   RPC_CHANNELS.file.GENERATE_THUMBNAIL,
+  RPC_CHANNELS.file.WRITE,
   RPC_CHANNELS.fs.SEARCH,
   RPC_CHANNELS.fs.LIST_DIRECTORY,
+  RPC_CHANNELS.fs.READ_DIRECTORY,
 ] as const
+
+function getPreviewAllowedDirs(workspaceId?: string | null): string[] {
+  const comfyRoot = process.env.COMFYUI_ROOT?.trim()
+    || (process.platform === 'win32' ? 'D:\\Comfyui' : join(homedir(), 'ComfyUI'))
+  return [
+    ...getWorkspaceAllowedDirs(workspaceId),
+    join(comfyRoot, 'output', 'ARCHstudio'),
+  ]
+}
 
 export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): void {
   // Read a file (with path validation to prevent traversal attacks)
@@ -54,11 +65,11 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
   server.handle(RPC_CHANNELS.file.READ_DATA_URL, async (ctx, path: string) => {
     try {
       const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
-      const safePath = await validateFilePath(path, getWorkspaceAllowedDirs(workspaceId))
-      const buffer = await readFile(safePath)
+      const safePath = await validateFilePath(path, getPreviewAllowedDirs(workspaceId))
       const ext = safePath.split('.').pop()?.toLowerCase() ?? ''
+      const buffer = await readFile(safePath)
 
-      // Map previewable image extensions to MIME types.
+      // Map previewable image and media extensions to MIME types.
       // HEIC/HEIF/TIFF are intentionally excluded — no Chromium codec, opened externally instead.
       const mimeMap: Record<string, string> = {
         png: 'image/png',
@@ -70,6 +81,9 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
         bmp: 'image/bmp',
         ico: 'image/x-icon',
         avif: 'image/avif',
+        mp4: 'video/mp4',
+        webm: 'video/webm',
+        mov: 'video/quicktime',
       }
       const mime = mimeMap[ext] || 'application/octet-stream'
       const base64 = buffer.toString('base64')
@@ -86,7 +100,7 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
   server.handle(RPC_CHANNELS.file.READ_PREVIEW_DATA_URL, async (ctx, path: string, maxSize = 64) => {
     try {
       const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
-      const safePath = await validateFilePath(path, getWorkspaceAllowedDirs(workspaceId))
+      const safePath = await validateFilePath(path, getPreviewAllowedDirs(workspaceId))
       const size = Number.isFinite(maxSize) ? Math.max(16, Math.min(256, Math.floor(maxSize))) : 64
       const preview = await deps.platform.imageProcessor.process(safePath, {
         resize: { width: size, height: size },
@@ -101,12 +115,14 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
     }
   })
 
-  // Read a file as raw binary (Uint8Array) for react-pdf.
+  // Read a previewable file as raw binary (Uint8Array) for react-pdf and
+  // scoped in-app media playback. ComfyUI access remains restricted to the
+  // ARCHstudio output namespace via getPreviewAllowedDirs().
   // The WS transport codec preserves Uint8Array payloads over JSON envelopes.
   server.handle(RPC_CHANNELS.file.READ_BINARY, async (ctx, path: string) => {
     try {
       const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
-      const safePath = await validateFilePath(path, getWorkspaceAllowedDirs(workspaceId))
+      const safePath = await validateFilePath(path, getPreviewAllowedDirs(workspaceId))
       const buffer = await readFile(safePath)
       // Return as Uint8Array (serializes to ArrayBuffer over IPC)
       return new Uint8Array(buffer)
@@ -437,6 +453,21 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
     }
   })
 
+  // Write UTF-8 content to a file on disk (save-back for editor).
+  // Uses the same path validation as readFile to prevent traversal attacks.
+  server.handle(RPC_CHANNELS.file.WRITE, async (ctx, path: string, content: string) => {
+    try {
+      const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
+      const safePath = await validateFilePath(path, getWorkspaceAllowedDirs(workspaceId))
+      await writeFile(safePath, content, 'utf-8')
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      deps.platform.logger.error('writeFile error:', path, message)
+      return { success: false, error: message }
+    }
+  })
+
   // Filesystem search for @ mention file selection.
   // Parallel BFS walk that skips ignored directories BEFORE entering them,
   // avoiding reading node_modules/etc. contents entirely. Uses withFileTypes
@@ -593,5 +624,85 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
       totalEntries,
       entries,
     } satisfies DirectoryListingResult
+  })
+
+  // Read directory with file metadata for the working-directory file browser.
+  // Returns both files and directories with size/mtime info.
+  server.handle(RPC_CHANNELS.fs.READ_DIRECTORY, async (_ctx, dirPath: string) => {
+    // Resolve ~ to home directory
+    if (dirPath === '~' || dirPath.startsWith('~/')) {
+      dirPath = dirPath === '~' ? homedir() : join(homedir(), dirPath.slice(2))
+    }
+
+    const pathCheck = validatePathFormat(dirPath)
+    if (!pathCheck.valid) {
+      throw new Error(pathCheck.reason!)
+    }
+
+    const resolved = resolve(dirPath)
+    const raw = await readdir(resolved, { withFileTypes: true })
+
+    const entries: Array<{
+      name: string
+      path: string
+      type: 'file' | 'directory'
+      size?: number
+      mtime?: number
+      ctime?: number
+      isSymlink: boolean
+    }> = []
+
+    for (const entry of raw) {
+      // Skip hidden entries
+      if (entry.name.startsWith('.')) continue
+
+      const fullPath = join(resolved, entry.name)
+      const isDir = entry.isDirectory()
+      const isSymlink = entry.isSymbolicLink()
+
+      try {
+        const info = await stat(fullPath)
+        entries.push({
+          name: entry.name,
+          path: fullPath,
+          type: isDir ? 'directory' : 'file',
+          size: isDir ? undefined : info.size,
+          mtime: info.mtimeMs,
+          // Normalize birthtime — fs.Stats.birthtimeMs is documented as a
+          // number but is 0 on filesystems that don't track creation time
+          // (pre-Linux-4.11 ext4, FAT32, network mounts).  Coerce 0 \u2192
+          // undefined so renderers can honestly say "unknown" rather than
+          // 1970-01-01.
+          ctime: info.birthtimeMs > 0 ? info.birthtimeMs : undefined,
+          isSymlink,
+        })
+      } catch {
+        // Can't stat — symlink target missing, permissions, etc.
+        entries.push({
+          name: entry.name,
+          path: fullPath,
+          type: isDir ? 'directory' : 'file',
+          isSymlink,
+        })
+      }
+    }
+
+    // Sort: directories first, then files, alphabetical within each group
+    entries.sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    })
+
+    const totalEntries = entries.length
+    const truncated = totalEntries > 500
+    if (truncated) entries.length = 500
+
+    const parentPath = resolved === parsePath(resolved).root ? null : dirname(resolved)
+
+    return {
+      currentPath: resolved,
+      parentPath,
+      entries,
+    } satisfies ReadDirectoryResult
   })
 }

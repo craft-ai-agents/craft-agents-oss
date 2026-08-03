@@ -159,8 +159,11 @@ export function FullscreenOverlayBase({
             event.stopPropagation()
           }}
         >
-          {/* Visually hidden title for accessibility - required by Radix Dialog */}
+          {/* Visually hidden naming for accessibility — required by Radix Dialog. */}
           <Dialog.Title className="sr-only">{accessibleTitle}</Dialog.Title>
+          <Dialog.Description className="sr-only">
+            Fullscreen preview. Press Escape or use the close control to return.
+          </Dialog.Description>
 
           {/* Full-viewport masked scroll area — covers the entire dialog including behind the header.
               The CSS mask gradient fades content at both edges (starting from y=0).

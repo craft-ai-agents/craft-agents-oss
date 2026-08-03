@@ -1,0 +1,70 @@
+.knowledge-qa-bar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.knowledge-qa-bar__input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+  font-size: 13px;
+  outline: none;
+  transition: all 150ms ease;
+}
+
+.knowledge-qa-bar__input:focus {
+  border-color: #aa00ff;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(170, 0, 255, 0.2);
+}
+
+.knowledge-qa-bar__input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.knowledge-qa-bar__input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.knowledge-qa-bar__button {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  background: linear-gradient(135deg, #00ff00, #aa00ff);
+  color: #000000;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 150ms ease;
+  flex-shrink: 0;
+}
+
+.knowledge-qa-bar__button:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.knowledge-qa-bar__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.knowledge-qa-bar__spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

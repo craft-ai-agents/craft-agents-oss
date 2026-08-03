@@ -79,7 +79,7 @@ export default [
         },
       },
       // Custom style rules
-      'craft-styles': {
+      'archstudio-styles': {
         rules: {
           'no-hardcoded-z-index': noHardcodedZIndex,
           'no-nonstandard-shadows': noNonstandardShadows,
@@ -113,10 +113,10 @@ export default [
       'craft-sources/no-inline-source-auth-check': 'error',
 
       // Custom style rule — use z-index token scale instead of hardcoded literals
-      'craft-styles/no-hardcoded-z-index': 'error',
+      'archstudio-styles/no-hardcoded-z-index': 'error',
 
       // Custom style rule — enforce approved shadow classes/tokens only
-      'craft-styles/no-nonstandard-shadows': ['error', {
+      'archstudio-styles/no-nonstandard-shadows': ['error', {
         allowedClasses: [
           'shadow-none',
           'shadow-xs',
@@ -155,7 +155,7 @@ export default [
       'src/renderer/playground/**/*.{ts,tsx}',
     ],
     rules: {
-      'craft-styles/no-nonstandard-shadows': 'off',
+      'archstudio-styles/no-nonstandard-shadows': 'off',
     },
   },
 
@@ -166,16 +166,16 @@ export default [
       'no-restricted-imports': ['error', {
         paths: [
           {
-            name: '@craft-agent/shared/codex',
-            message: 'Use provider-agnostic APIs from @craft-agent/shared/agent/backend instead.',
+            name: '@archstudio/shared/codex',
+            message: 'Use provider-agnostic APIs from @archstudio/shared/agent/backend instead.',
           },
           {
-            name: '@craft-agent/shared/agent/claude-agent',
-            message: 'Provider backends must stay behind @craft-agent/shared/agent/backend.',
+            name: '@archstudio/shared/agent/claude-agent',
+            message: 'Provider backends must stay behind @archstudio/shared/agent/backend.',
           },
           {
-            name: '@craft-agent/shared/agent/pi-agent',
-            message: 'Provider backends must stay behind @craft-agent/shared/agent/backend.',
+            name: '@archstudio/shared/agent/pi-agent',
+            message: 'Provider backends must stay behind @archstudio/shared/agent/backend.',
           },
         ],
       }],
@@ -189,7 +189,7 @@ export default [
       'no-restricted-syntax': ['error',
         {
           selector: "CallExpression[callee.name='fetch']",
-          message: 'Do not call provider APIs directly in Electron model fetchers. Delegate to fetchBackendModels() from @craft-agent/shared/agent/backend.',
+          message: 'Do not call provider APIs directly in Electron model fetchers. Delegate to fetchBackendModels() from @archstudio/shared/agent/backend.',
         },
         {
           selector: "ImportDeclaration[source.value='@anthropic-ai/claude-agent-sdk']",

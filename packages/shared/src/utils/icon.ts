@@ -17,7 +17,11 @@
  * - Relative paths: "./icon.svg", "/path/to/icon"
  */
 
-import { existsSync, writeFileSync } from 'fs';
+// Namespace import (not `{ existsSync, ... }`): a named import destructures
+// the property at module top-level. This module is transitively reachable
+// from the Electron renderer bundle, where Vite externalizes `fs` behind a
+// proxy that throws on property access.
+import * as fs from 'fs';
 import { join, extname } from 'path';
 import { debug } from './debug.ts';
 
@@ -92,7 +96,7 @@ export function validateIconValue(icon: unknown, context: string = 'Icon'): stri
 export function findIconFile(dir: string): string | undefined {
   for (const ext of ICON_EXTENSIONS) {
     const iconPath = join(dir, `icon${ext}`);
-    if (existsSync(iconPath)) {
+    if (fs.existsSync(iconPath)) {
       return iconPath;
     }
   }
@@ -167,7 +171,7 @@ export async function downloadIcon(
     // Read the response body and write to file
     const buffer = await response.arrayBuffer();
     const iconPath = join(targetDir, `${filenameBase}${ext}`);
-    writeFileSync(iconPath, Buffer.from(buffer));
+    fs.writeFileSync(iconPath, Buffer.from(buffer));
 
     debug(`[${context}] Icon downloaded successfully:`, iconPath);
     return iconPath;

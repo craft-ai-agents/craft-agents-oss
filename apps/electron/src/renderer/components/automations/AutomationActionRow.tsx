@@ -11,7 +11,7 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { THINKING_LEVELS } from '@craft-agent/shared/agent/thinking-levels'
+import { THINKING_LEVELS } from '@archstudio/shared/agent/thinking-levels'
 import type { AutomationAction, PromptAction } from './types'
 import { ActionTypeIcon } from './ActionTypeIcon'
 import { DEFAULT_WEBHOOK_METHOD } from './constants'

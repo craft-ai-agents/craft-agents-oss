@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
+import { releaseBrowserOwnershipOnForcedStop } from '@archstudio/server-core/domain'
 
 describe('releaseBrowserOwnershipOnForcedStop', () => {
   it('clears visuals and unbinds session ownership', async () => {

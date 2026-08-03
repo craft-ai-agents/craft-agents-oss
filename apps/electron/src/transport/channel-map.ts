@@ -91,6 +91,7 @@ export const CHANNEL_MAP = {
   readUserAttachment: invoke(RPC_CHANNELS.file.READ_USER_ATTACHMENT),
   storeAttachment: invoke(RPC_CHANNELS.file.STORE_ATTACHMENT),
   generateThumbnail: invoke(RPC_CHANNELS.file.GENERATE_THUMBNAIL),
+  writeFile: invoke(RPC_CHANNELS.file.WRITE),
 
   // Theme
   getSystemTheme: invoke(RPC_CHANNELS.theme.GET_SYSTEM_PREFERENCE),
@@ -99,6 +100,7 @@ export const CHANNEL_MAP = {
   // System
   getVersions: invoke(RPC_CHANNELS.system.VERSIONS),
   getHomeDir: invoke(RPC_CHANNELS.system.HOME_DIR),
+  getConfigDir: invoke(RPC_CHANNELS.system.CONFIG_DIR),
   isDebugMode: invoke(RPC_CHANNELS.system.IS_DEBUG_MODE),
 
   // Auto-update
@@ -143,6 +145,8 @@ export const CHANNEL_MAP = {
   exchangeClaudeCode: invoke(RPC_CHANNELS.onboarding.EXCHANGE_CLAUDE_CODE),
   hasClaudeOAuthState: invoke(RPC_CHANNELS.onboarding.HAS_CLAUDE_OAUTH_STATE),
   clearClaudeOAuthState: invoke(RPC_CHANNELS.onboarding.CLEAR_CLAUDE_OAUTH_STATE),
+  getLastConnectedProvider: invoke(RPC_CHANNELS.onboarding.GET_CONNECTED_PROVIDER),
+  setLastConnectedProvider: invoke(RPC_CHANNELS.onboarding.SET_CONNECTED_PROVIDER),
   deferSetup: invoke(RPC_CHANNELS.onboarding.DEFER_SETUP),
 
   // ChatGPT OAuth
@@ -195,6 +199,8 @@ export const CHANNEL_MAP = {
 
   // Server filesystem browsing (remote mode)
   listServerDirectory: invoke(RPC_CHANNELS.fs.LIST_DIRECTORY),
+  // Working-directory file browser (lists files + dirs with metadata)
+  listDirectoryFiles: invoke(RPC_CHANNELS.fs.READ_DIRECTORY),
 
   // Debug logging
   debugLog: invoke(RPC_CHANNELS.debug.LOG),
@@ -216,6 +222,19 @@ export const CHANNEL_MAP = {
   watchSessionFiles: invoke(RPC_CHANNELS.sessions.WATCH_FILES),
   unwatchSessionFiles: invoke(RPC_CHANNELS.sessions.UNWATCH_FILES),
   onSessionFilesChanged: listener(RPC_CHANNELS.sessions.FILES_CHANGED),
+
+  // Media Lab — server-side cursor-paginated list (replaces the per-session
+  // getSessionFiles fan-out with one typed request). The AbortSignal is
+  // duck-typed and stripped before serialization by the transport; the
+  // typed request only carries {kind, cursor, limit}.
+  mediaList: invoke(RPC_CHANNELS.media.LIST),
+  comfyHealth: invoke(RPC_CHANNELS.media.COMFY_HEALTH),
+  comfyStart: invoke(RPC_CHANNELS.media.COMFY_START),
+  comfyWorkflows: invoke(RPC_CHANNELS.media.COMFY_WORKFLOWS),
+  comfyArtifacts: invoke(RPC_CHANNELS.media.COMFY_ARTIFACTS),
+  comfyRun: invoke(RPC_CHANNELS.media.COMFY_RUN),
+  comfyStatus: invoke(RPC_CHANNELS.media.COMFY_STATUS),
+  comfyCancel: invoke(RPC_CHANNELS.media.COMFY_CANCEL),
 
   // Sources
   getSources: invoke(RPC_CHANNELS.sources.GET),
@@ -311,6 +330,10 @@ export const CHANNEL_MAP = {
   // Tools settings
   getBrowserToolEnabled: invoke(RPC_CHANNELS.tools.GET_BROWSER_TOOL_ENABLED),
   setBrowserToolEnabled: invoke(RPC_CHANNELS.tools.SET_BROWSER_TOOL_ENABLED),
+  getLocalMcpEnabled: invoke(RPC_CHANNELS.tools.GET_LOCAL_MCP_ENABLED),
+  setLocalMcpEnabled: invoke(RPC_CHANNELS.tools.SET_LOCAL_MCP_ENABLED),
+  getAllowRemoteEvaluate: invoke(RPC_CHANNELS.tools.GET_ALLOW_REMOTE_EVALUATE),
+  setAllowRemoteEvaluate: invoke(RPC_CHANNELS.tools.SET_ALLOW_REMOTE_EVALUATE),
 
   // Prompt caching & context
   getExtendedPromptCache: invoke(RPC_CHANNELS.caching.GET_EXTENDED_PROMPT_CACHE),
@@ -337,11 +360,54 @@ export const CHANNEL_MAP = {
 
   // Git
   getGitBranch: invoke(RPC_CHANNELS.git.GET_BRANCH),
+  getGitStatus: invoke(RPC_CHANNELS.git.STATUS),
+  getFileGitDiff: invoke(RPC_CHANNELS.git.FILE_DIFF),
+  getGitUserName: invoke(RPC_CHANNELS.git.GET_USER_NAME),
   checkGitBash: invoke(RPC_CHANNELS.gitbash.CHECK),
   browseForGitBash: invoke(RPC_CHANNELS.gitbash.BROWSE),
   setGitBashPath: invoke(RPC_CHANNELS.gitbash.SET_PATH),
+  runArchCommand: invoke(RPC_CHANNELS.archCommand.RUN),
+  killArchCommand: invoke(RPC_CHANNELS.archCommand.KILL),
 
-  // Menu actions
+  // Memory
+  listMemories: invoke(RPC_CHANNELS.memory.LIST),
+  getMemory: invoke(RPC_CHANNELS.memory.GET),
+  createMemory: invoke(RPC_CHANNELS.memory.CREATE),
+  updateMemory: invoke(RPC_CHANNELS.memory.UPDATE),
+  archiveMemory: invoke(RPC_CHANNELS.memory.ARCHIVE),
+  restoreMemory: invoke(RPC_CHANNELS.memory.RESTORE),
+  deleteMemory: invoke(RPC_CHANNELS.memory.DELETE),
+  searchMemories: invoke(RPC_CHANNELS.memory.SEARCH),
+  getMemoryGraph: invoke(RPC_CHANNELS.memory.GRAPH),
+  getMemoryStats: invoke(RPC_CHANNELS.memory.STATS),
+  importMemoriesFromVault: invoke(RPC_CHANNELS.memory.IMPORT),
+  getVaultInfo: invoke(RPC_CHANNELS.memory.VAULT_GET),
+  setVaultPath: invoke(RPC_CHANNELS.memory.VAULT_SET),
+  openVaultFolder: invoke(RPC_CHANNELS.memory.VAULT_OPEN),
+  syncVault: invoke(RPC_CHANNELS.memory.VAULT_SYNC),
+  getVaultWatcherStatus: invoke(RPC_CHANNELS.memory.VAULT_WATCHER_STATUS),
+  createMemoryEdge: invoke(RPC_CHANNELS.memory.EDGE_CREATE),
+  deleteMemoryEdge: invoke(RPC_CHANNELS.memory.EDGE_DELETE),
+  getMemoryEdges: invoke(RPC_CHANNELS.memory.EDGE_LIST),
+
+  // Knowledge Galaxy (second brain)
+  buildGraph: invoke(RPC_CHANNELS.knowledge.BUILD_GRAPH),
+  getGraph: invoke(RPC_CHANNELS.knowledge.GET_GRAPH),
+  graphStatus: invoke(RPC_CHANNELS.knowledge.GRAPH_STATUS),
+  ask: invoke(RPC_CHANNELS.knowledge.ASK),
+  getConversation: invoke(RPC_CHANNELS.knowledge.GET_CONVERSATION),
+
+  // Health check persistence + heatmap
+  recordHealthCheck: invoke(RPC_CHANNELS.health.RECORD),
+  getHealthHeatmap: invoke(RPC_CHANNELS.health.HEATMAP),
+  getHealthHeatmapAll: invoke(RPC_CHANNELS.health.HEATMAP_ALL),
+
+  compilePrompt: invoke(RPC_CHANNELS.prompts.COMPILE),
+  invalidatePromptCache: invoke(RPC_CHANNELS.prompts.INVALIDATE),
+  resolveWorkspaceContext: invoke(RPC_CHANNELS.prompts.RESOLVE_CONTEXT),
+  onContextFilesChanged: listener(RPC_CHANNELS.prompts.CONTEXT_FILES_CHANGED),
+
+  // Browser pane
   menuQuit: invoke(RPC_CHANNELS.menu.QUIT),
   menuNewWindow: invoke(RPC_CHANNELS.menu.NEW_WINDOW),
   menuMinimize: invoke(RPC_CHANNELS.menu.MINIMIZE),
@@ -382,6 +448,11 @@ export const CHANNEL_MAP = {
   testLlmConnection: invoke(RPC_CHANNELS.llmConnections.TEST),
   setDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_DEFAULT),
   setWorkspaceDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT),
+
+  // LLM Inference history (real request data for ProvidersPanel sparkline)
+  getLlmInferenceHistory: invoke(RPC_CHANNELS.llmInference.HISTORY),
+  getLlmInferenceHistoryAll: invoke(RPC_CHANNELS.llmInference.HISTORY_ALL),
+  onLlmInferenceChanged: listener(RPC_CHANNELS.llmInference.UPDATED),
 
   // Projects
   getProjects: invoke(RPC_CHANNELS.projects.GET),

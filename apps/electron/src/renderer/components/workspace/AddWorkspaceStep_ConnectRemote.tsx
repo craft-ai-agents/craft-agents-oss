@@ -50,7 +50,7 @@ async function resolveUniqueSlug(baseName: string): Promise<{ slug: string; path
 }
 
 /**
- * AddWorkspaceStep_ConnectRemote - Connect to a remote Craft Agent Server
+ * AddWorkspaceStep_ConnectRemote - Connect to a remote ARCHstudio Server
  *
  * Two paths:
  * 1. Connect to existing workspace — select from dropdown, no name needed, auto-resolve local slug
@@ -69,7 +69,7 @@ export function AddWorkspaceStep_ConnectRemote({
   const isReconnectMode = !!reconnectWorkspace
   const [serverUrl, setServerUrl] = useState(initialUrl ?? '')
   const [token, setToken] = useState(initialToken ?? '')
-  const [homeDir, setHomeDir] = useState('')
+  const [configDir, setConfigDir] = useState('')
   const [testState, setTestState] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle')
   const [testError, setTestError] = useState<string | null>(null)
   const [remoteWorkspaces, setRemoteWorkspaces] = useState<Array<{ id: string; name: string }>>([])
@@ -79,7 +79,7 @@ export function AddWorkspaceStep_ConnectRemote({
   const selectPortalRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    window.electronAPI.getHomeDir().then(setHomeDir)
+    window.electronAPI.getConfigDir().then(setConfigDir)
   }, [])
 
   const isCreateNew = selectedValue === CREATE_NEW_VALUE
@@ -146,8 +146,8 @@ export function AddWorkspaceStep_ConnectRemote({
       }
     }
 
-    if (!homeDir) return
-    const defaultBasePath = `${homeDir}/.craft-agent/workspaces`
+    if (!configDir) return
+    const defaultBasePath = `${configDir}/workspaces`
 
     if (isCreateNew || isFreshServer) {
       // Create new workspace on remote server via direct RPC, then connect locally
@@ -173,7 +173,7 @@ export function AddWorkspaceStep_ConnectRemote({
       const finalPath = path || `${defaultBasePath}/${slug}`
       await onCreate(finalPath, selectedWorkspace.name, { url: serverUrl, token, remoteWorkspaceId: selectedWorkspace.id })
     }
-  }, [serverUrl, token, homeDir, isCreateNew, isFreshServer, newWorkspaceName, selectedWorkspace, onCreate, isReconnectMode, onUpdate, reconnectWorkspace])
+  }, [serverUrl, token, configDir, isCreateNew, isFreshServer, newWorkspaceName, selectedWorkspace, onCreate, isReconnectMode, onUpdate, reconnectWorkspace])
 
   const canConnect = testState === 'ok' && !isCreating && (
     isReconnectMode ? true :
@@ -204,7 +204,7 @@ export function AddWorkspaceStep_ConnectRemote({
         title={isReconnectMode ? t("workspace.reconnect", { name: reconnectWorkspace!.name }) : "Connect to remote server"}
         description={isReconnectMode
           ? "Update the server URL or token to restore the connection."
-          : "Connect to a remote Craft Agent Server for this workspace."}
+          : "Connect to a remote ARCHstudio Server for this workspace."}
       />
 
       <div className="mt-6 w-full space-y-5">

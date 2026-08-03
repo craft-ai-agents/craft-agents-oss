@@ -62,6 +62,14 @@ export function createScriptRuntimeEnv(
   env.TEMP = tmpDir;
 
   if (options.language === 'python3') {
+    // uv creates an isolated interpreter environment; inherited interpreter
+    // controls can mix incompatible host packages or point Python at another
+    // installation before uv's environment is active.
+    const pythonControlVars = new Set(['PYTHONPATH', 'PYTHONHOME', 'VIRTUAL_ENV']);
+    for (const key of Object.keys(env)) {
+      if (pythonControlVars.has(key.toUpperCase())) delete env[key];
+    }
+
     const uvCacheDir = join(dataDir, '.uv-cache');
     const xdgCacheHome = join(dataDir, '.cache');
     const pythonPyCachePrefix = join(dataDir, '.pycache');

@@ -488,7 +488,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   const handleOpenInNewWindow = React.useCallback(async () => {
     const route = routes.view.allSessions(sessionId)
     const separator = route.includes('?') ? '&' : '?'
-    const url = `craftagents://${route}${separator}window=focused`
+    const url = `archstudio://${route}${separator}window=focused`
     try {
       await window.electronAPI?.openUrl(url)
     } catch (error) {
@@ -576,11 +576,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
               <Link2Off className="h-3.5 w-3.5" />
               <span className="flex-1">{t('sessionMenu.stopSharing')}</span>
             </StyledDropdownMenuItem>
-            <StyledDropdownMenuSeparator />
-            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs/go-further/sharing')}>
-              <Info className="h-3.5 w-3.5" />
-              <span className="flex-1">{t('chat.learnMore')}</span>
-            </StyledDropdownMenuItem>
           </>
         ) : (
           <>
@@ -589,11 +584,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 <path d="M8 8.53809C6.74209 8.60866 5.94798 8.80911 5.37868 9.37841C4.5 10.2571 4.5 11.6713 4.5 14.4997V15.4997C4.5 18.3282 4.5 19.7424 5.37868 20.6211C6.25736 21.4997 7.67157 21.4997 10.5 21.4997H13.5C16.3284 21.4997 17.7426 21.4997 18.6213 20.6211C19.5 19.7424 19.5 18.3282 19.5 15.4997V14.4997C19.5 11.6713 19.5 10.2571 18.6213 9.37841C18.052 8.80911 17.2579 8.60866 16 8.53809M12 14V3.5M9.5 5.5C9.99903 4.50411 10.6483 3.78875 11.5606 3.24093C11.7612 3.12053 11.8614 3.06033 12 3.06033C12.1386 3.06033 12.2388 3.12053 12.4394 3.24093C13.3517 3.78875 14.001 4.50411 14.5 5.5" />
               </svg>
               <span className="flex-1">{t('chat.shareOnline')}</span>
-            </StyledDropdownMenuItem>
-            <StyledDropdownMenuSeparator />
-            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs/go-further/sharing')}>
-              <Info className="h-3.5 w-3.5" />
-              <span className="flex-1">{t('chat.learnMore')}</span>
             </StyledDropdownMenuItem>
           </>
         )}

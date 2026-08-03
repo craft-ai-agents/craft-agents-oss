@@ -40,6 +40,7 @@ import {
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
+  DrawerDescription,
   DrawerClose,
 } from '@/components/ui/drawer'
 import { HeaderIconButton } from '@/components/ui/HeaderIconButton'
@@ -50,8 +51,8 @@ import {
   filterItems as filterLabelMenuItems,
   type LabelMenuItem,
 } from '@/components/ui/label-menu-utils'
-import { findLabelById } from '@craft-agent/shared/labels'
-import type { LabelConfig } from '@craft-agent/shared/labels'
+import { findLabelById } from '@archstudio/shared/labels'
+import type { LabelConfig } from '@archstudio/shared/labels'
 import { type SessionStatus, type SessionStatusId } from '@/config/session-status-config'
 import type { ChatGroupingMode } from './SessionList'
 
@@ -196,7 +197,12 @@ export function CompactSessionListFilter({
 
       <DrawerContent className="max-h-[75vh]">
         <DrawerHeader className="flex flex-row items-center justify-between gap-3 !text-left">
-          <DrawerTitle>{t('sidebar.filterChats')}</DrawerTitle>
+          <div className="min-w-0 flex-1">
+            <DrawerTitle>{t('sidebar.filterChats')}</DrawerTitle>
+            <DrawerDescription className="sr-only">
+              Filter sessions by status or label and choose how they are grouped.
+            </DrawerDescription>
+          </div>
           {hasUserFilter && (
             <button
               type="button"

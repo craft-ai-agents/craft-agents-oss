@@ -12,9 +12,9 @@ import { toast } from 'sonner'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@archstudio/ui'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
-import type { ServerConfig, ServerStatus } from '@craft-agent/shared/config/server-config'
+import type { ServerConfig, ServerStatus } from '@archstudio/shared/config/server-config'
 
 import {
   SettingsSection,

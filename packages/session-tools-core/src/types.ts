@@ -5,6 +5,9 @@
  * Claude (in-process) and Codex (subprocess) implementations.
  */
 
+import type { SourceConnectionStatus } from '@archstudio/shared/sources/types';
+export type { SourceConnectionStatus };
+
 // ============================================================
 // Credential Input Modes
 // ============================================================
@@ -297,7 +300,15 @@ export interface LocalSourceConfig {
 }
 
 /**
- * Connection status for sources
+ * Outcome vocabulary for the `source_test` connection probe.
+ *
+ * This is the TOOL'S INTERNAL vocabulary, not the value persisted on a source.
+ * It is deliberately a different set from `SourceConnectionStatus` (the shape
+ * the rest of the app reads): the probe distinguishes "endpoint answered but
+ * unusably" ('disconnected') from "never ran" ('unknown'), a distinction the UI
+ * has no use for. Convert at the persistence boundary with
+ * `toSourceConnectionStatus` in handlers/source-test.ts — never assign one of
+ * these straight to `SourceConfig.connectionStatus`.
  */
 export type ConnectionStatus = 'connected' | 'disconnected' | 'error' | 'unknown';
 
@@ -321,7 +332,8 @@ export interface SourceConfig {
   // Display fields
   tagline?: string;
   icon?: string; // URL, emoji, or omitted for local file
-  // Connection tracking
-  connectionStatus?: ConnectionStatus;
+  // Connection tracking. Uses the canonical persisted vocabulary shared with
+  // the rest of the app — NOT the probe-local `ConnectionStatus` above.
+  connectionStatus?: SourceConnectionStatus;
   connectionError?: string;
 }

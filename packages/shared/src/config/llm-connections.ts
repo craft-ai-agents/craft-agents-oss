@@ -201,6 +201,12 @@ export interface LlmConnection {
 
   // --- Timestamps ---
 
+  /**
+   * When true, this connection was set up through the local-model (Ollama) onboarding path.
+   * The UI uses this flag to show a more specific display name (e.g. "Ollama" vs "Anthropic API").
+   */
+  isLocalModel?: boolean;
+
   /** Timestamp when connection was created */
   createdAt: number;
 

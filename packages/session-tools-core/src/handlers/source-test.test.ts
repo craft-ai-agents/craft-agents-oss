@@ -415,7 +415,10 @@ describe('source_test API connection branches', () => {
     ) as SourceConfig;
     // The enabled flag must not be flipped on a failed probe.
     expect(persisted.enabled).toBe(false);
-    expect(persisted.connectionStatus).toBe('disconnected');
+    // A soft failure persists as 'failed' — the probe ran and did not succeed.
+    // 'disconnected' is this tool's internal probe vocabulary and is not a
+    // valid SourceConnectionStatus.
+    expect(persisted.connectionStatus).toBe('failed');
   });
 
   it('404 → disconnected, NOT auto-enabled, activation NOT called', async () => {
@@ -695,6 +698,36 @@ describe('source_test HTTP MCP probe credential forwarding (regression for #720)
     expect(calls[0]?.headers).toEqual({ 'X-Api-Key': 'k1' });
     expect(calls[0]?.accessToken).toBeUndefined();
     expect(cred.refreshCalls).toBe(0);
+  });
+});
+
+describe('source_test MCP error normalization', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'source-test-mcp-errors-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('persists normalized MCP connection errors for http sources', async () => {
+    writeHttpMcpSource(tempDir, 'broken-mcp');
+
+    const ctx = createCtx(tempDir, {
+      validateMcpConnection: async () => ({ success: false, error: 'MCP connection failed health check: 404 Not Found' }),
+    });
+
+    const result = await handleSourceTest(ctx, { sourceSlug: 'broken-mcp', autoEnable: false });
+    const text = result.content[0]?.text ?? '';
+
+    expect(text).toContain('MCP server endpoint not found. Check that the URL is correct and the server is online.');
+
+    const persisted = JSON.parse(
+      readFileSync(join(tempDir, 'sources', 'broken-mcp', 'config.json'), 'utf-8')
+    ) as SourceConfig;
+    expect(persisted.connectionError).toBe('MCP server endpoint not found. Check that the URL is correct and the server is online.');
   });
 });
 

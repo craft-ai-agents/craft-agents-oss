@@ -1,8 +1,8 @@
 import { join } from 'path'
 import { existsSync, readdirSync, statSync } from 'fs'
-import { RPC_CHANNELS, type SkillFile } from '@craft-agent/shared/protocol'
-import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import { RPC_CHANNELS, type SkillFile } from '@archstudio/shared/protocol'
+import { getWorkspaceByNameOrId } from '@archstudio/shared/config'
+import type { RpcServer } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
 export const HANDLED_CHANNELS = [
@@ -27,7 +27,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     const effectiveWorkingDir = workingDirectory && existsSync(workingDirectory)
       ? workingDirectory
       : undefined
-    const { loadAllSkills } = await import('@craft-agent/shared/skills')
+    const { loadAllSkills } = await import('@archstudio/shared/skills')
     const skills = loadAllSkills(workspace.rootPath, effectiveWorkingDir)
     deps.platform.logger?.info(`SKILLS_GET: Loaded ${skills.length} skills from ${workspace.rootPath}`)
     return skills
@@ -41,7 +41,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       return []
     }
 
-    const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
+    const { getWorkspaceSkillsPath } = await import('@archstudio/shared/workspaces')
 
     const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
     const skillDir = join(skillsDir, skillSlug)
@@ -87,7 +87,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { deleteSkill } = await import('@craft-agent/shared/skills')
+    const { deleteSkill } = await import('@archstudio/shared/skills')
     deleteSkill(workspace.rootPath, skillSlug)
     deps.platform.logger?.info(`Deleted skill: ${skillSlug}`)
   })
@@ -98,7 +98,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     if (!workspace) throw new Error('Workspace not found')
     if (workspace.remoteServer) throw new Error('Open in editor is not available for remote workspaces')
 
-    const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
+    const { getWorkspaceSkillsPath } = await import('@archstudio/shared/workspaces')
 
     const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
     const skillFile = join(skillsDir, skillSlug, 'SKILL.md')
@@ -111,7 +111,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     if (!workspace) throw new Error('Workspace not found')
     if (workspace.remoteServer) throw new Error('Show in Finder is not available for remote workspaces')
 
-    const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
+    const { getWorkspaceSkillsPath } = await import('@archstudio/shared/workspaces')
 
     const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
     const skillDir = join(skillsDir, skillSlug)

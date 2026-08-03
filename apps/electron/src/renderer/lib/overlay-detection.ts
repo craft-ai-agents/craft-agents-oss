@@ -39,7 +39,7 @@ const OVERLAY_SELECTORS = [
   // Inline menus (@mention, /slash, #label autocomplete)
   '[data-inline-menu]',
 
-  // Dialog-mode islands (from @craft-agent/ui Island primitive)
+  // Dialog-mode islands (from @archstudio/ui Island primitive)
   '[data-ca-island-dialog="true"][data-state="open"]',
 ]
 

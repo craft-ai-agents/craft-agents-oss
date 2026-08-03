@@ -1,0 +1,86 @@
+/**
+ * UI density.
+ *
+ * `Compact UI` used to be a placebo: it toggled a `compact-ui` class on <html>
+ * that no stylesheet consumed. This is the real implementation.
+ *
+ * ── Why a multiplier rather than a second token set ──────────────────────
+ *
+ * Spacing in this app lives in three places, and only one of them is the
+ * design-system scale:
+ *
+ *   ~2670  Tailwind spacing utilities in TSX  (p-3, gap-2, …)
+ *   ~790   hardcoded px in hand-written panel CSS
+ *   ~32    var(--ds-space-N) references
+ *
+ * Overriding only `--ds-space-*` would move ~1% of the spacing in the app —
+ * near enough to a placebo to be dishonest. So density is expressed as a
+ * single scalar, `--density-scale`, and applied at all three layers:
+ *
+ *   1. `--spacing`      Tailwind v4 compiles every spacing utility to
+ *                       `calc(var(--spacing) * N)`, so redefining it here
+ *                       rescales all of them at once.
+ *   2. `--ds-space-*`   the design-system scale.
+ *   3. `--density-scale` hand-written CSS multiplies its own px values by
+ *                       this, e.g. `padding: calc(16px * var(--density-scale))`.
+ *
+ * ── Why comfortable is exactly 1 ─────────────────────────────────────────
+ *
+ * At `--density-scale: 1` every `calc(Npx * var(--density-scale))` collapses
+ * to `Npx`. The default rendering is therefore bit-identical to what it was
+ * before density existed, so converting a stylesheet cannot regress the
+ * default appearance — only compact mode changes.
+ *
+ * ── What is deliberately NOT scaled ──────────────────────────────────────
+ *
+ * Border widths, icon sizes, font sizes, radii and z-indices. Compact means
+ * "less air", not "smaller everything": scaling text or hairlines makes the
+ * UI blurry and harder to read rather than denser. Scrollbar and hit-target
+ * minimums below are floored for the same reason.
+ */
+
+:root {
+  /**
+   * Multiplier applied to spacing. 1 = comfortable (default).
+   * Declared on :root so hand-written CSS can rely on it existing even before
+   * a density has been chosen.
+   */
+  --density-scale: 1;
+}
+
+:root[data-density='compact'] {
+  /* 0.8 removes a fifth of the padding everywhere. Tighter values (0.6–0.7)
+     start closing the gap between adjacent hit targets in the session list
+     and the settings rows, which reads as broken rather than dense. */
+  --density-scale: 0.8;
+
+  /* 1. Tailwind v4 spacing scale — see header. 0.25rem * 0.8. */
+  --spacing: 0.2rem;
+
+  /* 2. Design-system scale. Written out rather than computed so the values
+        stay whole pixels; calc() here would produce 9.6px-style fractions
+        that blur borders on non-integer DPI. */
+  --ds-space-1: 3px;
+  --ds-space-2: 6px;
+  --ds-space-3: 10px;
+  --ds-space-4: 13px;
+  --ds-space-5: 16px;
+  --ds-space-6: 22px;
+}
+
+/**
+ * Compact-mode structural adjustments that a pure multiplier cannot express.
+ *
+ * These are minimums and fixed heights that were authored as single values
+ * rather than as padding, so nothing in the scale reaches them.
+ */
+:root[data-density='compact'] {
+  /* Row heights across list surfaces. */
+  --ds-row-height: 30px;
+  --ds-row-height-lg: 38px;
+}
+
+:root {
+  --ds-row-height: 36px;
+  --ds-row-height-lg: 46px;
+}

@@ -7,16 +7,16 @@
  * locally-connected renderers and returns the full instance list from LIST.
  *
  * The reason: a renderer's transport-level workspaceId is always the *local*
- * Craft Agents window's id (set by updateClientWorkspace), but remote-bridged
+ * ARCHstudio window's id (set by updateClientWorkspace), but remote-bridged
  * tabs are stamped with the *remote* server's workspaceId. A workspace-scoped
  * broadcast or LIST filter would silently drop those events because the two
  * ids never match. The renderer knows both ids and filters correctly.
  */
 
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import type { RpcServer } from '@archstudio/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
-import type { BrowserInstanceInfo } from '@craft-agent/shared/protocol'
+import type { BrowserInstanceInfo } from '@archstudio/shared/protocol'
 
 mock.module('electron', () => ({
   ipcMain: { handle: () => {}, on: () => {} },
@@ -180,7 +180,7 @@ describe('browser handler — workspace filtering', () => {
 
     it('returns ALL instances regardless of ctx.workspaceId (renderer filters)', async () => {
       // The server-side filter is intentionally absent: ctx.workspaceId is the
-      // local Craft Agents window's workspace id, but remote-bridged tabs are
+      // local ARCHstudio window's workspace id, but remote-bridged tabs are
       // stamped with the remote server's workspace id. Filtering here would
       // hide those tabs. The renderer applies filterInstancesForWorkspace,
       // which accepts both ids.

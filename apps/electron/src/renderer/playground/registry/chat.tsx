@@ -2,7 +2,7 @@ import * as React from 'react'
 import type { ComponentEntry } from './types'
 import { AttachmentPreview } from '@/components/app-shell/AttachmentPreview'
 import { SetupAuthBanner } from '@/components/app-shell/SetupAuthBanner'
-import { TurnCard, type ActivityItem } from '@craft-agent/ui'
+import { TurnCard, type ActivityItem } from '@archstudio/ui'
 import type { BackgroundTask } from '@/components/app-shell/ActiveTasksBar'
 import { ActiveOptionBadges } from '@/components/app-shell/ActiveOptionBadges'
 import { ChatInputZone, InputContainer } from '@/components/app-shell/input'
@@ -12,7 +12,7 @@ import { EmptyStateHint, getHintCount, getHintTemplate } from '@/components/chat
 import { Button } from '@/components/ui/button'
 import { motion } from 'motion/react'
 import { ArrowUp, Paperclip, ChevronDown, Circle, Sparkles } from 'lucide-react'
-import type { LabelConfig } from '@craft-agent/shared/labels'
+import type { LabelConfig } from '@archstudio/shared/labels'
 import type { SessionStatus } from '@/config/session-status-config'
 import type { FileAttachment, PermissionRequest, PermissionMode } from '../../../shared/types'
 import { cn } from '@/lib/utils'
@@ -562,7 +562,7 @@ interface InputContainerPlaygroundProps {
 function InputContainerPlayground({
   disabled = false,
   isProcessing = false,
-  placeholder = 'Message Craft Agent...',
+  placeholder = 'Message ARCHstudio...',
   currentModel = 'claude-sonnet-4-6',
   permissionMode = 'ask',
   workingDirectory = '/Users/demo/projects/craft-agent',
@@ -834,7 +834,7 @@ function ActiveTasksBarContext({ tasks = sampleBackgroundTasks }: ActiveTasksBar
 
         {/* Real InputContainer */}
         <InputContainer
-          placeholder="Message Craft Agent..."
+          placeholder="Message ARCHstudio..."
           disabled={false}
           isProcessing={false}
           currentModel="claude-sonnet-4-6"
@@ -937,7 +937,7 @@ function PermissionInputToggle({ autoToggle = false, autoToggleInterval = 3000, 
 
       {/* Real InputContainer - handles animation automatically */}
       <InputContainer
-        placeholder="Message Craft Agent..."
+        placeholder="Message ARCHstudio..."
         disabled={false}
         isProcessing={false}
         currentModel="claude-sonnet-4-6"
@@ -1289,7 +1289,7 @@ export const chatComponents: ComponentEntry[] = [
         name: 'placeholder',
         description: 'Textarea placeholder text',
         control: { type: 'string', placeholder: 'Message...' },
-        defaultValue: 'Message Craft Agent...',
+        defaultValue: 'Message ARCHstudio...',
       },
       {
         name: 'currentModel',
