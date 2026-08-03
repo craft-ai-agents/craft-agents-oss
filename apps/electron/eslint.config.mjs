@@ -17,6 +17,7 @@ import noDirectFileOpen from './eslint-rules/no-direct-file-open.cjs'
 import noInlineSourceAuthCheck from './eslint-rules/no-inline-source-auth-check.cjs'
 import noHardcodedZIndex from './eslint-rules/no-hardcoded-z-index.cjs'
 import noNonstandardShadows from './eslint-rules/no-nonstandard-shadows.cjs'
+import noTeleportingState from './eslint-rules/no-teleporting-state.cjs'
 
 export default [
   // Ignore patterns
@@ -85,6 +86,13 @@ export default [
           'no-nonstandard-shadows': noNonstandardShadows,
         },
       },
+      // Custom motion audit — flags raw {isOpen && <JSX>} teleporting-state
+      // renders with no AnimatePresence / animate-in / motion.* animation.
+      'archstudio-motion': {
+        rules: {
+          'no-teleporting-state': noTeleportingState,
+        },
+      },
     },
     settings: {
       react: {
@@ -132,6 +140,11 @@ export default [
         ],
         allowInlineNone: true,
       }],
+
+      // Teleporting-state audit — raw {isOpen &&}/{expanded &&} conditional
+      // renders must animate their mount (AnimatePresence, animate-in, or
+      // motion.*). See no-teleporting-state.cjs for the full semantics.
+      'archstudio-motion/no-teleporting-state': 'warn',
 
       // Enforce centralized action registry for keyboard shortcuts
       'no-restricted-imports': ['error', {

@@ -9,6 +9,8 @@ import tsParser from '@typescript-eslint/parser'
 import noHardcodedZIndex from './eslint-rules/no-hardcoded-z-index.cjs'
 import noFloatingZTokensInIsland from './eslint-rules/no-floating-z-tokens-in-island.cjs'
 import noNonstandardShadows from './eslint-rules/no-nonstandard-shadows.cjs'
+// Canonical copy lives in apps/electron/eslint-rules (tests run there).
+import noTeleportingState from '../../apps/electron/eslint-rules/no-teleporting-state.cjs'
 
 export default [
   // Ignore patterns
@@ -38,6 +40,11 @@ export default [
           'no-hardcoded-z-index': noHardcodedZIndex,
           'no-floating-z-tokens-in-island': noFloatingZTokensInIsland,
           'no-nonstandard-shadows': noNonstandardShadows,
+        },
+      },
+      'archstudio-motion': {
+        rules: {
+          'no-teleporting-state': noTeleportingState,
         },
       },
     },
@@ -75,6 +82,11 @@ export default [
         ],
         allowInlineNone: true,
       }],
+
+      // Teleporting-state audit — raw {isOpen &&}/{expanded &&} conditional
+      // renders must animate their mount (AnimatePresence, animate-in, or
+      // motion.*). See no-teleporting-state.cjs for the full semantics.
+      'archstudio-motion/no-teleporting-state': 'warn',
     },
   },
 
