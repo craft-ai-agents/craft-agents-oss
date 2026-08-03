@@ -1,5 +1,5 @@
 import * as CollapsiblePrimitive from "@radix-ui/react-collapsible"
-import { motion, AnimatePresence } from "motion/react"
+import { motion, AnimatePresence, useReducedMotion } from "motion/react"
 import * as React from "react"
 
 // Radix primitives (unchanged)
@@ -31,6 +31,11 @@ function AnimatedCollapsibleContent({
   children,
   className
 }: AnimatedCollapsibleContentProps) {
+  // Respect prefers-reduced-motion: collapse the spring to an instant
+  // state change (AnimatePresence still mounts/unmounts, just without
+  // animating). useReducedMotion updates reactively when the setting
+  // changes, so this also works mid-session.
+  const shouldReduceMotion = useReducedMotion()
   return (
     <AnimatePresence initial={false}>
       {isOpen && (
@@ -38,7 +43,7 @@ function AnimatedCollapsibleContent({
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: "auto", opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}
-          transition={springTransition}
+          transition={shouldReduceMotion ? { duration: 0 } : springTransition}
           className={className}
           style={{ clipPath: "inset(0 -20px)" }}
         >
