@@ -35,7 +35,7 @@
 ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
-import { Window } from 'happy-dom'
+import { setupTestEnvironment } from './support/test-env'
 
 // -------------------------------------------------------------------------
 // 1. Mocks — MUST register before ANY module that uses them
@@ -48,43 +48,7 @@ mock.module('pdfjs-dist', () => ({
 }))
 
 // -------------------------------------------------------------------------
-// 2. DOM setup
-// -------------------------------------------------------------------------
-const win = new Window({ url: 'http://localhost:5173', height: 900, width: 1400 })
-const doc = win.document
-
-const gs: any = globalThis
-gs.window = win
-gs.document = doc
-gs.HTMLElement = win.HTMLElement
-gs.Element = win.Element
-gs.Node = win.Node
-gs.getComputedStyle = win.getComputedStyle.bind(win)
-gs.navigator = win.navigator
-gs.requestAnimationFrame = (cb: FrameRequestCallback) =>
-  setTimeout(() => cb(Date.now()), 0)
-gs.cancelAnimationFrame = (id: number) => clearTimeout(id)
-gs.ResizeObserver = class MockResizeObserver {
-  private cb: ResizeObserverCallback
-  constructor(cb: ResizeObserverCallback) { this.cb = cb }
-  observe(target: Element) {
-    this.cb(
-      [{ contentRect: { width: 1400, height: 900 }, target } as unknown as ResizeObserverEntry],
-      this as unknown as ResizeObserver,
-    )
-  }
-  unobserve() {}
-  disconnect() {}
-}
-gs.customElements = {
-  define: () => {},
-  get: () => undefined,
-  whenDefined: () => Promise.resolve(),
-  upgrade: () => {},
-}
-
-// -------------------------------------------------------------------------
-// 3. IPC mock — deterministic 52-dir tree
+// 2. IPC mock — deterministic 52-dir tree
 // -------------------------------------------------------------------------
 const listDirectoryCalls: string[] = []
 
@@ -124,6 +88,8 @@ function buildTree(): Record<string, { name: string; path: string; type: 'file' 
 
 const tree = buildTree()
 
+const { doc, api } = setupTestEnvironment({ tree })
+
 const listDirectoryFiles = mock(async (dirPath: string) => {
   listDirectoryCalls.push(dirPath)
   const entries = tree[dirPath]
@@ -134,14 +100,12 @@ const listDirectoryFiles = mock(async (dirPath: string) => {
 const getGitBranch = mock(async () => 'main')
 const getGitStatus = mock(async () => ({ files: [] }))
 
-;(win as any).electronAPI = {
-  listDirectoryFiles,
-  getGitBranch,
-  getGitStatus,
-}
+api.listDirectoryFiles = listDirectoryFiles
+api.getGitBranch = getGitBranch
+api.getGitStatus = getGitStatus
 
 // -------------------------------------------------------------------------
-// 4. Dynamic imports — ALL modules that could trigger pdfjs-dist loads
+// 3. Dynamic imports — ALL modules that could trigger pdfjs-dist loads
 //    come AFTER the mocks above.
 // -------------------------------------------------------------------------
 const React = await import('react')

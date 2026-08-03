@@ -28,10 +28,8 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
-
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
-import { Window } from 'happy-dom'
+import { setupTestEnvironment } from './support/test-env'
 
 // -------------------------------------------------------------------------
 // 1. Module-level mocks — MUST register before any module that uses them
@@ -45,61 +43,8 @@ mock.module('pdfjs-dist', () => ({
 }))
 
 // -------------------------------------------------------------------------
-// 2. DOM setup — happy-dom provides browser globals on a single Window.
+// 2. Test environment — DOM + window.electronAPI with deterministic tree
 // -------------------------------------------------------------------------
-
-const win = new Window({ url: 'http://localhost:5173', height: 900, width: 1400 })
-const doc = win.document
-
-;(globalThis as any).window = win
-;(globalThis as any).document = doc
-;(globalThis as any).HTMLElement = win.HTMLElement
-;(globalThis as any).Element = win.Element
-;(globalThis as any).Node = win.Node
-;(globalThis as any).getComputedStyle = win.getComputedStyle.bind(win)
-;(globalThis as any).navigator = win.navigator
-;(globalThis as any).requestAnimationFrame = (cb: FrameRequestCallback) =>
-  setTimeout(() => cb(Date.now()), 0)
-;(globalThis as any).cancelAnimationFrame = (id: number) => clearTimeout(id)
-;(globalThis as any).ResizeObserver = class MockResizeObserver {
-  private cb: ResizeObserverCallback
-  constructor(cb: ResizeObserverCallback) {
-    this.cb = cb
-  }
-  observe(target: Element) {
-    this.cb(
-      [
-        {
-          contentRect: { width: 1400, height: 900 },
-          target,
-        } as unknown as ResizeObserverEntry,
-      ],
-      this as unknown as ResizeObserver,
-    )
-  }
-  unobserve() {}
-  disconnect() {}
-}
-;(globalThis as any).IntersectionObserver = class MockIntersectionObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-  takeRecords() {
-    return []
-  }
-}
-;(globalThis as any).customElements = {
-  define: () => {},
-  get: () => undefined,
-  whenDefined: () => Promise.resolve(),
-  upgrade: () => {},
-}
-
-// -------------------------------------------------------------------------
-// 3. IPC mock — deterministic 3-level tree
-// -------------------------------------------------------------------------
-
-const listDirectoryCalls: string[] = []
 
 const tree: Record<string, Array<{ name: string; path: string; type: 'file' | 'directory'; size?: number; isSymlink: boolean }>> = {
   '/test/wd': [
@@ -117,24 +62,23 @@ const tree: Record<string, Array<{ name: string; path: string; type: 'file' | 'd
   '/test/wd/subdir/nested/deep': [],
 }
 
+const { win, doc, api } = setupTestEnvironment({ tree })
+
+const listDirectoryCalls: string[] = []
 const listDirectoryFiles = mock(async (dirPath: string) => {
   listDirectoryCalls.push(dirPath)
   const entries = tree[dirPath]
   if (!entries) throw new Error(`ENOENT: ${dirPath}`)
   return { entries }
 })
-
 const getGitBranch = mock(async () => 'main')
 const getGitStatus = mock(async () => ({ files: [] }))
-
-;(win as any).electronAPI = {
-  listDirectoryFiles,
-  getGitBranch,
-  getGitStatus,
-}
+api.listDirectoryFiles = listDirectoryFiles
+api.getGitBranch = getGitBranch
+api.getGitStatus = getGitStatus
 
 // -------------------------------------------------------------------------
-// 4. Dynamic imports — all modules that trigger pdfjs-dist loads come
+// 3. Dynamic imports — all modules that trigger pdfjs-dist loads come
 //    AFTER the mocks above.
 // -------------------------------------------------------------------------
 
