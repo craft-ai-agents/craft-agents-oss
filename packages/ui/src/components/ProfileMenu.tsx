@@ -83,7 +83,7 @@ export function ProfileMenu({
       </button>
 
       {isOpen && (
-        <div id="profile-dropdown-menu" className="profile-dropdown">
+        <div id="profile-dropdown-menu" className="profile-dropdown animate-in fade-in-0 zoom-in-95 duration-100">
           <div className="profile-dropdown__header">
             <span className="profile-dropdown__email">ARCHstudio</span>
           </div>
