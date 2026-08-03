@@ -196,7 +196,15 @@ function isPathWithinDirectory(targetPath: string, baseDir: string): boolean {
     return false;
   }
 
-  const realBase = existsSync(resolvedBase) ? realpathSync.native(resolvedBase) : resolvedBase;
+  // Base directory doesn't exist on disk — there are no symlinks to escape
+  // through, so a pure logical containment check is both correct and the only
+  // option (realpath has nothing to resolve). This keeps Windows case
+  // differences and not-yet-created plans folders working.
+  if (!existsSync(resolvedBase)) {
+    return isWithin(resolvedBase, resolvedTarget);
+  }
+
+  const realBase = realpathSync.native(resolvedBase);
 
   if (existsSync(resolvedTarget)) {
     const realTarget = realpathSync.native(resolvedTarget);
@@ -1610,8 +1618,9 @@ export function extractBashWriteTarget(command: string): string | null {
 
   // Pattern 2: shell -c/-lc with inner redirect (Codex pattern, unquoted paths)
   // Match: /bin/zsh -lc "... > /path/to/file ..." or bash -c '... > /path ...'
+  // Capture allows backslashes so Windows paths (C:\Users\...) aren't truncated.
   const shellExecMatch = command.match(
-    /(?:\/bin\/)?(?:zsh|bash|sh)\s+(?:-\w+\s+)*["'].*?>\s*([^\s'"\\]+)/
+    /(?:\/bin\/)?(?:zsh|bash|sh)\s+(?:-\w+\s+)*["'].*?>\s*([^\s'"|&;]+)/
   );
   if (shellExecMatch?.[1] && shellExecMatch[1] !== '/dev/null') {
     return shellExecMatch[1];

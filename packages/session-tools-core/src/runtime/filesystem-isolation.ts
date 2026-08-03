@@ -40,7 +40,9 @@ export function buildDarwinSandboxProfile(
   sessionDir: string,
   options?: FilesystemIsolationOptions,
 ): string {
-  const escapedRoot = escapeSandboxPath(resolve(sessionDir));
+  // Sandbox profile paths are always POSIX-style; on Windows resolve() yields
+  // backslashes which would produce a broken sandbox-exec rule. Normalize to '/'.
+  const escapedRoot = escapeSandboxPath(resolve(sessionDir).replace(/\\/g, '/'));
   const profileParts = [
     '(version 1)',
     '(deny default)',

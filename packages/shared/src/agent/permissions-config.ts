@@ -46,7 +46,11 @@ let permissionsInitialized = false;
  * Reads env var dynamically so tests can override via ARCHSTUDIO_CONFIG_DIR.
  */
 export function getAppPermissionsDir(): string {
-  return join(CONFIG_DIR, 'permissions');
+  // ARCHSTUDIO_CONFIG_DIR is read dynamically so tests (and multi-instance dev)
+  // can override it without relying on CONFIG_DIR having been captured at
+  // module load in this process.
+  const configDir = process.env.ARCHSTUDIO_CONFIG_DIR || CONFIG_DIR;
+  return join(configDir, 'permissions');
 }
 
 /**

@@ -37,8 +37,11 @@ export function expandPath(inputPath: string, basePath?: string): string {
     return home;
   }
 
-  // Handle ~/ prefix
+  // Handle ~/ prefix (and the Windows portable-path ~\ variant, which
+  // toPortablePath() produces on win32)
   if (expanded.startsWith('~/')) {
+    expanded = nodePath.join(home, expanded.slice(2));
+  } else if (expanded.startsWith('~\\')) {
     expanded = nodePath.join(home, expanded.slice(2));
   }
 

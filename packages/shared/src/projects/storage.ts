@@ -355,13 +355,24 @@ export function projectExists(workspaceRootPath: string, projectSlug: string): b
 
 /**
  * Sanitize an upload filename so it stays inside the assets directory.
- * Strips path separators and leading dots; falls back to a uuid name if empty.
+ * Strips path separators, leading dots, and a Windows drive-letter prefix;
+ * falls back to a uuid name if empty.
  */
 export function sanitizeAssetFilename(filename: string): string {
   // Strip path separators AND control chars (NUL/newlines/DEL) so a crafted upload name can't
   // escape the assets dir or, once listed, forge new lines in the <project_assets> prompt block.
+  // NOTE: do NOT use basename() here — it treats backslashes as separators on Windows (so
+  // '..\..\etc\passwd' becomes 'passwd') but not on POSIX. We split on '/' ourselves and then
+  // strip remaining '\' so the result is identical on every platform ('..\..\etc\passwd' → 'etcpasswd').
   // eslint-disable-next-line no-control-regex
-  const base = basename(filename).replace(/[\\/\x00-\x1f\x7f]+/g, '').replace(/^\.+/, '');
+  const lastSegment = filename.split('/').pop() ?? '';
+  const base = lastSegment
+    .replace(/[\\\x00-\x1f\x7f]+/g, '')
+    .replace(/^\.+/, '')
+    // Drop a Windows drive-letter prefix: a full path like C:\\Users\\me\\report.pdf
+    // would otherwise keep its ':' — illegal in NTFS filenames, so the write would EINVAL.
+    // (Strip after leading dots so '..\\..\\C:\\foo' → 'foo', not 'C:foo'.)
+    .replace(/^[A-Za-z]:/, '');
   if (!base) return `asset_${randomUUID().slice(0, 8)}`;
   return base.slice(0, 255);
 }

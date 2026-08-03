@@ -211,10 +211,16 @@ export function matcherMatchesSdk(matcher: AutomationMatcher, event: AgentEvent,
  * Get process.env as a clean Record<string, string> with undefined values filtered out.
  * Avoids the unsafe `process.env as Record<string, string>` cast that turns undefined
  * values into the string "undefined".
+ *
+ * Also strips env vars whose value is the literal string "undefined": on Windows,
+ * WSL env imports leak vars like ORIGINAL_XDG_CURRENT_DESKTOP="undefined" into
+ * process.env, and those must never reach child-process envs or automation hooks.
  */
 export function cleanEnv(): Record<string, string> {
   return Object.fromEntries(
-    Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined)
+    Object.entries(process.env).filter(
+      (e): e is [string, string] => e[1] !== undefined && e[1] !== 'undefined',
+    )
   );
 }
 

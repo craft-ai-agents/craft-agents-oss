@@ -2,7 +2,7 @@ import { writeFile, rename, unlink } from 'fs/promises'
 import { dirname } from 'path'
 import type { StoredSession, SessionHeader } from './types.js'
 import { getSessionFilePath, ensureSessionsDir, ensureSessionDir } from './storage.js'
-import { toPortablePath } from '../utils/paths.js'
+import { toPortablePath, expandPath } from '../utils/paths.js'
 import { createSessionHeader, makeSessionPathPortable, readSessionHeader } from './jsonl.js'
 import { debug } from '../utils/debug.js'
 
@@ -95,10 +95,13 @@ class SessionPersistenceQueue {
 
     try {
       const { data } = entry
-      ensureSessionsDir(data.workspaceRootPath)
-      ensureSessionDir(data.workspaceRootPath, sessionId)
+      // workspaceRootPath round-trips through the JSONL as a portable `~`-prefixed
+      // path; expand it back so writes land in the real directory.
+      const workspaceRoot = expandPath(data.workspaceRootPath)
+      ensureSessionsDir(workspaceRoot)
+      ensureSessionDir(workspaceRoot, sessionId)
 
-      const filePath = getSessionFilePath(data.workspaceRootPath, sessionId)
+      const filePath = getSessionFilePath(workspaceRoot, sessionId)
 
       // Prepare session with portable paths for cross-machine compatibility
       const storageSession: StoredSession = {
