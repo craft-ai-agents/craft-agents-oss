@@ -196,7 +196,7 @@ export function HTMLPreviewOverlay({
               maxWidth: contentSize?.width ? `${contentSize.width + 128}px` : undefined,
               padding: '24px 64px 36px',
               opacity: measured ? 1 : 0,
-              transition: 'opacity 200ms ease-in',
+              transition: 'opacity 200ms var(--ds-ease-decelerate)',
             }}
           >
             <iframe
