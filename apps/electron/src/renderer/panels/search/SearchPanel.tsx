@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useAtomValue } from 'jotai'
 import { Search, MessageSquare, Loader2, FileText } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { SessionSearchResult } from '@archstudio/shared/protocol/dto'
 import { sessionMetaMapAtom, windowWorkspaceIdAtom } from '../../atoms/sessions'
 import './SearchPanel.css'
@@ -44,6 +45,10 @@ export function SearchPanel({ onSelectSession }: SearchPanelProps) {
   const [isSearching, setIsSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  // Respect prefers-reduced-motion: collapse the entrance to an instant
+  // state change (AnimatePresence still mounts/unmounts, just without
+  // animating) — same pattern as AnimatedCollapsibleContent.
+  const shouldReduceMotion = useReducedMotion()
 
   /** Guards against out-of-order responses: only the newest search may commit. */
   const searchSeq = useRef(0)
@@ -176,11 +181,21 @@ export function SearchPanel({ onSelectSession }: SearchPanelProps) {
                   Show {hidden} more {hidden === 1 ? 'match' : 'matches'}
                 </button>
               )}
-              {isOpen && result.matches.length > 3 && (
-                <button type="button" className="search-group__more animate-in fade-in-0 duration-150" onClick={() => toggle(result.sessionId)}>
-                  Collapse
-                </button>
-              )}
+              <AnimatePresence initial={false}>
+                {isOpen && result.matches.length > 3 && (
+                  <motion.button
+                    type="button"
+                    className="search-group__more"
+                    onClick={() => toggle(result.sessionId)}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15, ease: 'easeOut' }}
+                  >
+                    Collapse
+                  </motion.button>
+                )}
+              </AnimatePresence>
             </div>
           )
         })}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   Settings,
   Sparkles,
@@ -60,6 +61,10 @@ export function ProfileMenu({
   settingsItems = DEFAULT_PROFILE_SETTINGS_ITEMS,
 }: ProfileMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
+  // Respect prefers-reduced-motion: collapse the entrance to an instant
+  // state change (AnimatePresence still mounts/unmounts, just without
+  // animating) — same pattern as AnimatedCollapsibleContent.
+  const shouldReduceMotion = useReducedMotion()
 
   const toggleOpen = () => setIsOpen(!isOpen)
 
@@ -82,8 +87,16 @@ export function ProfileMenu({
         <ChevronRight size={16} className={`profile-chevron ${isOpen ? 'profile-chevron--open' : ''}`} />
       </button>
 
-      {isOpen && (
-        <div id="profile-dropdown-menu" className="profile-dropdown animate-in fade-in-0 zoom-in-95 duration-100">
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            id="profile-dropdown-menu"
+            className="profile-dropdown"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.1, ease: 'easeOut' }}
+          >
           <div className="profile-dropdown__header">
             <span className="profile-dropdown__email">ARCHstudio</span>
           </div>
@@ -107,8 +120,9 @@ export function ProfileMenu({
               )
             })}
           </ul>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
