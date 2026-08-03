@@ -1,9 +1,9 @@
 /**
  * Integration test for the count-cap guardrail on the BFS expand.
  *
- * Validates that `trimExpandedByCount` correctly trims a 52-dir expansion
- * down to `MAX_OPEN_DIRS=50`, dropping the leaf-most (deepest) entries,
- * and that the `openCountCapped` chip appears in the section header.
+ * Validates that `trimExpandedByCount` correctly trims a 60-dir expansion
+ * down to `MAX_OPEN_DIRS=50`, dropping the tail entries, and that the
+ * `openCountCapped` chip appears in the section header.
  *
  * Uses happy-dom + createRoot + act() for a full client render.
  *
@@ -12,24 +12,19 @@
  * modules.  We keep only bun:test and happy-dom as static imports;
  * everything else is dynamically imported AFTER the mocks register.
  *
- * Fixture design (52 dirs, all empty at depth 2 — fits in one BFS pass):
+ * Fixture design (60 empty dirs at depth 1 — fits in one BFS pass):
  *
  *   /test/wd
- *     ├── A                (depth 1, has 25 leaf dirs)
- *     │     ├── A-leaf-00  (depth 2, empty)
- *     │     ├── ...
- *     │     └── A-leaf-24  (depth 2, empty)
- *     └── B                (depth 1, has 25 leaf dirs)
- *           ├── B-leaf-00  (depth 2, empty)
- *           ├── ...
- *           └── B-leaf-24  (depth 2, empty)
+ *     ├── dir-00  (depth 1, empty)
+ *     ├── dir-01  (depth 1, empty)
+ *     ├── ...
+ *     └── dir-59  (depth 1, empty)
  *
- * BFS at expandDepth=2 discovers all 52 dirs.  `trimExpandedByCount`
- * sorts shallowest-first (alphabetic tiebreaker) and keeps the first 50,
- * so the dropped set is {B-leaf-24, B-leaf-23} — both at the maximum
- * depth (leaf-most), with alphabetic ordering explaining why both happen
- * to land in the B subtree (A-leaves are alphabetically before B-leaves
- * so the trim cuts from the tail end of the sort).
+ * BFS at expandDepth=2 discovers all 60 dirs.  Every dir is strictly inside
+ * the depth cap (depth 1 < 2), so the depth-shrink guard keeps them all.
+ * `trimExpandedByCount` sorts shallowest-first (alphabetic tiebreaker) and
+ * keeps the first 50, so the dropped set is {dir-50 .. dir-59} — the ten
+ * alphabetically-last entries at the single occupied depth.
  */
 
 ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
@@ -57,30 +52,22 @@ function buildTree(): Record<string, { name: string; path: string; type: 'file' 
     '/test/wd': [],
   }
 
-  // Two parent dirs, each with 25 empty leaf dirs at depth 2.
-  for (const parent of ['A', 'B'] as const) {
-    const parentPath = `/test/wd/${parent}`
+  // 60 empty directories at depth 1.  All are strictly inside the depth
+  // cap (depth 1 < expandDepth 2), so the depth-shrink guard keeps them;
+  // their count (60) exceeds DEFAULT_MAX_OPEN_DIRS=50, so the count-cap
+  // trim fires and sheds the 10 alphabetically-last dirs (dir-50..dir-59).
+  for (let i = 0; i < 60; i++) {
+    const id = String(i).padStart(2, '0')
+    const dirName = `dir-${id}`
+    const dirPath = `/test/wd/${dirName}`
     tree['/test/wd'].push({
-      name: parent,
-      path: parentPath,
+      name: dirName,
+      path: dirPath,
       type: 'directory',
       size: 0,
       isSymlink: false,
     })
-    tree[parentPath] = []
-    for (let i = 0; i < 25; i++) {
-      const id = String(i).padStart(2, '0')
-      const leafName = `${parent}-leaf-${id}`
-      const leafPath = `${parentPath}/${leafName}`
-      tree[parentPath].push({
-        name: leafName,
-        path: leafPath,
-        type: 'directory',
-        size: 0,
-        isSymlink: false,
-      })
-      tree[leafPath] = []
-    }
+    tree[dirPath] = []
   }
 
   return tree
@@ -88,7 +75,7 @@ function buildTree(): Record<string, { name: string; path: string; type: 'file' 
 
 const tree = buildTree()
 
-const { doc, api } = setupTestEnvironment({ tree })
+const { doc, api, win } = setupTestEnvironment({ tree })
 
 const listDirectoryFiles = mock(async (dirPath: string) => {
   listDirectoryCalls.push(dirPath)
@@ -258,7 +245,7 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     }
   })
 
-  it('expands 52 dirs via BFS, trims to 50 leaf-most-dropped, shows cap chip', async () => {
+  it('expands 60 dirs via BFS, trims to 50 leaf-most-dropped, shows cap chip', async () => {
     const { container, root } = await renderShell()
     lastContainer = container
     lastRoot = root as any
@@ -268,8 +255,8 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     const callsBeforeExpand = listDirectoryCalls.length
 
     // Click "Expand all" — fires the fire-and-forget runDepthBFS at the
-    // default expandDepth=2.  The BFS walks root → A → B and discovers
-    // all 52 leaf dirs without going deeper (depth >= targetDepth skip).
+    // default expandDepth=2.  The BFS walks root and discovers
+    // all 60 depth-1 dirs without going deeper (depth >= targetDepth skip).
     const expandAllBtn = findExpandAllButton(container)
     expect(expandAllBtn).not.toBeNull()
     await act(async () => {
@@ -281,7 +268,7 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     // setExpandedPaths commit can land several microtasks after the
     // click.  We poll the *post-trim* artifact (the chip) rather than
     // guessing a fixed timeout — the chip only renders once both
-    // setExpandedPaths(52) AND the count-cap useEffect have fired.
+    // setExpandedPaths(60) AND the count-cap useEffect have fired.
     let chip: Element | null = null
     for (let attempt = 0; attempt < 50; attempt++) {
       await act(async () => { await flush() })
@@ -309,7 +296,7 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     const closedBtns = Array.from(
       container.querySelectorAll('.wd-files-item[aria-expanded="false"]'),
     ) as HTMLElement[]
-    expect(closedBtns.length).toBe(2)
+    expect(closedBtns.length).toBe(10)
 
     // Extract names from the closed buttons via `.wd-files-item__name`
     // (mirrors getRowName's defensive fallback).  We deliberately don't
@@ -317,36 +304,31 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     const closedNames = closedBtns.map(getRowName)
 
     // 4. The dropped dirs are the leaf-most entries in the trim-ordering.
-    // trimExpandedByCount sorts shallowest-first with an alphabetic
-    // tiebreaker, keeps the first 50, and reverses the tail into
-    // `dropped` (deepest-first).  In our fixture:
-    //   - Sorted [depth, path-alphabetic]: A, B, A-leaf-00..24,
-    //     B-leaf-00..24 → 52 entries.
-    //   - Keep [0..49]: A, B, all 25 A-leaves, B-leaf-00..22 (23 B-leaves).
-    //   - Drop [50..51] reversed: B-leaf-24, B-leaf-23.
-    // Both B-leaf-23 and B-leaf-24 are at the maximum depth (the
-    // leaf-most level), and the alphabetic tiebreaker explains why both
-    // happen to fall in the B subtree (A-leaves sort before B-leaves at
-    // the same depth, so the trim cuts from the tail end of the sort).
-    expect(closedNames).toEqual(
-      expect.arrayContaining(['B-leaf-23', 'B-leaf-24']),
-    )
+  // trimExpandedByCount sorts shallowest-first with an alphabetic
+  // tiebreaker, keeps the first 50, and reverses the tail into
+  // `dropped` (deepest-first).  In our fixture all 60 dirs are at the
+  // same depth, so the tiebreaker is purely path-alphabetic:
+  // dir-00..dir-59.  Keep = dir-00..dir-49; Drop (last 10, reversed) =
+  // dir-59 .. dir-50.
+  expect(closedNames).toEqual(
+    expect.arrayContaining(['dir-59', 'dir-58', 'dir-57', 'dir-56', 'dir-55', 'dir-54', 'dir-53', 'dir-52', 'dir-51', 'dir-50']),
+  )
 
     // 5. Sanity: BFS fetched every uncached dir.  The IPC fires BEFORE
     // the depth-skip guard, so even leaf dirs get a listDirectoryFiles
     // call to cache their (empty) children — only the enqueue walk is
     // skipped at depth >= expandDepth (LayoutShell.tsx ~line 946).  In
-    // this fixture: 1 initial root fetch + 52 BFS fetches = 53 IPCs.
-    expect(listDirectoryCalls.length).toBe(callsBeforeExpand + 52)
+    // this fixture: 1 initial root fetch + 60 BFS fetches = 61 IPCs.
+    expect(listDirectoryCalls.length).toBe(callsBeforeExpand + 60)
     expect(listDirectoryCalls).toEqual(
-      expect.arrayContaining(['/test/wd', '/test/wd/A', '/test/wd/B']),
+      expect.arrayContaining(['/test/wd', '/test/wd/dir-00', '/test/wd/dir-01']),
     )
 
     // 6. Every leaf dir was fetched exactly once (no over-fetching).
     // If a future BFS regression caused duplicate fetches, this would
     // catch it cheaply.
-    const leafPaths = listDirectoryCalls.filter((p) => p.startsWith('/test/wd/A/A-leaf-') || p.startsWith('/test/wd/B/B-leaf-'))
-    expect(leafPaths.length).toBe(50)
+    const leafPaths = listDirectoryCalls.filter((p) => p.startsWith('/test/wd/dir-'))
+    expect(leafPaths.length).toBe(60)
 
     // 7. The chip is only ONE chip (not two).  This guards against the
     // regression where the BFS cap (MAX_EXPAND_DIRS=100) and the count
@@ -377,7 +359,7 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     lastContainer = container
     lastRoot = root as any
 
-    // Click "Expand all" — BFS discovers 52 dirs → trim to 50.
+    // Click "Expand all" — BFS discovers 60 dirs → trim to 50.
     const expandAllBtn = findExpandAllButton(container)
     expect(expandAllBtn).not.toBeNull()
     await act(async () => {
@@ -394,7 +376,7 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     }
     expect(chip).not.toBeNull()
 
-    // Find an expanded leaf dir.
+    // Find an expanded dir.
     const expandedBtns = Array.from(
       // Scoped to tree rows: the depth-selector trigger also carries
       // `aria-expanded` (correct ARIA for a popover), so an unscoped query
@@ -407,7 +389,7 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     let collapseTarget: HTMLElement | null = null
     for (const btn of expandedBtns) {
       const name = getRowName(btn)
-      if (name.startsWith('A-leaf-')) {
+      if (name.startsWith('dir-')) {
         collapseTarget = btn
         break
       }
@@ -431,12 +413,12 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     // 1. The chip is gone.
     expect(chip).toBeNull()
 
-    // 2. There are now 3 closed dirs: the 2 originally-dropped
-    //    (B-leaf-23, B-leaf-24) + the one we just collapsed.
+    // 2. There are now 11 closed dirs: the 2 originally-dropped
+    //    (the 10 originally-dropped dir-50..dir-59) + the one we just collapsed.
     const closedBtns = Array.from(
       container.querySelectorAll('.wd-files-item[aria-expanded="false"]'),
     ) as HTMLElement[]
-    expect(closedBtns.length).toBe(3)
+    expect(closedBtns.length).toBe(11)
 
     // 3. Exactly 49 directories stay expanded.
     const openBtnsAfter = Array.from(
@@ -462,7 +444,7 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     lastContainer = container
     lastRoot = root as any
 
-    // Click "Expand all" — BFS discovers 52 dirs → trim to 10 (the override).
+    // Click "Expand all" — BFS discovers 60 dirs → trim to 10 (the override).
     const expandAllBtn = findExpandAllButton(container)
     expect(expandAllBtn).not.toBeNull()
     await act(async () => {
@@ -498,11 +480,11 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     ) as HTMLElement[]
     expect(openBtns.length).toBe(10)
 
-    // 4. The dropped set is large: 52 - 10 = 42 leaf-most entries.
+    // 4. The dropped set is large: 60 - 10 = 50 leaf-most entries.
     const closedBtns = Array.from(
       container.querySelectorAll('.wd-files-item[aria-expanded="false"]'),
     ) as HTMLElement[]
-    expect(closedBtns.length).toBe(42)
+    expect(closedBtns.length).toBe(50)
   })
 
   // ---------------------------------------------------------------------
@@ -519,7 +501,7 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     lastContainer = container
     lastRoot = root as any
 
-    // First click "Expand all" to get a baseline tree with 52 dirs
+    // First click "Expand all" to get a baseline tree with 60 dirs
     // trimmed to 50.
     const expandAllBtn = findExpandAllButton(container)
     expect(expandAllBtn).not.toBeNull()
@@ -537,7 +519,7 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     }
     expect(chip).not.toBeNull()
 
-    // Target one of the two dirs the trim just EVICTED (B-leaf-23/24).
+    // Target one of the two dirs the trim just EVICTED (dir-50..dir-59).
     // Those are the deepest-and-alphabetically-last entries, so they are
     // precisely the ones the cap sheds first — pinning one is the sharpest
     // possible test of the exemption.
@@ -552,7 +534,7 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     const droppedBtns = Array.from(
       container.querySelectorAll('.wd-files-item[aria-expanded="false"]'),
     ) as HTMLElement[]
-    expect(droppedBtns.length).toBe(2)
+    expect(droppedBtns.length).toBe(10)
 
     const pinTarget: HTMLElement | null = droppedBtns[0] ?? null
     const pinTargetName: string | null = pinTarget ? getRowName(pinTarget) : null
@@ -636,7 +618,7 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
       // counts it as a tree row and skews the totals by one.
       container.querySelectorAll('.wd-files-item[aria-expanded="true"]'),
     ) as HTMLElement[]
-    const target = expandedBtns.find(b => getRowName(b).startsWith('A-leaf-'))
+    const target = expandedBtns.find(b => getRowName(b).startsWith('dir-'))
     // Must be found — the assertion below used to read
     // `expect(target).not.toBeDefined()`, which contradicted the very next
     // line and could never pass.

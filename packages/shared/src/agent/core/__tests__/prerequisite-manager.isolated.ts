@@ -5,19 +5,21 @@
  * until required files (like guide.md) have been read.
  */
 import { describe, it, expect, beforeEach, mock } from 'bun:test';
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
+import * as realFS from 'node:fs';
 import { resolve, join } from 'node:path';
+import { CONFIG_DIR } from '../../../config/paths.ts';
 import { PrerequisiteManager } from '../prerequisite-manager.ts';
 
-// Mock existsSync to control guide.md existence
-const originalExistsSync = existsSync;
+// Mock existsSync to control guide.md existence while still letting the app
+// see real files (e.g. loadConfigDefaults() checks config-defaults.json at
+// import time). The factory spreads the whole real module so every other fs
+// export keeps working, and existsSync only lies about whitelisted paths.
+const realExistsSync = realFS.existsSync;
 let mockExistsPaths: Set<string> = new Set();
 
 mock.module('node:fs', () => ({
-  existsSync: (path: string) => mockExistsPaths.has(path),
-  // Re-export anything else the module needs
-  readFileSync: originalExistsSync,
+  ...realFS,
+  existsSync: (path: string) => mockExistsPaths.has(path) || realExistsSync(path),
 }));
 
 const WORKSPACE_ROOT = '/test/workspace';
@@ -27,7 +29,7 @@ function guidePath(slug: string): string {
 }
 
 function browserDocPath(): string {
-  return resolve(join(homedir(), '.archstudio', 'docs', 'browser-tools.md'));
+  return resolve(join(CONFIG_DIR, 'docs', 'browser-tools.md'));
 }
 
 describe('PrerequisiteManager', () => {

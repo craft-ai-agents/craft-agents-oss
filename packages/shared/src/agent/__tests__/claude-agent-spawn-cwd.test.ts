@@ -43,7 +43,9 @@ describe('isExistingDirectory', () => {
     expect(isExistingDirectory(filePath)).toBe(false);
   });
 
-  it('returns false for a broken symlink (target missing)', () => {
+  // Creating a symlink on Windows requires admin / Developer Mode (EPERM otherwise),
+  // so the broken-symlink case can only be exercised on POSIX hosts.
+  it.skipIf(process.platform === 'win32')('returns false for a broken symlink (target missing)', () => {
     const linkPath = join(tempDir, 'broken-link');
     symlinkSync(join(tempDir, 'no-such-target'), linkPath);
     // lstatSync returns SymbolicLink stats, isDirectory() is false → "missing"

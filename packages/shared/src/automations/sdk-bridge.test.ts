@@ -32,6 +32,22 @@ describe('sdk-bridge', () => {
       }
     });
 
+    it('strips env vars whose value is the literal string "undefined" (Windows WSL leak)', () => {
+      // ORIGINAL_XDG_CURRENT_DESKTOP is exported as the literal string
+      // "undefined" when WSL env is imported into the Windows shell. cleanEnv()
+      // must drop it so it never reaches the child-process env.
+      const leakedKey = 'ORIGINAL_XDG_CURRENT_DESKTOP';
+      const original = process.env[leakedKey];
+      process.env[leakedKey] = 'undefined';
+      try {
+        const env = buildEnvFromSdkInput('PreToolUse', input());
+        expect(env[leakedKey]).toBeUndefined();
+      } finally {
+        if (original === undefined) delete process.env[leakedKey];
+        else process.env[leakedKey] = original;
+      }
+    });
+
     describe('PreToolUse / PostToolUse', () => {
       it('should map tool_name to ARCHSTUDIO_TOOL_NAME', () => {
         const env = buildEnvFromSdkInput('PreToolUse', input({ tool_name: 'Bash' }));

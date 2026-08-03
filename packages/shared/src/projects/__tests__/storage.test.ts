@@ -46,6 +46,14 @@ describe('sanitizeAssetFilename', () => {
   it('falls back to a generated name when the input reduces to empty', () => {
     expect(sanitizeAssetFilename('\x00\n\t')).toMatch(/^asset_[0-9a-f]{8}$/);
   });
+
+  it('strips a Windows drive-letter prefix so the result has no colon (NTFS-legal)', () => {
+    // A full Windows path must not keep its drive prefix: ':' is illegal in NTFS
+    // filenames, so writing it would EINVAL. The result must be a bare name.
+    expect(sanitizeAssetFilename('C:\\Users\\me\\report.pdf')).toBe('Usersmereport.pdf');
+    // Drive-prefix stripping must also apply when leading dots survive first.
+    expect(sanitizeAssetFilename('..\\..\\C:\\foo')).toBe('foo');
+  });
 });
 
 describe('loadProjectMemory', () => {

@@ -128,11 +128,11 @@ describe('preferences.uiLanguage', () => {
           import { setPersistedUiLanguage } from '${PREFS_MODULE}';
           import { statSync } from 'fs';
           setPersistedUiLanguage('hu');
-          const first = statSync('${prefsFile}').mtimeMs;
+          const first = statSync(${JSON.stringify(prefsFile)}).mtimeMs;
           const start = Date.now();
           while (Date.now() - start < 30) {}
           setPersistedUiLanguage('hu');
-          const second = statSync('${prefsFile}').mtimeMs;
+          const second = statSync(${JSON.stringify(prefsFile)}).mtimeMs;
           console.log(JSON.stringify({ first, second }));
         `);
         expect(r.exitCode).toBe(0);

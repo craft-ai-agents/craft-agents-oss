@@ -85,6 +85,7 @@ mock.module('@archstudio/shared/config', () => ({
   DEFAULT_THEME: { mode: 'system' },
   getDefaultModelsForConnection: () => ({ default: 'claude-sonnet-4-20250514', mini: 'claude-haiku-4-5-20251001' }),
   getDefaultModelForConnection: () => 'claude-sonnet-4-20250514',
+  defaultMidStreamBehavior: () => 'queue',
   setGitBashPath: () => {},
   clearGitBashPath: () => {},
   setActiveWorkspace: () => {},
@@ -107,6 +108,34 @@ mock.module('@archstudio/shared/config', () => ({
   touchLlmConnection: async () => {},
   isCompatProvider: () => false,
   isAnthropicProvider: () => true,
+  modelSupportsImages: () => false,
+  // Barrel-completeness stubs: every value the real graph imports from the
+  // @archstudio/shared/config barrel must exist on this mock or the import
+  // graph throws "Export named X not found". Safe no-op defaults only.
+  CONFIG_DIR: '/tmp/config',
+  clearDismissedUpdateVersion: () => {},
+  deriveBedrockRegionPrefix: () => '',
+  ensurePresetThemes: () => {},
+  ensureToolIcons: () => {},
+  getAllPiModels: () => [],
+  getAllowRemoteEvaluate: () => false,
+  getDismissedUpdateVersion: () => null,
+  getModelsForProviderType: () => [],
+  getPersistedUiLanguage: () => undefined,
+  getPiModelsForAuthProvider: () => [],
+  loadAppTheme: () => null,
+  loadPreferences: () => ({}),
+  loadStoredConfig: () => null,
+  registerPiModelResolver: () => {},
+  resetManagedAnthropicAuthEnvVars: () => {},
+  resolveMidStreamBehavior: () => 'queue',
+  resolveTitleLanguageName: () => undefined,
+  saveConfig: () => {},
+  setDefaultThinkingLevel: () => true,
+  setPersistedUiLanguage: () => {},
+  setSetupDeferred: () => {},
+  toBedrockNativeId: (modelId: string) => modelId,
+  updateWorkspaceRemoteServer: async () => null,
 }))
 
 mock.module('@archstudio/shared/workspaces', () => ({
