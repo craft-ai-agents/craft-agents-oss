@@ -92,6 +92,43 @@ export type ThemeMode = 'light' | 'dark' | 'system'
 type WorkspaceTab = 'agent-chat' | 'editor' | 'preview' | 'tasks'
 type RailTab = 'context' | 'files' | 'changes'
 
+const WORKSPACE_TAB_IDS: ReadonlySet<WorkspaceTab> = new Set<WorkspaceTab>([
+  'agent-chat', 'editor', 'preview', 'tasks',
+])
+
+function isWorkspaceArtifact(value: unknown): value is WorkspaceArtifact {
+  if (!value || typeof value !== 'object') return false
+  const v = value as Record<string, unknown>
+  return typeof v.id === 'string'
+    && typeof v.title === 'string'
+    && (v.kind === 'text' || v.kind === 'markdown' || v.kind === 'html' || v.kind === 'json')
+    && typeof v.content === 'string'
+    && typeof v.updatedAt === 'number'
+    && (v.sourcePath === undefined || typeof v.sourcePath === 'string')
+}
+
+function parseWorkspaceTab(value: unknown, fallback: WorkspaceTab): WorkspaceTab {
+  if (value === 'code' || value === 'canvas') return 'editor'
+  return typeof value === 'string' && WORKSPACE_TAB_IDS.has(value as WorkspaceTab)
+    ? (value as WorkspaceTab)
+    : fallback
+}
+
+function parseWorkspaceState(raw: unknown): {
+  artifacts: WorkspaceArtifact[]
+  selectedFile: string | null
+  activeTab: WorkspaceTab
+} {
+  const empty = { artifacts: [], selectedFile: null as string | null, activeTab: 'agent-chat' as WorkspaceTab }
+  if (!raw || typeof raw !== 'object') return empty
+  const v = raw as Record<string, unknown>
+  return {
+    artifacts: Array.isArray(v.artifacts) && v.artifacts.every(isWorkspaceArtifact) ? v.artifacts : [],
+    selectedFile: typeof v.selectedFile === 'string' ? v.selectedFile : null,
+    activeTab: parseWorkspaceTab(v.activeTab, 'agent-chat'),
+  }
+}
+
 const WORKSPACE_TABS: { id: WorkspaceTab; label: string }[] = [
   { id: 'agent-chat', label: 'Agent Chat' },
   { id: 'editor', label: 'Editor' },
@@ -772,18 +809,13 @@ function LayoutShell({
       return
     }
     try {
-      const saved = JSON.parse(readWorkspaceStateRaw(`archstudio:workspace:${activeSessionId}`) || '{}') as { artifacts?: WorkspaceArtifact[]; selectedFile?: string; activeTab?: WorkspaceTab | 'code' | 'canvas' }
-      const artifacts = Array.isArray(saved.artifacts) ? saved.artifacts : []
-      setCanvasArtifacts(artifacts)
-      setSelectedCanvasArtifactId(artifacts[0]?.id ?? null)
-      setSelectedWorkspaceFile(saved.selectedFile ?? null)
+      const parsed: unknown = JSON.parse(readWorkspaceStateRaw(`archstudio:workspace:${activeSessionId}`) || '{}')
+      const saved = parseWorkspaceState(parsed)
+      setCanvasArtifacts(saved.artifacts)
+      setSelectedCanvasArtifactId(saved.artifacts[0]?.id ?? null)
+      setSelectedWorkspaceFile(saved.selectedFile)
       setPreviewArtifactId(null)
-      // Map legacy tab names to the new consolidated 'editor' tab
-      const legacyTab = saved.activeTab
-      const mappedTab: WorkspaceTab =
-        legacyTab === 'code' || legacyTab === 'canvas' ? 'editor'
-        : (legacyTab as WorkspaceTab | undefined) ?? 'agent-chat'
-      setActiveWorkspaceTab(mappedTab)
+      setActiveWorkspaceTab(saved.activeTab)
     } catch {
       setCanvasArtifacts([])
       setSelectedCanvasArtifactId(null)
