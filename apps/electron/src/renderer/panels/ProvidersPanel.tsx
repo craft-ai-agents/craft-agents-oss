@@ -44,6 +44,7 @@ import { providerLabel } from '@archstudio/shared/config/provider-labels'
 // Type-only — erased at build time, so no Node code reaches the renderer bundle.
 import type { InferenceHistoryResult } from '@archstudio/shared/agent/core/index'
 import { FullscreenOverlayBase } from '@archstudio/ui'
+import { AnimatedCollapsibleContent } from '@/components/ui/collapsible'
 import type { CustomEndpointApi } from '@config/llm-connections'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
 // `useOnboarding` itself only imports types from the onboarding barrel, so it
@@ -2442,7 +2443,7 @@ export function ProvidersPanel({
                 </div>
 
                 {/* Detail view — only for the currently-open provider. */}
-                {isOpen && (
+                <AnimatedCollapsibleContent isOpen={isOpen}>
                 <div id={`provider-detail-${provider.slug}`} className="providers-panel__card-detail">
                 {/* Card body */}
                 <div className="providers-panel__card-body">
@@ -2679,7 +2680,7 @@ export function ProvidersPanel({
                   )
                 })()}
                 </div>
-                )}
+                </AnimatedCollapsibleContent>
               </div>
               )
             })
