@@ -319,6 +319,19 @@ mock.module('sonner', () => ({
     info: (message: string, opts?: any) => {
       toastCalls.push({ message, opts })
     },
+    // Provide the full sonner surface so a mock registered in this file can't
+    // break OTHER tests sharing the worker process: bun's mock.module applies
+    // to later 'sonner' imports in the same worker, and panels call
+    // toast.error/success.  A shim missing these crashes them.
+    success: (message: string, opts?: any) => {
+      toastCalls.push({ message, opts })
+    },
+    error: (message: string, opts?: any) => {
+      toastCalls.push({ message, opts })
+    },
+    warning: (message: string, opts?: any) => {
+      toastCalls.push({ message, opts })
+    },
   },
 }))
 
