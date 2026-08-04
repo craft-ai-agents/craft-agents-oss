@@ -92,7 +92,6 @@ import { getConnectionDisplayName } from "@config/provider-labels"
 import { defaultSessionOptions } from "@/hooks/useSessionOptions"
 import { EscapeInterruptProvider, useEscapeInterrupt } from "@/context/EscapeInterruptContext"
 import { useTheme } from "@/context/ThemeContext"
-import { getResizeGradientStyle } from "@/hooks/useResizeGradient"
 import { useAction, useActionLabel } from "@/actions"
 import { useFocusZone } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
@@ -151,10 +150,6 @@ import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import {
   PANEL_GAP,
   PANEL_EDGE_INSET,
-  PANEL_SASH_HALF_HIT_WIDTH,
-  PANEL_SASH_HIT_WIDTH,
-  PANEL_SASH_LINE_WIDTH,
-  PANEL_STACK_VERTICAL_OVERFLOW,
   RADIUS_EDGE,
   RADIUS_INNER,
 } from "../components/app-shell/panel-constants"
@@ -598,11 +593,6 @@ function ChatSessionAreaContent({
     })
   }, [])
 
-  const [isResizing, setIsResizing] = React.useState<'sidebar' | 'session-list' | null>(null)
-  const [sidebarHandleY, setSidebarHandleY] = React.useState<number | null>(null)
-  const [sessionListHandleY, setSessionListHandleY] = React.useState<number | null>(null)
-  const resizeHandleRef = React.useRef<HTMLDivElement>(null)
-  const sessionListHandleRef = React.useRef<HTMLDivElement>(null)
   const [session, setSession] = useSession()
   const { resolvedMode, isDark, setMode } = useTheme()
   const { canGoBack, canGoForward, goBack, goForward, navigateToSource, navigateToSession } = useNavigation()
@@ -1369,53 +1359,6 @@ function ChatSessionAreaContent({
     return () => document.removeEventListener('paste', handleGlobalPaste)
   }, [focusedSessionId, session.selected])
 
-  // Resize effect for sidebar, session list, browser host lane, and metadata right sidebar.
-  React.useEffect(() => {
-    if (!isResizing) return
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isResizing === 'sidebar') {
-        const newWidth = Math.min(Math.max(e.clientX, 180), 320)
-        setSidebarWidth(newWidth)
-        if (resizeHandleRef.current) {
-          const rect = resizeHandleRef.current.getBoundingClientRect()
-          setSidebarHandleY(e.clientY - rect.top)
-        }
-      } else if (isResizing === 'session-list') {
-        const offset = isSidebarVisible ? sidebarWidth : 0
-        const newWidth = Math.min(Math.max(e.clientX - offset, 240), 480)
-        setSessionListWidth(newWidth)
-        if (sessionListHandleRef.current) {
-          const rect = sessionListHandleRef.current.getBoundingClientRect()
-          setSessionListHandleY(e.clientY - rect.top)
-        }
-      }
-    }
-
-    const handleMouseUp = () => {
-      if (isResizing === 'sidebar') {
-        storage.set(storage.KEYS.sidebarWidth, sidebarWidth)
-        setSidebarHandleY(null)
-      } else if (isResizing === 'session-list') {
-        storage.set(storage.KEYS.sessionListWidth, sessionListWidth)
-        setSessionListHandleY(null)
-      }
-      setIsResizing(null)
-    }
-
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-    }
-  }, [
-    isResizing,
-    sidebarWidth,
-    sessionListWidth,
-    isSidebarVisible,
-  ])
 
   // Spring transition config - shared between sidebar and header
   // Critical damping (no bounce): damping = 2 * sqrt(stiffness * mass)
@@ -3416,76 +3359,7 @@ function ChatSessionAreaContent({
           isSidebarAndNavigatorHidden={effectiveSidebarAndNavigatorHidden}
           isRightSidebarVisible={false}
           isCompact={isAutoCompact}
-          isResizing={!!isResizing}
         />
-
-        {/* Sidebar Resize Handle (absolute, hidden in focused mode) */}
-        {!effectiveSidebarAndNavigatorHidden && (
-        <div
-          ref={resizeHandleRef}
-          onMouseDown={(e) => { e.preventDefault(); setIsResizing('sidebar') }}
-          onMouseMove={(e) => {
-            if (resizeHandleRef.current) {
-              const rect = resizeHandleRef.current.getBoundingClientRect()
-              setSidebarHandleY(e.clientY - rect.top)
-            }
-          }}
-          onMouseLeave={() => { if (!isResizing) setSidebarHandleY(null) }}
-          className="absolute cursor-col-resize z-panel flex justify-center"
-          style={{
-            width: PANEL_SASH_HIT_WIDTH,
-            top: PANEL_STACK_VERTICAL_OVERFLOW,
-            bottom: PANEL_STACK_VERTICAL_OVERFLOW,
-            left: isSidebarVisible
-              ? sidebarWidth + (PANEL_GAP / 2) - PANEL_SASH_HALF_HIT_WIDTH
-              : -PANEL_GAP,
-            transition: isResizing === 'sidebar' ? undefined : 'left 0.15s ease-out',
-          }}
-        >
-          <div
-            className="h-full"
-            style={{
-              ...getResizeGradientStyle(sidebarHandleY, resizeHandleRef.current?.clientHeight ?? null),
-              width: PANEL_SASH_LINE_WIDTH,
-            }}
-          />
-        </div>
-        )}
-
-        {/* Session List Resize Handle (absolute, hidden in focused mode and board view) */}
-        {!effectiveSidebarAndNavigatorHidden && !isBoardView && (
-        <div
-          ref={sessionListHandleRef}
-          onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}
-          onMouseMove={(e) => {
-            if (sessionListHandleRef.current) {
-              const rect = sessionListHandleRef.current.getBoundingClientRect()
-              setSessionListHandleY(e.clientY - rect.top)
-            }
-          }}
-          onMouseLeave={() => { if (isResizing !== 'session-list') setSessionListHandleY(null) }}
-          className="absolute cursor-col-resize z-panel flex justify-center"
-          style={{
-            width: PANEL_SASH_HIT_WIDTH,
-            top: PANEL_STACK_VERTICAL_OVERFLOW,
-            bottom: PANEL_STACK_VERTICAL_OVERFLOW,
-            left:
-              (isSidebarVisible ? sidebarWidth + PANEL_GAP : PANEL_EDGE_INSET) +
-              sessionListWidth +
-              (PANEL_GAP / 2) -
-              PANEL_SASH_HALF_HIT_WIDTH,
-            transition: isResizing === 'session-list' ? undefined : 'left 0.15s ease-out',
-          }}
-        >
-          <div
-            className="h-full"
-            style={{
-              ...getResizeGradientStyle(sessionListHandleY, sessionListHandleRef.current?.clientHeight ?? null),
-              width: PANEL_SASH_LINE_WIDTH,
-            }}
-          />
-        </div>
-        )}
 
       </div>
 
