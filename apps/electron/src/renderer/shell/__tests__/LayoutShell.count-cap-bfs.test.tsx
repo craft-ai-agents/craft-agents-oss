@@ -43,7 +43,7 @@ mock.module('pdfjs-dist', () => ({
 }))
 
 // -------------------------------------------------------------------------
-// 2. IPC mock — deterministic 52-dir tree
+// 2. IPC mock — deterministic 60-dir single-level tree
 // -------------------------------------------------------------------------
 const listDirectoryCalls: string[] = []
 
@@ -245,7 +245,14 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     }
   })
 
-  it('expands 60 dirs via BFS, trims to 50 leaf-most-dropped, shows cap chip', async () => {
+  // NOTE ON COVERAGE: this fixture is deliberately flat (all 60 dirs at
+  // depth 1), so `trimExpandedByCount`'s `a.depth - b.depth` sort key is a
+  // constant here and only the alphabetic tiebreaker is exercised.  The
+  // depth term — "shed the deepest entries first" — is covered by
+  // LayoutShell.count-cap-depth-order.test.tsx (integration, two-level
+  // fixture) and packages/ui/src/lib/__tests__/treeBfsGate.test.ts (unit).
+  // Do not re-word the assertions below as if they proved depth ordering.
+  it('expands 60 same-depth dirs via BFS, trims to 50 alphabetically, shows cap chip', async () => {
     const { container, root } = await renderShell()
     lastContainer = container
     lastRoot = root as any
@@ -303,22 +310,23 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     // .sort() — the arrayContaining matcher accepts any order.
     const closedNames = closedBtns.map(getRowName)
 
-    // 4. The dropped dirs are the leaf-most entries in the trim-ordering.
+    // 4. The dropped dirs are the last entries in the trim-ordering.
   // trimExpandedByCount sorts shallowest-first with an alphabetic
   // tiebreaker, keeps the first 50, and reverses the tail into
-  // `dropped` (deepest-first).  In our fixture all 60 dirs are at the
-  // same depth, so the tiebreaker is purely path-alphabetic:
-  // dir-00..dir-59.  Keep = dir-00..dir-49; Drop (last 10, reversed) =
-  // dir-59 .. dir-50.
+  // `dropped`.  All 60 dirs here sit at the same depth, so the depth key
+  // contributes nothing and this asserts the alphabetic tiebreaker only:
+  // Keep = dir-00..dir-49; Drop (last 10, reversed) = dir-59 .. dir-50.
   expect(closedNames).toEqual(
     expect.arrayContaining(['dir-59', 'dir-58', 'dir-57', 'dir-56', 'dir-55', 'dir-54', 'dir-53', 'dir-52', 'dir-51', 'dir-50']),
   )
 
     // 5. Sanity: BFS fetched every uncached dir.  The IPC fires BEFORE
     // the depth-skip guard, so even leaf dirs get a listDirectoryFiles
-    // call to cache their (empty) children — only the enqueue walk is
-    // skipped at depth >= expandDepth (LayoutShell.tsx ~line 946).  In
-    // this fixture: 1 initial root fetch + 60 BFS fetches = 61 IPCs.
+    // call to cache their (empty) children.  Note this fixture bottoms
+    // out at depth 1, so it does NOT exercise the enqueue-skip at
+    // depth >= expandDepth — the two-level fixture in
+    // LayoutShell.count-cap-depth-order.test.tsx covers that.  Here:
+    // 1 initial root fetch + 60 BFS fetches = 61 IPCs.
     expect(listDirectoryCalls.length).toBe(callsBeforeExpand + 60)
     expect(listDirectoryCalls).toEqual(
       expect.arrayContaining(['/test/wd', '/test/wd/dir-00', '/test/wd/dir-01']),
@@ -333,7 +341,7 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     // 7. The chip is only ONE chip (not two).  This guards against the
     // regression where the BFS cap (MAX_EXPAND_DIRS=100) and the count
     // cap (MAX_OPEN_DIRS=50) chips both render — in this fixture,
-    // discoverSet.size (52) is well under MAX_EXPAND_DIRS=100, so only
+    // discoverSet.size (60) is under MAX_EXPAND_DIRS=100, so only
     // the count cap should fire.
     const allCapChips = container.querySelectorAll('.wd-files-capped-badge')
     expect(allCapChips.length).toBe(1)
@@ -413,8 +421,8 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     // 1. The chip is gone.
     expect(chip).toBeNull()
 
-    // 2. There are now 11 closed dirs: the 2 originally-dropped
-    //    (the 10 originally-dropped dir-50..dir-59) + the one we just collapsed.
+    // 2. There are now 11 closed dirs: the 10 originally-dropped
+    //    (dir-50..dir-59) + the one we just collapsed.
     const closedBtns = Array.from(
       container.querySelectorAll('.wd-files-item[aria-expanded="false"]'),
     ) as HTMLElement[]
@@ -480,7 +488,7 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     ) as HTMLElement[]
     expect(openBtns.length).toBe(10)
 
-    // 4. The dropped set is large: 60 - 10 = 50 leaf-most entries.
+    // 4. The dropped set is large: 60 - 10 = 50 trailing entries.
     const closedBtns = Array.from(
       container.querySelectorAll('.wd-files-item[aria-expanded="false"]'),
     ) as HTMLElement[]
@@ -519,9 +527,9 @@ describe('LayoutShell count-cap trims BFS-expanded dirs', () => {
     }
     expect(chip).not.toBeNull()
 
-    // Target one of the two dirs the trim just EVICTED (dir-50..dir-59).
-    // Those are the deepest-and-alphabetically-last entries, so they are
-    // precisely the ones the cap sheds first — pinning one is the sharpest
+    // Target one of the dirs the trim just EVICTED (dir-50..dir-59).
+    // Those are the alphabetically-last entries, so they are precisely
+    // the ones the cap sheds first — pinning one is the sharpest
     // possible test of the exemption.
     //
     // NOTE ON FLOW: this test used to pin an already-expanded dir, collapse

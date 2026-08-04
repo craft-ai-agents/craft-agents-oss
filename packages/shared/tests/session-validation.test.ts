@@ -277,7 +277,11 @@ describe('path normalization safety', () => {
     const sanitized = sanitizeSessionId(maliciousInput); // Returns 'tmp'
     const result = join(workspaceRoot, 'sessions', sanitized);
 
-    expect(result).toBe(join(workspaceRoot, 'sessions', sanitized));
+    // Pin the sanitizer's actual output — comparing `result` against the
+    // expression that produced it would be a tautology and would survive a
+    // regression that let traversal segments through.
+    expect(sanitized).toBe('tmp');
+    expect(result).toBe(join(workspaceRoot, 'sessions', 'tmp'));
     expect(result.startsWith(rootNorm)).toBe(true);
   });
 });

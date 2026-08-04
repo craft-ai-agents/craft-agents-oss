@@ -74,10 +74,12 @@ describe('ensureDefaultPermissions migration', () => {
       stdout: 'pipe',
       stderr: 'pipe',
     });
-    expect(run.exitCode).toBe(0);
+    // Log before asserting — expect() throws, so a diagnostic placed after it
+    // would never run on the exact failure it exists to explain.
     if (run.exitCode !== 0) {
       console.error(run.stderr.toString());
     }
+    expect(run.exitCode).toBe(0);
 
     const merged = JSON.parse(readFileSync(join(installedDir, 'default.json'), 'utf-8'));
 
