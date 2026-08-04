@@ -355,9 +355,10 @@ export async function processAttachment(
   if (basePath && filePath && !path.isAbsolute(filePath) && !filePath.startsWith('~')) {
     filePath = path.resolve(basePath, filePath);
   }
-  // Basename on both separators so Windows backslash paths (C:\...\file.ts)
-  // collapse to just the filename, matching POSIX behavior.
-  const filename = filePath.split(/[\\/]/).pop() || filePath;
+  // path.basename is platform-correct: it splits on both separators on
+  // Windows, but only on '/' elsewhere — so a POSIX filename that legally
+  // contains a backslash keeps its real name.
+  const filename = path.basename(filePath) || filePath;
   const safeFilename = escapeXml(filename); // Escape for use in XML-like tags
 
   // --- Validate path exists and is a file ---

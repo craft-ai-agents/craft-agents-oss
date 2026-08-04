@@ -40,9 +40,12 @@ export function buildDarwinSandboxProfile(
   sessionDir: string,
   options?: FilesystemIsolationOptions,
 ): string {
-  // Sandbox profile paths are always POSIX-style; on Windows resolve() yields
-  // backslashes which would produce a broken sandbox-exec rule. Normalize to '/'.
-  const escapedRoot = escapeSandboxPath(resolve(sessionDir).replace(/\\/g, '/'));
+  // Do NOT normalize separators here.  This profile is only ever built under
+  // `process.platform === 'darwin'` (see applyFilesystemIsolation), where
+  // resolve() never emits a backslash — so rewriting '\' to '/' could only
+  // corrupt a backslash that is a legitimate part of a macOS filename, and
+  // would defeat the escaping escapeSandboxPath exists to provide.
+  const escapedRoot = escapeSandboxPath(resolve(sessionDir));
   const profileParts = [
     '(version 1)',
     '(deny default)',
