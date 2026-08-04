@@ -20,43 +20,57 @@ import { Provider, createStore } from 'jotai'
 
 // -------------------------------------------------------------------------
 // 1. DOM setup — happy-dom provides browser globals on a single Window.
+//
+// NOTE on module-scope globals: bun may co-run multiple test files in one
+// worker, and every file's top-level code runs before the test bodies. The
+// jsdom-based LayoutShell tests assign THEIR document/HTMLElement/window onto
+// the same `globalThis` keys. If this file's assignments only happened at
+// module scope, a jsdom file that loaded later in the worker would leave those
+// globals installed while THIS file's tests ran — and React clicks would never
+// fire (events dispatched against the happy-dom container while React's event
+// system resolves globals against the jsdom document). So the globals are
+// installed via installDomGlobals() from beforeEach, right before each test.
 // -------------------------------------------------------------------------
 const win = new Window({ url: 'http://localhost:5173', height: 900, width: 1400 })
 const doc = win.document
 
-const gs: any = globalThis
-gs.window = win
-gs.document = doc
-gs.HTMLElement = win.HTMLElement
-gs.Element = win.Element
-gs.Node = win.Node
-gs.getComputedStyle = win.getComputedStyle.bind(win)
-gs.navigator = win.navigator
-gs.requestAnimationFrame = (cb: FrameRequestCallback) =>
-  setTimeout(() => cb(Date.now()), 0)
-gs.cancelAnimationFrame = (id: number) => clearTimeout(id)
+function installDomGlobals() {
+  const gs: any = globalThis
+  gs.window = win
+  gs.document = doc
+  gs.HTMLElement = win.HTMLElement
+  gs.Element = win.Element
+  gs.Node = win.Node
+  gs.getComputedStyle = win.getComputedStyle.bind(win)
+  gs.navigator = win.navigator
+  gs.requestAnimationFrame = (cb: FrameRequestCallback) =>
+    setTimeout(() => cb(Date.now()), 0)
+  gs.cancelAnimationFrame = (id: number) => clearTimeout(id)
 
-// ResizeObserver stub
-gs.ResizeObserver = class MockResizeObserver {
-  private cb: ResizeObserverCallback
-  constructor(cb: ResizeObserverCallback) { this.cb = cb }
-  observe(target: Element) {
-    this.cb(
-      [{ contentRect: { width: 1400, height: 900 }, target } as unknown as ResizeObserverEntry],
-      this as unknown as ResizeObserver,
-    )
+  // ResizeObserver stub
+  gs.ResizeObserver = class MockResizeObserver {
+    private cb: ResizeObserverCallback
+    constructor(cb: ResizeObserverCallback) { this.cb = cb }
+    observe(target: Element) {
+      this.cb(
+        [{ contentRect: { width: 1400, height: 900 }, target } as unknown as ResizeObserverEntry],
+        this as unknown as ResizeObserver,
+      )
+    }
+    unobserve() {}
+    disconnect() {}
   }
-  unobserve() {}
-  disconnect() {}
+
+  // Clipboard API stub (used by handleCopy) — navigator.clipboard is readonly
+  // in happy-dom, so we use defineProperty.
+  Object.defineProperty(gs.navigator, 'clipboard', {
+    value: { writeText: async () => {} },
+    writable: false,
+    configurable: true,
+  })
 }
 
-// Clipboard API stub (used by handleCopy) — navigator.clipboard is readonly
-// in happy-dom, so we use defineProperty.
-Object.defineProperty(gs.navigator, 'clipboard', {
-  value: { writeText: async () => {} },
-  writable: false,
-  configurable: true,
-})
+installDomGlobals()
 
 // -------------------------------------------------------------------------
 // 2. ElectronAPI mock — wire the IPC methods the panel calls.
@@ -159,6 +173,12 @@ describe('PromptStudioPanel smoke test', () => {
     compilePrompt.mockClear()
     getWindowMode.mockClear()
     getHomeDir.mockClear()
+    // Reinstall the happy-dom globals before every test — see the note on
+    // installDomGlobals() above. Another test file co-resident in the same bun
+    // worker (e.g. the jsdom LayoutShell suites) may have overwritten
+    // globalThis.document/window/HTMLElement at its module scope.
+    installDomGlobals()
+    ;(globalThis as any).__PROMPTS_DOC_IS_HAPPY__ = (globalThis as any).document === doc
   })
 
   afterEach(() => {
@@ -194,6 +214,12 @@ describe('PromptStudioPanel smoke test', () => {
   })
 
   it('uses sibling controls instead of nested buttons', async () => {
+    const g = globalThis as any
+    console.log('[prompts] doc happy:', g.__PROMPTS_DOC_IS_HAPPY__,
+      '| HTMLElement happy:', g.HTMLElement === win.HTMLElement,
+      '| Element happy:', g.Element === win.Element,
+      '| PointerEvent === MouseEvent:', g.PointerEvent === g.MouseEvent,
+      '| window happy:', g.window === win)
     const { container, root } = await renderPanel()
     lastContainer = container
     lastRoot = root
