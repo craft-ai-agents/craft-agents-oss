@@ -615,9 +615,19 @@ export function SessionFilesSection({ sessionId, className, sessionFolderPath, h
   // effect's dependency-array reference resolves at TS evaluation time.
   // saveExpandedPaths is stable for the lifetime of the sessionId, so
   // putting it first doesn't alter the count-cap effect's behavior.
+  // Drilled rows are deliberately excluded from the persisted set.  Drill
+  // state itself is in-memory only (see the Drill mode block below), so
+  // persisting the expansion it produced would restore a past-cap tree on
+  // the next launch with no drill marker and no gate affordance to clear
+  // it — the depth selector would read N while the tree showed N+1.
+  // Filtering on write keeps every call site honest, including the
+  // count-cap trim.  drilledPathsRef is declared further down; this
+  // callback only ever runs from effects and handlers, long after the
+  // component body has evaluated.
   const saveExpandedPaths = useCallback((paths: Set<string>) => {
     if (sessionId) {
-      storage.set(storage.KEYS.sessionFilesExpandedFolders, Array.from(paths), sessionId)
+      const persistable = Array.from(paths).filter((p) => !drilledPathsRef.current.has(p))
+      storage.set(storage.KEYS.sessionFilesExpandedFolders, persistable, sessionId)
     }
   }, [sessionId])
 
