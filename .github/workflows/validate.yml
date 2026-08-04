@@ -76,3 +76,51 @@ jobs:
 
       - name: Run full test suite (owned roots + isolated runner)
         run: bun run test
+
+      # Cross-platform smoke (aj-geddes Quick Start fixture + repo path/env
+      # bug classes) on the same 3-OS matrix. Each OS writes a machine-
+      # readable report that cross-platform-divergence diffs below. Runs even
+      # when the suite above fails: the script writes its report before
+      # exiting non-zero, so a red leg still uploads an artifact the
+      # divergence job can compare.
+      - name: Run cross-platform smoke
+        if: always()
+        run: bun scripts/cross-platform-smoke.mjs --json smoke-report-${{ matrix.os }}.json
+
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report-${{ matrix.os }}
+          path: smoke-report-${{ matrix.os }}.json
+          if-no-files-found: error
+
+  # Diffs the three per-OS smoke reports. A probe that passes on linux but
+  # fails on windows (or is missing from one OS) is named in the workflow log
+  # — the divergence contract that turns future Windows bug-class regressions
+  # into workflow noise instead of postmortems. Runs even when a matrix leg
+  # fails (if: always): a red suite is exactly when named divergence output
+  # matters most, and --diff already reports missing/unparseable reports.
+  cross-platform-divergence:
+    name: cross-platform smoke divergence check
+    runs-on: ubuntu-latest
+    needs: [test-suite]
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.10"
+
+      - name: Download smoke reports
+        uses: actions/download-artifact@v4
+        with:
+          path: smoke-reports
+          pattern: smoke-report-*
+          merge-multiple: true
+
+      - name: Diff smoke reports across OSes
+        run: bun scripts/cross-platform-smoke.mjs --diff smoke-reports/*.json

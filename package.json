@@ -59,6 +59,8 @@
     "sort-locales": "bun scripts/sort-locales.ts",
     "lint:i18n:sorted": "bun scripts/sort-locales.ts --check",
     "check-test-discovery": "bun scripts/check-test-discovery.ts",
+    "cross-platform-smoke": "bun scripts/cross-platform-smoke.mjs",
+    "cross-platform-smoke:diff": "bun scripts/cross-platform-smoke.mjs --diff",
     "check-build-leaks": "bun scripts/check-build-leaks.ts",
     "check:renderer-node-imports": "bun scripts/check-renderer-node-imports.ts",
     "check:test-count": "bun scripts/check-test-count.ts",
