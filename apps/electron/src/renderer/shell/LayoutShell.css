@@ -307,7 +307,6 @@
   min-height: 38px;
   padding: 9px 11px;
   border-radius: 8px;
-  border: 1px solid transparent;
   background: transparent;
   color: var(--shell-text-muted);
   cursor: pointer;
@@ -322,10 +321,8 @@
 }
 
 .layout-nav-item--active {
-  background: linear-gradient(90deg, color-mix(in oklch, var(--brand-lime) 13%, transparent), color-mix(in oklch, var(--brand-purple) 11%, transparent));
-  border-color: color-mix(in oklch, var(--brand-purple) 42%, transparent);
-  color: var(--foreground);
-  box-shadow: inset 2px 0 0 var(--brand-lime);
+  background: color-mix(in oklch, var(--brand-purple) 16%, transparent);
+  color: var(--brand-purple);
 }
 
 .layout-nav-item__label {
