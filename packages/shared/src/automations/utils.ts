@@ -10,6 +10,7 @@ import type { AutomationEvent, AutomationMatcher, PromptReferences, AgentEvent, 
 import { matchesCron } from './cron-matcher.ts';
 import { sanitizeForShell } from './security.ts';
 import { evaluateConditions } from './conditions.ts';
+import { sanitizeChildProcessEnv } from '../utils/env.ts';
 
 // ============================================================================
 // String Utilities
@@ -307,11 +308,10 @@ export function buildEnvFromPayload(event: AutomationEvent, payload: BaseEventPa
 export function buildWebhookEnv(event: AutomationEvent, payload: BaseEventPayload): Record<string, string> {
   const env = buildBaseEventEnv(event, payload);
 
-  // User-defined webhook secrets: only ARCHSTUDIO_WH_* from process.env
-  for (const [key, value] of Object.entries(process.env)) {
-    if (key.startsWith('ARCHSTUDIO_WH_') && value !== undefined) {
-      env[key] = value;
-    }
+  // User-defined webhook secrets: only ARCHSTUDIO_WH_* from process.env,
+  // through the shared sanitizer so the literal-"undefined" leak is stripped.
+  for (const [key, value] of Object.entries(sanitizeChildProcessEnv(process.env))) {
+    if (key.startsWith('ARCHSTUDIO_WH_')) env[key] = value
   }
 
   return env;
