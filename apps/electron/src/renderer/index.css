@@ -1,5 +1,10 @@
 @import "tailwindcss" source(none);
 @plugin "@tailwindcss/typography";
+/* Enter/exit animation utilities (animate-in / fade-in-0 / zoom-in-95 /
+   slide-in-from-* / data-[state=open]:animate-in used across Radix and
+   shadcn-style surfaces). tailwindcss-animate is the v4-compatible provider
+   of these utilities (the shadcn standard). */
+@plugin "tailwindcss-animate";
 
 /* Tell Tailwind where to scan for utility classes */
 @source "../renderer/App.tsx";
@@ -838,56 +843,14 @@ html.dark[data-scenic] .fullscreen-overlay-background {
 }
 
 /* =============================================================================
-   DISABLE ANIMATIONS FOR DIALOGS, DROPDOWNS, AND POPOVERS
+   RADIX OVERLAY ENTRANCES
 
-   Radix UI (used by shadcn/ui) applies animations via data-state attributes.
-   This globally disables enter/exit animations for overlay components.
-
-   To re-enable for specific components, use: animation: revert !important;
+   The tailwindcss-animate plugin powers the data-[state=open]:animate-in /
+   fade-in-0 / zoom-in-95 classes on the shared Radix surfaces (dialog,
+   dropdown, popover, select, tooltip, context menu, alert dialog). Users who
+   prefer reduced motion get instant state changes via the prefers-reduced-motion
+   rule on .animate-in/.animate-out below.
 ============================================================================= */
-
-/* Dialog overlay (backdrop) */
-[data-radix-dialog-overlay] {
-  animation: none !important;
-}
-
-/* Dialog content */
-[role="dialog"][data-state],
-[data-radix-dialog-content] {
-  animation: none !important;
-}
-
-/* Dropdown menu content */
-[data-radix-menu-content],
-[data-radix-dropdown-menu-content] {
-  animation: none !important;
-}
-
-/* Popover content */
-[data-radix-popover-content] {
-  animation: none !important;
-}
-
-/* Select content */
-[data-radix-select-content] {
-  animation: none !important;
-}
-
-/* Tooltip content (if you want tooltips instant too) */
-[data-radix-tooltip-content] {
-  animation: none !important;
-}
-
-/* Context menu content */
-[data-radix-context-menu-content] {
-  animation: none !important;
-}
-
-/* Alert dialog */
-[data-radix-alert-dialog-overlay],
-[data-radix-alert-dialog-content] {
-  animation: none !important;
-}
 
 /* Fix ScrollArea internal div preventing content shrink
    Radix injects a div with min-width: 100%; display: table; which prevents shrinking */
@@ -1537,6 +1500,24 @@ html.dark[data-scenic] .fullscreen-overlay-background {
   .arch-splash-ring,
   .arch-splash-diamond {
     animation: none;
+  }
+
+  /* Kill the tailwindcss-animate entrance/exit utilities for reduced-motion
+     users. Substring-match the class attribute: real usage is the single
+     token `data-[state=open]:animate-in`, which bare `.animate-in` misses. */
+  [class*='animate-in'],
+  [class*='animate-out'] {
+    animation: none !important;
+    --tw-enter-opacity: initial;
+    --tw-enter-scale: initial;
+    --tw-enter-rotate: initial;
+    --tw-enter-translate-x: initial;
+    --tw-enter-translate-y: initial;
+    --tw-exit-opacity: initial;
+    --tw-exit-scale: initial;
+    --tw-exit-rotate: initial;
+    --tw-exit-translate-x: initial;
+    --tw-exit-translate-y: initial;
   }
 }
 

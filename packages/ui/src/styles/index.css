@@ -25,6 +25,9 @@
 
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
+/* Enter/exit animation utilities (animate-in / fade-in-0 / zoom-in-95 /
+   slide-in-from-* / data-[state=open]:animate-in) for shared UI surfaces. */
+@plugin "tailwindcss-animate";
 
 /* =============================================================================
    LIGHT MODE (default)
@@ -329,6 +332,30 @@ html[data-font="inter"] {
     --tw-ring-offset-width: var(--ring-offset);
     --tw-ring-width: var(--ring-width);
     --tw-ring-color: var(--ring);
+  }
+}
+
+/* =============================================================================
+   REDUCED MOTION
+============================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  /* Kill the tailwindcss-animate entrance/exit utilities for reduced-motion
+     users. Substring-match the class attribute: real usage is the single
+     token `data-[state=open]:animate-in`, which bare `.animate-in` misses. */
+  [class*='animate-in'],
+  [class*='animate-out'] {
+    animation: none !important;
+    --tw-enter-opacity: initial;
+    --tw-enter-scale: initial;
+    --tw-enter-rotate: initial;
+    --tw-enter-translate-x: initial;
+    --tw-enter-translate-y: initial;
+    --tw-exit-opacity: initial;
+    --tw-exit-scale: initial;
+    --tw-exit-rotate: initial;
+    --tw-exit-translate-x: initial;
+    --tw-exit-translate-y: initial;
   }
 }
 
