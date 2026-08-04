@@ -16,7 +16,7 @@
 ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
-import { Window } from 'happy-dom'
+import { JSDOM, type DOMWindow } from 'jsdom'
 
 // -------------------------------------------------------------------------
 // 1. Mocks — MUST register before ANY module that uses them
@@ -31,7 +31,11 @@ mock.module('pdfjs-dist', () => ({
 // -------------------------------------------------------------------------
 // 2. DOM setup
 // -------------------------------------------------------------------------
-const win = new Window({ url: 'http://localhost:5173', height: 900, width: 1400 })
+const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', {
+  url: 'http://localhost:5173',
+  pretendToBeVisual: true,
+})
+const win = dom.window
 const doc = win.document
 
 const gs: any = globalThis
@@ -45,6 +49,11 @@ gs.navigator = win.navigator
 gs.requestAnimationFrame = (cb: FrameRequestCallback) =>
   setTimeout(() => cb(Date.now()), 0)
 gs.cancelAnimationFrame = (id: number) => clearTimeout(id)
+// jsdom lacks PointerEvent — React 19's synthetic events fall back to MouseEvent.
+gs.PointerEvent = win.MouseEvent
+// jsdom does not implement scrollIntoView (LayoutShell scrolls the focused
+// tree row into view in an effect).
+win.HTMLElement.prototype.scrollIntoView = () => {}
 gs.ResizeObserver = class MockResizeObserver {
   private cb: ResizeObserverCallback
   constructor(cb: ResizeObserverCallback) { this.cb = cb }

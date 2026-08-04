@@ -2845,11 +2845,15 @@ const DEPTH_POPOVER_OPTIONS = [
               <section className="arch-agent-workspace" aria-label="Agent session workspace">
                 <div className="arch-agent-workspace__tabs">
                   {WORKSPACE_TABS.map((tab) => (
+                    // These are styled toggle buttons, not a WAI-ARIA tabs
+                    // widget: there is no tablist parent and no tabpanel/
+                    // aria-controls wiring, so claiming role="tab" + aria-selected
+                    // flagged axe's aria-required-parent (tab role requires a
+                    // tablist ancestor). Plain buttons keep the interaction and
+                    // the active state is conveyed via .is-active styling.
                     <button
                       key={tab.id}
                       type="button"
-                      role="tab"
-                      aria-selected={activeWorkspaceTab === tab.id}
                       className={activeWorkspaceTab === tab.id ? 'is-active' : ''}
                       onClick={() => setActiveWorkspaceTab(tab.id)}
                       aria-label={tab.label}

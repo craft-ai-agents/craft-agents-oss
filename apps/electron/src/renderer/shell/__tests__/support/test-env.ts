@@ -1,10 +1,14 @@
 /**
  * Shared test setup for LayoutShell integration tests.
  *
- * Provides a happy-dom window, the DOM globals that React + happy-dom expect,
- * and a fully-typed `window.electronAPI` mock that covers every method
+ * Provides a jsdom window, the DOM globals that React + jsdom expect, and a
+ * fully-typed `window.electronAPI` mock that covers every method
  * `LayoutShell.tsx` (or any of its descendants) calls. Tests can override
  * individual methods on the returned `api` object to inject fixtures.
+ *
+ * Migrated from happy-dom → jsdom so axe-core (via vitest-axe) can run real
+ * accessibility audits against the rendered tree: happy-dom's DOM was too
+ * incomplete for axe's selectors/roles resolution.
  *
  * Usage:
  *   import { setupTestEnvironment, type TestApi } from './support/test-env'
@@ -13,7 +17,7 @@
  *   // then dynamically import LayoutShell
  */
 
-import { Window } from 'happy-dom'
+import { JSDOM, type DOMWindow } from 'jsdom'
 
 type DirectoryEntry = {
   name: string
@@ -51,14 +55,18 @@ type SetupOptions = {
 }
 
 export function setupTestEnvironment(options: SetupOptions = {}): {
-  win: Window
-  doc: Window['document']
+  win: DOMWindow
+  doc: DOMWindow['document']
   api: TestApi
   tree: DirectoryTree
 } {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-  const win = new Window({ url: 'http://localhost:5173', height: 900, width: 1400 })
+  const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', {
+    url: 'http://localhost:5173',
+    pretendToBeVisual: true, // enables requestAnimationFrame on the window
+  })
+  const win = dom.window
   const doc = win.document
 
   const gs = globalThis as Record<string, unknown>
@@ -72,6 +80,30 @@ export function setupTestEnvironment(options: SetupOptions = {}): {
   gs.requestAnimationFrame = (cb: FrameRequestCallback) =>
     setTimeout(() => cb(Date.now()), 0)
   gs.cancelAnimationFrame = (id: number) => clearTimeout(id)
+  // jsdom lacks PointerEvent (React 19 uses it for some synthetic events).
+  // Fall back to MouseEvent when absent.
+  if (!gs.PointerEvent) {
+    gs.PointerEvent = win.MouseEvent
+  }
+  // jsdom does not implement scrollIntoView (LayoutShell scrolls the focused
+  // tree row into view in an effect).
+  if (typeof win.HTMLElement.prototype.scrollIntoView !== 'function') {
+    win.HTMLElement.prototype.scrollIntoView = () => {}
+  }
+
+  // axe-core reads matchMedia during its run.
+  if (!gs.matchMedia) {
+    gs.matchMedia = (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })
+  }
 
   if (!gs.ResizeObserver) {
     class MockResizeObserver {

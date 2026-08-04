@@ -31,7 +31,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { execSync } from 'node:child_process'
-import { Window } from 'happy-dom'
+import { JSDOM, type DOMWindow } from 'jsdom'
 import { getDefaultStore } from 'jotai'
 import { activeSessionIdAtom } from '../../atoms/sessions'
 import type { GitFileEntry, ShellSessionContext } from '../types'
@@ -44,7 +44,11 @@ import type { GitFileEntry, ShellSessionContext } from '../types'
 
 ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
 
-const win = new Window({ url: 'http://localhost:5173', height: 900, width: 1400 })
+const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', {
+  url: 'http://localhost:5173',
+  pretendToBeVisual: true,
+})
+const win = dom.window
 const gs: any = globalThis
 gs.window = win
 gs.document = win.document

@@ -88,8 +88,12 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
+    "@types/jsdom": "^28.0.3",
     "@types/react-window": "^1.8.0",
     "@types/ws": "^8.18.1",
-    "happy-dom": "^20.11.1"
+    "axe-core": "^4.12.1",
+    "happy-dom": "^20.11.1",
+    "jsdom": "^30.0.1",
+    "vitest-axe": "^0.1.0"
   }
 }

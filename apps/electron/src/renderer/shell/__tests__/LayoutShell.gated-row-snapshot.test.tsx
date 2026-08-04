@@ -249,7 +249,14 @@ function normalizeSnapshotHtml(html: string): string {
   // *references* to it — notably the gate banner's `aria-describedby` — intact,
   // so the id still leaked into the snapshot. Scrub the token wherever it
   // appears instead of guessing which attributes carry it.
-  return html.replace(/:r[0-9a-z]+:/gi, 'SNAPSHOT_ID')
+  //
+  // Also scrub the row-focus class: clicking a tree row sets focusedTreePath
+  // (which drives `wd-files-item--focused`). happy-dom did not move focus on
+  // click, but jsdom does, so the class only shows up under the migrated env.
+  // It is interaction state, not snapshot-worthy structure.
+  return html
+    .replace(/:r[0-9a-z]+:/gi, 'SNAPSHOT_ID')
+    .replace(/wd-files-item--focused /g, '')
 }
 
 function snapshotTree(container: HTMLElement): string {
