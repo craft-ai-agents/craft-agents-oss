@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { Check, Minus, Plus, RotateCcw } from 'lucide-react'
 import { cn } from '../../lib/utils'
@@ -33,6 +34,7 @@ function ZoomDropdown({
   const { t } = useTranslation()
   const [isOpen, setIsOpen] = React.useState(false)
   const dropdownRef = React.useRef<HTMLDivElement>(null)
+  const shouldReduceMotion = useReducedMotion()
 
   React.useEffect(() => {
     if (!isOpen) return
@@ -68,39 +70,44 @@ function ZoomDropdown({
         {zoomPercent}%
       </button>
 
-      {isOpen && (
-        <div
-          className={cn(
-            'absolute top-full right-0 mt-1 min-w-[140px] p-1',
-            'bg-background rounded-[8px] shadow-strong border border-border/50',
-            'animate-in fade-in-0 zoom-in-95 duration-100',
-          )}
-        >
-          <button
-            type="button"
-            onClick={() => { onZoomToFit(); setIsOpen(false) }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-left text-[13px] rounded-[4px] hover:bg-foreground/[0.05] transition-colors"
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            className={cn(
+              'absolute top-full right-0 mt-1 min-w-[140px] p-1',
+              'bg-background rounded-[8px] shadow-strong border border-border/50',
+            )}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.1, ease: 'easeOut' }}
           >
-            {t('overlay.zoomToFit')}
-          </button>
-          <div className="h-px bg-foreground/5 my-1" />
-          {zoomPresets.map(preset => (
             <button
-              key={preset}
               type="button"
-              onClick={() => { onZoomToPreset(preset); setIsOpen(false) }}
+              onClick={() => { onZoomToFit(); setIsOpen(false) }}
               className="flex items-center gap-2 w-full px-2.5 py-1.5 text-left text-[13px] rounded-[4px] hover:bg-foreground/[0.05] transition-colors"
             >
-              <span className="w-3.5 h-3.5 flex items-center justify-center shrink-0">
-                {activePreset === preset && <Check className="w-3.5 h-3.5" />}
-              </span>
-              <span className={activePreset === preset ? 'font-medium' : ''}>
-                {preset}%
-              </span>
+              {t('overlay.zoomToFit')}
             </button>
-          ))}
-        </div>
-      )}
+            <div className="h-px bg-foreground/5 my-1" />
+            {zoomPresets.map(preset => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => { onZoomToPreset(preset); setIsOpen(false) }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-left text-[13px] rounded-[4px] hover:bg-foreground/[0.05] transition-colors"
+              >
+                <span className="w-3.5 h-3.5 flex items-center justify-center shrink-0">
+                  {activePreset === preset && <Check className="w-3.5 h-3.5" />}
+                </span>
+                <span className={activePreset === preset ? 'font-medium' : ''}>
+                  {preset}%
+                </span>
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

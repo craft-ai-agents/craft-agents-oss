@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as ReactDOM from 'react-dom'
 import { cn } from '../../lib/utils'
@@ -124,6 +125,7 @@ export function SimpleDropdown({
 }: SimpleDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
+  const shouldReduceMotion = useReducedMotion()
 
   // Notify parent of open state changes
   const setIsOpenWithCallback = useCallback((open: boolean | ((prev: boolean) => boolean)) => {
@@ -312,23 +314,28 @@ export function SimpleDropdown({
         {trigger}
       </div>
 
-      {isOpen && position && ReactDOM.createPortal(
-        <SimpleDropdownContext.Provider value={contextValue}>
-          <div
-            ref={menuRef}
-            className={cn(
-              'fixed z-50 min-w-[140px] p-1',
-              'bg-background rounded-[8px] shadow-strong border border-border/50',
-              'animate-in fade-in-0 zoom-in-95 duration-100',
-              className
-            )}
-            style={{ top: position.top, left: position.left }}
-          >
-            {children}
-          </div>
-        </SimpleDropdownContext.Provider>,
-        document.body
-      )}
+      <AnimatePresence initial={false}>
+        {isOpen && position && ReactDOM.createPortal(
+          <SimpleDropdownContext.Provider value={contextValue}>
+            <motion.div
+              ref={menuRef}
+              className={cn(
+                'fixed z-50 min-w-[140px] p-1',
+                'bg-background rounded-[8px] shadow-strong border border-border/50',
+                className,
+              )}
+              style={{ top: position.top, left: position.left }}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.1, ease: 'easeOut' }}
+            >
+              {children}
+            </motion.div>
+          </SimpleDropdownContext.Provider>,
+          document.body,
+        )}
+      </AnimatePresence>
     </>
   )
 }
