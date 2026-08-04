@@ -61,16 +61,39 @@ gs.IntersectionObserver = class MockIntersectionObserver {
 }
 
 // -------------------------------------------------------------------------
-// 2. Mock motion/react — render AnimatePresence + motion.div as plain divs
-//    so we don't need the real animation engine.
+// 2. Mock motion/react — render the motion surfaces used by renderer tests
+//    as plain elements so we don't need the real animation engine. Bun's
+//    module mock is worker-wide, so keep this surface complete for consumers
+//    loaded after this test (including SearchPanel's motion.button and
+//    useReducedMotion).
 // -------------------------------------------------------------------------
+const motionElement = (tag: string) =>
+  React.forwardRef<HTMLElement, any>((props, ref) => {
+    const {
+      initial,
+      animate,
+      exit,
+      transition,
+      variants,
+      layout,
+      layoutId,
+      whileHover,
+      whileTap,
+      whileFocus,
+      whileInView,
+      viewport,
+      ...domProps
+    } = props
+    return React.createElement(tag, { ...domProps, ref })
+  })
+
 mock.module('motion/react', () => ({
   AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
   motion: {
-    div: React.forwardRef<HTMLDivElement, any>((props, ref) =>
-      React.createElement('div', { ...props, ref }),
-    ),
+    div: motionElement('div'),
+    button: motionElement('button'),
   },
+  useReducedMotion: () => false,
 }))
 
 // -------------------------------------------------------------------------

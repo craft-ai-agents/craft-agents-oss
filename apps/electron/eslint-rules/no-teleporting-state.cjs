@@ -11,11 +11,10 @@
  * a hard cut: the eye loses the element between frames and the interface
  * feels jumpy. The accepted remediations are (pick one):
  *
- *   1. Wrap in <AnimatePresence> + <motion.div> (Framer Motion) for a real
- *      exit animation, or
- *   2. Add Tailwind's mount-animation utilities to the rendered element —
- *      `animate-in fade-in-0 zoom-in-95 duration-100` — which fire on
- *      mount via the tailwindcss-animate plugin.
+ *   1. Wrap the conditional render in <AnimatePresence> (Framer Motion)
+ *      for a real exit-capable transition, or
+ *   2. Render the conditional content as a `motion.*` element so the mount
+ *      is owned by the motion runtime.
  *
  * The rule does NOT demand an exit animation for the "tens/day" frequency
  * tier — it only demands that the mount is not a teleport.
@@ -51,14 +50,11 @@
  * ----------
  * A flagged-shaped render is allowed when ANY of these hold:
  *   - an <AnimatePresence> ancestor (exit-capable, Framer Motion owns it)
- *   - the rendered element carries an `animate-in` class — string literal,
- *     cn(...) call, or template literal
  *   - the rendered element is a `motion.*` component
  *   - the rendered element name is in `allowedComponents`
  *     (default: AnimatedCollapsibleContent)
  *   - the render is a ReactDOM.createPortal(...) whose JSX argument is
- *     itself an animated element (the animate-in lives on the portalled
- *     node, which is what the user sees mount)
+ *     itself a motion element (the motion runtime owns the portalled node)
  *
  * Scope (deliberately limited)
  * ----------------------------
@@ -79,7 +75,7 @@ module.exports = {
     type: 'suggestion',
     docs: {
       description:
-        'Require conditional renders gated on state toggles (isOpen / expanded / ...) to animate their mount (AnimatePresence or animate-in classes) instead of teleporting.',
+        'Require conditional renders gated on state toggles (isOpen / expanded / ...) to animate their mount (AnimatePresence or motion.*) instead of teleporting.',
       category: 'Best Practices',
       recommended: false,
     },
@@ -108,7 +104,7 @@ module.exports = {
     ],
     messages: {
       teleportingState:
-        '`{{name}} && <JSX>` mounts with no transition — it teleports in/out. Wrap in <AnimatePresence> + <motion.div>, or add Tailwind mount-animation classes (`animate-in fade-in-0 zoom-in-95 duration-100`) to the rendered element.',
+        '`{{name}} && <JSX>` mounts with no transition — it teleports in/out. Wrap in <AnimatePresence> + <motion.div>, or render the conditional content as a motion.* component.',
     },
   },
 
@@ -230,42 +226,12 @@ module.exports = {
       )
     }
 
-    /** True when a className attribute value mentions animate-in. */
-    function classNameHasAnimateIn(valueNode, depth = 0) {
-      if (!valueNode || depth > 3) return false
-
-      // className="literal" or className={ts cast}
-      const v = unwrap(valueNode)
-      if (!v) return false
-
-      // String literal.
-      if (v.type === 'Literal' && typeof v.value === 'string') {
-        return v.value.includes('animate-in')
-      }
-      // Template literal with a static quasi.
-      if (v.type === 'TemplateLiteral') {
-        return v.quasis.some((q) => q.value && q.value.cooked && q.value.cooked.includes('animate-in'))
-      }
-      // cn('animate-in ...', cond && 'animate-in', ...) — inspect every arg.
-      if (v.type === 'CallExpression') {
-        return v.arguments.some((arg) => classNameHasAnimateIn(arg, depth + 1))
-      }
-      // cn(base, isOpen && 'animate-in') — logical/concat branches.
-      if (v.type === 'LogicalExpression' || v.type === 'ConditionalExpression' || v.type === 'BinaryExpression') {
-        return (
-          classNameHasAnimateIn(v.left, depth + 1) ||
-          classNameHasAnimateIn(v.right, depth + 1)
-        )
-      }
-      return false
-    }
-
     /**
      * True when a rendered RHS is animated:
-     *   - a JSXElement with an animate-in className, motion.* name, or
-     *     an allowed component name
+     *   - a JSXElement with a motion.* name or an allowed component name
+     *   - a transparent Provider/Suspense wrapper containing an animated element
      *   - a createPortal(...) whose JSX argument is an animated element
-     *   - a JSXFragment (children carry their own classes — recurse)
+     *   - a JSXFragment (children carry their own motion — recurse)
      */
     function isAnimatedRender(node, depth = 0) {
       if (!node || depth > 3) return false
@@ -282,30 +248,26 @@ module.exports = {
         ) {
           return true
         }
-        let hasClassName = false
-        // className on the element itself.
-        for (const attr of opening.attributes || []) {
-          if (
-            attr.type === 'JSXAttribute' &&
-            attr.name &&
-            attr.name.type === 'JSXIdentifier' &&
-            attr.name.name === 'className' &&
-            attr.value
-          ) {
-            hasClassName = true
-            const value =
-              attr.value.type === 'JSXExpressionContainer' ? attr.value.expression : attr.value
-            if (classNameHasAnimateIn(value)) return true
-          }
-        }
-        // Transparent wrapper (context Provider, Suspense, etc.) with no
-        // className of its own — recurse into children so the animated
-        // node a portal actually renders is credited.
-        if (!hasClassName) {
-          return n.children.some((child) => isAnimatedRender(child, depth + 1))
-        }
-        // Styled surface without animate-in — a teleport.
-        return false
+        // Only wrappers that do not render a visible surface may delegate
+        // animation credit to a motion child. A plain <div> around motion
+        // content still mounts itself abruptly and must be flagged.
+        const wrapperName = opening && opening.name
+        const isTransparentWrapper =
+          Boolean(
+            wrapperName &&
+              wrapperName.type === 'JSXMemberExpression' &&
+              wrapperName.property &&
+              (wrapperName.property.name === 'Provider' ||
+                wrapperName.property.name === 'Consumer'),
+          ) ||
+          Boolean(
+            wrapperName &&
+              wrapperName.type === 'JSXIdentifier' &&
+              wrapperName.name === 'Suspense',
+          )
+        return isTransparentWrapper
+          ? n.children.some((child) => isAnimatedRender(child, depth + 1))
+          : false
       }
 
       if (n.type === 'JSXFragment') {

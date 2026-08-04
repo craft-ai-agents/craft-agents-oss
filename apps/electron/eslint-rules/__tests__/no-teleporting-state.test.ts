@@ -7,7 +7,7 @@
  * The rule should:
  *   - Flag `{isOpen && <JSX>}` / `{expanded && <JSX>}` conditional renders
  *     whose mount is not animated (no AnimatePresence ancestor, no
- *     animate-in class, no motion.* element, no allowed component).
+ *     motion.* element, no allowed component).
  *   - Allow the same shapes when one of those exemptions holds.
  *   - Ignore data gates (`showTransportConnectionBanner && ...`,
  *     `openCountCapped && ...`) that are not state toggles.
@@ -140,28 +140,28 @@ describe('no-teleporting-state', () => {
     ).toEqual([])
   })
 
-  it('allows {isOpen && <JSX>} with an animate-in className literal', () => {
+  it('flags dead animate-in className literals', () => {
     expect(
       lint(
         'const x = <div>{isOpen && <div className="animate-in fade-in-0 zoom-in-95 duration-100">hi</div>}</div>',
-      ),
-    ).toEqual([])
+      )[0]?.messageId,
+    ).toBe(FAIL)
   })
 
-  it('allows animate-in inside a cn(...) call', () => {
+  it('flags dead animate-in classes inside a cn(...) call', () => {
     expect(
       lint(
         "const x = <div>{isOpen && <div className={cn('animate-in fade-in-0', 'duration-100')}>hi</div>}</div>",
-      ),
-    ).toEqual([])
+      )[0]?.messageId,
+    ).toBe(FAIL)
   })
 
-  it('allows animate-in via a conditional inside cn(...)', () => {
+  it('flags dead conditional animate-in classes inside cn(...)', () => {
     expect(
       lint(
         "const x = <div>{isOpen && <div className={cn('base', isOpen && 'animate-in')}>hi</div>}</div>",
-      ),
-    ).toEqual([])
+      )[0]?.messageId,
+    ).toBe(FAIL)
   })
 
   it('allows motion.* elements', () => {
@@ -172,12 +172,20 @@ describe('no-teleporting-state', () => {
     ).toEqual([])
   })
 
-  it('allows a createPortal whose JSX argument carries animate-in', () => {
-    expect(
-      lint(
-        "const x = <div>{isOpen && position && ReactDOM.createPortal(<div className='animate-in fade-in-0 zoom-in-95 duration-100'>menu</div>, document.body)}</div>",
-      ),
-    ).toEqual([])
+  it('does not let a plain wrapper hide a teleporting outer mount', () => {
+    const errs = lint(
+      'const x = <div>{isOpen && <div><motion.div>hi</motion.div></div>}</div>',
+    )
+    expect(errs).toHaveLength(1)
+    expect(errs[0]!.messageId).toBe(FAIL)
+  })
+
+  it('flags a createPortal whose JSX argument only carries dead animate-in', () => {
+    const errs = lint(
+      "const x = <div>{isOpen && position && ReactDOM.createPortal(<div className='animate-in fade-in-0 zoom-in-95 duration-100'>menu</div>, document.body)}</div>",
+    )
+    expect(errs).toHaveLength(1)
+    expect(errs[0]!.messageId).toBe(FAIL)
   })
 
   it('flags a createPortal whose JSX argument has no animate-in', () => {
@@ -188,13 +196,13 @@ describe('no-teleporting-state', () => {
     expect(errs[0]!.messageId).toBe(FAIL)
   })
 
-  it('allows animate-in through a transparent wrapper (Context.Provider) in a portal', () => {
+  it('flags dead animate-in through a transparent wrapper in a portal', () => {
     // SimpleDropdown shape: the animate-in div sits inside a context Provider.
-    expect(
-      lint(
-        "const x = <div>{isOpen && position && ReactDOM.createPortal(<SimpleDropdownContext.Provider value={ctx}><div className='animate-in fade-in-0 zoom-in-95 duration-100'>menu</div></SimpleDropdownContext.Provider>, document.body)}</div>",
-      ),
-    ).toEqual([])
+    const errs = lint(
+      "const x = <div>{isOpen && position && ReactDOM.createPortal(<SimpleDropdownContext.Provider value={ctx}><div className='animate-in fade-in-0 zoom-in-95 duration-100'>menu</div></SimpleDropdownContext.Provider>, document.body)}</div>",
+    )
+    expect(errs).toHaveLength(1)
+    expect(errs[0]!.messageId).toBe(FAIL)
   })
 
   it('still flags animate-in on a wrapper but not the styled surface itself', () => {
