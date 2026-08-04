@@ -78,6 +78,7 @@
     "./tasks": "./src/tasks/index.ts",
     "./tools": "./src/tools/index.ts",
     "./utils": "./src/utils/index.ts",
+    "./utils/env": "./src/utils/env.ts",
     "./utils/icon": "./src/utils/icon.ts",
     "./utils/icon-constants": "./src/utils/icon-constants.ts",
     "./utils/logo": "./src/utils/logo.ts",

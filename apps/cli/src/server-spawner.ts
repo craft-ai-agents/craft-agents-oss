@@ -7,6 +7,7 @@
 
 import { resolve, join } from 'node:path'
 import type { Subprocess } from 'bun'
+import { sanitizeChildProcessEnv } from '@archstudio/shared/utils/env'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -61,13 +62,13 @@ export async function spawnServer(opts?: SpawnServerOptions): Promise<SpawnedSer
   // subprocess launches when the CLI is invoked from within a Claude Code session.
   const { CLAUDECODE: _, ...parentEnv } = process.env
   const proc: Subprocess = Bun.spawn(['bun', 'run', serverEntry], {
-    env: {
+    env: sanitizeChildProcessEnv({
       ...parentEnv,
       ...opts?.env,
       ARCHSTUDIO_SERVER_TOKEN: token,
       ARCHSTUDIO_RPC_PORT: '0',
       ARCHSTUDIO_RPC_HOST: '127.0.0.1',
-    },
+    }),
     stdout: 'pipe',
     stderr: 'pipe',
   })

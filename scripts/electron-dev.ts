@@ -8,6 +8,7 @@ import { existsSync, rmSync, cpSync, readFileSync, statSync, mkdirSync } from "f
 import { join, basename } from "path";
 import * as esbuild from "esbuild";
 import { downloadUv, type Platform, type Arch } from "./build/common";
+import { sanitizeChildProcessEnv } from "@archstudio/shared/utils/env";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const ELECTRON_DIR = join(ROOT_DIR, "apps/electron");
@@ -281,14 +282,14 @@ function getElectronEnv(): Record<string, string> {
   // It checks: CODEX_PATH env var > bundled binary > local dev fork > system PATH.
   // You can override with CODEX_PATH env var if needed for debugging.
 
-  return {
-    ...process.env as Record<string, string>,
+  return sanitizeChildProcessEnv({
+    ...process.env,
     VITE_DEV_SERVER_URL: `http://localhost:${vitePort}`,
     ARCHSTUDIO_CONFIG_DIR: process.env.ARCHSTUDIO_CONFIG_DIR || "",
     ARCHSTUDIO_APP_NAME: process.env.ARCHSTUDIO_APP_NAME || "ARCHstudio",
     ARCHSTUDIO_DEEPLINK_SCHEME: process.env.ARCHSTUDIO_DEEPLINK_SCHEME || "archstudio",
     ARCHSTUDIO_INSTANCE_NUMBER: process.env.ARCHSTUDIO_INSTANCE_NUMBER || "",
-  };
+  });
 }
 
 // Externals for the main-process bundle.
@@ -543,7 +544,7 @@ async function main(): Promise<void> {
     stdin: "ignore",
     stdout: "inherit",
     stderr: "inherit",
-    env: process.env as Record<string, string>,
+    env: sanitizeChildProcessEnv(process.env),
   });
   processes.push(viteProc);
 

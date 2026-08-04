@@ -9,6 +9,7 @@
 import { CraftMcpClient } from './client.js';
 import { debug } from '../utils/debug.ts';
 import { normalizeMcpUrl } from '../sources/server-builder.ts';
+import { sanitizeChildProcessEnv } from '../utils/env.ts';
 import type { McpTransport } from '../sources/types.ts';
 
 export interface InvalidProperty {
@@ -360,13 +361,7 @@ export async function validateStdioMcpConnection(
     }
   };
 
-  // Filter out undefined entries from process.env before merging.
-  const processEnv: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined) {
-      processEnv[key] = value;
-    }
-  }
+  const processEnv = sanitizeChildProcessEnv(process.env);
 
   const withTimeout = <T>(p: Promise<T>, ms: number, label: string): Promise<T> => {
     return new Promise<T>((resolve, reject) => {
@@ -390,7 +385,7 @@ export async function validateStdioMcpConnection(
     transport = new StdioClientTransport({
       command,
       args,
-      env: { ...processEnv, ...env },
+      env: sanitizeChildProcessEnv({ ...processEnv, ...env }),
       stderr: 'pipe',
     });
 

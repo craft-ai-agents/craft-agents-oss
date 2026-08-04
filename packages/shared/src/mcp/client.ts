@@ -8,6 +8,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { sanitizeChildProcessEnv } from '../utils/env.ts';
 
 /**
  * HTTP transport config for remote MCP servers
@@ -84,16 +85,14 @@ export class CraftMcpClient {
     if (config.transport === 'stdio') {
       // Stdio transport for local MCP servers - merge with process env,
       // but filter out sensitive credentials to prevent leaking secrets to subprocesses
-      const processEnv: Record<string, string> = {};
-      for (const [key, value] of Object.entries(process.env)) {
-        if (value !== undefined && !BLOCKED_ENV_VARS.includes(key)) {
-          processEnv[key] = value;
-        }
+      const processEnv = sanitizeChildProcessEnv(process.env);
+      for (const key of BLOCKED_ENV_VARS) {
+        delete processEnv[key];
       }
       this.transport = new StdioClientTransport({
         command: config.command,
         args: config.args,
-        env: { ...processEnv, ...config.env },
+        env: sanitizeChildProcessEnv({ ...processEnv, ...config.env }),
       });
     } else {
       // HTTP transport for remote MCP servers

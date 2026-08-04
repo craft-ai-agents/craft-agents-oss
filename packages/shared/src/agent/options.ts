@@ -4,6 +4,7 @@ import { homedir } from "os";
 import { existsSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from "fs";
 import { debug } from "../utils/debug";
 import { getProxyEnvVars } from "../config/proxy-env.ts";
+import { sanitizeChildProcessEnv } from "../utils/env.ts";
 
 declare const ARCHSTUDIO_AGENT_CLI_VERSION: string | undefined;
 
@@ -185,13 +186,13 @@ export function getPathToClaudeCodeExecutable(): string | undefined {
 export function buildClaudeSubprocessEnv(
     envOverrides?: Record<string, string>,
 ): NodeJS.ProcessEnv {
-    const env: NodeJS.ProcessEnv = {
+    const env: NodeJS.ProcessEnv = sanitizeChildProcessEnv({
         ...process.env,
         ...getProxyEnvVars(),
         ...envOverrides,
         // Propagate debug mode from argv flag OR existing env var
         ARCHSTUDIO_DEBUG: (process.argv.includes('--debug') || process.env.ARCHSTUDIO_DEBUG === '1') ? '1' : '0',
-    };
+    });
 
     // Bedrock must never be routed through the Claude SDK path.
     // Strip only Claude-specific Bedrock routing vars here; keep generic AWS_*

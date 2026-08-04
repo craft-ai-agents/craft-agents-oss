@@ -24,6 +24,7 @@ import {
   type WorkerCommand,
   type WorkerEvent,
 } from '@archstudio/messaging-whatsapp-worker'
+import { sanitizeChildProcessEnv } from '@archstudio/shared/utils/env'
 import type {
   PlatformAdapter,
   PlatformConfig,
@@ -161,7 +162,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
     this.proc = spawn(nodeBin, [cfg.workerEntry], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      env: sanitizeChildProcessEnv({ ...process.env, ELECTRON_RUN_AS_NODE: '1' }),
     })
 
     this.proc.stdout?.setEncoding('utf8')

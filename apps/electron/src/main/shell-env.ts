@@ -11,6 +11,7 @@
 
 import { execSync } from 'child_process'
 import { mainLog } from './logger'
+import { sanitizeChildProcessEnv } from '@archstudio/shared/utils/env'
 
 // Environment variables that should NOT be imported from the shell
 // VITE_* vars from dev mode would make packaged app try to load from localhost
@@ -48,7 +49,7 @@ export function loadShellEnv(): void {
     const output = execSync(`${shell} -l -i -c 'echo __ENV_START__ && env'`, {
       encoding: 'utf-8',
       timeout: 5000,
-      env: {
+      env: sanitizeChildProcessEnv({
         HOME: process.env.HOME,
         USER: process.env.USER,
         SHELL: shell,
@@ -58,7 +59,7 @@ export function loadShellEnv(): void {
         // when the shell hits the /usr/bin/git shim on systems without Xcode CLT
         APPLE_SUPPRESS_DEVELOPER_TOOL_POPUP: '1',
         GIT_TERMINAL_PROMPT: '0',
-      },
+      }),
       stdio: ['pipe', 'pipe', 'pipe'],
     })
 

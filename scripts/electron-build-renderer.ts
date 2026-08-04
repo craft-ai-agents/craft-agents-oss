@@ -5,6 +5,7 @@
 import { spawn } from "bun";
 import { existsSync, rmSync } from "fs";
 import { join } from "path";
+import { sanitizeChildProcessEnv } from "@archstudio/shared/utils/env";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const ELECTRON_DIR = join(ROOT_DIR, "apps/electron");
@@ -20,7 +21,7 @@ const proc = spawn({
   cwd: ROOT_DIR,
   stdout: "inherit",
   stderr: "inherit",
-  env: { ...process.env, NODE_OPTIONS: "--max-old-space-size=4096" },
+  env: sanitizeChildProcessEnv({ ...process.env, NODE_OPTIONS: "--max-old-space-size=4096" }),
 });
 
 const exitCode = await proc.exited;

@@ -18,6 +18,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { sanitizeChildProcessEnv } from '../../utils/env.ts';
 
 const SPAWN_TIMEOUT_MS = 200;
 
@@ -58,7 +59,7 @@ export function rewriteBashWithRtk(
     const result = spawnSync(rtkPath, ['rewrite', command], {
       encoding: 'utf-8',
       timeout: SPAWN_TIMEOUT_MS,
-      env: { ...process.env, RTK_TELEMETRY_DISABLED: '1' },
+      env: sanitizeChildProcessEnv({ ...process.env, RTK_TELEMETRY_DISABLED: '1' }),
     });
 
     if (result.error) {

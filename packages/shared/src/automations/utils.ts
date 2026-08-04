@@ -209,20 +209,29 @@ export function matcherMatchesSdk(matcher: AutomationMatcher, event: AgentEvent,
 // ============================================================================
 
 /**
- * Get process.env as a clean Record<string, string> with undefined values filtered out.
- * Avoids the unsafe `process.env as Record<string, string>` cast that turns undefined
- * values into the string "undefined".
+ * Get process.env as a clean Record<string, string> filtered for the automations
+ * pipeline. Avoids the unsafe `process.env as Record<string, string>` cast that
+ * turns undefined values into the string "undefined".
  *
- * Also strips env vars whose value is the literal string "undefined": on Windows,
- * WSL env imports leak vars like ORIGINAL_XDG_CURRENT_DESKTOP="undefined" into
- * process.env, and those must never reach child-process envs or automation hooks.
+ * Strips three hostile value classes that can leak into process.env on Windows
+ * and reach downstream prompt/command/webhook actions:
+ *   1. genuinely undefined entries (already filtered by sanitizeChildProcessEnv)
+ *   2. the literal string "undefined" (WSL -> Windows shell imports such as
+ *      ORIGINAL_XDG_CURRENT_DESKTOP — filtered by sanitizeChildProcessEnv)
+ *   3. empty strings (e.g. accidental `ARCHSTUDIO_TOKEN=` assignment bleeds
+ *      into automation hooks; automation commands need a definite presence
+ *      check, not a truthy check that includes "")
+ *
+ * The shared `sanitizeChildProcessEnv` keeps its empty-string carve-out for
+ * non-automation spawn paths (dev/build scripts), where POSIX-style "F= unset"
+ * matters. Automations need the stricter filter; this is the source.
  */
 export function cleanEnv(): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(process.env).filter(
-      (e): e is [string, string] => e[1] !== undefined && e[1] !== 'undefined',
-    )
-  );
+  const cleaned = sanitizeChildProcessEnv(process.env)
+  for (const key of Object.keys(cleaned)) {
+    if (cleaned[key] === '') delete cleaned[key]
+  }
+  return cleaned
 }
 
 /** Keys skipped when iterating payload fields for env vars */

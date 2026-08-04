@@ -4,6 +4,7 @@ import { RPC_CHANNELS, type FileAttachment, type SendMessageOptions, type Sessio
 import type { StoredAttachment } from '@archstudio/core/types'
 import { getWorkspaceByNameOrId } from '@archstudio/shared/config'
 import { perf } from '@archstudio/shared/utils'
+import { sanitizeChildProcessEnv } from '@archstudio/shared/utils/env'
 import { isValidThinkingLevel, THINKING_LEVEL_IDS } from '@archstudio/shared/agent/thinking-levels'
 
 const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
@@ -480,7 +481,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
         }
         const result = Bun.spawnSync(['git', 'checkout', '--', filePath], {
           cwd,
-          env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }, // never prompt for credentials
+          env: sanitizeChildProcessEnv({ ...process.env, GIT_TERMINAL_PROMPT: '0' }), // never prompt for credentials
         })
         if (result.exitCode !== 0) {
           const stderr = result.stderr instanceof Buffer ? result.stderr.toString() : String(result.stderr ?? '')

@@ -5,6 +5,7 @@
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ScriptRuntimeLanguage } from './resolve-script-runtime.ts';
+import { sanitizeChildProcessEnv } from '@archstudio/shared/utils/env';
 
 /**
  * Env vars stripped from subprocesses to prevent credential leakage.
@@ -28,7 +29,7 @@ export const BLOCKED_ENV_VARS = [
  * Return a shallow-copied environment with sensitive variables removed.
  */
 export function createSanitizedEnv(baseEnv: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...baseEnv };
+  const env: NodeJS.ProcessEnv = sanitizeChildProcessEnv(baseEnv);
   for (const key of BLOCKED_ENV_VARS) {
     delete env[key];
   }

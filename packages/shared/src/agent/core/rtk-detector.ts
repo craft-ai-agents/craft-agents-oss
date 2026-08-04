@@ -13,6 +13,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { sanitizeChildProcessEnv } from '../../utils/env.ts';
 
 const REQUIRED_MIN_VERSION = { major: 0, minor: 23, patch: 0 } as const;
 
@@ -73,7 +74,7 @@ export function getRtkGain(): RtkGainStats | null {
     const out = execFileSync(rtkPath, ['gain', '--format', 'json'], {
       encoding: 'utf-8',
       timeout: 2000,
-      env: { ...process.env, RTK_TELEMETRY_DISABLED: '1' },
+      env: sanitizeChildProcessEnv({ ...process.env, RTK_TELEMETRY_DISABLED: '1' }),
     });
     const parsed = JSON.parse(out) as { summary?: Partial<Record<keyof RtkGainStats | 'total_commands' | 'total_input' | 'total_output' | 'total_saved' | 'avg_savings_pct' | 'total_time_ms' | 'avg_time_ms', number>> };
     const s = parsed.summary;

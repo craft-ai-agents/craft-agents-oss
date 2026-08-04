@@ -3,6 +3,7 @@ import { join } from 'path'
 import { homedir } from 'os'
 import { execSync, spawn, type ChildProcess } from 'child_process'
 import { RPC_CHANNELS } from '@archstudio/shared/protocol'
+import { sanitizeChildProcessEnv } from '@archstudio/shared/utils/env'
 import { getGitBashPath, setGitBashPath, clearGitBashPath, CONFIG_DIR } from '@archstudio/shared/config'
 import { classifyExternalUrl, formatBlockedUrlError } from '@archstudio/shared/utils/url-safety'
 import { isUsableGitBashPath, validateGitBashPath } from '@archstudio/server-core/services'
@@ -239,7 +240,7 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
         const child = spawn(command, [], {
           shell: true,
           cwd: cwd || homedir(),
-          env: process.env,
+          env: sanitizeChildProcessEnv(process.env),
           windowsHide: true,
         })
         archCommandProcs.set(id, child)

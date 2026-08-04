@@ -18,6 +18,7 @@ import { createInterface, type Interface as ReadlineInterface } from 'node:readl
 import type { AgentEvent } from '@archstudio/core/types';
 import type { FileAttachment } from '../utils/files.ts';
 import { getProxyEnvVars } from '../config/proxy-env.ts';
+import { sanitizeChildProcessEnv } from '../utils/env.ts';
 
 import type {
   BackendConfig,
@@ -486,7 +487,7 @@ export class PiAgent extends BaseAgent {
     const child = spawn(nodePath, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
+      env: sanitizeChildProcessEnv({
         ...process.env,
         ...getProxyEnvVars(),
         ...this.config.envOverrides,
@@ -495,7 +496,7 @@ export class PiAgent extends BaseAgent {
         ...(sessionDir ? { ARCHSTUDIO_SESSION_DIR: sessionDir } : {}),
         // Propagate debug mode
         ARCHSTUDIO_DEBUG: (process.argv.includes('--debug') || process.env.ARCHSTUDIO_DEBUG === '1') ? '1' : '0',
-      },
+      }),
     });
 
     this.subprocess = child;

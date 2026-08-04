@@ -12,6 +12,7 @@
 import { spawnSync } from 'node:child_process'
 import { readdirSync, statSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
+import { sanitizeChildProcessEnv } from '@archstudio/shared/utils/env'
 
 const ROOT = resolve(import.meta.dirname, '..')
 
@@ -61,7 +62,7 @@ for (const file of files) {
   const res = spawnSync(process.execPath /* bun */, ['test', file], {
     cwd: ROOT,
     stdio: 'inherit',
-    env: { ...process.env },
+    env: sanitizeChildProcessEnv(process.env),
   })
   if (res.status !== 0) {
     failed++
