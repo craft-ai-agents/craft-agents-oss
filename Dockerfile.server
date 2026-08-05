@@ -60,14 +60,11 @@ COPY packages/core/package.json packages/core/
 COPY packages/session-tools-core/package.json packages/session-tools-core/
 COPY packages/session-mcp-server/package.json packages/session-mcp-server/
 COPY packages/pi-agent-server/package.json packages/pi-agent-server/
-COPY packages/craft-agents-commands/package.json packages/craft-agents-commands/
-COPY packages/craft-cli/package.json packages/craft-cli/
 COPY packages/ui/package.json packages/ui/
 COPY packages/messaging-gateway/package.json packages/messaging-gateway/
 COPY packages/messaging-whatsapp-worker/package.json packages/messaging-whatsapp-worker/
 COPY apps/electron/package.json apps/electron/
 COPY apps/cli/package.json apps/cli/
-COPY apps/marketing/package.json apps/marketing/
 COPY apps/viewer/package.json apps/viewer/
 COPY apps/webui/package.json apps/webui/
 

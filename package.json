@@ -18,7 +18,10 @@
   "workspaces": [
     "packages/*",
     "apps/*",
-    "!apps/online-docs"
+    "!apps/online-docs",
+    "!apps/marketing",
+    "!packages/craft-cli",
+    "!packages/craft-agents-commands"
   ],
   "scripts": {
     "test": "bun test && for f in $(find . -name '*.isolated.ts' -not -path './node_modules/*'); do bun test \"$f\" || exit 1; done",
