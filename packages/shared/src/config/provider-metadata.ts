@@ -68,6 +68,10 @@ const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
     name: 'xAI',
     dashboardUrl: 'https://console.x.ai',
   },
+  minimax: {
+    name: 'MiniMax',
+    dashboardUrl: 'https://platform.minimax.io',
+  },
 }
 
 /**

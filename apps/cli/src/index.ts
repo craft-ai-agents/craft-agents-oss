@@ -524,6 +524,7 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
   xai: 'XAI_API_KEY',
   cerebras: 'CEREBRAS_API_KEY',
   huggingface: 'HUGGINGFACE_API_KEY',
+  minimax: 'MINIMAX_API_KEY',
 }
 
 const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
@@ -1905,7 +1906,7 @@ Connection:
 
 LLM Configuration (for 'run' command):
   --provider <name>      LLM provider (default: anthropic, or $LLM_PROVIDER)
-                         Supported: anthropic, openai, google, openrouter, groq, mistral, deepseek, xai, ...
+                         Supported: anthropic, openai, google, openrouter, groq, mistral, deepseek, xai, minimax, ...
   --model <id>           Model to use (or $LLM_MODEL)
   --api-key <key>        API key (or $LLM_API_KEY, or provider-specific e.g. $OPENAI_API_KEY)
   --base-url <url>       Custom API endpoint (or $LLM_BASE_URL)

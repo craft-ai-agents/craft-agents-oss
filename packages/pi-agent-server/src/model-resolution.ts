@@ -39,7 +39,7 @@ export function resolvePiModel(
     const exact = modelRegistry.find(piAuthProvider, bareId);
     if (exact) {
       // MiniMax CN API rejects model IDs with the 'MiniMax-' prefix (e.g. 500 for
-      // 'MiniMax-M2.5-highspeed') but accepts bare names ('M2.5-highspeed').
+      // 'MiniMax-M3') but accepts bare names ('M3').
       if (piAuthProvider === 'minimax-cn' && exact.id.startsWith('MiniMax-')) {
         return { ...exact, id: exact.id.slice('MiniMax-'.length) };
       }
