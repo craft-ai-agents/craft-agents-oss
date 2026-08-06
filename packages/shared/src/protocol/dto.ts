@@ -593,7 +593,7 @@ export interface LlmConnectionSetup {
   /** AWS region for Pi+Bedrock connections */
   awsRegion?: string
   /** Bedrock authentication method — determines auth type for Pi+Bedrock connections */
-  bedrockAuthMethod?: 'iam_credentials' | 'environment'
+  bedrockAuthMethod?: 'iam_credentials' | 'environment' | 'bedrock_api_key'
   /**
    * Resolved Anthropic OAuth identity (issue #838), threaded through setup so it
    * persists for both new and re-auth connections. Optional and fail-soft.

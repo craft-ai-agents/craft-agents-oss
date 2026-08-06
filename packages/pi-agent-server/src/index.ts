@@ -85,7 +85,7 @@ import { applySystemPromptOverride } from './system-prompt-override.ts';
 
 /** Credential union used in init and token_update messages */
 type PiCredential =
-  | { type: 'api_key'; key: string }
+  | { type: 'api_key'; key: string; region?: string }
   | { type: 'oauth'; access: string; refresh: string; expires: number }
   | { type: 'iam'; accessKeyId: string; secretAccessKey: string; region?: string; sessionToken?: string };
 

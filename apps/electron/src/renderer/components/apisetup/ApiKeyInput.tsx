@@ -55,7 +55,7 @@ export interface ApiKeySubmitData {
   /** AWS region for Pi+Bedrock */
   awsRegion?: string
   /** Bedrock authentication method — determines auth type for Pi+Bedrock connections */
-  bedrockAuthMethod?: 'iam_credentials' | 'environment'
+  bedrockAuthMethod?: 'iam_credentials' | 'environment' | 'bedrock_api_key'
 }
 
 export interface ApiKeyInputProps {
@@ -205,7 +205,7 @@ export function ApiKeyInput({
   const [modelError, setModelError] = useState<string | null>(null)
 
   // Bedrock auth state
-  const [bedrockAuthMethod, setBedrockAuthMethod] = useState<'iam_credentials' | 'environment'>('iam_credentials')
+  const [bedrockAuthMethod, setBedrockAuthMethod] = useState<'iam_credentials' | 'environment' | 'bedrock_api_key'>('iam_credentials')
   const [awsAccessKeyId, setAwsAccessKeyId] = useState('')
   const [awsSecretAccessKey, setAwsSecretAccessKey] = useState('')
   const [awsSessionToken, setAwsSessionToken] = useState('')
@@ -233,7 +233,9 @@ export function ApiKeyInput({
 
   // Provider-specific placeholders from the active preset
   const activePresetObj = presets.find(p => p.key === activePreset)
-  const apiKeyPlaceholder = activePresetObj?.placeholder
+  const apiKeyPlaceholder = (isBedrock && bedrockAuthMethod === 'bedrock_api_key')
+    ? 'Paste your Bedrock API key...'
+    : activePresetObj?.placeholder
     ?? (providerType === 'google' ? 'AIza...'
     : providerType === 'pi' ? 'pi-...'
     : providerType === 'openai' ? 'sk-...'
@@ -367,9 +369,13 @@ export function ApiKeyInput({
         setModelError('Secret Access Key is required for IAM authentication.')
         return
       }
+      if (bedrockAuthMethod === 'bedrock_api_key' && !apiKey.trim()) {
+        setModelError('Bedrock API key is required.')
+        return
+      }
       const parsedModels = parseModelList(connectionDefaultModel)
       onSubmit({
-        apiKey: '',
+        apiKey: bedrockAuthMethod === 'bedrock_api_key' ? apiKey.trim() : '',
         piAuthProvider: effectivePiAuthProvider,
         bedrockAuthMethod,
         awsRegion: awsRegion.trim() || 'us-east-1',
@@ -430,8 +436,7 @@ export function ApiKeyInput({
 
   return (
     <form id={formId} onSubmit={handleSubmit} className="space-y-6">
-      {/* API Key — hidden for Bedrock (uses IAM/Environment auth) */}
-      {!isBedrock && (<div className="space-y-2">
+      {(!isBedrock || bedrockAuthMethod === 'bedrock_api_key') && (<div className="space-y-2">
         <Label htmlFor="api-key">API Key</Label>
         <div className={cn(
           "relative rounded-md shadow-minimal transition-colors",
@@ -549,7 +554,7 @@ export function ApiKeyInput({
 
       {/* Bedrock Auth Section */}
       {isBedrock && (
-        <>
+        <div className="space-y-3">
           {/* Auth Method Toggle */}
           <div className="space-y-2">
             <Label>Authentication</Label>
@@ -560,6 +565,7 @@ export function ApiKeyInput({
             )}>
               {([
                 { value: 'iam_credentials' as const, label: 'IAM Credentials' },
+                { value: 'bedrock_api_key' as const, label: 'API Key' },
                 { value: 'environment' as const, label: 'Environment (AWS CLI)' },
               ]).map(({ value, label }) => (
                 <button
@@ -568,7 +574,7 @@ export function ApiKeyInput({
                   disabled={isDisabled}
                   onClick={() => setBedrockAuthMethod(value)}
                   className={cn(
-                    "flex-1 py-1.5 text-[12px] font-medium transition-colors",
+                    "flex-auto py-1.5 px-2 text-[12px] font-medium transition-colors",
                     bedrockAuthMethod === value
                       ? "bg-background text-foreground shadow-minimal"
                       : "text-foreground/50 hover:text-foreground/70"
@@ -643,6 +649,14 @@ export function ApiKeyInput({
             </div>
           )}
 
+          {bedrockAuthMethod === 'bedrock_api_key' && (
+            <div className="rounded-md bg-foreground-2 p-3">
+              <p className="text-xs text-foreground/50">
+                Use an AWS Bedrock API key for simplified single-token authentication. Generate one in the <a href="https://console.aws.amazon.com/bedrock" target="_blank" rel="noreferrer" className="text-foreground/70 underline">AWS Bedrock console</a>.
+              </p>
+            </div>
+          )}
+
           {/* Environment info */}
           {bedrockAuthMethod === 'environment' && (
             <div className="rounded-md bg-foreground-2 p-3">
@@ -669,7 +683,7 @@ export function ApiKeyInput({
               />
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* Model Selection — 3 tier dropdowns for Pi providers, text input for custom/compat */}

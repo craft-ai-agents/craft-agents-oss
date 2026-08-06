@@ -2,6 +2,8 @@
   "activity.command": "Polecenie",
   "activity.inputParams": "Parametry wejściowe",
   "apiSetup.authorizationCode": "Kod autoryzacyjny",
+  "apiSetup.credentials.bedrockApiKey": "Klucz API",
+  "apiSetup.credentials.bedrockApiKeyHelp": "Użyj klucza API AWS Bedrock do uproszczonego uwierzytelniania jednym tokenem. Wygeneruj go w konsoli AWS Bedrock.",
   "apiSetup.credentials.environment": "Środowisko (AWS CLI)",
   "apiSetup.credentials.iam": "Dane uwierzytelniające IAM",
   "apiSetup.format.anthropicCompatible": "Zgodny z Anthropic",
