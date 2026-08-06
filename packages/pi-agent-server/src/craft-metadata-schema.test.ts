@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { createEditToolDefinition } from '@mariozechner/pi-coding-agent';
+import { createEditToolDefinition } from '@earendil-works/pi-coding-agent';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
 
 describe('Craft metadata schema compatibility for Pi tools', () => {
@@ -47,7 +47,10 @@ describe('Craft metadata schema compatibility for Pi tools', () => {
       required?: string[];
     };
 
-    expect(widenedSchema.additionalProperties).toBe(false);
+    // Preserve upstream additionalProperties as-is (pi 0.80.6 stopped setting
+    // `false`; the synthetic-schema test above covers preservation when set).
+    const upstream = editTool.parameters as { additionalProperties?: unknown };
+    expect(widenedSchema.additionalProperties).toBe(upstream.additionalProperties);
     expect(widenedSchema.properties._displayName).toBeDefined();
     expect(widenedSchema.properties._intent).toBeDefined();
     expect(widenedSchema.required ?? []).not.toContain('_displayName');

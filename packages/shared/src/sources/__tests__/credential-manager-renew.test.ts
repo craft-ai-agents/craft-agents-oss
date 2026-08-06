@@ -5,27 +5,17 @@
  * for sources with renewEndpoint configuration.
  */
 
-import { describe, test, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
 import { SourceCredentialManager } from '../credential-manager.ts';
 import type { FolderSourceConfig } from '../types.ts';
 
-// Mock storage module to prevent disk I/O
-mock.module('../storage.ts', () => ({
-  markSourceAuthenticated: mock(() => true),
-  loadSourceConfig: mock(() => null),
-  saveSourceConfig: mock(() => {}),
-}));
-
-// Mock credentials module — track set() calls to verify saves
+// Track save() calls without globally mocking credentials/storage modules.
+// Bun module mocks leak across files in the same test process; method spies keep
+// this test discoverable alongside storage.ts regression tests.
 let setCalls: unknown[][] = [];
-const mockGet = mock(() => Promise.resolve(null as unknown));
-mock.module('../../credentials/index.ts', () => ({
-  getCredentialManager: () => ({
-    set: (...args: unknown[]) => { setCalls.push(args); return Promise.resolve(); },
-    get: mockGet,
-    delete: mock(() => Promise.resolve()),
-  }),
-}));
+let mockGet = mock(() => Promise.resolve(null as unknown));
+let loadSpy: { mockRestore: () => void } | null = null;
+let saveSpy: { mockRestore: () => void } | null = null;
 
 function createRenewSource(overrides: Partial<FolderSourceConfig> = {}) {
   const config: FolderSourceConfig = {
@@ -85,9 +75,18 @@ describe('refreshApiRenew via refresh()', () => {
     originalFetch = globalThis.fetch;
     setCalls = [];
     fetchCalls = [];
+    mockGet = mock(() => Promise.resolve(null as unknown));
+    loadSpy = spyOn(credManager, 'load').mockImplementation(async () => await mockGet() as never);
+    saveSpy = spyOn(credManager, 'save').mockImplementation(async (source, credential) => {
+      setCalls.push([credManager.getCredentialId(source), credential]);
+    });
   });
 
   afterEach(() => {
+    loadSpy?.mockRestore();
+    saveSpy?.mockRestore();
+    loadSpy = null;
+    saveSpy = null;
     globalThis.fetch = originalFetch;
   });
 

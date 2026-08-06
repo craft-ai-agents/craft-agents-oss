@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import JsonView from '@uiw/react-json-view'
 import { vscodeTheme } from '@uiw/react-json-view/vscode'
 import { githubLightTheme } from '@uiw/react-json-view/githubLight'
@@ -66,6 +67,7 @@ export function ActivityCardsOverlay({
   onOpenUrl,
   onOpenFile,
 }: ActivityCardsOverlayProps) {
+  const { t } = useTranslation()
   const jsonTheme = useMemo(() => (theme === 'dark' ? craftAgentDarkTheme : craftAgentLightTheme), [theme])
 
   const renderMarkdownCard = (card: OverlayCard, content: string) => {
@@ -99,7 +101,7 @@ export function ActivityCardsOverlay({
           <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4">
             {isInputCard && commandPreview && (
               <div className="bg-background shadow-minimal rounded-[8px] px-4 py-3 font-mono">
-                <div className="text-xs font-semibold text-muted-foreground/70 mb-1">Command</div>
+                <div className="text-xs font-semibold text-muted-foreground/70 mb-1">{t('activity.command')}</div>
                 <div className="text-sm text-foreground overflow-x-auto">
                   <span className="text-muted-foreground select-none">$ </span>
                   <span>{commandPreview}</span>
@@ -109,7 +111,7 @@ export function ActivityCardsOverlay({
 
             <div>
               {isInputCard && (
-                <div className="text-xs font-semibold text-muted-foreground/70 mb-2 px-1">Input Params</div>
+                <div className="text-xs font-semibold text-muted-foreground/70 mb-2 px-1">{t('activity.inputParams')}</div>
               )}
               <div className="p-4">
                 <JsonView value={processedData} style={jsonTheme} collapsed={false} enableClipboard displayDataTypes={false} shortenTextAfterLength={100}>

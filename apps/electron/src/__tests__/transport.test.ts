@@ -705,9 +705,9 @@ describe('edge cases', () => {
       await client.invoke('anything')
       throw new Error('Should have thrown')
     } catch (err: any) {
-      expect(
-        err.message.includes('Connection') || err.message.includes('WebSocket error during connection setup'),
-      ).toBe(true)
+      // Accept either the connect-time WebSocket error (with or without ws-library
+      // detail like "ECONNREFUSED") or the ensureConnected fallback.
+      expect(err.message).toMatch(/WebSocket error|Not connected/i)
     }
   })
 

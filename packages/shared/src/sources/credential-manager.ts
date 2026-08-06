@@ -154,6 +154,15 @@ export class SourceCredentialManager {
       return this.loadMcpCredential(source);
     }
 
+    // API sources with authType:'none' must never read the shared source_apikey
+    // slot. 'none', 'header', and 'query' all map to source_apikey for storage
+    // compatibility; reading here would resurrect stale header/query credentials
+    // after a source is switched to public/default-header auth.
+    if (source.config.type === 'api' && source.config.api?.authType === 'none') {
+      debug(`[SourceCredentialManager] Skipping credential load for public API source ${source.config.slug}`);
+      return null;
+    }
+
     // For other sources, use the credential ID based on authType
     const credentialId = this.getCredentialId(source);
     const cred = await manager.get(credentialId);
@@ -200,6 +209,20 @@ export class SourceCredentialManager {
     const credentialId = this.getCredentialId(source);
     const manager = getCredentialManager();
     const deleted = await manager.delete(credentialId);
+    if (deleted) {
+      debug(`[SourceCredentialManager] Deleted ${credentialId.type} for ${source.config.slug}`);
+    }
+    return deleted;
+  }
+
+  /**
+   * Delete credential for a source synchronously.
+   * Used by sync config-save paths to avoid stale credential reads on immediate reload.
+   */
+  deleteSync(source: LoadedSource): boolean {
+    const credentialId = this.getCredentialId(source);
+    const manager = getCredentialManager();
+    const deleted = manager.deleteSync(credentialId);
     if (deleted) {
       debug(`[SourceCredentialManager] Deleted ${credentialId.type} for ${source.config.slug}`);
     }

@@ -18,6 +18,7 @@ import {
   EVENT_BUFFER_MAX_SIZE,
   EVENT_BUFFER_TTL_MS,
   DISCONNECTED_CLIENT_TTL_MS,
+  isErrorCode,
   type MessageEnvelope,
   type PushTarget,
   type ErrorCode,
@@ -99,7 +100,7 @@ export interface WsRpcServerOptions {
   /** Maximum concurrent clients. 0 = unlimited. Default: 50 */
   maxClients?: number
   /** Called when a client completes handshake. */
-  onClientConnected?: (info: { clientId: string; webContentsId: number | null; workspaceId: string | null }) => void
+  onClientConnected?: (info: { clientId: string; webContentsId: number | null; workspaceId: string | null; capabilities: string[] }) => void
   /** Called when a client disconnects. */
   onClientDisconnected?: (clientId: string) => void
   /**
@@ -198,6 +199,21 @@ export class WsRpcServer implements RpcServer {
       if (!this.matchesTarget(client, target)) continue
       this.bufferAndMaybeSendEvent(client, channel, args, timestamp, false)
     }
+  }
+
+  hasClientCapability(clientId: string, capability: string): boolean {
+    const client = this.clients.get(clientId)
+    return !!client && client.capabilities.has(capability)
+  }
+
+  findClientsWithCapability(capability: string, opts?: { workspaceId?: string }): string[] {
+    const results: string[] = []
+    for (const [clientId, client] of this.clients) {
+      if (!client.capabilities.has(capability)) continue
+      if (opts?.workspaceId !== undefined && client.workspaceId !== opts.workspaceId) continue
+      results.push(clientId)
+    }
+    return results
   }
 
   invokeClient(clientId: string, channel: string, ...args: any[]): Promise<any> {
@@ -401,8 +417,8 @@ export class WsRpcServer implements RpcServer {
           return
         }
 
-        const clientMajor = parseInt(envelope.protocolVersion.split('.')[0], 10)
-        const serverMajor = parseInt(PROTOCOL_VERSION.split('.')[0], 10)
+        const clientMajor = parseInt(envelope.protocolVersion.split('.')[0] ?? '0', 10)
+        const serverMajor = parseInt(PROTOCOL_VERSION.split('.')[0] ?? '0', 10)
         if (clientMajor !== serverMajor) {
           this.sendError(ws, envelope.id, 'PROTOCOL_VERSION_UNSUPPORTED',
             `Server protocol ${PROTOCOL_VERSION}, client ${envelope.protocolVersion}`)
@@ -525,6 +541,7 @@ export class WsRpcServer implements RpcServer {
                 clientId: prevClient.id,
                 webContentsId: prevClient.webContentsId,
                 workspaceId: prevClient.workspaceId,
+                capabilities: [...prevClient.capabilities],
               })
               return
             }
@@ -575,6 +592,7 @@ export class WsRpcServer implements RpcServer {
           clientId,
           webContentsId: client.webContentsId,
           workspaceId: client.workspaceId,
+          capabilities: [...client.capabilities],
         })
 
         this.setupClientHandlers(ws, client)
@@ -599,7 +617,7 @@ export class WsRpcServer implements RpcServer {
           // Evict acknowledged events
           const buf = client.eventBuffer
           let removeCount = 0
-          while (removeCount < buf.length && buf[removeCount].seq <= ackSeq) {
+          while (removeCount < buf.length && buf[removeCount]!.seq <= ackSeq) {
             removeCount++
           }
           if (removeCount > 0) {
@@ -658,7 +676,8 @@ export class WsRpcServer implements RpcServer {
       this.safeSend(client.ws, serializeEnvelope(response))
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      const code: ErrorCode = (err as any)?.code ?? 'HANDLER_ERROR'
+      const rawCode = (err as { code?: unknown } | null)?.code
+      const code: ErrorCode = isErrorCode(rawCode) ? rawCode : 'HANDLER_ERROR'
       this.sendResponseError(client.ws, id, channel, code, message)
     }
   }
@@ -763,7 +782,7 @@ export class WsRpcServer implements RpcServer {
 
     // Evict by TTL
     while (removeCount < buf.length &&
-           now - buf[removeCount].timestamp > EVENT_BUFFER_TTL_MS) {
+           now - buf[removeCount]!.timestamp > EVENT_BUFFER_TTL_MS) {
       removeCount++
     }
 

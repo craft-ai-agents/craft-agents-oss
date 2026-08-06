@@ -6,6 +6,8 @@ import { StructuredInput } from './StructuredInput'
 import type { RichTextInputHandle } from '@/components/ui/rich-text-input'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import type { StructuredInputState, StructuredResponse, InputMode } from './structured/types'
+import { getStructuredInputMaxHeight } from './structured-height'
+import { BackgroundFinishedChip } from '../BackgroundFinishedChip'
 
 interface InputContainerProps extends Omit<FreeFormInputProps, 'inputRef'> {
   /** Structured input state - when present, shows structured UI instead of freeform */
@@ -59,6 +61,9 @@ export function InputContainer({
     compactMode ? FALLBACK_HEIGHTS['freeform-compact'] : FALLBACK_HEIGHTS.freeform
   )
   const [structuredHeight, setStructuredHeight] = React.useState<number | null>(null)
+  const [viewportHeight, setViewportHeight] = React.useState<number>(() =>
+    typeof window === 'undefined' ? 0 : window.innerHeight
+  )
   const [isFocused, setIsFocused] = React.useState(false)
   const hasInitializedRef = React.useRef(false)
 
@@ -87,18 +92,41 @@ export function InputContainer({
     }
   }, [contentKey, isTransitioning])
 
-  // Track isProcessing changes in compact mode - animate height collapse/expand
-  const prevIsProcessingRef = React.useRef(isProcessing)
+  // Compact-mode collapse-during-thinking is escapable: the user can hover or
+  // click the collapsed bar to bring the input back without waiting for the
+  // agent to finish. State resets the moment processing ends so the next
+  // thinking cycle starts collapsed again.
+  const [expandedDuringProcessing, setExpandedDuringProcessing] = React.useState(false)
+
   React.useEffect(() => {
-    if (compactMode && prevIsProcessingRef.current !== isProcessing) {
-      prevIsProcessingRef.current = isProcessing
-      setIsAnimating(true)
-      const timer = setTimeout(() => {
-        setIsAnimating(false)
-      }, TRANSITION_DURATION * 1000 + 100)
-      return () => clearTimeout(timer)
+    if (!isProcessing && expandedDuringProcessing) {
+      setExpandedDuringProcessing(false)
     }
-  }, [compactMode, isProcessing])
+  }, [isProcessing, expandedDuringProcessing])
+
+  const handleRequestExpand = React.useCallback(() => {
+    setExpandedDuringProcessing(true)
+  }, [])
+
+  const isCollapsedInCompact = compactMode && isProcessing && !expandedDuringProcessing
+
+  // Animate height when either isProcessing flips OR the user manually expands
+  // / re-collapses the input during a thinking cycle.
+  const prevIsProcessingRef = React.useRef(isProcessing)
+  const prevExpandedRef = React.useRef(expandedDuringProcessing)
+  React.useEffect(() => {
+    if (!compactMode) return
+    const isProcessingChanged = prevIsProcessingRef.current !== isProcessing
+    const expandedChanged = prevExpandedRef.current !== expandedDuringProcessing
+    prevIsProcessingRef.current = isProcessing
+    prevExpandedRef.current = expandedDuringProcessing
+    if (!isProcessingChanged && !expandedChanged) return
+    setIsAnimating(true)
+    const timer = setTimeout(() => {
+      setIsAnimating(false)
+    }, TRANSITION_DURATION * 1000 + 100)
+    return () => clearTimeout(timer)
+  }, [compactMode, isProcessing, expandedDuringProcessing])
 
   // Handle height changes from FreeFormInput (synchronous, no measuring div needed)
   const handleFreeformHeightChange = React.useCallback((height: number) => {
@@ -111,6 +139,15 @@ export function InputContainer({
   // Handle focus changes from FreeFormInput
   const handleFocusChange = React.useCallback((focused: boolean) => {
     setIsFocused(focused)
+  }, [])
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const updateViewportHeight = () => setViewportHeight(window.innerHeight)
+    updateViewportHeight()
+    window.addEventListener('resize', updateViewportHeight)
+    return () => window.removeEventListener('resize', updateViewportHeight)
   }, [])
 
   // Use ResizeObserver only for structured inputs (freeform uses onHeightChange callback)
@@ -140,10 +177,15 @@ export function InputContainer({
     return () => observer.disconnect()
   }, [contentKey, mode])
 
-  // Use appropriate height source based on mode
-  const targetHeight = mode === 'freeform'
+  // Use appropriate height source based on mode. Structured prompts are clamped
+  // to viewport-aware bounds; their internals scroll so action buttons stay reachable.
+  const rawTargetHeight = mode === 'freeform'
     ? freeformHeight
     : (structuredHeight ?? FALLBACK_HEIGHTS[structuredInput?.type ?? 'freeform'] ?? FALLBACK_HEIGHTS.freeform)
+  const structuredMaxHeight = getStructuredInputMaxHeight(viewportHeight)
+  const targetHeight = mode === 'freeform'
+    ? rawTargetHeight
+    : Math.min(rawTargetHeight, structuredMaxHeight)
 
   // Motion value for frame-synchronized height animation
   const heightMotionValue = useMotionValue(targetHeight)
@@ -184,6 +226,8 @@ export function InputContainer({
           {...freeFormProps}
           compactMode={compactMode}
           isProcessing={isProcessing}
+          isCollapsedInCompact={isCollapsedInCompact}
+          onRequestExpand={handleRequestExpand}
           inputRef={forMeasuring ? undefined : textareaRef}
           onHeightChange={forMeasuring ? undefined : handleFreeformHeightChange}
           onFocusChange={forMeasuring ? undefined : handleFocusChange}
@@ -222,7 +266,10 @@ export function InputContainer({
           isFocusedPanel ? "shadow-middle" : "shadow-minimal",
           "bg-background"
         )}
-        style={{ height: heightMotionValue }}
+        style={{
+          height: heightMotionValue,
+          ...(mode !== 'freeform' ? { maxHeight: structuredMaxHeight } : {}),
+        }}
       >
         {/* Crossfading content - freeform anchored to bottom (for auto-grow), others fill */}
         <AnimatePresence mode="sync" initial={false}>
@@ -238,6 +285,15 @@ export function InputContainer({
           </motion.div>
         </AnimatePresence>
       </motion.div>
+
+      {/* Background-completion chip — floats in the input box's top-right corner.
+       * Self-contained (its own atoms + navigation); renders nothing when idle.
+       * Freeform-only so it never overlaps a structured prompt's header. The outer
+       * wrapper is `relative` and (unlike the visible box) not `overflow-hidden`,
+       * so the chip's soft shadow isn't clipped. */}
+      {mode === 'freeform' && freeFormProps.sessionId && (
+        <BackgroundFinishedChip sessionId={freeFormProps.sessionId} />
+      )}
     </div>
   )
 }

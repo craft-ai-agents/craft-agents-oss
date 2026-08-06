@@ -40,6 +40,7 @@ import {
   addSessionAtom,
   removeSessionAtom,
   updateSessionAtom,
+  replaceLoadedSessionAtom,
   refreshSessionsMetadataAtom,
   sessionAtomFamily,
   sessionMetaMapAtom,
@@ -50,9 +51,16 @@ import {
   extractSessionMeta,
   windowWorkspaceIdAtom,
   type SessionMeta,
+  type BackgroundTask,
 } from '@/atoms/sessions'
 import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
+import {
+  showBackgroundFinishedChipAtom,
+  pushBackgroundFinishedAtom,
+} from '@/atoms/background-finished'
+import { visibleSessionIdsAtom } from '@/atoms/panel-stack'
+import { getSessionTitle } from '@/utils/session'
 import { extractBadges } from '@/lib/mentions'
 import { getDefaultStore } from 'jotai'
 import {
@@ -68,7 +76,12 @@ import { useLinkInterceptor, type FilePreviewState } from '@/hooks/useLinkInterc
 import { useTransportConnectionState } from '@/hooks/useTransportConnectionState'
 import { useStaleSessionRecovery } from '@/hooks/useStaleSessionRecovery'
 import { TransportConnectionBanner, shouldShowTransportConnectionBanner } from '@/components/app-shell/TransportConnectionBanner'
+import {
+  markBackgroundTaskSignal,
+  markLiveBackgroundTasksOrphaned,
+} from '@/components/app-shell/background-task-chip-state'
 import { getFileManagerName } from '@/lib/platform'
+import { rendererLog } from '@/lib/logger'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
 
@@ -76,6 +89,32 @@ type AppState = 'loading' | 'onboarding' | 'reauth' | 'workspace-picker' | 'read
 
 /** Type for the Jotai store returned by useStore() */
 type JotaiStore = ReturnType<typeof getDefaultStore>
+
+type SessionListRefreshOptions = {
+  removeMissing?: boolean
+  reason?: string
+  selectedSessionId?: string | null
+}
+
+const SESSION_REFRESH_LOG_ID_LIMIT = 25
+
+function summarizeIds(ids: Iterable<string>, limit = SESSION_REFRESH_LOG_ID_LIMIT) {
+  const all = Array.from(ids)
+  return {
+    count: all.length,
+    ids: all.slice(0, limit),
+    truncated: all.length > limit,
+  }
+}
+
+function workspaceDistribution(sessions: Iterable<{ workspaceId?: string }>): Record<string, number> {
+  const distribution: Record<string, number> = {}
+  for (const session of sessions) {
+    const key = session.workspaceId || '(missing)'
+    distribution[key] = (distribution[key] ?? 0) + 1
+  }
+  return distribution
+}
 
 /**
  * Helper to handle background task events from the agent.
@@ -96,49 +135,86 @@ function handleBackgroundTaskEvent(
     const currentTasks = store.get(backgroundTasksAtom)
     const exists = currentTasks.some(t => t.toolUseId === evt.toolUseId)
     if (!exists) {
+      const isWorkflow = evt.kind === 'workflow'
+      const startTime = Date.now()
       store.set(backgroundTasksAtom, [
         ...currentTasks,
         {
           id: evt.taskId as string,
-          type: 'agent' as const,
+          type: isWorkflow ? ('workflow' as const) : ('agent' as const),
           toolUseId: evt.toolUseId as string,
-          startTime: Date.now(),
+          startTime,
           elapsedSeconds: 0,
+          lastSignalAt: startTime,
           intent: evt.intent as string | undefined,
+          status: 'running' as const,
+          ...(isWorkflow ? { workflowId: evt.workflowId as string | undefined, agentsCompleted: 0 } : {}),
         },
       ])
     }
+  } else if (event.type === 'workflow_agent_completed' && 'workflowId' in evt) {
+    // One sub-agent of a running Workflow finished — bump the owning chip's count
+    // and treat it as evidence that a stale workflow is still alive.
+    const currentTasks = store.get(backgroundTasksAtom)
+    const now = Date.now()
+    store.set(backgroundTasksAtom, currentTasks.map(t =>
+      t.type === 'workflow' && t.workflowId === evt.workflowId
+        ? { ...markBackgroundTaskSignal(t, now), agentsCompleted: (t.agentsCompleted ?? 0) + 1 }
+        : t
+    ))
   } else if (event.type === 'shell_backgrounded' && 'shellId' in evt && 'toolUseId' in evt) {
     const currentTasks = store.get(backgroundTasksAtom)
     const exists = currentTasks.some(t => t.toolUseId === evt.toolUseId)
     if (!exists) {
+      const startTime = Date.now()
       store.set(backgroundTasksAtom, [
         ...currentTasks,
         {
           id: evt.shellId as string,
           type: 'shell' as const,
           toolUseId: evt.toolUseId as string,
-          startTime: Date.now(),
+          startTime,
           elapsedSeconds: 0,
+          lastSignalAt: startTime,
           intent: evt.intent as string | undefined,
+          status: 'running' as const,
         },
       ])
     }
   } else if (event.type === 'task_progress' && 'toolUseId' in evt && 'elapsedSeconds' in evt) {
     const currentTasks = store.get(backgroundTasksAtom)
+    const now = Date.now()
     store.set(backgroundTasksAtom, currentTasks.map(t =>
       t.toolUseId === evt.toolUseId
-        ? { ...t, elapsedSeconds: evt.elapsedSeconds as number }
+        ? { ...markBackgroundTaskSignal(t, now), elapsedSeconds: evt.elapsedSeconds as number }
         : t
     ))
   } else if (event.type === 'task_completed' && 'taskId' in evt) {
-    // Remove task when background task completes
+    // Transition the chip to a terminal status (keep it visible with a terminal
+    // icon + click-through to output). The ActiveTasksBar auto-expiry ticker
+    // prunes it after a short linger — we no longer remove it instantly, so the
+    // user sees that the task finished rather than the chip just vanishing.
+    const status = (evt.status as BackgroundTask['status']) ?? 'completed'
     const currentTasks = store.get(backgroundTasksAtom)
-    store.set(backgroundTasksAtom, currentTasks.filter(t => t.id !== evt.taskId))
+    store.set(backgroundTasksAtom, currentTasks.map(t =>
+      t.id === evt.taskId
+        ? {
+            ...t,
+            status,
+            completedAt: Date.now(),
+            outputFile: (evt.outputFile as string | undefined) ?? t.outputFile,
+            summary: (evt.summary as string | undefined) ?? t.summary,
+          }
+        : t
+    ))
   } else if (event.type === 'shell_killed' && 'shellId' in evt) {
-    // Remove shell task when KillShell succeeds
+    // Mark shell stopped (lingers briefly, then auto-expires) instead of vanishing.
     const currentTasks = store.get(backgroundTasksAtom)
-    store.set(backgroundTasksAtom, currentTasks.filter(t => t.id !== evt.shellId))
+    store.set(backgroundTasksAtom, currentTasks.map(t =>
+      t.id === evt.shellId
+        ? { ...t, status: 'stopped' as const, completedAt: Date.now() }
+        : t
+    ))
   } else if (event.type === 'tool_result' && 'toolUseId' in evt) {
     // Remove task when it completes - but NOT if this is the initial backgrounding result
     // Background tasks return immediately with agentId/shell_id/backgroundTaskId,
@@ -153,13 +229,20 @@ function handleBackgroundTaskEvent(
       const currentTasks = store.get(backgroundTasksAtom)
       store.set(backgroundTasksAtom, currentTasks.filter(t => t.toolUseId !== evt.toolUseId))
     }
+  } else if (event.type === 'complete' || event.type === 'interrupted' || event.type === 'error') {
+    // Orphan backstop: without keep-alive, turn teardown is authoritative evidence
+    // that both running and uncertain/stale background tasks died with the SDK
+    // subprocess. With keep-alive they may genuinely survive, so preserve them for
+    // a later progress or task_completed signal.
+    if (evt.backgroundTasksAlive === true) {
+      return
+    }
+    const currentTasks = store.get(backgroundTasksAtom)
+    const nextTasks = markLiveBackgroundTasksOrphaned(currentTasks, Date.now())
+    if (nextTasks !== currentTasks) {
+      store.set(backgroundTasksAtom, nextTasks)
+    }
   }
-  // Note: We do NOT clear background tasks on complete/error/interrupted
-  // Background tasks should persist and keep running after the turn ends
-  // They are only removed when:
-  // 1. task_completed event arrives (background task finished)
-  // 2. Their tool_result comes back (foreground task finished)
-  // 3. KillShell succeeds (shell_killed event)
 }
 
 function SessionLoadErrorScreen({
@@ -217,6 +300,7 @@ export default function App() {
   const addSession = useSetAtom(addSessionAtom)
   const removeSession = useSetAtom(removeSessionAtom)
   const updateSessionDirect = useSetAtom(updateSessionAtom)
+  const replaceLoadedSession = useSetAtom(replaceLoadedSessionAtom)
   const store = useStore()
 
   // Helper to update a session by ID with partial fields
@@ -423,7 +507,7 @@ export default function App() {
         : fresh
 
       clearStreamingState(sessionId)
-      updateSessionDirect(sessionId, () => nextSession)
+      replaceLoadedSession(nextSession)
       syncSessionOptionsFromSession(nextSession)
       void reconcilePermissionModeState(sessionId)
       return preservedStaleMessages ? 'preserved_stale_messages' : 'refreshed'
@@ -431,7 +515,7 @@ export default function App() {
       console.error(`[App] Failed to refresh session ${sessionId}:`, err)
       return 'failed'
     }
-  }, [clearStreamingState, updateSessionDirect, syncSessionOptionsFromSession, reconcilePermissionModeState, store])
+  }, [clearStreamingState, replaceLoadedSession, syncSessionOptionsFromSession, reconcilePermissionModeState, store])
 
   const loadSessionsFromServer = useCallback(async () => {
     setSessionLoadError(null)
@@ -485,16 +569,49 @@ export default function App() {
     }
   }, [initializeSessions, initialSessionId, reconcilePermissionModeState, windowWorkspaceId])
 
-  const refreshSessionListMetadataFromServer = useCallback(async (): Promise<Map<string, SessionMeta> | null> => {
+  const refreshSessionListMetadataFromServer = useCallback(async (options: SessionListRefreshOptions = {}): Promise<Map<string, SessionMeta> | null> => {
+    const {
+      removeMissing = true,
+      reason = 'manual-or-authoritative',
+      selectedSessionId = null,
+    } = options
+    const beforeMetaMap = store.get(sessionMetaMapAtom)
+    const beforeIds = new Set(beforeMetaMap.keys())
+    const transportState = await window.electronAPI.getTransportConnectionState().catch(() => null)
+
     try {
       const sessions = await window.electronAPI.getSessions()
-      console.info(`[App] getSessions returned ${sessions.length} session(s) for reconnect refresh`)
+      const returnedIds = new Set(sessions.map(s => s.id))
+      const missingIds = Array.from(beforeIds).filter(id => !returnedIds.has(id))
+      const addedIds = sessions.map(s => s.id).filter(id => !beforeIds.has(id))
+      const logPayload = {
+        reason,
+        removeMissing,
+        windowWorkspaceId,
+        windowRemoteWorkspaceId,
+        selectedSessionId,
+        beforeCount: beforeIds.size,
+        returnedCount: sessions.length,
+        beforeIds: summarizeIds(beforeIds),
+        returnedIds: summarizeIds(returnedIds),
+        missingIds: summarizeIds(missingIds),
+        addedIds: summarizeIds(addedIds),
+        beforeWorkspaceIds: workspaceDistribution(beforeMetaMap.values()),
+        returnedWorkspaceIds: workspaceDistribution(sessions),
+        transportState,
+      }
+
+      rendererLog.info('[App] Session list metadata refresh result', logPayload)
+      if (!removeMissing && missingIds.length > 0) {
+        rendererLog.warn('[App] Non-destructive refresh preserved sessions omitted by getSessions(); this indicates a partial backend response or workspace-context mismatch', logPayload)
+      }
+
       const loadedSessionIds = store.get(loadedSessionsAtom)
 
       // Single transactional atom write — all cross-atom mutations happen
       // inside one Jotai write function so React subscribers see one
       // consistent update instead of intermediate states.
-      const nextMetaMap = store.set(refreshSessionsMetadataAtom, { sessions, loadedSessionIds })
+      const nextMetaMap = store.set(refreshSessionsMetadataAtom, { sessions, loadedSessionIds, removeMissing })
 
       // Sync app-level state (React hooks / non-atom concerns) after the atom transaction
       for (const session of sessions) {
@@ -504,10 +621,21 @@ export default function App() {
 
       return nextMetaMap
     } catch (err) {
-      console.error('[App] Failed to refresh session list metadata after reconnect:', err)
+      rendererLog.error('[App] Failed to refresh session list metadata after reconnect:', {
+        reason,
+        removeMissing,
+        windowWorkspaceId,
+        windowRemoteWorkspaceId,
+        selectedSessionId,
+        beforeCount: beforeIds.size,
+        beforeIds: summarizeIds(beforeIds),
+        beforeWorkspaceIds: workspaceDistribution(beforeMetaMap.values()),
+        transportState,
+        error: err,
+      })
       return null
     }
-  }, [store, syncSessionOptionsFromSession, reconcilePermissionModeState])
+  }, [store, syncSessionOptionsFromSession, reconcilePermissionModeState, windowWorkspaceId, windowRemoteWorkspaceId])
 
   // Stale session watchdog — catches stuck sessions that the reconnect protocol misses
   const { trackSessionActivity } = useStaleSessionRecovery({
@@ -706,7 +834,7 @@ export default function App() {
     // Handoff events signal end of streaming - need to sync back to React state
     // Also includes todo_state_changed so status updates immediately reflect in sidebar
     // async_operation included so shimmer effect on session titles updates in real-time
-    const handoffEventTypes = new Set(['complete', 'error', 'interrupted', 'typed_error', 'session_status_changed', 'session_flagged', 'session_unflagged', 'name_changed', 'labels_changed', 'title_generated', 'async_operation'])
+    const handoffEventTypes = new Set(['complete', 'error', 'interrupted', 'typed_error', 'session_status_changed', 'session_metadata_changed', 'session_flagged', 'session_unflagged', 'name_changed', 'labels_changed', 'project_id_changed', 'title_generated', 'async_operation'])
 
     // Helper to handle side effects (same logic for both paths)
     const handleEffects = (effects: Effect[], sessionId: string, eventType: string) => {
@@ -758,16 +886,6 @@ export default function App() {
               next.set(sessionId, [...existingQueue, effect.request])
               return next
             })
-            break
-          }
-          case 'auto_retry': {
-            // A source was auto-activated, automatically re-send the original message
-            // Add suffix to indicate the source was activated
-            const messageWithSuffix = `${effect.originalMessage}\n\n[${effect.sourceSlug} activated]`
-            // Use setTimeout to ensure the previous turn has fully completed
-            setTimeout(() => {
-              window.electronAPI.sendMessage(effect.sessionId, messageWithSuffix)
-            }, 100)
             break
           }
           case 'restore_input': {
@@ -828,11 +946,7 @@ export default function App() {
             if (createdSession) {
               const existingMeta = store.get(sessionMetaMapAtom).has(sessionId)
               if (existingMeta) {
-                updateSessionDirect(sessionId, () => createdSession)
-                const metaMap = store.get(sessionMetaMapAtom)
-                const nextMetaMap = new Map(metaMap)
-                nextMetaMap.set(sessionId, extractSessionMeta(createdSession))
-                store.set(sessionMetaMapAtom, nextMetaMap)
+                replaceLoadedSession(createdSession)
               } else {
                 addSession(createdSession)
               }
@@ -911,6 +1025,21 @@ export default function App() {
             const rawPreview = lastMessage?.content?.substring(0, 200) || undefined
             const preview = rawPreview ? stripMarkdown(rawPreview).substring(0, 100) || undefined : undefined
             showSessionNotification(updatedSession, preview)
+
+            // In-app complement to the OS notification: when a *background*
+            // session (one not shown in any open panel) finishes, queue a chip
+            // above the chat. The OS notification above is suppressed while the
+            // window is focused, so the chip is the only completion signal then.
+            if (
+              store.get(showBackgroundFinishedChipAtom) &&
+              !store.get(visibleSessionIdsAtom).has(sessionId)
+            ) {
+              store.set(pushBackgroundFinishedAtom, {
+                sessionId,
+                title: getSessionTitle(updatedSession),
+                finishedAt: Date.now(),
+              })
+            }
           }
         }
 
@@ -949,6 +1078,7 @@ export default function App() {
     windowWorkspaceId,
     store,
     updateSessionDirect,
+    replaceLoadedSession,
     showSessionNotification,
     initializeSessions,
     addSession,
@@ -970,7 +1100,11 @@ export default function App() {
 
       console.warn('[App] Stale reconnect — refreshing session metadata and active/processing sessions')
 
-      const refreshedMetaMap = await refreshSessionListMetadataFromServer()
+      const refreshedMetaMap = await refreshSessionListMetadataFromServer({
+        removeMissing: false,
+        reason: 'stale-reconnect',
+        selectedSessionId: sessionSelection.selected,
+      })
       const metaMap = refreshedMetaMap ?? store.get(sessionMetaMapAtom)
       const refreshIds = getSessionsToRefreshAfterStaleReconnect(metaMap, sessionSelection.selected)
 
@@ -1551,8 +1685,14 @@ export default function App() {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
         console.error('Failed to open URL:', error)
+        // The blocked-URL classifier already explains WHY and (for file:)
+        // points the user at preview blocks. Don't append the generic
+        // "use Open File instead" hint when the message already carries
+        // that guidance.
+        const hasRichGuidance = /URL blocked/.test(message)
+        const tail = hasRichGuidance ? '' : '. If this is a local path, use Open File instead.'
         toast.error(t('toast.failedToOpenLink'), {
-          description: `${message}. If this is a local path, use Open File instead.`,
+          description: `${message}${tail}`,
         })
       }
     },
@@ -1931,7 +2071,10 @@ export default function App() {
           )}
 
           {/* Main UI - always rendered, splash fades away to reveal it */}
-          <div className="h-full flex flex-col pt-[48px] text-foreground">
+          <div
+            className="h-full flex flex-col text-foreground"
+            style={{ paddingTop: 'var(--topbar-height)' }}
+          >
             {showTransportConnectionBanner && connectionState && (
               <TransportConnectionBanner
                 state={connectionState}

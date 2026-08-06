@@ -3,17 +3,58 @@
  *
  * Global host that owns the messaging pairing/connect dialogs so they survive
  * the close of the triggering context menu or dropdown.
+ *
+ * Auto-dismiss: when the pairing dialog is showing a code and the user
+ * completes `/pair <code>` in their bot, the gateway emits
+ * `messaging:bindingChanged`. We watch that signal, fetch the latest
+ * bindings, and close the dialog (with a success toast) if the dialog's
+ * sessionId now has an active binding for the matching platform.
  */
 
+import * as React from 'react'
 import { useAtom } from 'jotai'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { messagingDialogAtom } from '@/atoms/messaging'
 import { PairingCodeDialog } from './PairingCodeDialog'
 import { WhatsAppConnectDialog } from './WhatsAppConnectDialog'
 
 export function MessagingDialogHost() {
   const [state, setState] = useAtom(messagingDialogAtom)
+  const { t } = useTranslation()
 
   const close = () => setState({ kind: 'closed' })
+
+  // Subscribe to binding-changed pushes only while the user is waiting on
+  // a pairing code. The check needs the *latest* state values, so we capture
+  // them via a ref to keep the subscription effect stable.
+  const stateRef = React.useRef(state)
+  stateRef.current = state
+
+  const isWaitingForPair = state.kind === 'pairing' && state.code !== null
+  React.useEffect(() => {
+    if (!isWaitingForPair) return
+    const off = window.electronAPI.onMessagingBindingChanged(async () => {
+      const current = stateRef.current
+      if (current.kind !== 'pairing' || current.code === null) return
+      try {
+        const bindings = await window.electronAPI.getMessagingBindings()
+        const bound = bindings.some(
+          (b) =>
+            b.enabled &&
+            b.sessionId === current.sessionId &&
+            b.platform === current.platform,
+        )
+        if (bound) {
+          toast.success(t('toast.messagingPaired'))
+          setState({ kind: 'closed' })
+        }
+      } catch {
+        // If we can't verify, leave the dialog open — user can still close it.
+      }
+    })
+    return off
+  }, [isWaitingForPair, setState, t])
 
   const openPairing = async (sessionId: string, platform: 'telegram' | 'whatsapp') => {
     setState({

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import {
+  resolveCustomEndpointPayload,
   resolvePiAuthProviderForSubmit,
   resolvePresetStateForBaseUrlChange,
 } from '../submit-helpers'
@@ -94,6 +95,62 @@ describe('resolvePresetStateForBaseUrlChange', () => {
     })).toEqual({
       activePreset: 'custom',
       lastNonCustomPreset: 'openrouter',
+    })
+  })
+})
+
+describe('resolveCustomEndpointPayload', () => {
+  const BRANDED = new Set(['manifest'])
+
+  it('routes branded openai-compat presets through openai-completions regardless of toggle', () => {
+    expect(resolveCustomEndpointPayload({
+      activePreset: 'manifest',
+      baseUrl: 'https://app.manifest.build/v1',
+      customApi: 'anthropic-messages',
+      brandedOpenAiCompatPresets: BRANDED,
+      fallbackPiAuthProvider: undefined,
+    })).toEqual({
+      customEndpoint: { api: 'openai-completions' },
+      piAuthProvider: 'openai',
+    })
+  })
+
+  it('honors the protocol toggle for the generic custom preset', () => {
+    expect(resolveCustomEndpointPayload({
+      activePreset: 'custom',
+      baseUrl: 'https://my-endpoint.example.com',
+      customApi: 'anthropic-messages',
+      brandedOpenAiCompatPresets: BRANDED,
+      fallbackPiAuthProvider: undefined,
+    })).toEqual({
+      customEndpoint: { api: 'anthropic-messages' },
+      piAuthProvider: 'anthropic',
+    })
+  })
+
+  it('returns no customEndpoint for a standard preset, passing through the fallback piAuth', () => {
+    expect(resolveCustomEndpointPayload({
+      activePreset: 'openrouter',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      customApi: 'openai-completions',
+      brandedOpenAiCompatPresets: BRANDED,
+      fallbackPiAuthProvider: 'openrouter',
+    })).toEqual({
+      customEndpoint: undefined,
+      piAuthProvider: 'openrouter',
+    })
+  })
+
+  it('treats branded preset with empty URL as non-custom (no customEndpoint)', () => {
+    expect(resolveCustomEndpointPayload({
+      activePreset: 'manifest',
+      baseUrl: '',
+      customApi: 'openai-completions',
+      brandedOpenAiCompatPresets: BRANDED,
+      fallbackPiAuthProvider: undefined,
+    })).toEqual({
+      customEndpoint: undefined,
+      piAuthProvider: undefined,
     })
   })
 })

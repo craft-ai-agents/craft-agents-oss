@@ -8,6 +8,21 @@ function normalizeFileUrlPath(path: string): string {
   return /^\/[A-Za-z]:\//.test(path) ? path.slice(1) : path
 }
 
+/**
+ * Percent-decode a bare file path so a link destination with %20 (the only
+ * CommonMark-legal way to encode a space in a bare destination) resolves to the
+ * real on-disk path. No-op when there's no '%'; falls back to the raw string if
+ * the value isn't valid percent-encoding (#944).
+ */
+function decodeFilePath(path: string): string {
+  if (!path.includes('%')) return path
+  try {
+    return decodeURIComponent(path)
+  } catch {
+    return path
+  }
+}
+
 function resolveFileUrlPath(target: string): string | null {
   if (!/^file:/i.test(target)) return null
 
@@ -45,7 +60,7 @@ export function resolveMarkdownLinkTarget(target: string): ResolvedMarkdownLinkT
   }
 
   if (isFilePathTarget(trimmed)) {
-    return { kind: 'file', path: trimmed }
+    return { kind: 'file', path: decodeFilePath(trimmed) }
   }
 
   return { kind: 'url', url: trimmed }

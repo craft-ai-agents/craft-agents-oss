@@ -304,7 +304,7 @@ export async function getAuthState(): Promise<AuthState> {
       }
     }
     // Other auth types (iam_credentials, service_account_file, environment, none) are handled by hasLlmCredentials
-    // OpenAI OAuth credentials are handled separately by CodexAgent
+    // OpenAI / ChatGPT OAuth credentials are handled inside PiAgent's auth path
   } else {
     // No connection configured - credentials not available
     // Legacy migration should have created a default connection

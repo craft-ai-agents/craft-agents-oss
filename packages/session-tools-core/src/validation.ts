@@ -265,16 +265,56 @@ export function validateSkillContent(markdownContent: string, slug: string): Val
 export const MERMAID_DIAGRAM_TYPES = [
   'graph', 'flowchart', 'sequenceDiagram', 'classDiagram',
   'stateDiagram', 'erDiagram', 'gantt', 'pie', 'mindmap',
-  'timeline', 'gitGraph', 'C4Context', 'sankey',
+  'timeline', 'gitGraph', 'C4Context', 'sankey', 'xychart', 'xychart-beta',
 ] as const;
+
+/** Remove Mermaid YAML frontmatter (`--- ... ---`) from the start of a diagram. */
+export function stripMermaidFrontmatter(code: string): string {
+  const withoutBom = code.replace(/^\uFEFF/, '');
+  const leadingWhitespaceMatch = withoutBom.match(/^\s*/);
+  const leadingWhitespace = leadingWhitespaceMatch?.[0] ?? '';
+  const candidate = withoutBom.slice(leadingWhitespace.length);
+  const lines = candidate.split(/\r?\n/);
+
+  if (lines[0]?.trim() !== '---') return code;
+
+  const endIndex = lines.findIndex((line, index) => index > 0 && line.trim() === '---');
+  if (endIndex === -1) return code;
+
+  return lines.slice(endIndex + 1).join('\n').trimStart();
+}
+
+/**
+ * Normalize Mermaid before validation/rendering through native tooling.
+ *
+ * Frontmatter is metadata, not diagram syntax. Leading Mermaid comments/directives
+ * are also skipped so diagram-type detection matches the renderer pipeline for
+ * charts such as `xychart-beta`.
+ */
+export function normalizeMermaidSource(code: string): string {
+  const lines = stripMermaidFrontmatter(code).split(/\r?\n/);
+  while (lines.length > 0) {
+    const first = lines[0]?.trim() ?? '';
+    if (first.length === 0 || first.startsWith('%%')) {
+      lines.shift();
+      continue;
+    }
+    break;
+  }
+  return lines.join('\n').trimStart();
+}
+
+function getFirstMermaidDiagramLine(code: string): string {
+  return normalizeMermaidSource(code).split(/\r?\n/)[0]?.trim() ?? '';
+}
 
 /**
  * Basic mermaid syntax validation (no rendering).
  * Checks for common syntax errors without requiring a browser.
  */
 export function validateMermaidSyntax(code: string): ValidationResult {
-  const lines = code.trim().split('\n');
-  const firstLine = lines[0]?.trim() ?? '';
+  const normalizedCode = normalizeMermaidSource(code);
+  const firstLine = getFirstMermaidDiagramLine(code);
 
   // Check diagram type declaration
   const hasValidType = MERMAID_DIAGRAM_TYPES.some(type =>
@@ -291,7 +331,7 @@ export function validateMermaidSyntax(code: string): ValidationResult {
 
   // Check for unbalanced brackets
   const brackets = { '[': 0, '{': 0, '(': 0 };
-  for (const char of code) {
+  for (const char of normalizedCode) {
     if (char === '[') brackets['[']++;
     if (char === ']') brackets['[']--;
     if (char === '{') brackets['{']++;

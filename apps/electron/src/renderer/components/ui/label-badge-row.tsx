@@ -17,6 +17,7 @@ import { LabelValuePopover } from './label-value-popover'
 import { LabelIcon, LabelValueTypeIcon } from './label-icon'
 import { MetadataBadge } from './metadata-badge'
 import { parseLabelEntry, formatLabelEntry, formatDisplayValue } from '@craft-agent/shared/labels'
+import { openLabelLink } from '@/lib/open-label-link'
 import type { LabelConfig } from '@craft-agent/shared/labels'
 import { resolveEntityColor } from '@craft-agent/shared/colors'
 import { useTheme } from '@/context/ThemeContext'
@@ -107,6 +108,7 @@ export function LabelBadgeRow({
             <MetadataBadge
               label={resolvedConfig.name}
               value={displayValue}
+              onValueClick={resolvedConfig.valueType === 'link' && parsed.rawValue ? () => openLabelLink(parsed.rawValue!) : undefined}
               icon={<LabelIcon label={resolvedConfig} size="lg" />}
               valueHintIcon={resolvedConfig.valueType ? <LabelValueTypeIcon valueType={resolvedConfig.valueType} /> : undefined}
               badgeColor={resolvedColor}

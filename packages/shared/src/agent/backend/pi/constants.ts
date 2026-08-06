@@ -5,12 +5,15 @@
  * Extracted here to avoid circular imports between pi-agent.ts and event-adapter.ts.
  */
 
-import type { ThinkingLevel as PiThinkingLevel } from '@mariozechner/pi-agent-core';
+import type { ThinkingLevel as PiThinkingLevel } from '@earendil-works/pi-agent-core';
 import type { ThinkingLevel } from '../../thinking-levels.ts';
 
 /**
  * Map Craft's {@link ThinkingLevel} to Pi's `ThinkingLevel`.
- * Pi's ceiling is `xhigh`; Craft's `max` saturates there.
+ * All levels pass through 1:1 — Pi clamps per model internally
+ * (`clampThinkingLevel` in pi-ai), so `max` degrades to the model's
+ * ceiling on models without native max support (e.g. GPT-5.6 accepts
+ * it natively, older GPT-5.x fall back to xhigh).
  */
 export const THINKING_TO_PI: Record<ThinkingLevel, PiThinkingLevel> = {
   off: 'off',
@@ -18,7 +21,7 @@ export const THINKING_TO_PI: Record<ThinkingLevel, PiThinkingLevel> = {
   medium: 'medium',
   high: 'high',
   xhigh: 'xhigh',
-  max: 'xhigh',
+  max: 'max',
 };
 
 /**

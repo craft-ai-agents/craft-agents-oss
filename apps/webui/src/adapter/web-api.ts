@@ -245,6 +245,17 @@ export function createWebApi(options: WebApiOptions): {
       sessionId?: string
       authRequestId?: string
     }) => {
+      // iOS Safari (and any strict mobile pop-up blocker) requires
+      // `window.open()` to be called *synchronously* inside the click event
+      // — any preceding `await` loses the user-gesture and the call is
+      // silently blocked. We pre-open a blank tab here as the first thing
+      // in this async function (which still runs on the click tick, before
+      // the first await) and rewrite its `location.href` once the auth URL
+      // arrives. Same-window fallback covers users who blocked popups
+      // entirely. NOTE: dropped `noopener` because the spec returns null
+      // for `noopener` opens in some browsers, defeating the pre-open.
+      const popup = window.open('about:blank', '_blank')
+
       try {
         const callbackUrl = `${window.location.origin}/api/oauth/callback`
         const result = await client.invoke('oauth:start', {
@@ -254,14 +265,29 @@ export function createWebApi(options: WebApiOptions): {
           authRequestId: args.authRequestId,
         })
 
-        // Open auth URL in a new tab — after authentication the relay
-        // redirects back to our server's /api/oauth/callback endpoint.
-        window.open(result.authUrl, '_blank', 'noopener')
+        if (popup && !popup.closed) {
+          // Happy path — pre-opened popup is still open, redirect it.
+          popup.location.href = result.authUrl
+        } else if (popup === null) {
+          // Popup blocked entirely (popup === null) — fall back to a
+          // same-window redirect. The OAuth callback lands back on the
+          // WebUI; cookie-based session means the user picks up where
+          // they left off after auth.
+          window.location.href = result.authUrl
+        } else {
+          // Popup was opened but the user closed it while we waited for
+          // the RPC. Abort rather than redirecting their main tab.
+          return {
+            success: false,
+            error: 'Sign-in window was closed before authentication started.',
+          }
+        }
 
         // The server completes the flow when the callback arrives and pushes
         // auth status via WebSocket — the AuthRequestCard updates automatically.
         return { success: true }
       } catch (err) {
+        if (popup && !popup.closed) popup.close()
         return {
           success: false,
           error: err instanceof Error ? err.message : 'OAuth flow failed',
@@ -269,15 +295,25 @@ export function createWebApi(options: WebApiOptions): {
       }
     },
 
-    // Claude OAuth — server returns authUrl, we open it in a new tab
+    // Claude OAuth — server returns authUrl, we open it in a new tab.
+    // Same iOS-safe pre-open pattern as `performOAuth` above.
     startClaudeOAuth: async () => {
+      const popup = window.open('about:blank', '_blank')
       try {
         const result = await client.invoke('onboarding:startClaudeOAuth')
         if (result.success && result.authUrl) {
-          window.open(result.authUrl, '_blank', 'noopener')
+          if (popup && !popup.closed) {
+            popup.location.href = result.authUrl
+          } else {
+            window.location.href = result.authUrl
+          }
+        } else if (popup && !popup.closed) {
+          // No auth URL — close the placeholder we opened on the click.
+          popup.close()
         }
         return result
       } catch (err) {
+        if (popup && !popup.closed) popup.close()
         return {
           success: false,
           error: err instanceof Error ? err.message : 'Claude OAuth failed',

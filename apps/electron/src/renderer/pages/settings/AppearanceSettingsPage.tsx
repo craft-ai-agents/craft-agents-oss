@@ -28,8 +28,19 @@ import {
   SettingsMenuSelect,
   SettingsToggle,
 } from '@/components/settings'
+import { useAtom } from 'jotai'
 import * as storage from '@/lib/local-storage'
 import { useWorkspaceIcons } from '@/hooks/useWorkspaceIcon'
+import { WorkspaceAvatar } from '@/components/ui/workspace-avatar'
+import { ColorPicker } from '@/components/ui/color-picker'
+import { workspaceAvatarColorsAtom } from '@/atoms/workspace-avatar-colors'
+import { kanbanColumnColorsAtom, kanbanColumnStatusAtom, kanbanLivePulseAtom } from '@/atoms/kanban'
+import { showBackgroundFinishedChipAtom } from '@/atoms/background-finished'
+import { KANBAN_COLUMNS } from '@/components/app-shell/kanban/status-column'
+import { DEFAULT_KANBAN_COLUMN_COLORS } from '@/components/app-shell/kanban/kanban-colors'
+import type { KanbanColumnId } from '@/components/app-shell/kanban/types'
+import { setProjectColorTreatment, useProjectColorTreatment } from '@/hooks/useProjectColorTreatment'
+import { PROJECT_COLOR_PALETTE, type ProjectColorTreatment } from '@/utils/project-colors'
 import { Info_DataTable, SortableHeader } from '@/components/info/Info_DataTable'
 import { Info_Badge } from '@/components/info/Info_Badge'
 import type { PresetTheme } from '@config/theme'
@@ -110,7 +121,7 @@ export default function AppearanceSettingsPage() {
     themeLoadError,
     themeResolvedFrom,
   } = useTheme()
-  const { workspaces } = useAppShellContext()
+  const { workspaces, sessionStatuses } = useAppShellContext()
 
   // Fetch workspace icons as data URLs (file:// URLs don't work in renderer)
   const workspaceIconMap = useWorkspaceIcons(workspaces)
@@ -136,6 +147,58 @@ export default function AppearanceSettingsPage() {
     storage.set(storage.KEYS.showConnectionIcons, checked)
   }, [])
 
+  // Project color treatment in the SessionList
+  const projectColorTreatment = useProjectColorTreatment()
+  const handleProjectColorTreatmentChange = useCallback((value: string) => {
+    setProjectColorTreatment(value as ProjectColorTreatment)
+  }, [])
+
+  // Per-workspace avatar color overrides (persisted in localStorage)
+  const [workspaceAvatarColors, setWorkspaceAvatarColors] = useAtom(workspaceAvatarColorsAtom)
+  const setWorkspaceAvatarColor = useCallback((workspaceId: string, hex: string) => {
+    setWorkspaceAvatarColors(prev => ({ ...prev, [workspaceId]: hex }))
+  }, [setWorkspaceAvatarColors])
+  const clearWorkspaceAvatarColor = useCallback((workspaceId: string) => {
+    setWorkspaceAvatarColors(prev => {
+      const next = { ...prev }
+      delete next[workspaceId]
+      return next
+    })
+  }, [setWorkspaceAvatarColors])
+
+  // Kanban board appearance (persisted in localStorage via atomWithStorage).
+  const [kanbanColumnColors, setKanbanColumnColors] = useAtom(kanbanColumnColorsAtom)
+  const setKanbanColumnColor = useCallback((column: KanbanColumnId, hex: string) => {
+    setKanbanColumnColors(prev => ({ ...prev, [column]: hex }))
+  }, [setKanbanColumnColors])
+  const resetKanbanColumnColor = useCallback((column: KanbanColumnId) => {
+    setKanbanColumnColors(prev => {
+      const next = { ...prev }
+      delete next[column]
+      return next
+    })
+  }, [setKanbanColumnColors])
+  const [kanbanLivePulse, setKanbanLivePulse] = useAtom(kanbanLivePulseAtom)
+
+  // Per-column status applied when a task is dragged into that column. Empty
+  // selection ('') removes the mapping → status left unchanged on move.
+  const [kanbanColumnStatus, setKanbanColumnStatus] = useAtom(kanbanColumnStatusAtom)
+  const setColumnStatus = useCallback((column: KanbanColumnId, statusId: string) => {
+    setKanbanColumnStatus(prev => {
+      const next = { ...prev }
+      if (statusId) next[column] = statusId
+      else delete next[column]
+      return next
+    })
+  }, [setKanbanColumnStatus])
+  const columnStatusOptions = useMemo(
+    () => [
+      { value: '', label: t("settings.appearance.kanbanColumnStatusNone") },
+      ...(sessionStatuses ?? []).map(s => ({ value: s.id, label: s.label })),
+    ],
+    [sessionStatuses, t]
+  )
+
   // Rich tool descriptions toggle (persisted in config.json, read by SDK subprocess)
   const [richToolDescriptions, setRichToolDescriptions] = useState(true)
   useEffect(() => {
@@ -145,6 +208,10 @@ export default function AppearanceSettingsPage() {
     setRichToolDescriptions(checked)
     await window.electronAPI?.setRichToolDescriptions?.(checked)
   }, [])
+
+  // "Background session finished" chip toggle (renderer-only appearance pref,
+  // persisted in localStorage via atomWithStorage — read by App.tsx + ChatPage).
+  const [showBackgroundFinishedChip, setShowBackgroundFinishedChip] = useAtom(showBackgroundFinishedChipAtom)
 
   // Load preset themes on mount
   useEffect(() => {
@@ -284,6 +351,10 @@ export default function AppearanceSettingsPage() {
                     <SettingsMenuSelect
                       value={(i18n.resolvedLanguage ?? i18n.language) as LanguageCode}
                       onValueChange={(value) => {
+                        console.info('[i18n] Appearance dropdown change', {
+                          from: i18n.resolvedLanguage ?? null,
+                          to: value,
+                        })
                         i18n.changeLanguage(value)
                         window.electronAPI?.changeLanguage?.(value)
                       }}
@@ -316,15 +387,28 @@ export default function AppearanceSettingsPage() {
                           key={workspace.id}
                           label={
                             <div className="flex items-center gap-2">
-                              {workspaceIconMap.get(workspace.id) ? (
-                                <img
-                                  src={workspaceIconMap.get(workspace.id)}
-                                  alt=""
-                                  className="w-4 h-4 rounded object-cover"
-                                />
-                              ) : (
-                                <div className="w-4 h-4 rounded bg-foreground/10" />
-                              )}
+                              <ColorPicker
+                                value={workspaceAvatarColors[workspace.id] || ''}
+                                onChange={(hex) => setWorkspaceAvatarColor(workspace.id, hex)}
+                                onClear={() => clearWorkspaceAvatarColor(workspace.id)}
+                                clearLabel={t("settings.appearance.workspaceAvatarReset")}
+                                presets={PROJECT_COLOR_PALETTE}
+                                ariaLabel={t("settings.appearance.workspaceAvatarColor")}
+                                trigger={
+                                  <button
+                                    type="button"
+                                    className="cursor-pointer rounded hover:ring-2 hover:ring-foreground/20 transition-shadow"
+                                    aria-label={t("settings.appearance.workspaceAvatarColor")}
+                                  >
+                                    <WorkspaceAvatar
+                                      workspaceId={workspace.id}
+                                      workspaceName={workspace.name}
+                                      src={workspaceIconMap.get(workspace.id)}
+                                      className="w-4 h-4 rounded"
+                                    />
+                                  </button>
+                                }
+                              />
                               <span>{workspace.name}</span>
                             </div>
                           }
@@ -364,6 +448,74 @@ export default function AppearanceSettingsPage() {
                     checked={richToolDescriptions}
                     onCheckedChange={handleRichToolDescriptionsChange}
                   />
+                  <SettingsToggle
+                    label={t("settings.appearance.backgroundFinishedChip")}
+                    description={t("settings.appearance.backgroundFinishedChipDesc")}
+                    checked={showBackgroundFinishedChip}
+                    onCheckedChange={setShowBackgroundFinishedChip}
+                  />
+                  <SettingsRow
+                    label={t("settings.appearance.projectColorTreatment")}
+                    description={t("settings.appearance.projectColorTreatmentDesc")}
+                  >
+                    <SettingsMenuSelect
+                      value={projectColorTreatment}
+                      onValueChange={handleProjectColorTreatmentChange}
+                      options={[
+                        { value: 'stripe', label: t("settings.appearance.projectColorStripe") },
+                        { value: 'stripe-tint', label: t("settings.appearance.projectColorStripeTint") },
+                      ]}
+                    />
+                  </SettingsRow>
+                </SettingsCard>
+              </SettingsSection>
+
+              {/* Kanban board — column colors + live-pulse toggle */}
+              <SettingsSection
+                title={t("settings.appearance.kanbanBoard")}
+                description={t("settings.appearance.kanbanBoardDesc")}
+              >
+                <SettingsCard>
+                  {KANBAN_COLUMNS.map(column => {
+                    const merged = kanbanColumnColors[column.id] ?? DEFAULT_KANBAN_COLUMN_COLORS[column.id]
+                    return (
+                      <SettingsRow key={column.id} label={t(column.labelKey)}>
+                        <ColorPicker
+                          value={merged}
+                          onChange={(hex) => setKanbanColumnColor(column.id, hex)}
+                          onClear={kanbanColumnColors[column.id] ? () => resetKanbanColumnColor(column.id) : undefined}
+                          clearLabel={t("settings.appearance.kanbanColumnColorReset")}
+                          presets={PROJECT_COLOR_PALETTE}
+                          ariaLabel={t("settings.appearance.kanbanColumnColor", { column: t(column.labelKey) })}
+                          align="end"
+                        />
+                      </SettingsRow>
+                    )
+                  })}
+                  <SettingsToggle
+                    label={t("settings.appearance.kanbanLivePulse")}
+                    description={t("settings.appearance.kanbanLivePulseDesc")}
+                    checked={kanbanLivePulse}
+                    onCheckedChange={setKanbanLivePulse}
+                  />
+                </SettingsCard>
+              </SettingsSection>
+
+              {/* Kanban status automation — status applied on drag into a column */}
+              <SettingsSection
+                title={t("settings.appearance.kanbanColumnStatus")}
+                description={t("settings.appearance.kanbanColumnStatusDesc")}
+              >
+                <SettingsCard>
+                  {KANBAN_COLUMNS.map(column => (
+                    <SettingsRow key={column.id} label={t(column.labelKey)}>
+                      <SettingsMenuSelect
+                        value={kanbanColumnStatus[column.id] ?? ''}
+                        onValueChange={(value) => setColumnStatus(column.id, value)}
+                        options={columnStatusOptions}
+                      />
+                    </SettingsRow>
+                  ))}
                 </SettingsCard>
               </SettingsSection>
 

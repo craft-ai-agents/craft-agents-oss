@@ -1,7 +1,7 @@
 import type { ProviderDriver } from '../driver-types.ts';
 import { applyAnthropicRuntimeBootstrap } from '../runtime-resolver.ts';
 import { validateAnthropicConnection } from '../../../../config/llm-validation.ts';
-import { getModelContextWindow } from '../../../../config/models.ts';
+import { DEFAULT_MODEL, getModelById, getModelContextWindow, normalizeDeprecatedModelId } from '../../../../config/models.ts';
 
 export const anthropicDriver: ProviderDriver = {
   provider: 'anthropic',
@@ -71,28 +71,46 @@ export const anthropicDriver: ProviderDriver = {
       throw new Error('No models returned from Anthropic API');
     }
 
+    const seen = new Set<string>();
     const models = allRawModels
       .filter(m => m.id.startsWith('claude-') && !m.id.startsWith('claude-2') && !m.id.startsWith('claude-instant') && !m.id.startsWith('claude-1'))
-      .map(m => ({
-        id: m.id,
-        name: m.display_name,
-        shortName: (() => {
-          const stripped = m.id
-            .replace('claude-', '')
-            .replace(/-\d{8}$/, '')
-            .replace(/-latest$/, '');
-          const variant = stripped
-            .replace(/^[\d.-]+/, '')
-            .replace(/-[\d.]+$/, '')
-            .replace(/^-/, '');
-          return variant ? variant.charAt(0).toUpperCase() + variant.slice(1) : stripped;
-        })(),
-        description: '',
-        provider: 'anthropic' as const,
-        contextWindow: getModelContextWindow(m.id) ?? 200_000,
-      }));
+      // The live Anthropic API can still list deprecated models. Do not persist
+      // them back into active connection catalogs at startup.
+      .filter(m => normalizeDeprecatedModelId(m.id) === m.id)
+      .filter(m => {
+        if (seen.has(m.id)) return false;
+        seen.add(m.id);
+        return true;
+      })
+      .map(m => {
+        const registryModel = getModelById(m.id);
+        return {
+          id: m.id,
+          name: registryModel?.name ?? m.display_name,
+          shortName: registryModel?.shortName ?? (() => {
+            const stripped = m.id
+              .replace('claude-', '')
+              .replace(/-\d{8}$/, '')
+              .replace(/-latest$/, '');
+            const variant = stripped
+              .replace(/^[\d.-]+/, '')
+              .replace(/-[\d.]+$/, '')
+              .replace(/^-/, '');
+            return variant ? variant.charAt(0).toUpperCase() + variant.slice(1) : stripped;
+          })(),
+          description: registryModel?.description ?? '',
+          descriptionKey: registryModel?.descriptionKey,
+          provider: 'anthropic' as const,
+          contextWindow: getModelContextWindow(m.id) ?? 200_000,
+          supportsThinking: registryModel?.supportsThinking,
+          supportsImages: registryModel?.supportsImages,
+        };
+      });
 
-    return { models };
+    return {
+      models,
+      serverDefault: models.some(m => m.id === DEFAULT_MODEL) ? DEFAULT_MODEL : models[0]?.id,
+    };
   },
   validateStoredConnection: async ({ slug, connection, credentialManager }) => {
     // After legacy migration, only direct 'anthropic' connections reach this driver.

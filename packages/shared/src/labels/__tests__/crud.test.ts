@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { createLabel, ensureLabelsExist } from '../crud.ts';
+import { createLabel, ensureLabelsExist, ensureTaskLabel, ensureTaskItemLabel } from '../crud.ts';
 import { loadLabelConfig, saveLabelConfig } from '../storage.ts';
 import { flattenLabels } from '../tree.ts';
 
@@ -101,5 +101,72 @@ describe('ensureLabelsExist', () => {
   it('returns empty array for empty input', () => {
     const result = ensureLabelsExist(workspaceRoot, []);
     expect(result).toEqual([]);
+  });
+});
+
+describe('ensureTaskLabel / ensureTaskItemLabel', () => {
+  it('creates a plain Task root once and converges a legacy numbered root', () => {
+    const first = ensureTaskLabel(workspaceRoot);
+    expect(first).toBe('task');
+    const root = loadLabelConfig(workspaceRoot).labels.find(l => l.id === 'task')!;
+    expect(root.valueType).toBeUndefined();
+
+    // Legacy shape: the earlier scheme created the root with valueType 'number'.
+    root.valueType = 'number';
+    saveLabelConfig(workspaceRoot, { version: 1, labels: [root] });
+    expect(ensureTaskLabel(workspaceRoot)).toBe('task');
+    const converged = loadLabelConfig(workspaceRoot).labels.find(l => l.id === 'task')!;
+    expect(converged.valueType).toBeUndefined();
+  });
+
+  it('mints TASK-<slug>-<N> children under the root with a never-recycled counter', () => {
+    const a = ensureTaskItemLabel(workspaceRoot, 'Fix Login Crash On Startup Today');
+    // Short name: slug capped to the first few words, counter appended last.
+    expect(a.name).toBe('TASK-fix-login-crash-on-1');
+    const b = ensureTaskItemLabel(workspaceRoot, 'Fix Login Crash On Startup Today');
+    expect(b.name).toBe('TASK-fix-login-crash-on-2');
+    expect(b.itemId).not.toBe(a.itemId);
+
+    // Both live under the Task root.
+    const root = loadLabelConfig(workspaceRoot).labels.find(l => l.id === a.rootId)!;
+    expect(root.children?.map(c => c.id)).toEqual([a.itemId, b.itemId]);
+
+    // Deleting the newest child never recycles its number (max + 1, not count + 1).
+    root.children = root.children!.filter(c => c.id !== b.itemId);
+    saveLabelConfig(workspaceRoot, { version: 1, labels: [root] });
+    const c = ensureTaskItemLabel(workspaceRoot, 'Another');
+    expect(c.name).toBe('TASK-another-2');
+  });
+
+  it('falls back to a stable slug for unusable titles', () => {
+    const item = ensureTaskItemLabel(workspaceRoot, '   ');
+    expect(item.name).toBe('TASK-task-1');
+  });
+
+  it("adopts a user's own root Task label without disturbing its shape or children", () => {
+    // A user-authored organizational label that happens to be named "Task":
+    // string-valued, with an existing child whose name ends in a number.
+    saveLabelConfig(workspaceRoot, {
+      version: 1,
+      labels: [
+        {
+          id: 'task',
+          name: 'Task',
+          valueType: 'string',
+          children: [{ id: 'sprint-2026', name: 'Sprint-2026' }],
+        },
+      ],
+    });
+
+    const item = ensureTaskItemLabel(workspaceRoot, 'Fix login');
+    const root = loadLabelConfig(workspaceRoot).labels.find(l => l.id === 'task')!;
+    // Adopted, not duplicated; the user's valueType survives (only the legacy
+    // 'number' shape is converged) and their child is untouched.
+    expect(loadLabelConfig(workspaceRoot).labels.filter(l => l.name === 'Task')).toHaveLength(1);
+    expect(root.valueType).toBe('string');
+    expect(root.children?.map(c => c.id)).toEqual(['sprint-2026', item.itemId]);
+    // The counter only reads our TASK-…-<N> format — "Sprint-2026" must not
+    // inflate it to TASK-fix-login-2027.
+    expect(item.name).toBe('TASK-fix-login-1');
   });
 });

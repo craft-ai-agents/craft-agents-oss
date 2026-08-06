@@ -19,6 +19,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { WhatsAppAdapter, type WhatsAppConfig } from './index'
+import type { IncomingMessage } from '../../types'
 
 const cleanups: Array<() => void> = []
 
@@ -118,5 +119,124 @@ describe('WhatsAppAdapter send lifecycle', () => {
     await expect(pending).rejects.toThrow(
       /worker exited|adapter destroyed/,
     )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Regression for #719: incoming events with attachments must be translated
+// to IncomingMessage with attachments[].localPath populated.
+// ---------------------------------------------------------------------------
+
+/**
+ * Write a fake worker that emits a single `incoming` NDJSON event with
+ * attachments after a short delay (so the parent has time to attach a
+ * messageHandler), then stays alive on stdin.
+ */
+function writeIncomingAttachmentWorker(): string {
+  const dir = makeTmpDir()
+  const path = join(dir, 'incoming-worker.mjs')
+  const body = `
+    const ev = {
+      type: 'incoming',
+      channelId: 'chan-1',
+      messageId: 'MID-7',
+      senderId: 'sender-1',
+      senderName: 'Alice',
+      text: '',
+      attachments: [
+        {
+          type: 'voice',
+          fileName: 'voice.ogg',
+          mimeType: 'audio/ogg',
+          fileSize: 1234,
+          localPath: '/tmp/fake-voice.ogg',
+        },
+      ],
+      timestamp: 1700000000000,
+    }
+    setTimeout(() => {
+      process.stdout.write(JSON.stringify(ev) + '\\n')
+    }, 50)
+    process.stdin.setEncoding('utf8')
+    process.stdin.on('data', () => {})
+    setInterval(() => {}, 60_000)
+  `
+  writeFileSync(path, body)
+  return path
+}
+
+describe('WhatsAppAdapter incoming attachment translation (#719)', () => {
+  it('translates worker incoming attachments into IncomingMessage attachments', async () => {
+    const adapter = await makeAdapter({
+      workerScript: writeIncomingAttachmentWorker(),
+    })
+
+    const seen: IncomingMessage[] = []
+    adapter.onMessage(async (msg) => {
+      seen.push(msg)
+    })
+
+    // Wait for the fake worker to emit the event and the adapter to route it.
+    await new Promise((r) => setTimeout(r, 250))
+
+    try {
+      expect(seen.length).toBe(1)
+      const msg = seen[0]!
+      expect(msg.platform).toBe('whatsapp')
+      expect(msg.text).toBe('')
+      expect(msg.attachments?.length).toBe(1)
+
+      const att = msg.attachments![0]!
+      expect(att.type).toBe('voice')
+      expect(att.fileName).toBe('voice.ogg')
+      expect(att.mimeType).toBe('audio/ogg')
+      expect(att.fileSize).toBe(1234)
+      expect(att.localPath).toBe('/tmp/fake-voice.ogg')
+      // Adapter reuses messageId as fileId since WhatsApp has no separate
+      // server-side file_id (unlike Telegram).
+      expect(att.fileId).toBe('MID-7')
+    } finally {
+      await adapter.destroy()
+    }
+  })
+
+  it('plain text messages still work (no attachments key on the IncomingMessage)', async () => {
+    // Sanity regression: the non-media path must not be perturbed.
+    const dir = makeTmpDir()
+    const workerPath = join(dir, 'plain-text-worker.mjs')
+    writeFileSync(
+      workerPath,
+      `
+      const ev = {
+        type: 'incoming',
+        channelId: 'chan-1',
+        messageId: 'MID-8',
+        senderId: 'sender-1',
+        text: 'hello',
+        timestamp: 1700000000000,
+      }
+      setTimeout(() => {
+        process.stdout.write(JSON.stringify(ev) + '\\n')
+      }, 50)
+      process.stdin.setEncoding('utf8')
+      process.stdin.on('data', () => {})
+      setInterval(() => {}, 60_000)
+    `,
+    )
+
+    const adapter = await makeAdapter({ workerScript: workerPath })
+    const seen: IncomingMessage[] = []
+    adapter.onMessage(async (msg) => {
+      seen.push(msg)
+    })
+    await new Promise((r) => setTimeout(r, 250))
+
+    try {
+      expect(seen.length).toBe(1)
+      expect(seen[0]?.text).toBe('hello')
+      expect(seen[0]?.attachments).toBeUndefined()
+    } finally {
+      await adapter.destroy()
+    }
   })
 })

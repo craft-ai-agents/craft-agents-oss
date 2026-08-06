@@ -56,6 +56,7 @@ export class PromptHandler implements AutomationHandler {
     const matcherPrompts: Array<{
       matcherId: string | undefined;
       automationName: string;
+      telegramTopic: string | undefined;
       prompts: Array<{ prompt: PromptAction; labels?: string[]; permissionMode?: PermissionMode }>;
     }> = [];
 
@@ -69,7 +70,13 @@ export class PromptHandler implements AutomationHandler {
         }
       }
       if (prompts.length > 0) {
-        matcherPrompts.push({ matcherId: matcher.id, automationName: deriveAutomationName(event, matcher), prompts });
+        const telegramTopic = matcher.telegramTopic?.trim();
+        matcherPrompts.push({
+          matcherId: matcher.id,
+          automationName: deriveAutomationName(event, matcher),
+          telegramTopic: telegramTopic && telegramTopic.length > 0 ? telegramTopic : undefined,
+          prompts,
+        });
       }
     }
 
@@ -84,7 +91,12 @@ export class PromptHandler implements AutomationHandler {
     // Process prompts per matcher
     const pendingPrompts: PendingPrompt[] = [];
 
-    for (const { matcherId, automationName, prompts } of matcherPrompts) {
+    for (const { matcherId, automationName, telegramTopic, prompts } of matcherPrompts) {
+      // Topic name accepts env-var expansion so users can route by event payload
+      // (e.g. telegramTopic: "Label: $LABEL"). Empty after expansion → drop it.
+      const expandedTopic = telegramTopic ? expandEnvVars(telegramTopic, env).trim() : undefined;
+      const finalTopic = expandedTopic && expandedTopic.length > 0 ? expandedTopic : undefined;
+
       for (const { prompt, labels, permissionMode } of prompts) {
         // Expand environment variables in the prompt
         const expandedPrompt = expandEnvVars(prompt.prompt, env);
@@ -106,6 +118,7 @@ export class PromptHandler implements AutomationHandler {
           llmConnection: prompt.llmConnection,
           model: prompt.model,
           thinkingLevel: prompt.thinkingLevel,
+          telegramTopic: finalTopic,
         });
       }
 

@@ -21,7 +21,8 @@ import { Spinner } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { Kbd } from '@/components/ui/kbd'
 import { getHostname, getThemeLuminance } from '@/components/browser/utils'
-import { browserInstancesAtom } from '@/atoms/browser-pane'
+import { browserInstancesAtom, filterInstancesForWorkspace } from '@/atoms/browser-pane'
+import { useAppShellContext } from '@/context/AppShellContext'
 import type { BrowserInstanceInfo } from '../../../../shared/types'
 
 interface ToolbarStatusSlotProps {
@@ -35,7 +36,18 @@ export function ToolbarStatusSlot({
   showEscapeOverlay,
   sessionId,
 }: ToolbarStatusSlotProps) {
-  const browserInstances = useAtomValue(browserInstancesAtom)
+  // Filter to the active workspace so a session here doesn't surface a
+  // browser-status banner for an agent running in a different workspace.
+  // Accept both the local workspace id (manual tabs) and the remote-mirror
+  // workspace id (tabs stamped by the remote agent over the WS bridge).
+  const { activeWorkspaceId, workspaces } = useAppShellContext()
+  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId)
+  const remoteWorkspaceId = activeWorkspace?.remoteServer?.remoteWorkspaceId ?? null
+  const allInstances = useAtomValue(browserInstancesAtom)
+  const browserInstances = React.useMemo(
+    () => filterInstancesForWorkspace(allInstances, activeWorkspaceId, remoteWorkspaceId),
+    [allInstances, activeWorkspaceId, remoteWorkspaceId],
+  )
 
   // Find the visible browser instance bound to this session with active agent control.
   // Hidden instances are intentionally excluded so the status slot mirrors actual visibility.

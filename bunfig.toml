@@ -1,1 +1,10 @@
 preload = ["./packages/shared/src/unified-network-interceptor.ts"]
+
+# Use the hoisted linker so transitive deps resolve at top-level node_modules.
+# Vite + esbuild bundling expects this layout; bun's default isolated linker
+# leaves only declared deps at the workspace root, which breaks renderer imports
+# of packages pulled in transitively (i18next, @tiptap/*, pdfjs-dist, etc.).
+# Note: the Windows build script (scripts/build/common.ts) was already using
+# `bun install --linker=hoisted` for the same reason.
+[install]
+linker = "hoisted"

@@ -1,3 +1,5 @@
+import type { CustomEndpointApi, CustomEndpointConfig } from '@config/llm-connections'
+
 export type PresetKey = string
 
 /**
@@ -51,5 +53,37 @@ export function resolvePresetStateForBaseUrlChange(params: {
   return {
     activePreset: 'custom',
     lastNonCustomPreset,
+  }
+}
+
+/**
+ * Resolve the customEndpoint + piAuthProvider payload at submit time.
+ *
+ * Three submit branches:
+ *  - branded openai-compat preset (e.g. Manifest)  → pinned to openai-completions
+ *  - generic custom preset with a base URL         → honors the protocol toggle
+ *  - everything else                               → no customEndpoint, passthrough piAuth
+ */
+export function resolveCustomEndpointPayload(params: {
+  activePreset: PresetKey
+  baseUrl: string
+  customApi: CustomEndpointApi
+  brandedOpenAiCompatPresets: ReadonlySet<string>
+  fallbackPiAuthProvider: string | undefined
+}): {
+  customEndpoint: CustomEndpointConfig | undefined
+  piAuthProvider: string | undefined
+} {
+  const { activePreset, baseUrl, customApi, brandedOpenAiCompatPresets, fallbackPiAuthProvider } = params
+
+  const isBrandedOpenAiCompat = brandedOpenAiCompatPresets.has(activePreset) && !!baseUrl
+  const isCustomEndpoint = (activePreset === 'custom' && !!baseUrl) || isBrandedOpenAiCompat
+  const effectiveApi: CustomEndpointApi = isBrandedOpenAiCompat ? 'openai-completions' : customApi
+
+  return {
+    customEndpoint: isCustomEndpoint ? { api: effectiveApi } : undefined,
+    piAuthProvider: isCustomEndpoint
+      ? (effectiveApi === 'anthropic-messages' ? 'anthropic' : 'openai')
+      : fallbackPiAuthProvider,
   }
 }

@@ -293,9 +293,25 @@ export function sanitizeEmptyTextCacheControl(body: Record<string, unknown>): nu
  * When extendedPromptCache is disabled, the SDK may still send ttl: "1h"
  * natively (via prompt-caching-scope beta). This function removes the ttl
  * field so blocks fall back to the API default (5 min).
+ *
+ * Walks tools, system, message content, and top-level cache_control. The
+ * Anthropic API processes blocks in order `tools → system → messages` and
+ * rejects requests where a 1h block appears after a 5m block, so the tools
+ * walk must stay in sync with the upgrade path below.
  */
 function stripPromptCacheTtl(body: Record<string, unknown>): number {
   let stripped = 0;
+
+  const tools = body.tools as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(tools)) {
+    for (const tool of tools) {
+      const cc = tool.cache_control as Record<string, unknown> | undefined;
+      if (cc?.type === 'ephemeral' && 'ttl' in cc) {
+        delete cc.ttl;
+        stripped++;
+      }
+    }
+  }
 
   const system = body.system as Array<Record<string, unknown>> | undefined;
   if (Array.isArray(system)) {
@@ -340,9 +356,16 @@ function stripPromptCacheTtl(body: Record<string, unknown>): number {
  * When disabled, actively strips any SDK-injected TTL so blocks
  * fall back to the API default (5 min).
  *
- * Walks system prompt blocks, message content blocks, and the top-level
- * cache_control field (auto-caching mode). Only upgrades blocks with
- * type: "ephemeral" — leaves other types untouched.
+ * Walks tools, system prompt blocks, message content blocks, and the
+ * top-level cache_control field (auto-caching mode). Only upgrades blocks
+ * with type: "ephemeral" — leaves other types untouched.
+ *
+ * The tools walk is required for correctness, not just completeness: the
+ * Anthropic API processes blocks in order `tools → system → messages` and
+ * rejects requests where a 1h cache_control block appears after a 5m one.
+ * If we upgrade only system+messages, a 5m block on a tool (added by the
+ * SDK or user) ahead of a 1h block on system produces a 400 with message
+ * "a ttl='1h' cache_control block must not come after a ttl='5m' cache_control block."
  *
  * Exported for focused unit tests.
  */
@@ -350,6 +373,18 @@ export function upgradePromptCacheTtl(body: Record<string, unknown>): number {
   if (!isExtendedPromptCacheEnabled()) return stripPromptCacheTtl(body);
 
   let upgraded = 0;
+
+  // Upgrade tool cache_control (must run first — tools is processed before
+  // system, and a stale 5m block here would invalidate any later 1h upgrade).
+  const tools = body.tools as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(tools)) {
+    for (const tool of tools) {
+      if (tool.cache_control && (tool.cache_control as Record<string, unknown>).type === 'ephemeral') {
+        (tool.cache_control as Record<string, unknown>).ttl = '1h';
+        upgraded++;
+      }
+    }
+  }
 
   // Upgrade system prompt cache_control
   const system = body.system as Array<Record<string, unknown>> | undefined;
@@ -951,6 +986,7 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
     }
 
     let handledToolCalls = false;
+    let strippedEmptyToolCalls = false;
 
     // Buffer tool_call argument deltas (across all choices). All upstream
     // tool_call chunks are suppressed; we emit one consolidated event per
@@ -969,11 +1005,25 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
     //     those args to the matching phase-1 entry by walking the open calls
     //     in order rather than allocating a new bucket for them.
     for (const choice of choices) {
-      if (!choice?.delta?.tool_calls) continue;
+      // A present-but-empty tool_calls array ([]) is NOT a tool-call delta. Some
+      // OpenAI-compatible relays include `tool_calls: []` on ordinary content and
+      // even on the terminal finish_reason chunk; treating that as "handled" made
+      // us drop the chunk and starve the SDK of finish_reason (#995). Strip the
+      // empty key from the forwarded chunk too — the Pi SDK downstream is exactly
+      // the consumer with documented tool_calls-merging quirks, so it must never
+      // see the key at all.
+      const toolCalls = choice?.delta?.tool_calls;
+      if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+        if (Array.isArray(toolCalls) && choice.delta) {
+          delete choice.delta.tool_calls;
+          strippedEmptyToolCalls = true;
+        }
+        continue;
+      }
       handledToolCalls = true;
 
       const choiceIndex = choice.index ?? 0;
-      for (const tc of choice.delta.tool_calls) {
+      for (const tc of toolCalls) {
         // Resolve the bucket key. If `tc.index` is missing, prefer the most
         // recently opened call in this choice so we don't collide on key 0.
         const fallbackIndex = lastOpenedToolIndexByChoice.get(choiceIndex);
@@ -1054,18 +1104,21 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
       return;
     }
 
+    // Forward with the empty tool_calls key removed (re-serialized), or verbatim.
+    const forwardStr = strippedEmptyToolCalls ? JSON.stringify(data) : dataStr;
+
     // On finish, flush buffered tool calls with clean args BEFORE emitting finish event
     const hasFinish = choices.some(choice => choice?.finish_reason === 'tool_calls' || choice?.finish_reason === 'stop');
     if (hasFinish) {
       if (bufferingToolCalls) {
         flushTrackedCalls(controller);
       }
-      emitSseLine(dataStr, controller);
+      emitSseLine(forwardStr, controller);
       return;
     }
 
     // Non-tool events pass through
-    emitSseLine(dataStr, controller);
+    emitSseLine(forwardStr, controller);
   }
 
   return new TransformStream<Uint8Array, Uint8Array>({

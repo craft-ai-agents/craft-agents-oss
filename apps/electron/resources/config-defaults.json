@@ -10,7 +10,8 @@
     "keepAwakeWhileRunning": false,
     "richToolDescriptions": true,
     "extendedPromptCache": false,
-    "browserToolEnabled": true
+    "browserToolEnabled": true,
+    "allowRemoteEvaluate": true
   },
   "workspaceDefaults": {
     "thinkingLevel": "think",

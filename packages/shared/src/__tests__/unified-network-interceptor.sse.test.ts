@@ -61,6 +61,25 @@ describe('unified-network-interceptor SSE processors', () => {
     rmSync(sessionDir, { recursive: true, force: true });
   });
 
+  it('OpenAI: does not drop the terminal chunk when delta.tool_calls is an empty array (#995)', async () => {
+    // Some OpenAI-compatible relays send `tool_calls: []` on ordinary content and
+    // even on the terminal finish_reason chunk. Treating that as a tool-call delta
+    // dropped the chunk, so the SDK reported "Stream ended without finish_reason".
+    const sse = [
+      'data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"","tool_calls":[]}}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"content":"hi","tool_calls":[]}}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[]},"finish_reason":"stop"}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+    const out = await runThroughProcessor(createOpenAiSseStrippingStream(), sse);
+    expect(out).toContain('"finish_reason":"stop"');
+    expect(out).toContain('"content":"hi"');
+    expect(out).toContain('[DONE]');
+    // The empty key must also be stripped from forwarded chunks — the Pi SDK
+    // downstream mishandles tool_calls deltas and must never see it.
+    expect(out).not.toContain('"tool_calls":[]');
+  });
+
   it('OpenAI: handles multiple tool calls in one delta chunk without dropping calls', async () => {
     const sse = [
       'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"toolA","arguments":"{\\"a\\":1,\\"_intent\\":\\"intent-1\\",\\"_displayName\\":\\"Display 1\\"}"}},{"index":1,"id":"call_2","type":"function","function":{"name":"toolB","arguments":"{\\"b\\":2,\\"_intent\\":\\"intent-2\\",\\"_displayName\\":\\"Display 2\\"}"}}]}}]}\n\n',

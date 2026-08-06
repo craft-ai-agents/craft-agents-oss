@@ -16,6 +16,7 @@ import { SkillMenu } from '@/components/app-shell/SkillMenu'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { routes, navigate } from '@/lib/navigate'
 import { useActiveWorkspace } from '@/context/AppShellContext'
+import { getFileManagerName } from '@/lib/platform'
 import {
   Info_Page,
   Info_Section,
@@ -84,15 +85,16 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
 
   // Handle open in finder
   const handleOpenInFinder = useCallback(async () => {
-    if (!skill) return
-
+    if (!skill || !canRevealLocally) return
     try {
-      if (!canRevealLocally) return
-      await window.electronAPI.showInFolder(`${skill.path}/SKILL.md`)
+      await window.electronAPI.showInFolder(skill.path)
     } catch (err) {
-      console.error('Failed to open skill in finder:', err)
+      const message = err instanceof Error ? err.message : String(err)
+      toast.error(t('toast.failedToReveal', { fileManager: getFileManagerName() }), {
+        description: message,
+      })
     }
-  }, [canRevealLocally, skill])
+  }, [canRevealLocally, skill, t])
 
   // Handle delete
   const handleDelete = useCallback(async () => {
@@ -128,12 +130,17 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
     return path
   }
 
-  // Open the skill folder in Finder with SKILL.md selected
-  const handleLocationClick = () => {
-    if (!skill) return
-    // Show the SKILL.md file in Finder (this reveals the enclosing folder with file focused)
-    if (!canRevealLocally) return
-    window.electronAPI.showInFolder(`${skill.path}/SKILL.md`)
+  // Open the skill folder in Finder
+  const handleLocationClick = async () => {
+    if (!skill || !canRevealLocally) return
+    try {
+      await window.electronAPI.showInFolder(skill.path)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      toast.error(t('toast.failedToReveal', { fileManager: getFileManagerName() }), {
+        description: message,
+      })
+    }
   }
 
   return (

@@ -95,6 +95,65 @@ describe('resolveClaudeThinkingOptions', () => {
       maxThinkingTokens: 7_000,
     })
   })
+
+  // --- Mythos-class models (Fable 5): adaptive thinking always on -----------
+  // These reject `thinking: { type: 'disabled' }`, so the "off"/minimize case
+  // must fall back to adaptive + lowest effort instead of disabling.
+
+  it('uses adaptive thinking + effort for Fable 5 (normal level)', () => {
+    const result = resolveClaudeThinkingOptions({
+      thinkingLevel: 'high',
+      model: 'claude-fable-5',
+      providerType: 'anthropic',
+      minimizeThinking: false,
+    })
+
+    expect(result).toEqual({
+      thinking: { type: 'adaptive' },
+      effort: 'high',
+    })
+  })
+
+  it('never disables thinking on Fable 5 when level is off (adaptive + low instead)', () => {
+    const result = resolveClaudeThinkingOptions({
+      thinkingLevel: 'off',
+      model: 'claude-fable-5',
+      providerType: 'anthropic',
+      minimizeThinking: false,
+    })
+
+    expect(result).toEqual({
+      thinking: { type: 'adaptive' },
+      effort: 'low',
+    })
+  })
+
+  it('never disables thinking on Fable 5 when minimizeThinking is set', () => {
+    const result = resolveClaudeThinkingOptions({
+      thinkingLevel: 'medium',
+      model: 'claude-fable-5',
+      providerType: 'anthropic',
+      minimizeThinking: true,
+    })
+
+    expect(result).toEqual({
+      thinking: { type: 'adaptive' },
+      effort: 'low',
+    })
+  })
+
+  it('still disables thinking on Opus 4.8 when level is off (unchanged for non-Mythos models)', () => {
+    const result = resolveClaudeThinkingOptions({
+      thinkingLevel: 'off',
+      model: 'claude-opus-4-8',
+      providerType: 'anthropic',
+      minimizeThinking: false,
+    })
+
+    expect(result).toEqual({
+      thinking: { type: 'disabled' },
+    })
+  })
 })
 
 describe('getThinkingTokens', () => {

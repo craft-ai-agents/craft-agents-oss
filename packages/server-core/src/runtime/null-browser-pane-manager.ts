@@ -38,15 +38,24 @@ export class NullBrowserPaneManager implements IBrowserPaneManager {
   destroyForSession(_sessionId: string): void {}
   async clearVisualsForSession(_sessionId: string): Promise<void> {}
   unbindAllForSession(_sessionId: string): void {}
-  getOrCreateForSession(_sessionId: string): string { return unavailable('getOrCreateForSession') }
-  setAgentControl(_sessionId: string, _meta: { displayName?: string; intent?: string }): void {}
+  getOrCreateForSession(_sessionId: string, _options?: { workspaceId?: string | null }): string { return unavailable('getOrCreateForSession') }
+  async getOrCreateForSessionAsync(_sessionId: string, _options?: { workspaceId?: string | null }): Promise<string> { return unavailable('getOrCreateForSession') }
+  setAgentControl(
+    _sessionId: string,
+    _meta: { displayName?: string; intent?: string },
+    _options?: { workspaceId?: string | null },
+  ): void {}
 
   // -- Instance management --
-  createForSession(_sessionId: string, _options?: { show?: boolean }): string { return unavailable('createForSession') }
+  createForSession(_sessionId: string, _options?: { show?: boolean; workspaceId?: string | null }): string { return unavailable('createForSession') }
+  async createForSessionAsync(_sessionId: string, _options?: { show?: boolean; workspaceId?: string | null }): Promise<string> { return unavailable('createForSession') }
   getInstance(_id: string): BrowserInstanceSnapshot | undefined { return undefined }
+  async getInstanceAsync(_id: string): Promise<BrowserInstanceSnapshot | undefined> { return undefined }
   listInstances(): BrowserInstanceInfo[] { return [] }
-  focusBoundForSession(_sessionId: string): string { return unavailable('focusBoundForSession') }
-  bindSession(_id: string, _sessionId: string): void { unavailable('bindSession') }
+  async listInstancesAsync(): Promise<BrowserInstanceInfo[]> { return [] }
+  focusBoundForSession(_sessionId: string, _options?: { workspaceId?: string | null }): string { return unavailable('focusBoundForSession') }
+  async focusBoundForSessionAsync(_sessionId: string, _options?: { workspaceId?: string | null }): Promise<string> { return unavailable('focusBoundForSession') }
+  bindSession(_id: string, _sessionId: string, _options?: { workspaceId?: string | null }): void { unavailable('bindSession') }
   focus(_id: string): void { unavailable('focus') }
   destroyInstance(_id: string): void {}
   hide(_id: string): void {}

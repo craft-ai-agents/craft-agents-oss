@@ -187,6 +187,12 @@ export async function createSession(
     sessionStatus?: SessionConfig['sessionStatus'];
     labels?: string[];
     isFlagged?: boolean;
+    projectId?: string;
+    parentSessionId?: string;
+    taskSlug?: string;
+    taskRunId?: string;
+    taskNodeId?: string;
+    taskDraft?: boolean;
   }
 ): Promise<SessionConfig> {
   ensureSessionsDir(workspaceRootPath);
@@ -218,6 +224,12 @@ export async function createSession(
     sessionStatus: options?.sessionStatus,
     labels: options?.labels,
     isFlagged: options?.isFlagged,
+    projectId: options?.projectId,
+    parentSessionId: options?.parentSessionId,
+    taskSlug: options?.taskSlug,
+    taskRunId: options?.taskRunId,
+    taskNodeId: options?.taskNodeId,
+    taskDraft: options?.taskDraft,
   };
 
   // Save empty session
@@ -403,7 +415,7 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
 
     // Destructure fields that don't exist on SessionMetadata or need overrides
     const {
-      enabledSourceSlugs: _es, pendingPlanExecution: _pp,
+      pendingPlanExecution: _pp,
       sessionStatus: _ss, workingDirectory: _wd, sdkCwd: _sc,
       workspaceRootPath: _wrp, ...headerFields
     } = header;
@@ -541,6 +553,7 @@ export async function updateSessionMetadata(
     | 'llmConnection'
     | 'isArchived'
     | 'archivedAt'
+    | 'projectId'
   >>
 ): Promise<void> {
   const session = loadSession(workspaceRootPath, sessionId);
@@ -562,6 +575,7 @@ export async function updateSessionMetadata(
   if (updates.llmConnection !== undefined) session.llmConnection = updates.llmConnection;
   if (updates.isArchived !== undefined) session.isArchived = updates.isArchived;
   if ('archivedAt' in updates) session.archivedAt = updates.archivedAt;
+  if ('projectId' in updates) session.projectId = updates.projectId;
 
   await saveSession(session);
 }
@@ -600,6 +614,42 @@ export async function setSessionLabels(
   labels: string[]
 ): Promise<void> {
   await updateSessionMetadata(workspaceRootPath, sessionId, { labels });
+}
+
+/**
+ * Set or clear the project binding for a session.
+ * Pass `null` to unbind.
+ */
+export async function setSessionProjectId(
+  workspaceRootPath: string,
+  sessionId: string,
+  projectId: string | null
+): Promise<void> {
+  await updateSessionMetadata(workspaceRootPath, sessionId, {
+    projectId: projectId === null ? undefined : projectId,
+  });
+}
+
+/**
+ * Unbind every session that referenced a given projectId.
+ * Called when a project is deleted — sessions are preserved, just unlinked.
+ * Returns the number of sessions touched.
+ */
+export async function unbindProjectFromSessions(
+  workspaceRootPath: string,
+  projectId: string
+): Promise<number> {
+  const sessions = listSessions(workspaceRootPath);
+  let touched = 0;
+  for (const meta of sessions) {
+    const full = loadSession(workspaceRootPath, meta.id);
+    if (full?.projectId === projectId) {
+      full.projectId = undefined;
+      await saveSession(full);
+      touched++;
+    }
+  }
+  return touched;
 }
 
 /**

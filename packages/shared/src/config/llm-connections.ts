@@ -8,12 +8,13 @@
 
 // Import model types and lists from centralized registry
 // NOTE: Pi SDK functions (getPiModelsForAuthProvider, getAllPiModels) are NOT imported
-// here because @mariozechner/pi-ai transitively pulls in @aws-sdk which uses Node.js
+// here because @earendil-works/pi-ai transitively pulls in @aws-sdk which uses Node.js
 // `stream` module — breaking the Vite renderer build. Instead, Pi model resolution is
 // injected at app startup via registerPiModelResolver().
 import {
   type ModelDefinition,
   ANTHROPIC_MODELS,
+  normalizeDeprecatedModelId,
 } from './models';
 import type { CredentialManager } from '../credentials/manager.ts';
 
@@ -27,7 +28,7 @@ let _piModelResolver: PiModelResolver = () => [];
 /**
  * Register the Pi model resolver function.
  * Must be called from main process at app startup (before any Pi connections are used).
- * This avoids pulling @mariozechner/pi-ai into the renderer bundle.
+ * This avoids pulling @earendil-works/pi-ai into the renderer bundle.
  */
 export function registerPiModelResolver(resolver: PiModelResolver): void {
   _piModelResolver = resolver;
@@ -42,7 +43,7 @@ export function registerPiModelResolver(resolver: PiModelResolver): void {
  * This is separate from auth mechanism - a provider may support multiple auth types.
  *
  * - 'anthropic': Direct Anthropic API (api.anthropic.com) — uses Claude Agent SDK
- * - 'pi': Pi unified LLM API (20+ providers via @mariozechner/pi-ai)
+ * - 'pi': Pi unified LLM API (20+ providers via @earendil-works/pi-ai)
  * - 'pi_compat': Pi with custom endpoint (Ollama, self-hosted models, Anthropic-compat endpoints)
  *
  * Legacy values (bedrock, vertex, anthropic_compat) are migrated on startup
@@ -112,6 +113,22 @@ export interface CustomEndpointConfig {
 }
 
 /**
+ * Per-connection behavior when the user sends a message while the agent is
+ * still streaming/processing a previous turn.
+ *
+ * - 'steer': Try to deliver the message into the in-flight turn (Pi's native
+ *   `.steer()` or Claude's PreToolUse `additionalContext` hook). Falls back to
+ *   abort+queue when the backend can't steer.
+ * - 'queue': Hold the message; let the current turn finish naturally; replay
+ *   as a new turn afterwards. No abort, no destructive interruption.
+ *
+ * Default is per-`providerType` via {@link defaultMidStreamBehavior}; reads
+ * everywhere should go through {@link resolveMidStreamBehavior} so connections
+ * created before this field existed still pick up the right default.
+ */
+export type MidStreamBehavior = 'steer' | 'queue';
+
+/**
  * LLM Connection configuration.
  * Stored in config.llmConnections array.
  */
@@ -163,6 +180,24 @@ export interface LlmConnection {
    * Determines which streaming adapter the Pi SDK uses for requests.
    */
   customEndpoint?: CustomEndpointConfig;
+
+  /**
+   * Behavior when the user sends a message while the agent is still streaming.
+   * Optional for backward compat with config.json from before this field existed —
+   * read via {@link resolveMidStreamBehavior} which falls back to a per-provider
+   * default ({@link defaultMidStreamBehavior}).
+   */
+  midStreamBehavior?: MidStreamBehavior;
+
+  // --- Resolved Anthropic OAuth identity (issue #838) ---
+  // Captured from the token-exchange response; lets the UI flag two Claude
+  // connections that resolve to the same underlying account. All optional and
+  // fail-soft — absent identity simply means nothing is shown.
+  oauthAccountUuid?: string;
+  oauthAccountEmail?: string;
+  oauthOrganizationUuid?: string;
+  oauthOrganizationName?: string;
+  oauthProfileVerifiedAt?: number; // epoch ms
 
   // --- Timestamps ---
 
@@ -427,6 +462,106 @@ export function isPiProvider(providerType: LlmProviderType): boolean {
 }
 
 /**
+ * Default mid-stream send behavior for a given provider type.
+ *
+ * - 'anthropic' → 'queue': Claude's emulated steer (PreToolUse hook injection)
+ *   has a real failure mode — if no tool fires before the turn ends, the steer
+ *   becomes `steer_undelivered` and gets re-queued anyway, paying for the
+ *   original turn's tokens for nothing. Default to queue for predictability.
+ * - 'pi' / 'pi_compat' → 'steer': Pi's native `.steer()` is non-destructive
+ *   (delivers after the current tool finishes, keeps full context). No
+ *   downside to defaulting to immediate steering.
+ */
+export function defaultMidStreamBehavior(providerType: LlmProviderType): MidStreamBehavior {
+  return providerType === 'anthropic' ? 'queue' : 'steer';
+}
+
+/**
+ * Read the effective mid-stream behavior for a connection.
+ *
+ * Single source of truth — every call site that needs to decide steer-vs-queue
+ * should go through here so legacy connections (created before the field
+ * existed) and connections with corrupt/unexpected values fall through to the
+ * provider-appropriate default.
+ */
+export function resolveMidStreamBehavior(
+  connection: Pick<LlmConnection, 'midStreamBehavior' | 'providerType'>,
+): MidStreamBehavior {
+  if (connection.midStreamBehavior === 'steer' || connection.midStreamBehavior === 'queue') {
+    return connection.midStreamBehavior;
+  }
+  return defaultMidStreamBehavior(connection.providerType);
+}
+
+/**
+ * Return a new LlmConnection with the given model's `supportsImages` override set.
+ *
+ * Centralizes the string-vs-object normalization for `connection.models[]`:
+ *   - string entry → promoted to `{ id, name, shortName, supportsImages: enabled }`
+ *   - object entry → only `supportsImages` is updated
+ *   - model not in array → connection returned unchanged (defensive)
+ *
+ * Pure function — does not mutate the input. Storage round-trip is handled
+ * upstream via `saveLlmConnection`. The stored object form for custom-endpoint
+ * models is `{ id, name?, shortName?, contextWindow?, supportsImages? }`
+ * (passthrough-validated by the storage schema). `name` and `shortName` default
+ * to the model's `id` when promoting so that downstream renderer surfaces that
+ * read `m.name` (the trigger button display, picker row labels) keep showing a
+ * label after the toggle promotes a string entry. The `ModelDefinition` cast
+ * matches the existing shape produced by `ApiKeyInput.tsx` and the Pi driver.
+ */
+export function setModelSupportsImages(
+  connection: LlmConnection,
+  modelId: string,
+  enabled: boolean,
+): LlmConnection {
+  if (!connection.models) return connection;
+  const idOf = (m: ModelDefinition | string) => (typeof m === 'string' ? m : m.id);
+  const idx = connection.models.findIndex(m => idOf(m) === modelId);
+  if (idx === -1) return connection;
+
+  const entry = connection.models[idx]!;
+  const nextEntry =
+    typeof entry === 'string'
+      ? { id: entry, name: entry, shortName: entry, supportsImages: enabled }
+      : { ...entry, supportsImages: enabled };
+
+  const nextModels = connection.models.slice();
+  nextModels[idx] = nextEntry as ModelDefinition;
+  return { ...connection, models: nextModels };
+}
+
+/**
+ * Resolve whether a given model on a connection accepts image input.
+ *
+ * For `pi_compat` (custom-endpoint) connections this mirrors the precedence used
+ * by Pi's `buildCustomEndpointModelDef`:
+ *   per-model `supportsImages` override
+ *   ?? connection-level `customEndpoint.supportsImages` default
+ *   ?? false
+ *
+ * For non-`pi_compat` connections the renderer doesn't own the catalog — Pi SDK's
+ * bundled provider definitions and Anthropic's API do. This helper conservatively
+ * returns `true` there (we don't know better; the upstream decides). The
+ * pre-flight banner gates on `pi_compat` separately, so this just reports what
+ * the renderer can know with confidence.
+ */
+export function modelSupportsImages(
+  connection: Pick<LlmConnection, 'providerType' | 'models' | 'customEndpoint'>,
+  modelId: string,
+): boolean {
+  if (!isCompatProvider(connection.providerType)) return true;
+
+  const entry = connection.models?.find(m =>
+    (typeof m === 'string' ? m : m.id) === modelId,
+  );
+  if (entry && typeof entry !== 'string' && typeof entry.supportsImages === 'boolean') {
+    return entry.supportsImages;
+  }
+  return connection.customEndpoint?.supportsImages ?? false;
+}
+
+/**
  * Get the default model list for a provider type from the registry.
  * For *_compat providers, returns empty array - those should use connection.models instead.
  *
@@ -469,11 +604,9 @@ export function getModelsForProviderType(providerType: LlmProviderType, piAuthPr
  * Format: bare model IDs (without pi/ prefix). Matched against pi/{id} or pi/{id}-*.
  */
 export const PI_PREFERRED_DEFAULTS: Record<string, string[]> = {
-  // TODO(opus-4.6-sunset): drop 'claude-opus-4-6' from anthropic and amazon-bedrock
-  // when Opus 4.6 is deprecated.
-  anthropic: ['claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
-  openai: ['gpt-5.5', 'gpt-5.2', 'gpt-5.1', 'gpt-5', 'o4-mini', 'o3', 'gpt-4o'],
-  'openai-codex': ['gpt-5.5', 'gpt-5.2', 'gpt-5.1', 'gpt-5', 'o4-mini', 'o3', 'gpt-4o'],
+  anthropic: ['claude-opus-4-8', 'claude-opus-4-7', 'claude-fable-5', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
+  openai: ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.2', 'gpt-5.1', 'gpt-5', 'o4-mini', 'o3', 'gpt-4o'],
+  'openai-codex': ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.2', 'gpt-5.1', 'gpt-5', 'o4-mini', 'o3', 'gpt-4o'],
   // Stable models first so the connection-setup test (which uses
   // getDefaultModelForConnection) lands on a reliable model.
   // gemini-3-pro-preview and gemini-3.1-pro-preview are intermittently
@@ -482,15 +615,15 @@ export const PI_PREFERRED_DEFAULTS: Record<string, string[]> = {
   google: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'],
   deepseek: ['deepseek-v4-pro', 'deepseek-v4-flash'],
   'github-copilot': ['claude-sonnet-4-6', 'gpt-5', 'o4-mini', 'claude-haiku-4-5'],
-  'amazon-bedrock': ['claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
+  'amazon-bedrock': ['claude-opus-4-8', 'claude-opus-4-7', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
 };
 
 export function getDefaultModelsForConnection(providerType: LlmProviderType, piAuthProvider?: string): Array<ModelDefinition | string> {
   if (providerType === 'pi') {
     const models = _piModelResolver(piAuthProvider);
     // Sort preferred defaults first so getDefaultModelForConnection picks a modern model.
-    // For Bedrock models, the Pi SDK returns IDs like pi/us.anthropic.claude-opus-4-7-v1
-    // but preferred defaults use bare IDs (claude-opus-4-7). We match via both direct
+    // For Bedrock models, the Pi SDK returns IDs like pi/us.anthropic.claude-opus-4-8
+    // but preferred defaults use bare IDs (claude-opus-4-8). We match via both direct
     // comparison and reverse Bedrock ID mapping.
     const preferred = (piAuthProvider && PI_PREFERRED_DEFAULTS[piAuthProvider]) || [];
     if (preferred.length > 0) {
@@ -616,16 +749,20 @@ export function isValidProviderAuthCombination(
  * Source: Pi SDK registry (models.generated.js) — us.* variants
  */
 const BEDROCK_MODEL_MAP: Record<string, string> = {
-  'claude-opus-4-7': 'us.anthropic.claude-opus-4-7-v1',
+  'claude-opus-4-8': 'us.anthropic.claude-opus-4-8',
+  'claude-opus-4-7': 'us.anthropic.claude-opus-4-7',
+  'claude-fable-5': 'us.anthropic.claude-fable-5',
+  'claude-sonnet-5': 'us.anthropic.claude-sonnet-5',
   'claude-sonnet-4-6': 'us.anthropic.claude-sonnet-4-6',
   'claude-haiku-4-5-20251001': 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
   // Older models (for migration of existing connections)
-  'claude-opus-4-6': 'us.anthropic.claude-opus-4-6-v1',
   'claude-opus-4-5-20251101': 'us.anthropic.claude-opus-4-5-20251101-v1:0',
   'claude-sonnet-4-5-20250929': 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
   // Also map base IDs (without region prefix) to US inference profiles
-  'anthropic.claude-opus-4-7-v1': 'us.anthropic.claude-opus-4-7-v1',
-  'anthropic.claude-opus-4-6-v1': 'us.anthropic.claude-opus-4-6-v1',
+  'anthropic.claude-opus-4-8': 'us.anthropic.claude-opus-4-8',
+  'anthropic.claude-opus-4-7': 'us.anthropic.claude-opus-4-7',
+  'anthropic.claude-fable-5': 'us.anthropic.claude-fable-5',
+  'anthropic.claude-sonnet-5': 'us.anthropic.claude-sonnet-5',
   'anthropic.claude-sonnet-4-6': 'us.anthropic.claude-sonnet-4-6',
   'anthropic.claude-haiku-4-5-20251001-v1:0': 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
   'anthropic.claude-opus-4-5-20251101-v1:0': 'us.anthropic.claude-opus-4-5-20251101-v1:0',
@@ -635,29 +772,41 @@ const BEDROCK_MODEL_MAP: Record<string, string> = {
 /** Reverse map: all known Bedrock ID variants → bare Anthropic ID */
 const BEDROCK_REVERSE_MAP: Record<string, string> = {
   // US inference profiles
+  'us.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'us.anthropic.claude-fable-5': 'claude-fable-5',
+  'us.anthropic.claude-opus-4-7': 'claude-opus-4-7',
   'us.anthropic.claude-opus-4-7-v1': 'claude-opus-4-7',
+  'us.anthropic.claude-sonnet-5': 'claude-sonnet-5',
   'us.anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',
   'us.anthropic.claude-haiku-4-5-20251001-v1:0': 'claude-haiku-4-5-20251001',
-  'us.anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
   'us.anthropic.claude-opus-4-5-20251101-v1:0': 'claude-opus-4-5-20251101',
   'us.anthropic.claude-sonnet-4-5-20250929-v1:0': 'claude-sonnet-4-5-20250929',
   // EU inference profiles
+  'eu.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'eu.anthropic.claude-fable-5': 'claude-fable-5',
+  'eu.anthropic.claude-opus-4-7': 'claude-opus-4-7',
   'eu.anthropic.claude-opus-4-7-v1': 'claude-opus-4-7',
+  'eu.anthropic.claude-sonnet-5': 'claude-sonnet-5',
   'eu.anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',
   'eu.anthropic.claude-haiku-4-5-20251001-v1:0': 'claude-haiku-4-5-20251001',
-  'eu.anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
   'eu.anthropic.claude-opus-4-5-20251101-v1:0': 'claude-opus-4-5-20251101',
   'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': 'claude-sonnet-4-5-20250929',
   // Global inference profiles
+  'global.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'global.anthropic.claude-fable-5': 'claude-fable-5',
+  'global.anthropic.claude-opus-4-7': 'claude-opus-4-7',
   'global.anthropic.claude-opus-4-7-v1': 'claude-opus-4-7',
+  'global.anthropic.claude-sonnet-5': 'claude-sonnet-5',
   'global.anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',
   'global.anthropic.claude-haiku-4-5-20251001-v1:0': 'claude-haiku-4-5-20251001',
-  'global.anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
   // Base IDs (no region prefix)
+  'anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'anthropic.claude-fable-5': 'claude-fable-5',
+  'anthropic.claude-opus-4-7': 'claude-opus-4-7',
   'anthropic.claude-opus-4-7-v1': 'claude-opus-4-7',
+  'anthropic.claude-sonnet-5': 'claude-sonnet-5',
   'anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',
   'anthropic.claude-haiku-4-5-20251001-v1:0': 'claude-haiku-4-5-20251001',
-  'anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
   'anthropic.claude-opus-4-5-20251101-v1:0': 'claude-opus-4-5-20251101',
   'anthropic.claude-sonnet-4-5-20250929-v1:0': 'claude-sonnet-4-5-20250929',
 }
@@ -679,8 +828,9 @@ export function deriveBedrockRegionPrefix(awsRegion?: string): string {
  * Pass-through if already native or unknown.
  */
 export function toBedrockNativeId(modelId: string, regionPrefix?: string): string {
-  const nativeId = BEDROCK_MODEL_MAP[modelId]
-  if (!nativeId) return modelId
+  const normalizedModelId = normalizeDeprecatedModelId(modelId)
+  const nativeId = BEDROCK_MODEL_MAP[normalizedModelId]
+  if (!nativeId) return normalizedModelId
   if (!regionPrefix || regionPrefix === 'us') return nativeId
   // BEDROCK_MODEL_MAP stores us.* variants — swap the region prefix
   return nativeId.replace(/^us\./, `${regionPrefix}.`)
@@ -688,7 +838,8 @@ export function toBedrockNativeId(modelId: string, regionPrefix?: string): strin
 
 /** Map a Bedrock-native model ID back to its bare Anthropic equivalent. Pass-through if already bare or unknown. */
 export function fromBedrockNativeId(modelId: string): string {
-  return BEDROCK_REVERSE_MAP[modelId] ?? modelId
+  const normalizedModelId = normalizeDeprecatedModelId(modelId)
+  return BEDROCK_REVERSE_MAP[normalizedModelId] ?? normalizedModelId
 }
 
 /**

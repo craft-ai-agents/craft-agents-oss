@@ -1,8 +1,11 @@
 /**
  * Update User Preferences Handler
  *
- * Updates stored user preferences (name, timezone, location, language, notes).
+ * Updates stored user preferences (name, timezone, location, notes).
  * Uses an injected updatePreferences callback to avoid depending on @craft-agent/shared.
+ *
+ * Note: UI language is NOT user-editable here — it mirrors Appearance → Language
+ * and is maintained internally by the main-process i18n IPC handler.
  */
 
 import type { SessionToolContext } from '../context.ts';
@@ -15,7 +18,6 @@ export interface UpdatePreferencesArgs {
   city?: string;
   region?: string;
   country?: string;
-  language?: string;
   notes?: string;
   includeCoAuthoredBy?: boolean;
 }
@@ -42,9 +44,6 @@ export async function handleUpdatePreferences(
     }
     if (args.timezone && typeof args.timezone === 'string') {
       updates.timezone = args.timezone;
-    }
-    if (args.language && typeof args.language === 'string') {
-      updates.language = args.language;
     }
 
     // Handle location fields

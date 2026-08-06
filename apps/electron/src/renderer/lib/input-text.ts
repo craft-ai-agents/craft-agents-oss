@@ -21,3 +21,15 @@ export function coerceInputText(value: unknown): string {
 
   return ''
 }
+
+/**
+ * Combine an existing input draft with text being restored (e.g. the last
+ * user message put back on Stop). Appends with a blank line so a half-typed
+ * draft isn't clobbered; returns the non-empty side when the other is empty.
+ */
+export function appendRestoredInput(existing: string | undefined, restored: string | undefined): string {
+  const existingText = coerceInputText(existing)
+  const restoredText = coerceInputText(restored)
+  if (!restoredText) return existingText
+  return existingText ? `${existingText}\n\n${restoredText}` : restoredText
+}

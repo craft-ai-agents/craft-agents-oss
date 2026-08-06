@@ -195,3 +195,96 @@ describe('BindingStore', () => {
     expect(JSON.parse(raw)).toHaveLength(1)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Telegram supergroup forum topics (Phase A)
+// ---------------------------------------------------------------------------
+
+describe('BindingStore — threadId (Telegram supergroup topics)', () => {
+  it('treats different topics in the same supergroup as separate bindings', () => {
+    const store = new BindingStore(dir)
+    const a = store.bind('ws1', 'sess-A', 'telegram', '-1001', undefined, undefined, 5)
+    const b = store.bind('ws1', 'sess-B', 'telegram', '-1001', undefined, undefined, 7)
+
+    expect(store.getAll()).toHaveLength(2)
+    expect(store.findByChannel('telegram', '-1001', 5)?.id).toBe(a.id)
+    expect(store.findByChannel('telegram', '-1001', 7)?.id).toBe(b.id)
+  })
+
+  it('rebinding the same (chat, topic) tuple evicts only that tuple', () => {
+    const store = new BindingStore(dir)
+    store.bind('ws1', 'sess-A', 'telegram', '-1001', undefined, undefined, 5)
+    store.bind('ws1', 'sess-B', 'telegram', '-1001', undefined, undefined, 7)
+    store.bind('ws1', 'sess-C', 'telegram', '-1001', undefined, undefined, 5)
+
+    // Topic 5: latest binding wins (sess-C). Topic 7: untouched (sess-B).
+    expect(store.findByChannel('telegram', '-1001', 5)?.sessionId).toBe('sess-C')
+    expect(store.findByChannel('telegram', '-1001', 7)?.sessionId).toBe('sess-B')
+    expect(store.getAll()).toHaveLength(2)
+  })
+
+  it('a DM binding in the same chatId does not collide with a topic binding', () => {
+    const store = new BindingStore(dir)
+    // DM (no threadId) and a topic in the same chatId — implausible in real
+    // life (DMs and supergroups have disjoint chatIds) but the eviction key
+    // must still treat them as distinct.
+    store.bind('ws1', 'sess-DM', 'telegram', 'shared', undefined, undefined, undefined)
+    store.bind('ws1', 'sess-Topic', 'telegram', 'shared', undefined, undefined, 9)
+
+    expect(store.findByChannel('telegram', 'shared')?.sessionId).toBe('sess-DM')
+    expect(store.findByChannel('telegram', 'shared', 9)?.sessionId).toBe('sess-Topic')
+    expect(store.getAll()).toHaveLength(2)
+  })
+
+  it('findByChannel without threadId does not match topic-bound entries', () => {
+    const store = new BindingStore(dir)
+    store.bind('ws1', 'sess-Topic', 'telegram', '-1001', undefined, undefined, 5)
+
+    // The Telegram General topic (no message_thread_id) → no DM binding here
+    expect(store.findByChannel('telegram', '-1001')).toBeUndefined()
+    expect(store.findByChannel('telegram', '-1001', 5)?.sessionId).toBe('sess-Topic')
+  })
+
+  it('persists threadId across BindingStore instances', () => {
+    const a = new BindingStore(dir)
+    a.bind('ws1', 'sess-T', 'telegram', '-1001', 'topic-name', undefined, 12)
+
+    const b = new BindingStore(dir)
+    const hit = b.findByChannel('telegram', '-1001', 12)
+    expect(hit?.sessionId).toBe('sess-T')
+    expect(hit?.threadId).toBe(12)
+  })
+
+  it('unbind targeted at a specific topic leaves sibling topics intact', () => {
+    const store = new BindingStore(dir)
+    store.bind('ws1', 'sess-A', 'telegram', '-1001', undefined, undefined, 5)
+    store.bind('ws1', 'sess-B', 'telegram', '-1001', undefined, undefined, 7)
+
+    expect(store.unbind('telegram', '-1001', 5)).toBe(true)
+    expect(store.findByChannel('telegram', '-1001', 5)).toBeUndefined()
+    expect(store.findByChannel('telegram', '-1001', 7)?.sessionId).toBe('sess-B')
+    expect(store.unbind('telegram', '-1001', 5)).toBe(false)
+  })
+
+  it('legacy bindings without threadId continue to match DM lookups', () => {
+    // Pre-topics-feature data on disk: no threadId field.
+    writeFileSync(
+      join(dir, 'bindings.json'),
+      JSON.stringify([
+        {
+          id: 'legacy-1',
+          workspaceId: 'ws1',
+          sessionId: 'sess-old',
+          platform: 'telegram',
+          channelId: 'dm-chat',
+          enabled: true,
+          createdAt: 1,
+          config: {},
+        },
+      ]),
+    )
+    const store = new BindingStore(dir)
+    expect(store.findByChannel('telegram', 'dm-chat')?.sessionId).toBe('sess-old')
+    expect(store.findByChannel('telegram', 'dm-chat', 5)).toBeUndefined()
+  })
+})

@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from "react-i18next"
-import { ChevronDown, Square, ArrowUpRight } from 'lucide-react'
+import { useSetAtom } from 'jotai'
+import { ChevronDown, Square, ArrowUpRight, CheckCircle2, XCircle, AlertTriangle, X } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -12,6 +13,7 @@ import { Spinner } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { BackgroundTask } from './ActiveTasksBar'
+import { backgroundTasksAtomFamily } from '@/atoms/sessions'
 
 /** Terminal data for overlay display */
 export interface TerminalOverlayData {
@@ -59,50 +61,63 @@ export interface TaskActionMenuProps {
  *
  * Provides contextual actions for background tasks:
  * - View Output: Opens task output in terminal overlay
+ * - Dismiss: Hides the renderer-only chip without stopping the task
  * - Stop Task: Kills shell tasks (agent tasks show warning)
  */
 export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, onShowTerminalOverlay, className }: TaskActionMenuProps) {
   const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
+  const setTasks = useSetAtom(backgroundTasksAtomFamily(sessionId))
 
-  // Local timer for shell tasks (since they don't get task_progress events)
-  // For agent tasks, we use elapsedSeconds from events
+  const isTerminal = task.status === 'completed'
+    || task.status === 'failed'
+    || task.status === 'stopped'
+    || task.status === 'orphaned'
+
+  // Wall-clock timer for RUNNING tasks. The async-by-default agent path emits no
+  // task_progress events, so deriving elapsed from startTime (rather than relying
+  // on elapsedSeconds) keeps the chip ticking for every task type. Terminal chips
+  // freeze their elapsed at completedAt.
   const [localElapsed, setLocalElapsed] = React.useState(() => {
-    // Initialize from startTime
     return Math.floor((Date.now() - task.startTime) / 1000)
   })
 
   React.useEffect(() => {
-    // Only use local timer for shell tasks
-    if (task.type !== 'shell') return
-
+    if (task.status !== 'running') return
     const interval = setInterval(() => {
       setLocalElapsed(Math.floor((Date.now() - task.startTime) / 1000))
     }, 1000)
-
     return () => clearInterval(interval)
-  }, [task.type, task.startTime])
+  }, [task.status, task.startTime])
 
-  // Use local timer for shells, event-based for agents
-  const displayElapsed = task.type === 'shell' ? localElapsed : task.elapsedSeconds
+  const displayElapsed = isTerminal
+    ? Math.max(0, Math.floor(((task.completedAt ?? Date.now()) - task.startTime) / 1000))
+    : Math.max(localElapsed, task.elapsedSeconds)
+
+  // Prefer the human-readable intent over the opaque task ID for the chip label.
+  const taskLabel = task.intent?.trim() ?? ''
 
   const handleViewOutput = async () => {
-    if (!onShowTerminalOverlay) {
-      toast.error(t('toast.terminalOverlayNotAvailable'))
-      return
-    }
-
     try {
-      // Fetch task output via IPC
+      // Fetch task output via IPC (reads the file stored on task_completed).
       const output = await window.electronAPI.getTaskOutput(task.id)
 
-      // Show terminal output in overlay
-      onShowTerminalOverlay({
-        command: task.intent || `${task.type} task`,
-        output: output || t('chat.noOutputYet'),
-        description: task.intent,
-        toolType: 'bash', // Use 'bash' for both shell and agent tasks
-      })
+      if (onShowTerminalOverlay) {
+        // Preferred path: show in the terminal overlay.
+        onShowTerminalOverlay({
+          command: task.intent || `${task.type} task`,
+          output: output || t('chat.noOutputYet'),
+          description: task.intent,
+          toolType: 'bash', // Use 'bash' for both shell and agent tasks
+        })
+      } else if (output) {
+        // Fallback when no overlay handler is wired: copy the full output to the
+        // clipboard so it's still retrievable. (Running tasks have no output yet.)
+        await navigator.clipboard?.writeText(output)
+        toast.success(t('toast.taskOutputCopied', 'Task output copied to clipboard'))
+      } else {
+        toast.info(t('chat.noOutputYet'))
+      }
       setOpen(false)
     } catch (err) {
       toast.error(t('toast.failedToLoadTaskOutput'))
@@ -114,6 +129,54 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
     setOpen(false)
   }
 
+  // Manually remove this chip from the bar. The chip is renderer-only state, so
+  // dismissing it just hides the indicator — it never kills the underlying task
+  // (shells use Stop for that). This is the escape hatch for a chip that got
+  // stuck 'running' because its task_completed was lost.
+  const handleDismiss = () => {
+    setTasks((prev) => prev.filter((t) => t.id !== task.id))
+    setOpen(false)
+  }
+
+  // Status → icon + tint. Running shows the spinner; terminal/orphaned states
+  // are visually distinct so a chip never falsely reads as "still running".
+  const statusTint = cn(
+    "bg-white dark:bg-white/10",
+    "hover:bg-white/80 dark:hover:bg-white/15",
+    "data-[state=open]:bg-white/80 dark:data-[state=open]:bg-white/15",
+    task.status === 'failed' && "bg-destructive/10 hover:bg-destructive/15 dark:bg-destructive/15",
+    (task.status === 'orphaned' || task.status === 'stale') && "bg-amber-500/10 hover:bg-amber-500/15 dark:bg-amber-500/15",
+  )
+
+  const StatusIcon = () => {
+    switch (task.status) {
+      case 'completed':
+        return <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-500" />
+      case 'failed':
+        return <XCircle className="h-3.5 w-3.5 text-destructive" />
+      case 'stopped':
+        return <Square className="h-3 w-3 opacity-60" />
+      case 'orphaned':
+      case 'stale':
+        return <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-500" />
+      default:
+        return <Spinner className="text-xs" />
+    }
+  }
+
+  const statusLabel: Record<string, string> = {
+    completed: t('chat.taskStatusDone', 'done'),
+    failed: t('chat.taskStatusFailed', 'failed'),
+    stopped: t('chat.taskStatusStopped', 'stopped'),
+    orphaned: t('chat.taskStatusOrphaned', 'orphaned'),
+    stale: t('common.unknown'),
+  }
+
+  const chipTitle = task.status === 'orphaned'
+    ? t('chat.taskOrphanedHint', 'This background task was terminated when its turn ended.')
+    : task.status === 'stale'
+      ? t('chat.taskStaleHint')
+      : t("chat.clickForTaskActions")
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -124,33 +187,58 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
             "h-[30px] pl-2.5 pr-2 text-xs font-medium rounded-[8px]",
             "flex items-center gap-1.5 shrink-0 select-none",
             "transition-all shadow-minimal cursor-pointer",
-            // Plain white badge with hover
-            "bg-white dark:bg-white/10",
-            "hover:bg-white/80 dark:hover:bg-white/15",
-            "data-[state=open]:bg-white/80 dark:data-[state=open]:bg-white/15",
+            statusTint,
             className
           )}
-          title={t("chat.clickForTaskActions")}
+          title={chipTitle}
         >
-          {/* Spinner */}
+          {/* Status icon */}
           <div className="flex items-center justify-center shrink-0">
-            <Spinner className="text-xs" />
+            <StatusIcon />
           </div>
 
           {/* Type badge */}
           <span className="opacity-60">
-            {task.type === 'agent' ? t('chat.taskTypeAgent') : t('chat.taskTypeShell')}
+            {task.type === 'workflow'
+              ? t('chat.taskTypeWorkflow')
+              : task.type === 'agent'
+                ? t('chat.taskTypeAgent')
+                : t('chat.taskTypeShell')}
           </span>
 
-          {/* Task ID (shortened) */}
-          <span className="font-mono opacity-80">
-            {shortenId(task.id)}
-          </span>
+          {/* Intent (the actual task description) — falls back to the shortened
+              task ID only when no intent was captured. Truncated so a long intent
+              can't blow up the chip; full text shown on hover. */}
+          {taskLabel ? (
+            <span className="opacity-80 truncate max-w-[220px]" title={taskLabel}>
+              {taskLabel}
+            </span>
+          ) : (
+            <span className="font-mono opacity-80">
+              {shortenId(task.id)}
+            </span>
+          )}
 
-          {/* Elapsed time */}
-          <span className="opacity-60 tabular-nums">
-            {formatElapsed(displayElapsed)}
-          </span>
+          {/* Workflow fan-out progress: live count of completed sub-agents. */}
+          {task.type === 'workflow' && (task.agentsCompleted ?? 0) > 0 && (
+            <span
+              className="opacity-60 tabular-nums"
+              title={t('chat.workflowAgentsDone', { count: task.agentsCompleted ?? 0 })}
+            >
+              {t('chat.workflowAgentsDone', { count: task.agentsCompleted ?? 0 })}
+            </span>
+          )}
+
+          {/* Elapsed time, or terminal status word */}
+          {task.status === 'running' ? (
+            <span className="opacity-60 tabular-nums">
+              {formatElapsed(displayElapsed)}
+            </span>
+          ) : (
+            <span className="opacity-70">
+              {statusLabel[task.status] ?? task.status}
+            </span>
+          )}
 
           {/* Dropdown indicator */}
           <ChevronDown className="h-3.5 w-3.5 opacity-60 ml-auto" />
@@ -161,6 +249,12 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
         <StyledDropdownMenuItem onClick={handleViewOutput}>
           <ArrowUpRight />
           {t('chat.viewOutput')}
+        </StyledDropdownMenuItem>
+
+        {/* Dismiss - remove the chip (renderer-only; does not kill the task) */}
+        <StyledDropdownMenuItem onClick={handleDismiss}>
+          <X />
+          {t('common.dismiss')}
         </StyledDropdownMenuItem>
 
         {/* Stop Task - Only show for shell tasks (inserts kill command into input) */}

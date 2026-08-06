@@ -156,6 +156,12 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.caching.GET_ENABLE_1M_CONTEXT,
   RPC_CHANNELS.caching.SET_ENABLE_1M_CONTEXT,
 
+  // rtk — token-optimization opt-in
+  RPC_CHANNELS.rtk.GET_ENABLED,
+  RPC_CHANNELS.rtk.SET_ENABLED,
+  RPC_CHANNELS.rtk.GET_STATUS,
+  RPC_CHANNELS.rtk.GET_GAIN,
+
   // tools — local tool settings
   RPC_CHANNELS.tools.GET_BROWSER_TOOL_ENABLED,
   RPC_CHANNELS.tools.SET_BROWSER_TOOL_ENABLED,
@@ -256,8 +262,19 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.transfer.COMMIT,
   RPC_CHANNELS.transfer.ABORT,
 
-  // tasks — workspace content
+  // tasks — workspace content (Conductor DAG runs on the workspace server)
   RPC_CHANNELS.tasks.GET_OUTPUT,
+  RPC_CHANNELS.tasks.VALIDATE,
+  RPC_CHANNELS.tasks.CREATE,
+  RPC_CHANNELS.tasks.GENERATE,
+  RPC_CHANNELS.tasks.GENERATED,
+  RPC_CHANNELS.tasks.RUN,
+  RPC_CHANNELS.tasks.PAUSE,
+  RPC_CHANNELS.tasks.RESUME,
+  RPC_CHANNELS.tasks.STOP,
+  RPC_CHANNELS.tasks.GET,
+  RPC_CHANNELS.tasks.LIST,
+  RPC_CHANNELS.tasks.GET_RESULTS,
 
   // file — workspace files (not openDialog which is native)
   RPC_CHANNELS.file.READ,
@@ -396,6 +413,17 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.automations.REPLAY,
   RPC_CHANNELS.automations.CHANGED,
 
+  // projects — workspace projects
+  RPC_CHANNELS.projects.GET,
+  RPC_CHANNELS.projects.GET_ONE,
+  RPC_CHANNELS.projects.CREATE,
+  RPC_CHANNELS.projects.UPDATE,
+  RPC_CHANNELS.projects.DELETE,
+  RPC_CHANNELS.projects.LIST_ASSETS,
+  RPC_CHANNELS.projects.UPLOAD_ASSET,
+  RPC_CHANNELS.projects.DELETE_ASSET,
+  RPC_CHANNELS.projects.CHANGED,
+
   // git — workspace filesystem
   RPC_CHANNELS.git.GET_BRANCH,
 
@@ -417,19 +445,34 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.messaging.WA_DISCONNECT,
   RPC_CHANNELS.messaging.BINDING_CHANGED,
   RPC_CHANNELS.messaging.PLATFORM_STATUS,
+  RPC_CHANNELS.messaging.PENDING_CHANGED,
   RPC_CHANNELS.messaging.GET_CONFIG,
   RPC_CHANNELS.messaging.UPDATE_CONFIG,
   RPC_CHANNELS.messaging.TEST_TELEGRAM,
   RPC_CHANNELS.messaging.SAVE_TELEGRAM,
+  RPC_CHANNELS.messaging.TEST_LARK,
+  RPC_CHANNELS.messaging.SAVE_LARK,
   RPC_CHANNELS.messaging.DISCONNECT,
   RPC_CHANNELS.messaging.FORGET,
   RPC_CHANNELS.messaging.GET_BINDINGS,
   RPC_CHANNELS.messaging.GENERATE_CODE,
+  RPC_CHANNELS.messaging.GENERATE_SUPERGROUP_CODE,
+  RPC_CHANNELS.messaging.GET_SUPERGROUP,
+  RPC_CHANNELS.messaging.UNBIND_SUPERGROUP,
   RPC_CHANNELS.messaging.UNBIND,
   RPC_CHANNELS.messaging.UNBIND_BINDING,
   RPC_CHANNELS.messaging.WA_START_CONNECT,
   RPC_CHANNELS.messaging.WA_SUBMIT_PHONE,
   RPC_CHANNELS.messaging.WA_UI_EVENT,
+  // messaging access control — UI ↔ Server, per-platform owners + per-binding allow-list
+  RPC_CHANNELS.messaging.GET_PLATFORM_OWNERS,
+  RPC_CHANNELS.messaging.SET_PLATFORM_OWNERS,
+  RPC_CHANNELS.messaging.GET_PLATFORM_ACCESS_MODE,
+  RPC_CHANNELS.messaging.SET_PLATFORM_ACCESS_MODE,
+  RPC_CHANNELS.messaging.GET_PENDING_SENDERS,
+  RPC_CHANNELS.messaging.DISMISS_PENDING_SENDER,
+  RPC_CHANNELS.messaging.ALLOW_PENDING_SENDER,
+  RPC_CHANNELS.messaging.SET_BINDING_ACCESS,
 ])
 
 // ---------------------------------------------------------------------------

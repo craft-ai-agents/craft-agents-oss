@@ -22,10 +22,12 @@ import {
 import {
   activeBrowserInstanceIdAtom,
   browserInstancesAtom,
+  filterInstancesForWorkspace,
   setBrowserInstancesAtom,
   updateBrowserInstanceAtom,
   removeBrowserInstanceAtom,
 } from '@/atoms/browser-pane'
+import { useAppShellContext } from '@/context/AppShellContext'
 import { BrowserTabBadge } from './BrowserTabBadge'
 import type { BrowserInstanceInfo } from '../../../shared/types'
 import { getHostname } from './utils'
@@ -44,7 +46,18 @@ export function BrowserTabStrip({
   instancesOverride,
   maxVisibleBadges = DEFAULT_MAX_VISIBLE_BADGES,
 }: BrowserTabStripProps) {
-  const instances = useAtomValue(browserInstancesAtom)
+  // Filter the badge strip to the workspace currently in focus. Remote-connected
+  // workspaces have a different `remoteWorkspaceId` (what the remote agent
+  // stamps onto its tabs) than the local `activeWorkspaceId` (what locally-
+  // opened manual tabs use), so we accept either.
+  const { activeWorkspaceId, workspaces } = useAppShellContext()
+  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId)
+  const remoteWorkspaceId = activeWorkspace?.remoteServer?.remoteWorkspaceId ?? null
+  const allInstances = useAtomValue(browserInstancesAtom)
+  const instances = useMemo(
+    () => filterInstancesForWorkspace(allInstances, activeWorkspaceId, remoteWorkspaceId),
+    [allInstances, activeWorkspaceId, remoteWorkspaceId],
+  )
   const setInstances = useSetAtom(setBrowserInstancesAtom)
   const updateInstance = useSetAtom(updateBrowserInstanceAtom)
   const removeInstance = useSetAtom(removeBrowserInstanceAtom)

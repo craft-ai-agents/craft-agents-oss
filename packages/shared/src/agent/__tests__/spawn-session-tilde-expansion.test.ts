@@ -4,7 +4,7 @@
  * spawn_session must expand `~`, `${HOME}`, and relative paths in
  * `workingDirectory` before handing the request to `onSpawnSession`.
  * Otherwise `child_process.spawn({ cwd })` receives a literal tilde-path
- * and the SDK fails with a misleading "cli.js not found" error.
+ * and the SDK fails with a misleading executable-not-found error.
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { homedir } from 'node:os';

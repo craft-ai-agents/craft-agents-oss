@@ -135,6 +135,16 @@ export class CraftMcpClient {
     return result.tools;
   }
 
+  /**
+   * Returns server name/version reported during the MCP handshake.
+   * Available after `connect()` resolves; undefined otherwise.
+   */
+  getServerInfo(): { name: string; version: string } | undefined {
+    const info = this.client.getServerVersion();
+    if (!info) return undefined;
+    return { name: info.name, version: info.version };
+  }
+
   async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
     if (!this.connected) {
       await this.connect();

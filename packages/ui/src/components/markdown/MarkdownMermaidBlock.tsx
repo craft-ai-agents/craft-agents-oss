@@ -4,6 +4,7 @@ import { Maximize2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { CodeBlock } from './CodeBlock'
 import { MermaidPreviewOverlay } from '../overlay/MermaidPreviewOverlay'
+import { normalizeMermaidSource } from './mermaid-source'
 import { useScrollFade } from './useScrollFade'
 import { useTranslation } from 'react-i18next'
 
@@ -65,7 +66,7 @@ export function MarkdownMermaidBlock({ code, className, showExpandButton = true,
   const { svg, error } = React.useMemo(() => {
     try {
       return {
-        svg: renderMermaidSVG(code, {
+        svg: renderMermaidSVG(normalizeMermaidSource(code), {
           bg: 'var(--background)',
           fg: 'var(--foreground)',
           accent: 'var(--accent)',

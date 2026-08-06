@@ -310,7 +310,7 @@ export function AutomationsListPanel({
         </div>
       ) : (
         <ScrollArea className="flex-1">
-          <div className="pb-2">
+          <div className="pb-2" data-list-role="automations">
             <div className="pt-1">
               {filteredAutomations.map((automation, index) => (
                 <AutomationItem

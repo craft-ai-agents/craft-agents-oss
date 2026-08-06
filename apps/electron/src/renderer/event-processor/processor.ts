@@ -21,7 +21,9 @@ import {
   handleTypedError,
   handleSourcesChanged,
   handleLabelsChanged,
+  handleProjectIdChanged,
   handleSessionStatusChanged,
+  handleSessionMetadataChanged,
   handleSessionFlagged,
   handleSessionUnflagged,
   handleSessionArchived,
@@ -104,6 +106,11 @@ export function processEvent(
       return { state: newState, effects: [] }
     }
 
+    case 'workflow_agent_completed':
+      // Live workflow fan-out progress — the chip counter is updated in App.tsx's
+      // handleBackgroundTaskEvent; nothing to change in message/session state here.
+      return { state, effects: [] }
+
     case 'complete':
       return handleComplete(state, event)
 
@@ -156,8 +163,14 @@ export function processEvent(
     case 'labels_changed':
       return handleLabelsChanged(state, event)
 
+    case 'project_id_changed':
+      return handleProjectIdChanged(state, event)
+
     case 'session_status_changed':
       return handleSessionStatusChanged(state, event)
+
+    case 'session_metadata_changed':
+      return handleSessionMetadataChanged(state, event)
 
     case 'session_flagged':
       return handleSessionFlagged(state, event)
@@ -202,16 +215,9 @@ export function processEvent(
       return handleAuthCompleted(state, event)
 
     case 'source_activated':
-      // Source was auto-activated mid-turn, emit effect to auto-retry
-      return {
-        state,
-        effects: [{
-          type: 'auto_retry',
-          sessionId: event.sessionId,
-          originalMessage: event.originalMessage,
-          sourceSlug: event.sourceSlug,
-        }],
-      }
+      // Server-side handles the auto-retry now (craft-agents-oss#804); the renderer
+      // just receives the event for UI feedback. See SessionManager.processEvent.
+      return { state, effects: [] }
 
     case 'usage_update':
       return handleUsageUpdate(state, event)

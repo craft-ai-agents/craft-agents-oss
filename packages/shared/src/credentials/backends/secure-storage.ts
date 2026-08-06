@@ -152,7 +152,11 @@ export class SecureStorageBackend implements CredentialBackend {
   }
 
   async delete(id: CredentialId): Promise<boolean> {
-    const store = await this.loadStore();
+    return this.deleteSync(id);
+  }
+
+  deleteSync(id: CredentialId): boolean {
+    const store = this.loadStoreSync();
     if (!store) return false;
 
     const key = credentialIdToAccount(id);
@@ -161,7 +165,7 @@ export class SecureStorageBackend implements CredentialBackend {
     delete store.credentials[key];
     store.metadata.updatedAt = Date.now();
 
-    await this.saveStore(store);
+    this.saveStoreSync(store);
     return true;
   }
 
@@ -188,6 +192,10 @@ export class SecureStorageBackend implements CredentialBackend {
   // ============================================================
 
   private async loadStore(): Promise<CredentialStore | null> {
+    return this.loadStoreSync();
+  }
+
+  private loadStoreSync(): CredentialStore | null {
     // Return cached store if available
     if (this.cachedStore) return this.cachedStore;
 
@@ -238,7 +246,7 @@ export class SecureStorageBackend implements CredentialBackend {
     if (store) {
       // Migration: re-save with new stable key so future loads use hardware UUID
       this.cachedStore = store;
-      await this.saveStore(store);
+      this.saveStoreSync(store);
       return store;
     }
 
@@ -267,6 +275,10 @@ export class SecureStorageBackend implements CredentialBackend {
   }
 
   private async saveStore(store: CredentialStore): Promise<void> {
+    this.saveStoreSync(store);
+  }
+
+  private saveStoreSync(store: CredentialStore): void {
     // Ensure directory exists
     if (!existsSync(CREDENTIALS_DIR)) {
       mkdirSync(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });

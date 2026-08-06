@@ -1,11 +1,7 @@
 .planner-sortable-item {
   --sortable-shadow-base: none;
-  --sortable-shadow-active:
-    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-    rgba(var(--foreground-rgb), 0.13) 0px 0px 0px 1px,
-    rgba(0, 0, 0, 0.18) 0px 8px 10px -2px,
-    rgba(0, 0, 0, 0.24) 0px 18px 24px -10px;
+  /* Shared drag-lift elevation — see `--shadow-dragging` in index.css. */
+  --sortable-shadow-active: var(--shadow-dragging);
   --sortable-scale-active: 1.025;
 
   position: relative;

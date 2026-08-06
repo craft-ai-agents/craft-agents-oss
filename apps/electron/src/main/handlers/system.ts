@@ -4,7 +4,7 @@ import { homedir } from 'os'
 import { execSync } from 'child_process'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
-import { isSafeExternalUrl } from '@craft-agent/shared/utils/url-safety'
+import { classifyExternalUrl, formatBlockedUrlError } from '@craft-agent/shared/utils/url-safety'
 import { isUsableGitBashPath, validateGitBashPath } from '@craft-agent/server-core/services'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import type { RpcServer } from '@craft-agent/server-core/transport'
@@ -206,10 +206,13 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
   server.handle(RPC_CHANNELS.shell.OPEN_URL, async (ctx, url: string) => {
     deps.platform.logger.info('[OPEN_URL] Received request:', url)
     try {
-      const parsed = new URL(url)
+      const classification = classifyExternalUrl(url)
+      if (classification.kind === 'dangerous') {
+        throw new Error(formatBlockedUrlError(classification))
+      }
 
       // Handle craftagents:// URLs internally via deep link handler (GUI only)
-      if (parsed.protocol === 'craftagents:') {
+      if (classification.kind === 'internal-deeplink') {
         if (!windowManager) return
         deps.platform.logger.info('[OPEN_URL] Handling as deep link')
         const { handleDeepLink } = await import('../deep-link')
@@ -217,10 +220,6 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
         const result = await handleDeepLink(url, windowManager, server.push.bind(server), resolver, ctx.clientId)
         deps.platform.logger.info('[OPEN_URL] Deep link result:', result)
         return
-      }
-
-      if (!isSafeExternalUrl(url)) {
-        throw new Error(`Refused to open URL with blocked scheme: ${parsed.protocol}`)
       }
 
       const result = await requestClientOpenExternal(server, ctx.clientId, url)

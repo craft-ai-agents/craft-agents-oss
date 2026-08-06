@@ -13,7 +13,9 @@ import type {
   TypedErrorEvent,
   SourcesChangedEvent,
   LabelsChangedEvent,
+  ProjectIdChangedEvent,
   SessionStatusChangedEvent,
+  SessionMetadataChangedEvent,
   SessionFlaggedEvent,
   SessionUnflaggedEvent,
   SessionArchivedEvent,
@@ -544,6 +546,11 @@ export function handleUserMessage(
     // - 'processing' → isQueued = false (queued message is now actually running)
     // - 'accepted'   → isQueued = false (Pi steer path: agent has the message)
     //
+    // A queued message is re-stamped by SessionManager when replay starts so it
+    // sorts after the prior turn's final assistant response. Apply that canonical
+    // timestamp on the processing transition; otherwise the already-mounted
+    // optimistic bubble keeps its queue-time timestamp until the session reloads.
+    //
     // We deliberately do NOT swap `m.id` to the backend's canonical id here.
     // ChatDisplay's `getTurnKey` keys user-message bubbles by id, and a swap
     // would unmount/remount the UserMessageBubble — wiping its local timer
@@ -554,6 +561,7 @@ export function handleUserMessage(
       if (i === existingIndex) {
         return {
           ...m,
+          ...(status === 'processing' ? { timestamp: message.timestamp } : {}),
           isPending: false,
           isQueued: status === 'queued',
         }
@@ -654,6 +662,27 @@ export function handleLabelsChanged(
 }
 
 /**
+ * Handle project_id_changed - update session's projectId binding
+ */
+export function handleProjectIdChanged(
+  state: SessionState,
+  event: ProjectIdChangedEvent
+): ProcessResult {
+  const { session, streaming } = state
+
+  return {
+    state: {
+      session: {
+        ...session,
+        projectId: event.projectId ?? undefined,
+      },
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/**
  * Handle session_status_changed - update session's sessionStatus (external metadata change or agent tool)
  */
 export function handleSessionStatusChanged(
@@ -664,6 +693,25 @@ export function handleSessionStatusChanged(
   return {
     state: {
       session: { ...session, sessionStatus: event.sessionStatus },
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/**
+ * Handle session_metadata_changed - merge programmatic metadata changes (taskNodeCount,
+ * kanbanColumn, and the taskDraft→taskSlug promotion on orchestrator adoption) that don't
+ * propagate via the header-signature file watch.
+ */
+export function handleSessionMetadataChanged(
+  state: SessionState,
+  event: SessionMetadataChangedEvent
+): ProcessResult {
+  const { session, streaming } = state
+  return {
+    state: {
+      session: { ...session, ...event.changes },
       streaming,
     },
     effects: [],

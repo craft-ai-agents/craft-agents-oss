@@ -20,6 +20,8 @@ import { safeJsonParse, readJsonFileSync } from '../utils/files.ts';
 import { EntityColorSchema } from '../colors/validate.ts';
 import { THINKING_LEVEL_IDS } from '../agent/thinking-levels.ts';
 import { isValidProviderAuthCombination } from './llm-connections.ts';
+import { SUPPORTED_LANGUAGE_CODES } from '../i18n/languages.ts';
+import type { LanguageCode } from '../i18n/languages.ts';
 
 // ============================================================
 // Config Directory
@@ -117,10 +119,12 @@ export const UserPreferencesSchema = z.object({
   name: z.string().optional(),
   timezone: z.string().optional(),  // TODO: Could validate against IANA timezone list
   location: LocationSchema.optional(),
-  language: z.string().optional(),
   notes: z.string().optional(),
+  // Internal: mirrors Appearance → Language. Not user-editable.
+  // Validated against the registry-derived supported set.
+  uiLanguage: z.enum([...SUPPORTED_LANGUAGE_CODES] as [LanguageCode, ...LanguageCode[]]).optional(),
   updatedAt: z.number().int().min(0).optional(),
-});
+}).passthrough();
 
 // ============================================================
 // Validation Functions
@@ -1138,7 +1142,7 @@ const BaseLabelConfigSchema = z.object({
   color: EntityColorSchema.optional(),
   icon: z.string().optional(),
   /** Optional hint: what type of value this label carries (omit for boolean labels) */
-  valueType: z.enum(['string', 'number', 'date']).optional(),
+  valueType: z.enum(['string', 'number', 'date', 'link']).optional(),
   /** Auto-label rules: regex patterns that scan messages and apply labels automatically */
   autoRules: z.array(AutoLabelRuleSchema).optional(),
 });
@@ -1150,7 +1154,7 @@ type LabelConfigSchemaType = z.ZodType<{
   name: string;
   color?: unknown;
   icon?: string;
-  valueType?: 'string' | 'number' | 'date';
+  valueType?: 'string' | 'number' | 'date' | 'link';
   autoRules?: Array<{ pattern: string; flags?: string; valueTemplate?: string; description?: string }>;
   children?: LabelConfigSchemaType[];
 }>;

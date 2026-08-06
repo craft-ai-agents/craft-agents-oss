@@ -6,7 +6,7 @@
  *
  * The actual abort implementation is provider-specific:
  * - ClaudeAgent uses AbortController with the Claude SDK
- * - CodexAgent uses client.turnInterrupt() with the Codex API
+ * - PiAgent signals the pi-agent-server subprocess via JSONL
  *
  * This module provides the shared types and utilities that both use.
  */

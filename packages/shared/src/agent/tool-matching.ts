@@ -24,6 +24,23 @@ const log = createLogger('tool-matching');
 // Re-export from browser-safe module (no Node deps) for backward compatibility
 export { PARENT_TASK_TOOLS, isParentTaskTool } from '../utils/toolNames.ts';
 
+/**
+ * Parse the workflow run id (`wf_...`) from a subagent transcript path (or any
+ * string containing one). Workflow sub-agent transcripts live under
+ * `.../subagents/workflows/<wf_id>/agent-<id>.jsonl`, so this both (a) extracts
+ * the id from the Workflow tool result's "Transcript dir:" line and (b) attributes
+ * a SubagentStop's transcript path to the owning workflow. Returns null for
+ * non-workflow paths (ordinary sub-agents live under `.../subagents/agent-*`).
+ */
+export function parseWorkflowIdFromTranscriptPath(path: string | undefined): string | null {
+  if (!path) return null;
+  // The id charset [A-Za-z0-9_-] naturally bounds the match (it stops at `/`,
+  // `.`, whitespace or newline), so no explicit terminator is needed — and adding
+  // one breaks the "Transcript dir:" tail case where the id is followed by \n.
+  const m = path.match(/\/workflows\/(wf_[A-Za-z0-9_-]+)/);
+  return m?.[1] ?? null;
+}
+
 // ============================================================================
 // Tool Index — append-only, order-independent lookup
 // ============================================================================
@@ -399,21 +416,44 @@ function detectBackgroundEvents(
   const events: AgentEvent[] = [];
 
   // Background Task detection — Task/Agent tool with agentId in result.
-  // Only trigger when the tool was explicitly launched with run_in_background: true.
-  // Without this guard, foreground Agent tools whose result text happens to contain
-  // "agentId:" would be spuriously marked as backgrounded — and since no task_completed
-  // event ever arrives for them, they'd stay stuck in 'backgrounded' status forever.
+  //
+  // Two launch shapes both produce a real background agent:
+  //  1. Explicit `run_in_background: true` in the tool input.
+  //  2. Async-by-default: the SDK backgrounds the Agent/Task automatically and
+  //     returns a launch acknowledgement WITHOUT the caller ever setting
+  //     `run_in_background`. That result has a distinctive signature — an
+  //     `agentId:` plus "working in the background" / `output_file:` /
+  //     "Async agent launched" — which lets us detect it safely.
+  //
+  // The signature requirement is what prevents false positives: a *foreground*
+  // Agent whose result text merely mentions "agentId:" (e.g. quoting a value it
+  // found) has neither the background phrasing nor an output_file, so it is not
+  // marked backgrounded. This mirrors the renderer's signature check in
+  // App.tsx (`isBackgroundingResult`). For both shapes a real task_completed
+  // notification eventually arrives; the WS3 registry + turn-end orphan backstop
+  // cover the case where it does not.
   const wasRunInBackground = entry.input?.run_in_background === true;
-  if (isParentTaskTool(entry.name) && wasRunInBackground && !isError && resultStr) {
+  const looksAsyncLaunched =
+    /agentId:\s*[a-zA-Z0-9_-]+/.test(resultStr) &&
+    (/working in the background/i.test(resultStr) ||
+      /output_file:/i.test(resultStr) ||
+      /async agent launched/i.test(resultStr));
+  if (isParentTaskTool(entry.name) && (wasRunInBackground || looksAsyncLaunched) && !isError && resultStr) {
     const agentIdMatch = resultStr.match(/agentId:\s*([a-zA-Z0-9_-]+)/);
     if (agentIdMatch?.[1]) {
-      const intentValue = entry.input._intent;
+      // Prefer explicit `_intent` metadata; the built-in Agent/Task tool doesn't
+      // set it, so fall back to its concise `description` param (the "3-5 word
+      // description of the task") — this is what the chip shows instead of the
+      // opaque agent ID. Mirrors the Bash background-shell path below.
+      const intentValue = (typeof entry.input._intent === 'string' && entry.input._intent)
+        || (typeof entry.input.description === 'string' && entry.input.description)
+        || undefined;
       events.push({
         type: 'task_backgrounded',
         toolUseId,
         taskId: agentIdMatch[1],
         turnId,
-        ...(typeof intentValue === 'string' && { intent: intentValue }),
+        ...(intentValue && { intent: intentValue }),
       });
     }
   }
@@ -434,6 +474,35 @@ function detectBackgroundEvents(
         turnId,
         ...(intentValue && { intent: intentValue }),
         ...(commandValue && { command: commandValue }),
+      });
+    }
+  }
+
+  // Background Workflow detection — the Workflow tool always launches in the
+  // background and returns immediately. Its result has a distinct signature:
+  //   "Workflow launched in background. Task ID: <id>\nSummary: <...>\nTranscript
+  //    dir: .../workflows/wf_XXX"
+  // It is NOT a parent-task tool and its result lacks the async-agent signature
+  // (agentId/output_file), so it needs its own detector. We surface it as a
+  // background task with kind 'workflow' + the workflow run id (wf_XXX, parsed
+  // from the transcript dir) so SubagentStop events can attribute completed
+  // agents to this chip (see parseWorkflowIdFromTranscriptPath).
+  if (entry.name === 'Workflow' && !isError && resultStr) {
+    const taskIdMatch = resultStr.match(/Workflow launched in background\.?\s*Task ID:\s*(\S+)/i);
+    if (taskIdMatch?.[1]) {
+      const summaryMatch = resultStr.match(/Summary:\s*(.+)/);
+      const workflowId = parseWorkflowIdFromTranscriptPath(resultStr);
+      const intentValue = (typeof entry.input._intent === 'string' && entry.input._intent)
+        || (summaryMatch?.[1]?.trim())
+        || undefined;
+      events.push({
+        type: 'task_backgrounded',
+        toolUseId,
+        taskId: taskIdMatch[1],
+        turnId,
+        kind: 'workflow',
+        ...(intentValue && { intent: intentValue }),
+        ...(workflowId && { workflowId }),
       });
     }
   }

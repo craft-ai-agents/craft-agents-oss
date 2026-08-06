@@ -316,11 +316,22 @@ export interface SessionToolContext {
   /** Set status on a session. Defaults to current session if no ID given. Injected by backend. */
   setSessionStatus?(sessionId: string | undefined, status: string): void | Promise<void>;
 
+  /** Archive (archived=true) or unarchive (archived=false) another session by ID. Injected by backend. */
+  archiveSession?(sessionId: string, archived: boolean): void | Promise<void>;
+
   /** Get detailed info about a session. Defaults to current session if no ID given. Injected by backend. */
   getSessionInfo?(sessionId?: string): SessionInfo | null;
 
   /** List sessions in the workspace with pagination. Injected by backend. */
   listSessions?(options?: ListSessionsOptions): ListSessionsResult;
+
+  /**
+   * List background tasks (running + recently-terminal) for a session from the
+   * main-process registry. Defaults to the current session if no ID given.
+   * Injected by backend (SessionManager). Returns [] in backends that don't
+   * track background tasks.
+   */
+  listBackgroundTasks?(sessionId?: string): BackgroundTaskInfo[];
 
   /** Resolve label display names to IDs against configured labels. Injected by backend. */
   resolveLabels?(labels: string[]): ResolvedLabelsResult;
@@ -328,12 +339,26 @@ export interface SessionToolContext {
   /** Resolve a status display name to its ID against configured statuses. Injected by backend. */
   resolveStatus?(status: string): ResolvedStatusResult;
 
+  /**
+   * Create a Craft Agents Task (board card + task.yaml + orchestrator session)
+   * WITHOUT running it. Slug derivation, node synthesis, and spec validation
+   * happen behind this callback where the task primitives live. Injected by
+   * backend (SessionManager); undefined in backends that don't run alongside
+   * it (e.g. the Codex MCP subprocess) — the handler degrades gracefully.
+   */
+  createTask?(input: CreateTaskInput): Promise<CreateTaskResult>;
+
   // ============================================================
   // Inter-Session Messaging
   // ============================================================
 
-  /** Send a message to another session. Injected by backend (SessionManager). */
-  sendAgentMessage?(sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>): Promise<void>;
+  /**
+   * Send a message to another session. Injected by backend (SessionManager).
+   * Resolves with how the message was received so the sender can give the model
+   * a truthful ack (delivered immediately vs. queued behind a busy turn) instead
+   * of an unconditional "message sent".
+   */
+  sendAgentMessage?(sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>): Promise<SendAgentMessageResult>;
 
   /**
    * Activate a source in the running session: add to enabledSourceSlugs,
@@ -363,6 +388,8 @@ export interface SessionToolContext {
   getMessagingBindings?(sessionId: string): Array<{
     platform: string;
     channelId: string;
+    /** Telegram supergroup forum topic id; undefined for DMs / non-Telegram. */
+    threadId?: number;
     channelName?: string;
     enabled: boolean;
   }>;
@@ -413,6 +440,12 @@ export interface ResolvedStatusResult {
   resolved: string | null;
   /** All valid status IDs (for error messages) */
   available: string[];
+  /**
+   * Category of the matched status ('open' | 'closed'), when resolved. Lets the
+   * status tool reject agent-driven *closed* transitions (the human owns closure)
+   * while still allowing open ones like `needs-review`.
+   */
+  category?: 'open' | 'closed';
 }
 
 // ============================================================
@@ -420,6 +453,37 @@ export interface ResolvedStatusResult {
 // ============================================================
 
 /** Full metadata for a single session (returned by get_session_info). */
+/** Input for create_task — structured fields, mapped onto a TaskSpec by the backend. */
+export interface CreateTaskInput {
+  /** Short task title shown on the board (also drives the slug). */
+  title: string;
+  /** What the task should accomplish — becomes the task goal and the initial node prompt. */
+  description: string;
+  /** Freeform rubric the final result is verified against. */
+  acceptanceCriteria?: string;
+  /** Source slugs enabled on the task's sessions. */
+  sources?: string[];
+  /** Skill slugs applied to dispatched task prompts. */
+  skills?: string[];
+  /** LLM connection slug serving `model`. */
+  llmConnection?: string;
+  /** Model id for the task's sessions (workspace default when omitted). */
+  model?: string;
+  /** Working directory for the task's sessions. */
+  workingDirectory?: string;
+  /** Project to bind the task to. Defaults to the invoking session's project. */
+  projectId?: string;
+}
+
+/** Result of create_task. */
+export interface CreateTaskResult {
+  slug: string;
+  orchestratorSessionId: string;
+  taskLabelId?: string;
+  /** Fail-soft problems (unknown source/skill slugs, label failure, …). */
+  warnings: string[];
+}
+
 export interface SessionInfo {
   id: string;
   name: string;
@@ -460,6 +524,41 @@ export interface ListSessionsResult {
   sessions: SessionListItem[];
 }
 
+/**
+ * Result of delivering a cross-session message (send_agent_message).
+ * Lets the sender report the truth instead of an unconditional "sent".
+ */
+export interface SendAgentMessageResult {
+  /**
+   * - `delivered`: the target was idle, so it will start processing the message now.
+   * - `queued`: the target was mid-turn; the message is enqueued and will be
+   *   processed after the current turn finishes.
+   */
+  delivery: 'delivered' | 'queued';
+  /** Whether the target session was processing a turn when the message arrived. */
+  targetBusy: boolean;
+}
+
+/**
+ * A background task tracked by the main process (returned by
+ * list_background_tasks). This is the cross-subprocess source of truth: the
+ * SDK's in-subprocess task tools only see tasks launched in the CURRENT
+ * subprocess, so they cannot report a task from a prior turn's (torn-down)
+ * subprocess. `status: 'orphaned'` means the owning turn ended before a terminal
+ * notification arrived — the task most likely died with its subprocess.
+ */
+export interface BackgroundTaskInfo {
+  taskId: string;
+  intent?: string;
+  status: 'running' | 'completed' | 'failed' | 'stopped' | 'orphaned';
+  /** ms timestamp when the task was backgrounded */
+  startTime: number;
+  /** seconds elapsed since start (derived at query time) */
+  elapsedSeconds: number;
+  /** ms timestamp when the task reached a terminal/orphaned status, if any */
+  completedAt?: number;
+}
+
 // ============================================================
 // MCP Validation Types
 // ============================================================
@@ -476,8 +575,15 @@ export interface StdioMcpConfig {
 /**
  * Config for HTTP/SSE MCP connection validation.
  * Derived from McpSourceConfig to stay in sync automatically (DRY).
+ *
+ * `accessToken` is the resolved OAuth / bearer token for sources whose
+ * credential lives in the credential store (no `headerNames`). The probe
+ * forwards it to the underlying impl, which builds an
+ * `Authorization: Bearer …` header — matching the runtime path.
  */
-export type HttpMcpConfig = Required<Pick<McpSourceConfig, 'url'>> & Pick<McpSourceConfig, 'authType' | 'headers' | 'headerNames' | 'transport'>;
+export type HttpMcpConfig = Required<Pick<McpSourceConfig, 'url'>>
+  & Pick<McpSourceConfig, 'authType' | 'headers' | 'headerNames' | 'transport'>
+  & { accessToken?: string };
 
 /**
  * Result from stdio MCP validation

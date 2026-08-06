@@ -3,31 +3,16 @@
  *
  * These error types map HTTP status codes and error patterns to
  * actionable error information that can be displayed to users.
+ *
+ * The `ErrorCode` union is owned by `@craft-agent/core` so the wire
+ * format (which crosses package boundaries) stays in one place; this
+ * file owns the user-facing text and recovery actions for each code.
  */
 
+import type { ErrorCode } from '@craft-agent/core/types';
 import { getProviderMetadata } from '../config/provider-metadata.ts';
 
-export type ErrorCode =
-  | 'invalid_api_key'
-  | 'invalid_credentials'    // Generic credential issue (from diagnostics)
-  | 'expired_oauth_token'
-  | 'token_expired'          // Workspace token expired (from diagnostics)
-  | 'rate_limited'
-  | 'service_error'
-  | 'service_unavailable'    // Service unavailable (from diagnostics)
-  | 'network_error'
-  | 'proxy_error'           // Proxy/firewall/captive portal intercepted the request
-  | 'mcp_auth_required'
-  | 'mcp_unreachable'        // MCP server unreachable (from diagnostics)
-  | 'billing_error'          // HTTP 402 Payment Required
-  | 'model_no_tool_support'  // Model doesn't support tool/function calling
-  | 'invalid_model'          // Model ID not found
-  | 'data_policy_error'      // OpenRouter data policy restriction
-  | 'invalid_request'        // API rejected the request (e.g., bad image, invalid content)
-  | 'image_too_large'        // Image exceeds API dimension/size limits
-  | 'provider_error'         // AI provider experiencing issues (overloaded, unavailable)
-  | 'queued_message_replay_failed'  // A message queued during an active turn could not be auto-replayed (#616)
-  | 'unknown_error';
+export type { ErrorCode };
 
 /** Provider info attached to errors for user-facing context */
 export interface ProviderInfo {
@@ -90,6 +75,14 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
     actions: [
       { key: 's', label: 'Update credentials', command: '/settings', action: 'settings' },
     ],
+    canRetry: false,
+  },
+  // response_too_large is set by the UI tool-result handler; parseError
+  // never produces it, but the union requires a definition entry.
+  response_too_large: {
+    title: 'Response Too Large',
+    message: 'The tool response was too large to display inline. The full output has been saved to disk.',
+    actions: [],
     canRetry: false,
   },
   expired_oauth_token: {
@@ -235,6 +228,30 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
     ],
     canRetry: true,
   },
+  sdk_binary_missing: {
+    title: 'Claude Code binary missing from app bundle',
+    message:
+      'The Claude Agent SDK binary expected on disk is not present. ' +
+      'This usually means the app bundle is incomplete (interrupted download, partial update, ' +
+      'or a security tool removed it). Reinstalling Craft Agents typically fixes this.',
+    actions: [
+      { key: 'r', label: 'Retry', action: 'retry' },
+    ],
+    canRetry: true,
+    retryDelayMs: 1000,
+  },
+  sdk_cwd_missing: {
+    title: 'Branch source unavailable on this machine',
+    message:
+      "The folder this branched session was forked from doesn't exist on this machine. " +
+      'This typically happens after importing a session from another workspace. ' +
+      'Retrying will start a fresh fork from a summary of the parent conversation.',
+    actions: [
+      { key: 'r', label: 'Retry', action: 'retry' },
+    ],
+    canRetry: true,
+    retryDelayMs: 1000,
+  },
   unknown_error: {
     title: 'Error',
     message: 'Something went wrong. If this persists, check the provider status page or retry.',
@@ -377,10 +394,13 @@ export function parseError(
     lowerMessage.includes('function calling not available') ||
     lowerMessage.includes('tools are not supported') ||
     lowerMessage.includes('doesn\'t support tool') ||
-    lowerMessage.includes('tool use is not supported') ||
-    (lowerMessage.includes('invalid_request_error') && lowerMessage.includes('tool')) ||
-    // Generic pattern: "tool" + "not" + "support" anywhere in message
-    (lowerMessage.includes('tool') && lowerMessage.includes('not') && lowerMessage.includes('support'))
+    lowerMessage.includes('tool use is not supported')
+    // NOTE: do NOT match on `invalid_request_error + tool` or `tool + not + support`
+    // alone. Anthropic 400 errors frequently mention `tools` (e.g. the cache_control
+    // ordering error "blocks are processed in the following order: `tools`, `system`,
+    // `messages`") which would otherwise be misclassified as "Model Does Not Support
+    // Tools". The specific phrases above are tight enough to catch real tool-support
+    // refusals without these broad fallbacks.
   ) {
     code = 'model_no_tool_support';
   } else if (lowerMessage.includes('is not a valid model') || lowerMessage.includes('model not found') || lowerMessage.includes('invalid model') || lowerMessage.includes('model identifier is invalid')) {
@@ -422,9 +442,17 @@ export function parseError(
     } else {
       code = 'service_error';
     }
+  } else if (lowerMessage.includes('invalid_request_error') || lowerMessage.includes('400 ')) {
+    // Generic Anthropic-style API validation failures (cache_control ordering, malformed
+    // payloads, etc.). Lands here only after all the more specific branches above have
+    // declined; better than falling through to "unknown_error" which hides the message.
+    code = 'invalid_request';
   }
 
-  const definition = ERROR_DEFINITIONS[code];
+  // ErrorCode is a finite union and ERROR_DEFINITIONS covers every member,
+  // so the lookup is exhaustive — non-null assert to satisfy the
+  // noUncheckedIndexedAccess compiler option after the cross-module import.
+  const definition = ERROR_DEFINITIONS[code]!;
 
   // Resolve provider info from context
   const providerInfo = providerContext

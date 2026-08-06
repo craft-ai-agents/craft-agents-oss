@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Zap } from 'lucide-react'
+import { toast } from 'sonner'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { EntityPanel } from '@/components/ui/entity-panel'
 import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
@@ -9,6 +10,7 @@ import { SkillMenu } from './SkillMenu'
 import { SendResourceToWorkspaceDialog } from './SendResourceToWorkspaceDialog'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { useActiveWorkspace, useAppShellContext } from '@/context/AppShellContext'
+import { getFileManagerName } from '@/lib/platform'
 import type { LoadedSkill } from '../../../shared/types'
 
 export interface SkillsListPanelProps {
@@ -50,6 +52,7 @@ export function SkillsListPanel({
       selectedId={selectedSkillSlug}
       onItemClick={onSkillClick}
       className={className}
+      containerProps={{ 'data-list-role': 'skills' }}
       emptyState={
         <EntityListEmptyScreen
           icon={<Zap />}
@@ -88,9 +91,15 @@ export function SkillsListPanel({
             skillSlug={skill.slug}
             skillName={skill.metadata.name}
             onOpenInNewWindow={() => window.electronAPI.openUrl(`craftagents://skills/skill/${skill.slug}?window=focused`)}
-            onShowInFinder={() => {
-              if (canRevealLocally) {
-                void window.electronAPI.showInFolder(`${skill.path}/SKILL.md`)
+            onShowInFinder={async () => {
+              if (!canRevealLocally) return
+              try {
+                await window.electronAPI.showInFolder(skill.path)
+              } catch (err) {
+                const message = err instanceof Error ? err.message : String(err)
+                toast.error(t('toast.failedToReveal', { fileManager: getFileManagerName() }), {
+                  description: message,
+                })
               }
             }}
             canShowInFinder={canRevealLocally}

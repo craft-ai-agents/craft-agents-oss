@@ -40,6 +40,8 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAtomValue, useSetAtom, useStore } from 'jotai'
 import { useSession } from '@/hooks/useSession'
+import { useLabels } from '@/hooks/useLabels'
+import { matchesLabelFilter } from '@craft-agent/shared/labels'
 import {
   parseRoute,
   parseRouteToNavigationState,
@@ -68,9 +70,9 @@ import {
   isSettingsNavigation,
   isSkillsNavigation,
   isAutomationsNavigation,
+  isProjectsNavigation,
   DEFAULT_NAVIGATION_STATE,
 } from '../../shared/types'
-import { isValidSettingsSubpage, type SettingsSubpage } from '../../shared/settings-registry'
 import { sessionMetaMapAtom, updateSessionMetaAtom, type SessionMeta } from '@/atoms/sessions'
 import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
@@ -91,7 +93,7 @@ export type { Route }
 
 // Re-export navigation state types for consumers
 export type { NavigationState, SessionFilter }
-export { isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isAutomationsNavigation }
+export { isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isAutomationsNavigation, isProjectsNavigation }
 
 // =============================================================================
 // Context
@@ -168,6 +170,8 @@ export function NavigationProvider({
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const sessionMetas = useMemo(() => Array.from(sessionMetaMap.values()), [sessionMetaMap])
   const updateSessionMeta = useSetAtom(updateSessionMetaAtom)
+  // Label tree for filter matching (auto-select must agree with the visible list).
+  const { labels: labelConfigs } = useLabels(workspaceId)
 
   const pushPanel = useSetAtom(pushPanelAtom)
 
@@ -549,9 +553,9 @@ export function NavigationProvider({
             return session.sessionStatus === filter.stateId && session.isArchived !== true
           case 'label': {
             if (session.isArchived === true) return false
-            if (!session.labels?.length) return false
-            if (filter.labelId === '__all__') return true
-            return session.labels.some(l => l === filter.labelId || l.startsWith(`${filter.labelId}::`))
+            // Shared predicate — descendant-aware and project-scoped, matching
+            // exactly what the session list renders (auto-select must agree).
+            return matchesLabelFilter(session, filter, labelConfigs)
           }
           case 'view':
             if (session.isArchived === true) return false
@@ -561,7 +565,7 @@ export function NavigationProvider({
         }
       })
     },
-    [sessionMetas, workspaceId]
+    [sessionMetas, workspaceId, labelConfigs]
   )
 
   const getFirstSessionId = useCallback(
@@ -630,8 +634,15 @@ export function NavigationProvider({
         }
       }
 
-      // Sessions: auto-select last/first session
-      if (isSessionsNavigation(nextState) && !nextState.details && !options?.skipAutoSelect) {
+      // Sessions: auto-select last/first session.
+      // Board view has no per-session detail, so skip auto-selection — otherwise
+      // navigating to the board would immediately resolve into a chat route.
+      if (
+        isSessionsNavigation(nextState) &&
+        nextState.viewMode !== 'board' &&
+        !nextState.details &&
+        !options?.skipAutoSelect
+      ) {
         const lastSelectedSessionId = getLastSelectedSessionId(nextState.filter)
         const fallbackSessionId = lastSelectedSessionId ?? getFirstSessionId(nextState.filter)
         if (fallbackSessionId) {
@@ -692,6 +703,15 @@ export function NavigationProvider({
           }
           if (parsed.params.systemPrompt) {
             createOptions.systemPromptPreset = parsed.params.systemPrompt as 'default' | 'mini' | string
+          }
+          if (parsed.params.status) {
+            createOptions.sessionStatus = parsed.params.status
+          }
+          if (parsed.params.label) {
+            createOptions.labels = [parsed.params.label]
+          }
+          if (parsed.params.project) {
+            createOptions.projectId = parsed.params.project
           }
           const session = await onCreateSession(workspaceId, createOptions)
 
@@ -876,21 +896,11 @@ export function NavigationProvider({
         return
       }
 
-      // Parse route to NavigationState
-      let newNavState = parseRouteToNavigationState(route)
-
-      // Settings subpage persistence
-      if (newNavState && isSettingsNavigation(newNavState)) {
-        const isBareSettingsRoute = route === 'settings'
-        if (isBareSettingsRoute) {
-          const savedSubpage = storage.get<string>(storage.KEYS.lastSettingsSubpage, 'app')
-          if (isValidSettingsSubpage(savedSubpage) && savedSubpage !== 'app') {
-            newNavState = { ...newNavState, subpage: savedSubpage as SettingsSubpage }
-          }
-        } else {
-          storage.set(storage.KEYS.lastSettingsSubpage, newNavState.subpage)
-        }
-      }
+      // Parse route to NavigationState. Bare `settings` produces `subpage: null` —
+      // navigator-only view in compact mode, App-page fallback on desktop. We
+      // intentionally do NOT auto-redirect to the last-visited subpage; doing so
+      // would defeat the compact-mode drill-in UX.
+      const newNavState = parseRouteToNavigationState(route)
 
       // Suppress auto-select effect
       if (options?.skipAutoSelect) {
@@ -1232,19 +1242,21 @@ export function NavigationProvider({
     if (!isReady || !workspaceId) return
     // Don't auto-select when panel stack is empty (user closed all panels)
     if (store.get(panelStackAtom).length === 0) return
+    // Scoped to sessions with no explicit detail. resolveAutoSelection owns the
+    // selection decision (board skip, last/first fallback) so it lives in one
+    // place; this effect just applies it when the session list loads after
+    // navigation (workspace switch, lazy session load, etc.).
     if (!isSessionsNavigation(navigationState) || navigationState.details) return
 
-    const lastSelectedSessionId = getLastSelectedSessionId(navigationState.filter)
-    const fallbackSessionId = lastSelectedSessionId ?? getFirstSessionId(navigationState.filter)
-    if (!fallbackSessionId) return
-
-    navigateToSession(fallbackSessionId)
+    const resolved = resolveAutoSelection(navigationState)
+    if (isSessionsNavigation(resolved) && resolved.details) {
+      navigateToSession(resolved.details.sessionId)
+    }
   }, [
     isReady,
     workspaceId,
     navigationState,
-    getLastSelectedSessionId,
-    getFirstSessionId,
+    resolveAutoSelection,
     navigateToSession,
   ])
 

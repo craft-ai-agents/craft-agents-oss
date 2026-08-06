@@ -311,51 +311,120 @@ export async function installDependencies(config: BuildConfig): Promise<void> {
 }
 
 /**
- * Copy SDK from root node_modules
+ * Per-platform optional-dep package name for the native `claude` binary.
+ * Since SDK 0.2.113 the SDK ships only `sdk.mjs` + types; the native CLI
+ * lives in a per-arch sibling package (`@anthropic-ai/claude-agent-sdk-{platform}-{arch}`).
  */
-export function copySDK(config: BuildConfig): void {
-  const { rootDir, electronDir } = config;
+function platformBinaryPkg(config: BuildConfig): string {
+  const { platform, arch } = config;
+  if (platform === 'darwin') return `claude-agent-sdk-darwin-${arch}`;
+  if (platform === 'win32') return `claude-agent-sdk-win32-${arch}`;
+  if (platform === 'linux') return `claude-agent-sdk-linux-${arch}`;
+  throw new Error(`Unsupported platform for SDK binary lookup: ${platform}`);
+}
 
-  const sdkSource = join(rootDir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk');
-  const sdkDest = join(electronDir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk');
-
-  if (!existsSync(sdkSource)) {
-    throw new Error(`SDK not found at ${sdkSource}. Run 'bun install' first.`);
-  }
-
-  console.log('Copying SDK...');
-  mkdirSync(dirname(sdkDest), { recursive: true });
-  // Remove existing symlink/directory if present (bun uses symlinks)
-  if (existsSync(sdkDest)) {
-    rmSync(sdkDest, { recursive: true, force: true });
-  }
-  // Use dereference to follow symlinks and copy actual files (bun uses symlinked node_modules)
-  cpSync(sdkSource, sdkDest, { recursive: true, dereference: true });
+function nativeBinaryName(config: BuildConfig): string {
+  return config.platform === 'win32' ? 'claude.exe' : 'claude';
 }
 
 /**
- * Verify SDK was copied correctly (not as symlinks, with expected size)
+ * Copy SDK from root node_modules:
+ *   1. The thin core (`claude-agent-sdk`) — universal sdk.mjs + types.
+ *   2. The matching arch's binary package, staged at the stable alias
+ *      `claude-agent-sdk-binary/` so electron-builder.yml stays arch-agnostic
+ *      and the runtime resolver finds the binary regardless of host arch.
+ */
+export function copySDK(config: BuildConfig): void {
+  const { rootDir, electronDir } = config;
+  const sdkScope = join(electronDir, 'node_modules', '@anthropic-ai');
+
+  const sdkSource = join(rootDir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk');
+  const sdkDest = join(sdkScope, 'claude-agent-sdk');
+
+  if (!existsSync(sdkSource)) {
+    throw new Error(`SDK core not found at ${sdkSource}. Run 'bun install' first.`);
+  }
+
+  console.log('Copying SDK core...');
+  mkdirSync(sdkScope, { recursive: true });
+  if (existsSync(sdkDest)) {
+    rmSync(sdkDest, { recursive: true, force: true });
+  }
+  cpSync(sdkSource, sdkDest, { recursive: true, dereference: true });
+
+  const pkg = platformBinaryPkg(config);
+  const binSource = join(rootDir, 'node_modules', '@anthropic-ai', pkg);
+  if (!existsSync(binSource)) {
+    throw new Error(
+      `SDK native binary package not found at ${binSource}. ` +
+      `For cross-arch builds run \`npm pack @anthropic-ai/${pkg}@<sdk-version>\` ` +
+      `to fetch it, or use the platform build script (build-dmg.sh / build-linux.sh / build-win.ps1) ` +
+      `which handles the cross-fetch automatically.`,
+    );
+  }
+
+  const aliasDest = join(sdkScope, 'claude-agent-sdk-binary');
+  console.log(`Staging SDK native binary (${pkg}) as claude-agent-sdk-binary alias...`);
+  if (existsSync(aliasDest)) {
+    rmSync(aliasDest, { recursive: true, force: true });
+  }
+  cpSync(binSource, aliasDest, { recursive: true, dereference: true });
+}
+
+/**
+ * Verify the native binary was copied correctly (real file, expected size).
+ * Since SDK 0.2.113 the binary is ~210 MB; anything under 50 MB is suspect.
  */
 export function verifySDKCopy(config: BuildConfig): void {
   const { electronDir } = config;
-  const cliPath = join(electronDir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js');
+  const binaryPath = join(
+    electronDir,
+    'node_modules', '@anthropic-ai', 'claude-agent-sdk-binary',
+    nativeBinaryName(config),
+  );
 
-  if (!existsSync(cliPath)) {
-    throw new Error(`SDK verification failed: cli.js not found at ${cliPath}`);
+  if (!existsSync(binaryPath)) {
+    throw new Error(`SDK verification failed: native binary not found at ${binaryPath}`);
   }
 
-  const stats = lstatSync(cliPath);
+  const stats = lstatSync(binaryPath);
   if (stats.isSymbolicLink()) {
-    throw new Error('SDK verification failed: cli.js is a symlink (should be real file)');
+    throw new Error('SDK verification failed: native binary is a symlink (should be real file)');
   }
 
   const size = stats.size;
-  if (size < 1_000_000) {
-    // cli.js should be ~11MB
-    throw new Error(`SDK verification failed: cli.js too small (${size} bytes, expected ~11MB)`);
+  if (size < 50_000_000) {
+    throw new Error(`SDK verification failed: native binary too small (${size} bytes, expected ~210 MB)`);
   }
 
-  console.log(`  SDK copy verified: cli.js is ${(size / 1024 / 1024).toFixed(1)} MB`);
+  console.log(`  SDK copy verified: native binary is ${(size / 1024 / 1024).toFixed(1)} MB`);
+}
+
+/**
+ * Copy @vscode/ripgrep into the staged node_modules. Replaces the previous
+ * `vendor/ripgrep/<platform>/rg` shipped by the SDK before 0.2.113.
+ */
+export function copyRipgrep(config: BuildConfig): void {
+  const { rootDir, electronDir } = config;
+  const rgSource = join(rootDir, 'node_modules', '@vscode', 'ripgrep');
+  const binaryName = config.platform === 'win32' ? 'rg.exe' : 'rg';
+  const rgBinary = join(rgSource, 'bin', binaryName);
+
+  if (!existsSync(rgSource) || !existsSync(rgBinary)) {
+    throw new Error(
+      `@vscode/ripgrep not installed or postinstall did not run. ` +
+      `Run 'bun install' and 'bun pm trust @vscode/ripgrep'.`,
+    );
+  }
+
+  const rgScope = join(electronDir, 'node_modules', '@vscode');
+  const rgDest = join(rgScope, 'ripgrep');
+  console.log('Copying @vscode/ripgrep...');
+  mkdirSync(rgScope, { recursive: true });
+  if (existsSync(rgDest)) {
+    rmSync(rgDest, { recursive: true, force: true });
+  }
+  cpSync(rgSource, rgDest, { recursive: true, dereference: true });
 }
 
 /**

@@ -75,6 +75,22 @@ export interface SessionMeta {
   isArchived?: boolean
   /** Timestamp when session was archived (for retention policy) */
   archivedAt?: number
+  /** Workspace-scoped project id this session is bound to (undefined = unbound) */
+  projectId?: string
+  /** Parent session id — when set, this session is a subtask of the parent (undefined = top-level task) */
+  parentSessionId?: string
+  /** Kanban board column id ('todo' | 'in-progress' | 'done'); independent of sessionStatus */
+  kanbanColumn?: string
+  /** Tasks Conductor: slug of the task spec this session belongs to (orchestrator + child nodes) */
+  taskSlug?: string
+  /** Tasks Conductor: id of the run that spawned this child session (Conductor-owned children only) */
+  taskRunId?: string
+  /** Tasks Conductor: id of the DAG node this child session executes (Conductor-owned children only) */
+  taskNodeId?: string
+  /** Tasks Conductor: total DAG node count (orchestrator only) — stable board progress denominator while children spawn lazily */
+  taskNodeCount?: number
+  /** Tasks Conductor: a generate-time draft orchestrator, hidden from the board until adopted by createTask. */
+  taskDraft?: boolean
 }
 
 /**
@@ -109,7 +125,11 @@ export function extractSessionMeta(session: Session): SessionMeta {
   return {
     ...sessionFields,
     lastFinalMessageId: sessionLastFinal ?? findLastFinalMessageId(messages),
-    messageCount: messageCount ?? messages.length ?? 0,
+    // Math.max, not ??: streaming appends grow `messages` without touching the
+    // session's `messageCount` field, so a defined-but-stale count (stamped at
+    // load/creation) must never shadow the live length. Meta-only sessions
+    // (empty `messages`) keep the server/header count.
+    messageCount: Math.max(messageCount ?? 0, messages.length),
     isAsyncOperationOngoing: isAsyncOperationOngoing ?? isRegeneratingTitle,
     isRegeneratingTitle,
   } as SessionMeta
@@ -198,6 +218,33 @@ export const updateSessionMetaAtom = atom(
       const newMetaMap = new Map(metaMap)
       newMetaMap.set(sessionId, { ...existing, ...updates })
       set(sessionMetaMapAtom, newMetaMap)
+    }
+  }
+)
+
+/**
+ * Action atom: replace a session with an authoritative full session payload.
+ *
+ * Use this for data returned by getSessionMessages() or createSession(), where
+ * the `messages` array is known to represent the loaded transcript. Keeping the
+ * full session atom and loadedSessionsAtom in one write prevents the chat panel
+ * from hiding real messages behind a stale lazy-loading spinner.
+ */
+export const replaceLoadedSessionAtom = atom(
+  null,
+  (get, set, session: Session) => {
+    set(sessionAtomFamily(session.id), session)
+
+    const metaMap = get(sessionMetaMapAtom)
+    const newMetaMap = new Map(metaMap)
+    newMetaMap.set(session.id, extractSessionMeta(session))
+    set(sessionMetaMapAtom, newMetaMap)
+
+    const loadedSessions = get(loadedSessionsAtom)
+    if (!loadedSessions.has(session.id)) {
+      const newLoadedSessions = new Set(loadedSessions)
+      newLoadedSessions.add(session.id)
+      set(loadedSessionsAtom, newLoadedSessions)
     }
   }
 )
@@ -309,16 +356,22 @@ export const refreshSessionsMetadataAtom = atom(
   (
     get,
     set,
-    payload: { sessions: Session[]; loadedSessionIds: Set<string> }
+    payload: { sessions: Session[]; loadedSessionIds: Set<string>; removeMissing?: boolean }
   ): Map<string, SessionMeta> => {
-    const { sessions, loadedSessionIds } = payload
+    const { sessions, loadedSessionIds, removeMissing = true } = payload
 
-    // Remove stale sessions that no longer exist on the server
+    // Remove stale sessions only for authoritative refreshes. Stale reconnect
+    // recovery can receive a transient partial list immediately after sleep/wake;
+    // treating that as authoritative is what makes the sidebar collapse to the
+    // single active session. In non-destructive mode we upsert returned sessions
+    // and preserve missing metadata until a confirmed delete/workspace reload.
     const currentIds = get(sessionIdsAtom)
     const latestIds = new Set(sessions.map(s => s.id))
-    for (const staleId of currentIds) {
-      if (!latestIds.has(staleId)) {
-        set(removeSessionAtom, staleId)
+    if (removeMissing) {
+      for (const staleId of currentIds) {
+        if (!latestIds.has(staleId)) {
+          set(removeSessionAtom, staleId)
+        }
       }
     }
 
@@ -346,16 +399,19 @@ export const refreshSessionsMetadataAtom = atom(
       set(loadedSessionsAtom, nextLoaded)
     }
 
-    // Build and set metadata map
-    const nextMetaMap = new Map<string, SessionMeta>()
+    // Build and set metadata map. Non-destructive refresh starts from the
+    // existing map so sessions omitted by a transient partial response remain
+    // visible. Returned sessions are still authoritative for their own fields.
+    const nextMetaMap = removeMissing
+      ? new Map<string, SessionMeta>()
+      : new Map(get(sessionMetaMapAtom))
     for (const session of sessions) {
       nextMetaMap.set(session.id, extractSessionMeta(session))
     }
     set(sessionMetaMapAtom, nextMetaMap)
 
-    // Set ordered IDs
-    const nextIds = sessions
-      .slice()
+    // Set ordered IDs from the metadata map we actually exposed to the UI.
+    const nextIds = Array.from(nextMetaMap.values())
       .sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0))
       .map(s => s.id)
     set(sessionIdsAtom, nextIds)
@@ -640,19 +696,45 @@ export const forceSessionMessagesReloadAtom = atom(
 /**
  * Background task for ActiveTasksBar display
  */
+/**
+ * Lifecycle status of a background task chip.
+ * - `running`  — backgrounded, no terminal signal yet (chip shows a spinner + live elapsed).
+ * - `stale` — no lifecycle signal arrived within the renderer timeout. The task may
+ *   still be running, so the chip shows an unknown state and remains recoverable.
+ * - `completed`/`failed`/`stopped` — a real task_completed notification arrived.
+ * - `orphaned` — the turn that owned the task ended before it finished, so it was
+ *   terminated with that turn's subprocess. Shown distinctly instead of a false
+ *   "running". Not produced once WS2 keep-alive is enabled.
+ */
+export type BackgroundTaskStatus = 'running' | 'stale' | 'completed' | 'failed' | 'stopped' | 'orphaned'
+
 export interface BackgroundTask {
   /** Task or shell ID */
   id: string
-  /** Task type */
-  type: 'agent' | 'shell'
+  /** Task type. 'workflow' = a fan-out Workflow launch (many sub-agents). */
+  type: 'agent' | 'shell' | 'workflow'
   /** Tool use ID for correlation with messages */
   toolUseId: string
+  /** Workflow run id (wf_...) — set for type 'workflow'; correlates agent-completed updates. */
+  workflowId?: string
+  /** Count of sub-agents that have completed so far (type 'workflow' only). */
+  agentsCompleted?: number
   /** When the task started */
   startTime: number
-  /** Elapsed seconds (from progress events) */
+  /** Elapsed seconds (from progress events; the chip also derives it from startTime) */
   elapsedSeconds: number
+  /** Last renderer-observed lifecycle/progress signal; falls back to startTime. */
+  lastSignalAt?: number
   /** Task intent/description */
   intent?: string
+  /** Lifecycle status; defaults to 'running' when added */
+  status: BackgroundTaskStatus
+  /** ms timestamp when the task reached a terminal/orphaned status */
+  completedAt?: number
+  /** Output file for click-through, set when task_completed arrives */
+  outputFile?: string
+  /** Short summary, set when task_completed arrives */
+  summary?: string
 }
 
 /**

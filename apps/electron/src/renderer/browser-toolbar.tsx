@@ -8,6 +8,9 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import ReactDOM from 'react-dom/client'
+import { useTranslation, initReactI18next } from 'react-i18next'
+import LanguageDetector from 'i18next-browser-languagedetector'
+import { setupI18n } from '@craft-agent/shared/i18n'
 import { EyeOff, X, XCircle } from 'lucide-react'
 import { BrowserControls } from '@craft-agent/ui'
 import { HeaderIconButton } from '@/components/ui/HeaderIconButton'
@@ -18,6 +21,10 @@ import {
   StyledDropdownMenuItem,
 } from '@/components/ui/styled-dropdown'
 import './index.css'
+
+// This is a standalone entry (browser-toolbar.html) — i18n must be initialized
+// here or BrowserControls and the menu below render raw translation keys.
+setupI18n([LanguageDetector, initReactI18next])
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -56,6 +63,7 @@ declare global {
 /* ------------------------------------------------------------------ */
 
 function BrowserToolbarApp() {
+  const { t } = useTranslation()
   const [state, setState] = useState<ToolbarState>({
     url: 'about:blank',
     title: 'New Tab',
@@ -187,7 +195,7 @@ function BrowserToolbarApp() {
               <DropdownMenuTrigger asChild>
                 <HeaderIconButton
                   icon={<X className="h-3.5 w-3.5" />}
-                  aria-label="Browser window options"
+                  aria-label={t('browser.windowOptions')}
                   className={themeColor ? '' : 'bg-background shadow-minimal hover:bg-foreground/5'}
                   style={themeColor ? { color: 'var(--tb-fg)' } : undefined}
                 />
@@ -203,11 +211,11 @@ function BrowserToolbarApp() {
               >
                 <StyledDropdownMenuItem onSelect={handleHideWindow}>
                   <EyeOff className="h-3.5 w-3.5" />
-                  Hide Window
+                  {t('browser.hideWindow')}
                 </StyledDropdownMenuItem>
                 <StyledDropdownMenuItem variant="destructive" onSelect={handleCloseWindowEntirely}>
                   <XCircle className="h-3.5 w-3.5" />
-                  Close Window Entirely
+                  {t('browser.closeWindowEntirely')}
                 </StyledDropdownMenuItem>
               </StyledDropdownMenuContent>
             </DropdownMenu>

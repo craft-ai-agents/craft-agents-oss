@@ -96,9 +96,29 @@ export function extractLabelId(entry: string): string {
 }
 
 /**
+ * Toggle a label in a session-labels list. Returns a new array.
+ *
+ * - If any entry has this base ID (boolean or valued), all matching
+ *   entries are removed (so toggling "priority" removes "priority::3").
+ * - Otherwise the labelId is appended as a boolean entry.
+ *
+ * Designed for use with optimistic UI state in menu components — feeding
+ * the previous result back in compounds correctly under rapid toggles
+ * without losing earlier updates to a stale snapshot.
+ */
+export function toggleLabelInList(labels: string[], labelId: string): string[] {
+  const isApplied = labels.some(entry => extractLabelId(entry) === labelId);
+  if (isApplied) {
+    return labels.filter(entry => extractLabelId(entry) !== labelId);
+  }
+  return [...labels, labelId];
+}
+
+/**
  * Check whether `rawValue` is well-formed for the declared `valueType`.
  *
  * - `string` — always valid
+ * - `link`   — always valid (a URL string; protocol safety enforced at open time)
  * - `number` — matches DECIMAL_NUMBER_REGEX (rejects hex/octal/scientific)
  * - `date`   — ISO date (YYYY-MM-DD) or datetime (YYYY-MM-DDTHH:mm), with a
  *              round-trip check so `2026-02-29` doesn't silently clamp.
@@ -108,10 +128,13 @@ export function extractLabelId(entry: string): string {
  */
 export function validateLabelValue(
   rawValue: string,
-  valueType: 'string' | 'number' | 'date',
+  valueType: 'string' | 'number' | 'date' | 'link',
 ): boolean {
   switch (valueType) {
     case 'string':
+    case 'link':
+      // `link` validates like a string; URL/protocol safety is enforced at
+      // open time by the renderer's shell:openUrl IPC (http/https/mailto only).
       return true;
     case 'number':
       return DECIMAL_NUMBER_REGEX.test(rawValue);
@@ -131,16 +154,23 @@ export function validateLabelValue(
 
 /**
  * Format a raw label value for human-readable display.
- * Dates get locale-formatted (e.g. "Jan 30, 2026"), numbers and strings pass through.
+ * Dates get locale-formatted (e.g. "Jan 30, 2026"); links get their scheme
+ * stripped (e.g. "example.com/x"); numbers and strings pass through.
  * Used by UI badge components to render the value portion after the interpunct.
  */
-export function formatDisplayValue(rawValue: string, valueType?: 'string' | 'number' | 'date'): string {
+export function formatDisplayValue(rawValue: string, valueType?: 'string' | 'number' | 'date' | 'link'): string {
   if (valueType === 'date') {
     // Parse date-only or datetime strings (matching the storage formats in parseLabelEntry)
     const date = new Date(rawValue.includes('T') ? rawValue + ':00Z' : rawValue + 'T00:00:00Z');
     if (!isNaN(date.getTime())) {
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     }
+  }
+  if (valueType === 'link') {
+    // Strip the scheme and any trailing slash for a cleaner chip — e.g.
+    // "https://example.com/x/" → "example.com/x". The raw value stays the
+    // openable href (see openLabelLink); this only affects display.
+    return rawValue.replace(/^https?:\/\//i, '').replace(/\/$/, '');
   }
   return rawValue;
 }

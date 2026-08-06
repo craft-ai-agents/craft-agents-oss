@@ -1,7 +1,7 @@
 /**
  * Core Agent Types
  *
- * Shared types used by both ClaudeAgent and CodexAgent.
+ * Shared types used by both ClaudeAgent and PiAgent.
  * These types define the interfaces for core functionality that is
  * provider-agnostic and shared across all agent implementations.
  */
@@ -94,6 +94,8 @@ export interface PromptBuilderConfig {
   systemPromptPreset?: 'default' | 'mini' | string;
   /** Whether running in headless mode */
   isHeadless?: boolean;
+  /** Optional pre-resolved project snapshot for prompt injection (lets tests pin a value) */
+  project?: import('../../projects/types.ts').ProjectPromptContext;
 }
 
 /**

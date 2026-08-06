@@ -193,6 +193,33 @@ describe('groupActivitiesByParent', () => {
     })
   })
 
+  // Regression guard: Claude Agent SDK v0.2.72 renamed the subagent launcher
+  // from 'Task' to 'Agent'. Both names must group identically. If this test
+  // fails, a callsite has narrowed back to `=== 'Task'` instead of using
+  // `isParentTaskTool` — fix the callsite, don't loosen this test.
+  describe('SDK Agent tool name (post v0.2.72 rename)', () => {
+    it('groups children under an Agent parent identically to a Task parent', () => {
+      resetCounters()
+      const agentActivity = createActivity({
+        toolName: 'Agent',
+        toolInput: { description: 'Search codebase', subagent_type: 'Explore' },
+      })
+      const child1 = createChildActivity(agentActivity.toolUseId!, { toolName: 'Grep' })
+      const child2 = createChildActivity(agentActivity.toolUseId!, { toolName: 'Read' })
+
+      const result = groupActivitiesByParent([agentActivity, child1, child2])
+
+      expect(result.length).toBe(1)
+      expect(isActivityGroup(result[0]!)).toBe(true)
+
+      const group = result[0] as ActivityGroup
+      expect(group.parent.toolName).toBe('Agent')
+      expect(group.children.length).toBe(2)
+      expect(group.children[0]!.id).toBe(child1.id)
+      expect(group.children[1]!.id).toBe(child2.id)
+    })
+  })
+
   describe('multiple Tasks with children', () => {
     it('groups each Task with its own children', () => {
       resetCounters()

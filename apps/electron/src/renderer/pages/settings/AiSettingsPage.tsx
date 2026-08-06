@@ -16,9 +16,9 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
-import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw, Settings2 } from 'lucide-react'
+import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw, Settings2, MessageSquareMore, Zap, Clock, Check } from 'lucide-react'
 import type { CredentialHealthStatus, CredentialHealthIssue } from '../../../shared/types'
-import { Spinner, FullscreenOverlayBase } from '@craft-agent/ui'
+import { Spinner, FullscreenOverlayBase, Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import { useSetAtom } from 'jotai'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
 import { motion, AnimatePresence } from 'motion/react'
@@ -33,6 +33,9 @@ import {
   StyledDropdownMenuContent,
   StyledDropdownMenuItem,
   StyledDropdownMenuSeparator,
+  DropdownMenuSub,
+  StyledDropdownMenuSubTrigger,
+  StyledDropdownMenuSubContent,
 } from '@/components/ui/styled-dropdown'
 import { cn } from '@/lib/utils'
 import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
@@ -50,8 +53,19 @@ import { OnboardingWizard, type ApiSetupMethod } from '@/components/onboarding'
 import { RenameDialog } from '@/components/ui/rename-dialog'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { getModelShortName, type ModelDefinition } from '@config/models'
-import { getModelsForProviderType, type CustomEndpointApi } from '@config/llm-connections'
+import { getModelsForProviderType, resolveMidStreamBehavior, type CustomEndpointApi, type MidStreamBehavior } from '@config/llm-connections'
 import { toast } from 'sonner'
+
+/**
+ * Compact token count: 1234 → "1.2K", 1234567 → "1.2M". Used by the RTK
+ * efficiency meter. Locale-agnostic — the suffix is universal across the
+ * 7 supported locales.
+ */
+function formatTokenCount(n: number): string {
+  if (n < 1000) return String(n)
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`
+  return `${(n / 1_000_000).toFixed(1)}M`
+}
 
 /**
  * Derive model dropdown options from a connection's models array,
@@ -179,11 +193,14 @@ interface ConnectionRowProps {
   onValidate: () => void
   onReauthenticate: () => void
   onEdit: () => void
+  onSetMidStreamBehavior: (behavior: MidStreamBehavior) => void
   validationState: ValidationState
   validationError?: string
+  /** True when another OAuth connection resolves to the same Anthropic account (issue #838) */
+  isDuplicateAccount?: boolean
 }
 
-function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onReauthenticate, onEdit, validationState, validationError }: ConnectionRowProps) {
+function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onReauthenticate, onEdit, onSetMidStreamBehavior, validationState, validationError, isDuplicateAccount }: ConnectionRowProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [piBaseUrl, setPiBaseUrl] = useState<string | undefined>(undefined)
@@ -229,7 +246,11 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
         parts.push(piLabel ?? 'Craft Agents Backend')
         break
       }
-      case 'pi_compat': parts.push('Craft Agents Backend Compatible'); break
+      case 'pi_compat':
+        parts.push(connection.baseUrl?.toLowerCase().includes('manifest.build')
+          ? 'Manifest'
+          : 'Craft Agents Backend Compatible')
+        break
       default: parts.push(provider || 'Unknown')
     }
 
@@ -260,16 +281,38 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
     return parts.join(' · ')
   }
 
+  // Resolved Anthropic identity (issue #838): render `email · org` independently of
+  // validation state. It cannot live in getDescription() — that short-circuits for
+  // validating/success/error and would hide the identity during those states.
+  const oauthIdentityLine = connection.authType === 'oauth' && connection.oauthAccountEmail
+    ? [connection.oauthAccountEmail, connection.oauthOrganizationName].filter(Boolean).join(' · ')
+    : null
+
   return (
     <SettingsRow
       label={(
-        <div className="flex items-center gap-1">
-          <ConnectionIcon connection={connection} size={14} />
-          <span>{connection.name}</span>
-          {connection.isDefault && (
-            <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-background shadow-minimal text-foreground/60">
-              {t("common.default")}
-            </span>
+        <div className="flex flex-col gap-0.5 min-w-0">
+          <div className="flex items-center gap-1">
+            <ConnectionIcon connection={connection} size={14} />
+            <span>{connection.name}</span>
+            {connection.isDefault && (
+              <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-background shadow-minimal text-foreground/60">
+                {t("common.default")}
+              </span>
+            )}
+            {isDuplicateAccount && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex items-center" aria-label={t("settings.ai.duplicateAccount")}>
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{t("settings.ai.duplicateAccount")}</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+          {oauthIdentityLine && (
+            <span className="text-xs text-muted-foreground truncate">{oauthIdentityLine}</span>
           )}
         </div>
       )}
@@ -313,6 +356,29 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
             <CheckCircle2 className="h-3.5 w-3.5" />
             <span>{t("settings.ai.validateConnection")}</span>
           </StyledDropdownMenuItem>
+          {(() => {
+            const currentBehavior = resolveMidStreamBehavior(connection)
+            return (
+              <DropdownMenuSub>
+                <StyledDropdownMenuSubTrigger>
+                  <MessageSquareMore className="h-3.5 w-3.5" />
+                  <span>{t("settings.ai.midStream.title")}</span>
+                </StyledDropdownMenuSubTrigger>
+                <StyledDropdownMenuSubContent>
+                  <StyledDropdownMenuItem onClick={() => onSetMidStreamBehavior('steer')}>
+                    <Zap className="h-3.5 w-3.5" />
+                    <span className="flex-1">{t("settings.ai.midStream.steer")}</span>
+                    {currentBehavior === 'steer' && <Check className="h-3.5 w-3.5" />}
+                  </StyledDropdownMenuItem>
+                  <StyledDropdownMenuItem onClick={() => onSetMidStreamBehavior('queue')}>
+                    <Clock className="h-3.5 w-3.5" />
+                    <span className="flex-1">{t("settings.ai.midStream.queue")}</span>
+                    {currentBehavior === 'queue' && <Check className="h-3.5 w-3.5" />}
+                  </StyledDropdownMenuItem>
+                </StyledDropdownMenuSubContent>
+              </DropdownMenuSub>
+            )
+          })()}
           <StyledDropdownMenuSeparator />
           <StyledDropdownMenuItem
             onClick={onDelete}
@@ -582,6 +648,10 @@ export default function AiSettingsPage() {
   const [defaultThinking, setDefaultThinking] = useState<ThinkingLevel>(DEFAULT_THINKING_LEVEL)
   const [extendedPromptCache, setExtendedPromptCache] = useState(false)
   const [enable1MContext, setEnable1MContext] = useState(false)
+  const [rtkEnabled, setRtkEnabled] = useState(false)
+  const [rtkStatus, setRtkStatus] = useState<{ installed: boolean; path: string | null; version: string | null } | null>(null)
+  const [rtkRechecking, setRtkRechecking] = useState(false)
+  const [rtkGain, setRtkGain] = useState<{ totalCommands: number; totalInput: number; totalOutput: number; totalSaved: number; avgSavingsPct: number; totalTimeMs: number; avgTimeMs: number } | null>(null)
 
   // Validation state per connection
   const [validationStates, setValidationStates] = useState<Record<string, {
@@ -613,6 +683,12 @@ export default function AiSettingsPage() {
 
         const enable1M = await window.electronAPI.getEnable1MContext()
         setEnable1MContext(enable1M)
+
+        const rtkOn = await window.electronAPI.getRtkEnabled()
+        setRtkEnabled(rtkOn)
+
+        const status = await window.electronAPI.getRtkStatus()
+        setRtkStatus(status)
 
         // Check credential health for potential issues (corruption, machine migration)
         const health = await window.electronAPI.getCredentialHealth()
@@ -840,9 +916,44 @@ export default function AiSettingsPage() {
     }
   }, [refreshLlmConnections])
 
+  // Update a connection's mid-stream send behavior (steer vs queue).
+  // Uses the same saveLlmConnection RPC as other connection edits.
+  const handleSetMidStreamBehavior = useCallback(async (
+    connection: LlmConnectionWithStatus,
+    behavior: MidStreamBehavior,
+  ) => {
+    if (!window.electronAPI) return
+    if (resolveMidStreamBehavior(connection) === behavior) return
+    try {
+      const updated = { ...connection, midStreamBehavior: behavior }
+      const { isAuthenticated: _a, authError: _b, isDefault: _c, ...connectionData } = updated
+      const result = await window.electronAPI.saveLlmConnection(connectionData as import('../../../shared/types').LlmConnection)
+      if (result.success) {
+        refreshLlmConnections?.()
+      } else {
+        console.error('Failed to update mid-stream behavior:', result.error)
+        toast.error(t('settings.ai.midStream.updateFailed'))
+      }
+    } catch (error) {
+      console.error('Failed to update mid-stream behavior:', error)
+      toast.error(t('settings.ai.midStream.updateFailed'))
+    }
+  }, [refreshLlmConnections, t])
+
   // Get the default connection for display
   const defaultConnection = useMemo(() => {
     return llmConnections.find(c => c.isDefault)
+  }, [llmConnections])
+
+  // Anthropic account UUIDs that resolve from 2+ connections (issue #838).
+  // Surfaces a warning when several Claude connections share one account/quota.
+  const duplicateAccountUuids = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const conn of llmConnections) {
+      const uuid = conn.oauthAccountUuid
+      if (uuid) counts.set(uuid, (counts.get(uuid) ?? 0) + 1)
+    }
+    return new Set([...counts].filter(([, n]) => n > 1).map(([uuid]) => uuid))
   }, [llmConnections])
 
   const defaultModel = defaultConnection?.defaultModel ?? ''
@@ -886,6 +997,39 @@ export default function AiSettingsPage() {
     await window.electronAPI?.setEnable1MContext(enabled)
   }, [])
 
+  const handleRtkToggle = useCallback(async (enabled: boolean) => {
+    setRtkEnabled(enabled)
+    await window.electronAPI?.setRtkEnabled(enabled)
+  }, [])
+
+  const handleRecheckRtk = useCallback(async () => {
+    setRtkRechecking(true)
+    try {
+      const status = await window.electronAPI?.getRtkStatus({ forceRecheck: true })
+      if (status) setRtkStatus(status)
+    } finally {
+      setRtkRechecking(false)
+    }
+  }, [])
+
+  const handleGetRtk = useCallback(() => {
+    window.electronAPI?.openUrl('https://github.com/rtk-ai/rtk')
+  }, [])
+
+  const refreshRtkGain = useCallback(async () => {
+    const gain = await window.electronAPI?.getRtkGain()
+    setRtkGain(gain ?? null)
+  }, [])
+
+  // Refresh gain stats whenever rtk transitions to installed-and-enabled
+  useEffect(() => {
+    if (rtkStatus?.installed && rtkEnabled) {
+      refreshRtkGain()
+    } else {
+      setRtkGain(null)
+    }
+  }, [rtkStatus?.installed, rtkEnabled, refreshRtkGain])
+
   // Refresh callback for workspace cards
   const handleWorkspaceSettingsChange = useCallback(() => {
     // Refresh context so changes propagate immediately
@@ -919,7 +1063,7 @@ export default function AiSettingsPage() {
                       label: conn.name,
                       description: conn.providerType === 'anthropic' ? 'Anthropic API' :
                                    conn.providerType === 'pi' ? 'Craft Agents Backend' :
-                                   conn.providerType === 'pi_compat' ? 'Craft Agents Backend Compatible' :
+                                   conn.providerType === 'pi_compat' ? (conn.baseUrl?.toLowerCase().includes('manifest.build') ? 'Manifest' : 'Craft Agents Backend Compatible') :
                                    conn.providerType || 'Unknown',
                     }))}
                   />
@@ -988,8 +1132,10 @@ export default function AiSettingsPage() {
                         onValidate={() => handleValidateConnection(conn.slug)}
                         onReauthenticate={() => handleReauthenticateConnection(conn)}
                         onEdit={() => handleEditConnection(conn)}
+                        onSetMidStreamBehavior={(behavior) => handleSetMidStreamBehavior(conn, behavior)}
                         validationState={validationStates[conn.slug]?.state || 'idle'}
                         validationError={validationStates[conn.slug]?.error}
+                        isDuplicateAccount={!!conn.oauthAccountUuid && duplicateAccountUuids.has(conn.oauthAccountUuid)}
                       />
                     ))
                   )}
@@ -1019,6 +1165,64 @@ export default function AiSettingsPage() {
                     checked={extendedPromptCache}
                     onCheckedChange={handleExtendedPromptCacheChange}
                   />
+                  {rtkStatus?.installed ? (
+                    <>
+                      <SettingsToggle
+                        label={t("settings.ai.rtk.title")}
+                        description={t("settings.ai.rtk.description")}
+                        checked={rtkEnabled}
+                        onCheckedChange={handleRtkToggle}
+                      />
+                      {rtkEnabled && rtkGain && rtkGain.totalCommands > 0 && (
+                        <div className="px-4 pb-4 -mt-1">
+                          <div className="flex items-center justify-between text-xs text-foreground/60">
+                            <span>
+                              {t("settings.ai.rtk.gainSummary", {
+                                saved: formatTokenCount(rtkGain.totalSaved),
+                                count: rtkGain.totalCommands,
+                                pct: rtkGain.avgSavingsPct.toFixed(1),
+                              })}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={refreshRtkGain}
+                              className="text-foreground/60 hover:text-foreground transition-colors"
+                              aria-label={t("settings.ai.rtk.gainRefresh")}
+                            >
+                              <RefreshCcw className="size-3" />
+                            </button>
+                          </div>
+                          <div className="mt-2 h-1.5 rounded-full bg-foreground/10 overflow-hidden">
+                            <div
+                              className="h-full bg-foreground/60 transition-all"
+                              style={{ width: `${Math.min(100, Math.max(0, rtkGain.avgSavingsPct))}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <SettingsRow
+                      label={t("settings.ai.rtk.title")}
+                      description={rtkStatus === null ? t("common.checking") : t("settings.ai.rtk.notInstalledDesc")}
+                    >
+                      <Button
+                        size="sm"
+                        onClick={handleGetRtk}
+                        className="bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
+                      >
+                        {t("settings.ai.rtk.getRtk")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleRecheckRtk}
+                        disabled={rtkRechecking || rtkStatus === null}
+                        className="bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
+                      >
+                        {rtkRechecking ? t("common.checking") : t("settings.ai.rtk.recheck")}
+                      </Button>
+                    </SettingsRow>
+                  )}
                 </SettingsCard>
               </SettingsSection>
 

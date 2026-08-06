@@ -20,10 +20,21 @@ export async function handleSetSessionStatus(
 
     // Resolve display name → ID, reject unknown statuses
     if (ctx.resolveStatus) {
-      const { resolved, available } = ctx.resolveStatus(status);
+      const { resolved, available, category } = ctx.resolveStatus(status);
       if (!resolved) {
         return errorResponse(
           `Unknown status: "${status}". Available status IDs: ${available.join(', ')}`
+        );
+      }
+      // The human owns closure. The agent may prepare work and hand it off
+      // (e.g. set "needs-review"), but it must never move a card into a closed
+      // state on its own — that decision belongs to the user via the board.
+      // NOTE: this guards only the interactive tool path; the Tasks Conductor
+      // sets terminal statuses through SessionManager.setSessionStatus directly,
+      // so automated DAG runs are unaffected.
+      if (category === 'closed') {
+        return errorResponse(
+          `Refusing to set the closed status "${resolved}". Closing a task (done/cancelled) is the user's decision — leave it for them to do on the board. If the work is ready for review, set an open status such as "needs-review" instead.`
         );
       }
       status = resolved;

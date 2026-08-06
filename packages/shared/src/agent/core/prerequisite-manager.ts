@@ -14,7 +14,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { expandPath } from './path-processor.ts';
-import { isBrowserToolNameOrAlias } from '../browser-tool-names.ts';
+import { getBrowserToolEnabled } from '../../config/storage.ts';
 
 // ============================================================
 // Types
@@ -95,11 +95,13 @@ const RULES: PrerequisiteRule[] = [
       'You must read the source guide before using this tool. Please read the file at {filePath} first, then retry.',
   },
 
-  // Browser tools and command wrapper: require browser-tools.md first
+  // Built-in browser tool: require browser-tools.md first.
+  // Only matches the session-scoped tool (not external MCP browser tools like mcp__playwright__*),
+  // and skipped entirely when the built-in browser tool is disabled.
   {
-    toolMatcher: (toolName: string) => {
-      return isBrowserToolNameOrAlias(toolName);
-    },
+    toolMatcher: (toolName: string) =>
+      getBrowserToolEnabled() &&
+      (toolName === 'browser_tool' || toolName === 'mcp__session__browser_tool'),
     resolveRequiredPath: () => {
       return existsSync(BROWSER_TOOLS_DOC_PATH) ? BROWSER_TOOLS_DOC_PATH : null;
     },

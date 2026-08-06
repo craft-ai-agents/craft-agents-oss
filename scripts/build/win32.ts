@@ -11,24 +11,26 @@ import { join } from 'path';
 import type { BuildConfig } from './common';
 
 /**
- * Verify SDK is bundled in the packaged Windows app
+ * Verify SDK native binary is bundled in the packaged Windows app.
+ * Since SDK 0.2.113 the SDK ships a per-platform native binary instead of cli.js.
  */
 export function verifyPackagedSDK(unpackedPath: string): void {
   const appPath = join(unpackedPath, 'resources', 'app');
+  const binaryPath = join(
+    appPath,
+    'node_modules', '@anthropic-ai', 'claude-agent-sdk-binary', 'claude.exe',
+  );
 
-  // Verify SDK
-  const sdkPath = join(appPath, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js');
-
-  if (!existsSync(sdkPath)) {
-    throw new Error(`CRITICAL: SDK not bundled! Expected at: ${sdkPath}`);
+  if (!existsSync(binaryPath)) {
+    throw new Error(`CRITICAL: SDK native binary not bundled! Expected at: ${binaryPath}`);
   }
 
-  const stats = statSync(sdkPath);
-  if (stats.size < 1_000_000) {
-    throw new Error(`CRITICAL: SDK cli.js too small (${stats.size} bytes, expected ~11MB)`);
+  const stats = statSync(binaryPath);
+  if (stats.size < 50_000_000) {
+    throw new Error(`CRITICAL: SDK native binary too small (${stats.size} bytes, expected ~210 MB)`);
   }
 
-  console.log(`  SDK bundled: cli.js is ${(stats.size / 1024 / 1024).toFixed(1)} MB`);
+  console.log(`  SDK bundled: claude.exe is ${(stats.size / 1024 / 1024).toFixed(1)} MB`);
 }
 
 /**
@@ -124,6 +126,13 @@ function buildMainProcess(config: BuildConfig): void {
     '--format=cjs',
     '--outfile=apps/electron/dist/main.cjs',
     '--external:electron',
+    // SDK 0.3.x is pure ESM and calls createRequire(import.meta.url) at module init.
+    // esbuild's CJS bundling leaves import.meta.url undefined for inlined ESM, crashing
+    // the packaged app on load (ERR_INVALID_ARG_VALUE at sdk.mjs). Externalize so Node
+    // loads it natively as ESM; electron-builder.yml copies the SDK core into
+    // app/node_modules/@anthropic-ai/claude-agent-sdk (asar:false) so the require resolves.
+    // Must stay in sync with package.json build:main, electron-dev.ts, electron-build-main.ts.
+    '--external:@anthropic-ai/claude-agent-sdk',
     // Replace grammY's bundled polyfills (node-fetch@2 + abort-controller@3)
     // with native Node globals. Keeps parity with electron-dev.ts,
     // electron-build-main.ts, and apps/electron/package.json build:main.

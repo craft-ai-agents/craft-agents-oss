@@ -1,4 +1,4 @@
-import type { ModelRegistry as PiModelRegistry } from '@mariozechner/pi-coding-agent';
+import type { ModelRegistry as PiModelRegistry } from '@earendil-works/pi-coding-agent';
 
 // Re-export from shared so the auth-aware mini-model denylist has a single
 // source of truth (also used by `getMiniModel()` at selection time).

@@ -10,6 +10,7 @@ import {
   forceSessionMessagesReloadAtom,
   refreshSessionsMetadataAtom,
   initializeSessionsAtom,
+  replaceLoadedSessionAtom,
 } from '../sessions'
 
 function msg(id: string, role: Message['role'] = 'user'): Message {
@@ -42,6 +43,20 @@ describe('session message loading atoms', () => {
       // @ts-expect-error test cleanup for window shim
       delete globalThis.window
     }
+  })
+
+  it('replaceLoadedSessionAtom marks authoritative full sessions as loaded', () => {
+    const store = createStore()
+    const sessionId = 'session-1'
+
+    store.set(replaceLoadedSessionAtom, makeSession({
+      id: sessionId,
+      messages: [msg('m1'), msg('m2', 'assistant')],
+    }))
+
+    expect(store.get(loadedSessionsAtom).has(sessionId)).toBe(true)
+    expect(store.get(sessionAtomFamily(sessionId))?.messages.map((message) => message.id)).toEqual(['m1', 'm2'])
+    expect(store.get(sessionMetaMapAtom).get(sessionId)?.messageCount).toBe(2)
   })
 
   it('forceSessionMessagesReloadAtom reloads an empty-but-loaded session', async () => {
@@ -172,6 +187,53 @@ describe('refreshSessionsMetadataAtom', () => {
     expect(store.get(sessionMetaMapAtom).has('s2')).toBe(false)
     expect(store.get(sessionIdsAtom)).not.toContain('s2')
     expect(store.get(sessionAtomFamily('s2'))).toBe(null)
+  })
+
+  it('preserves omitted sessions when removeMissing is false', () => {
+    const store = createStore()
+
+    store.set(initializeSessionsAtom, [
+      makeSession({ id: 's1', name: 'First', lastMessageAt: 200 }),
+      makeSession({ id: 's2', name: 'Second', lastMessageAt: 100 }),
+    ])
+
+    const result = store.set(refreshSessionsMetadataAtom, {
+      sessions: [makeSession({ id: 's1', name: 'First refreshed', lastMessageAt: 300 })],
+      loadedSessionIds: new Set<string>(),
+      removeMissing: false,
+    })
+
+    expect(result.has('s1')).toBe(true)
+    expect(result.has('s2')).toBe(true)
+    expect(result.get('s1')?.name).toBe('First refreshed')
+    expect(result.get('s2')?.name).toBe('Second')
+
+    const storeMap = store.get(sessionMetaMapAtom)
+    expect(storeMap.has('s2')).toBe(true)
+    expect(store.get(sessionIdsAtom)).toEqual(['s1', 's2'])
+    expect(store.get(sessionAtomFamily('s2'))?.name).toBe('Second')
+  })
+
+  it('non-destructive refresh still preserves loaded messages for returned sessions', () => {
+    const store = createStore()
+    const existingMessages = [msg('m1'), msg('m2', 'assistant')]
+
+    store.set(initializeSessionsAtom, [
+      makeSession({ id: 's1', name: 'First', messages: [] }),
+      makeSession({ id: 's2', name: 'Second', messages: [] }),
+    ])
+    store.set(sessionAtomFamily('s1'), makeSession({ id: 's1', name: 'First', messages: existingMessages }))
+    store.set(loadedSessionsAtom, new Set(['s1']))
+
+    store.set(refreshSessionsMetadataAtom, {
+      sessions: [makeSession({ id: 's1', name: 'First refreshed', messages: [] })],
+      loadedSessionIds: new Set(['s1']),
+      removeMissing: false,
+    })
+
+    expect(store.get(sessionAtomFamily('s1'))?.messages.map(m => m.id)).toEqual(['m1', 'm2'])
+    expect(store.get(sessionMetaMapAtom).get('s1')?.name).toBe('First refreshed')
+    expect(store.get(sessionMetaMapAtom).get('s2')?.name).toBe('Second')
   })
 
   it('updates metadata map and returns it', () => {

@@ -2,8 +2,8 @@
  * Event Queue for Async Generator Pattern
  *
  * Bridges async event handlers (.on() listeners) with AsyncGenerator<AgentEvent>.
- * Used by CodexAgent and CopilotAgent where events arrive asynchronously from
- * separate notification handlers, unlike ClaudeAgent's synchronous for-await loop.
+ * Used by PiAgent where events arrive asynchronously from a subprocess JSONL
+ * stream, unlike ClaudeAgent's synchronous for-await loop over SDK messages.
  *
  * Pattern:
  *   handler calls enqueue(event) → pushes to queue, wakes waiters

@@ -55,7 +55,22 @@ export const RPC_CHANNELS = {
     ABORT: 'transfer:abort',
   },
   tasks: {
+    // Legacy: background-task output (disabled-feature remnant). Kept for back-compat; retire later.
     GET_OUTPUT: 'tasks:getOutput',
+    // Conductor — the Tasks DAG runner.
+    VALIDATE: 'tasks:validate',
+    CREATE: 'tasks:create',
+    GENERATE: 'tasks:generate',
+    // Push: the authored spec (or an error) for an async tasks:generate, keyed by orchestratorSessionId.
+    GENERATED: 'tasks:generated',
+    RUN: 'tasks:run',
+    PAUSE: 'tasks:pause',
+    RESUME: 'tasks:resume',
+    STOP: 'tasks:stop',
+    GET: 'tasks:get',
+    LIST: 'tasks:list',
+    // Storage-backed read of a run's outcome (verdict + per-node output). Survives restart.
+    GET_RESULTS: 'tasks:getResults',
   },
   workspaces: {
     GET: 'workspaces:get',
@@ -317,6 +332,12 @@ export const RPC_CHANNELS = {
     GET_ENABLE_1M_CONTEXT: 'caching:getEnable1MContext',
     SET_ENABLE_1M_CONTEXT: 'caching:setEnable1MContext',
   },
+  rtk: {
+    GET_ENABLED: 'rtk:getEnabled',
+    SET_ENABLED: 'rtk:setEnabled',
+    GET_STATUS: 'rtk:getStatus',
+    GET_GAIN: 'rtk:getGain',
+  },
   badge: {
     REFRESH: 'badge:refresh',
     SET_ICON: 'badge:setIcon',
@@ -372,6 +393,17 @@ export const RPC_CHANNELS = {
     EXPORT: 'resources:export',
     IMPORT: 'resources:import',
   },
+  projects: {
+    GET: 'projects:get',
+    GET_ONE: 'projects:getOne',
+    CREATE: 'projects:create',
+    UPDATE: 'projects:update',
+    DELETE: 'projects:delete',
+    LIST_ASSETS: 'projects:listAssets',
+    UPLOAD_ASSET: 'projects:uploadAsset',
+    DELETE_ASSET: 'projects:deleteAsset',
+    CHANGED: 'projects:changed',
+  },
   messaging: {
     // WhatsApp subprocess → Gateway (subprocess invokes on server)
     WA_REGISTER: 'messaging:wa:register',
@@ -389,22 +421,39 @@ export const RPC_CHANNELS = {
     // Gateway → UI clients (broadcast)
     BINDING_CHANGED: 'messaging:bindingChanged',
     PLATFORM_STATUS: 'messaging:platformStatus',
+    /** Broadcast when the workspace's pending-senders list mutates. */
+    PENDING_CHANGED: 'messaging:pendingChanged',
     // UI ↔ Server (config/binding CRUD)
     GET_CONFIG: 'messaging:getConfig',
     UPDATE_CONFIG: 'messaging:updateConfig',
     TEST_TELEGRAM: 'messaging:testTelegram',
     SAVE_TELEGRAM: 'messaging:saveTelegram',
+    TEST_LARK: 'messaging:testLark',
+    SAVE_LARK: 'messaging:saveLark',
     DISCONNECT: 'messaging:disconnect',
     FORGET: 'messaging:forget',
     GET_BINDINGS: 'messaging:getBindings',
     GENERATE_CODE: 'messaging:generateCode',
     UNBIND: 'messaging:unbind',
     UNBIND_BINDING: 'messaging:unbindBinding',
+    /** Workspace-supergroup pairing (Telegram forum support). UI ↔ Server. */
+    GENERATE_SUPERGROUP_CODE: 'messaging:generateSupergroupCode',
+    GET_SUPERGROUP: 'messaging:getSupergroup',
+    UNBIND_SUPERGROUP: 'messaging:unbindSupergroup',
     // UI ↔ Server — WhatsApp pairing/connection flow (Baileys subprocess adapter)
     WA_START_CONNECT: 'messaging:wa:startConnect',
     WA_SUBMIT_PHONE: 'messaging:wa:submitPhone',
     /** Broadcast to UI clients: QR string, pairing code, status, unavailable, error. */
     WA_UI_EVENT: 'messaging:wa:uiEvent',
+    // UI ↔ Server — Access control (per-platform owners + per-binding allow-list)
+    GET_PLATFORM_OWNERS: 'messaging:access:getOwners',
+    SET_PLATFORM_OWNERS: 'messaging:access:setOwners',
+    GET_PLATFORM_ACCESS_MODE: 'messaging:access:getMode',
+    SET_PLATFORM_ACCESS_MODE: 'messaging:access:setMode',
+    GET_PENDING_SENDERS: 'messaging:access:getPending',
+    DISMISS_PENDING_SENDER: 'messaging:access:dismissPending',
+    ALLOW_PENDING_SENDER: 'messaging:access:allowPending',
+    SET_BINDING_ACCESS: 'messaging:access:setBindingAccess',
   },
 } as const
 

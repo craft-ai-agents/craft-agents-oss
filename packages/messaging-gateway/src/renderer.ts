@@ -28,10 +28,21 @@
 import type {
   PlatformAdapter,
   ChannelBinding,
+  SendOptions,
   SentMessage,
   InlineButton,
   ResponseMode,
 } from './types'
+
+/**
+ * Build the per-call options bag from a binding. Currently only `threadId`
+ * (Telegram supergroup forum topic) flows through. WhatsApp and DMs leave
+ * `threadId` undefined, which the adapters' `threadParams()` helper turns
+ * into a no-op spread.
+ */
+function bindingOpts(binding: ChannelBinding): SendOptions {
+  return binding.threadId !== undefined ? { threadId: binding.threadId } : {}
+}
 import type { PlanTokenRegistry } from './plan-tokens'
 
 /** Session event shape (subset of the full SessionEvent from server-core). */
@@ -68,6 +79,14 @@ interface RenderState {
   // --- progress / final_only modes -------------------------------------
   /** Progress/final_only: non-intermediate assistant text accumulated this run. */
   finalBuffer: string
+  /**
+   * Progress/final_only: the most recent non-empty assistant text seen this
+   * run, regardless of `isIntermediate`. Used as a fallback on `complete`
+   * when the run never produced a clean non-intermediate final turn (common
+   * for automations whose last action is a tool call) so we still deliver
+   * the agent's message instead of stranding the user on "thinking…".
+   */
+  lastAssistantText: string
   /** Progress: id of the single evolving message for this run (null before first activity). */
   progressMessageId: string | null
   /** Progress: last status label written to the bubble, to avoid redundant edits. */
@@ -98,18 +117,34 @@ export type PlanMessageRecorder = (
   messageId: string,
 ) => void
 
+/**
+ * Hook the renderer calls when a permission prompt with inline buttons has
+ * just been posted. Mirrors {@link PlanMessageRecorder}; the gateway uses
+ * this to track live prompts so it can (a) idempotently claim the prompt on
+ * tap, and (b) clear the inline keyboard when the agent moves on (resolved
+ * from any channel — desktop, MCP, etc.).
+ */
+export type PermissionMessageRecorder = (
+  binding: ChannelBinding,
+  requestId: string,
+  messageId: string,
+) => void
+
 export class Renderer {
   /** Per-binding render state. Keyed by binding.id */
   private states = new Map<string, RenderState>()
   private readonly planTokens: PlanTokenRegistry | undefined
   private readonly recordPlanMessage: PlanMessageRecorder | undefined
+  private readonly recordPermissionMessage: PermissionMessageRecorder | undefined
 
   constructor(deps?: {
     planTokens?: PlanTokenRegistry
     recordPlanMessage?: PlanMessageRecorder
+    recordPermissionMessage?: PermissionMessageRecorder
   }) {
     this.planTokens = deps?.planTokens
     this.recordPlanMessage = deps?.recordPlanMessage
+    this.recordPermissionMessage = deps?.recordPermissionMessage
   }
 
   private getState(bindingId: string): RenderState {
@@ -123,6 +158,7 @@ export class Renderer {
         lastEditedLength: 0,
         currentEditIntervalMs: DEFAULT_EDIT_INTERVAL_MS,
         finalBuffer: '',
+        lastAssistantText: '',
         progressMessageId: null,
         progressStatus: null,
       }
@@ -197,7 +233,7 @@ export class Renderer {
 
         if (state.streamingMessageId && adapter.capabilities.messageEditing) {
           if (text.trim()) {
-            await this.tryEditMessage(adapter, binding.channelId, state.streamingMessageId, text.trim(), state)
+            await this.tryEditMessage(adapter, binding, state.streamingMessageId, text.trim(), state)
           }
         } else if (text.trim()) {
           await this.sendText(adapter, binding, text.trim())
@@ -227,7 +263,7 @@ export class Renderer {
             this.cancelEditTimer(state)
             await this.tryEditMessage(
               adapter,
-              binding.channelId,
+              binding,
               state.streamingMessageId,
               state.textBuffer.trim(),
               state,
@@ -236,9 +272,9 @@ export class Renderer {
             state.textBuffer = ''
             state.lastEditedLength = 0
           }
-          await adapter.sendText(binding.channelId, `🔧 ${displayName}...`)
+          await adapter.sendText(binding.channelId, `🔧 ${displayName}...`, bindingOpts(binding))
         } else {
-          await adapter.sendTyping(binding.channelId).catch(() => {})
+          await adapter.sendTyping(binding.channelId, bindingOpts(binding)).catch(() => {})
         }
         break
       }
@@ -252,7 +288,7 @@ export class Renderer {
   ): Promise<void> {
     if (!state.streamingMessageId && state.textBuffer.length > 0) {
       try {
-        const sent = await adapter.sendText(binding.channelId, state.textBuffer)
+        const sent = await adapter.sendText(binding.channelId, state.textBuffer, bindingOpts(binding))
         state.streamingMessageId = sent.messageId
         state.lastEditedLength = state.textBuffer.length
         this.scheduleEdit(state, binding, adapter)
@@ -280,7 +316,7 @@ export class Renderer {
       const text = state.textBuffer.trim()
       if (!text) return
 
-      await this.tryEditMessage(adapter, binding.channelId, state.streamingMessageId, text, state)
+      await this.tryEditMessage(adapter, binding, state.streamingMessageId, text, state)
       state.lastEditedLength = state.textBuffer.length
 
       if (state.processing) {
@@ -308,11 +344,16 @@ export class Renderer {
       case 'text_complete': {
         const isIntermediate = Boolean(event.isIntermediate)
         const text = typeof event.text === 'string' ? event.text : ''
-        if (!isIntermediate && text.trim()) {
-          // Last assistant text of the run — keep it for the final edit.
-          state.finalBuffer = appendFinal(state.finalBuffer, text)
+        if (text.trim()) {
+          if (!isIntermediate) {
+            // Last assistant text of the run — keep it for the final edit.
+            state.finalBuffer = appendFinal(state.finalBuffer, text)
+          }
+          // Always remember the latest assistant text so `complete` can fall
+          // back to it if the run never produces a non-intermediate final.
+          state.lastAssistantText = text
         }
-        // Intermediate text is dropped. Make sure the bubble exists and shows
+        // Intermediate text is dropped from the bubble. Make sure it exists and shows
         // thinking status so the user knows the run is alive.
         await this.ensureProgressBubble(state, binding, adapter, THINKING_LABEL)
         return
@@ -338,19 +379,22 @@ export class Renderer {
       }
 
       case 'complete': {
-        const finalText = state.finalBuffer.trim()
+        // Prefer the clean non-intermediate final; fall back to the last
+        // assistant text so a tool-terminated run still delivers a message
+        // instead of freezing the bubble on "thinking…".
+        const finalText = (state.finalBuffer.trim() || state.lastAssistantText.trim())
         if (state.progressMessageId && adapter.capabilities.messageEditing) {
           if (finalText) {
             await this.tryEditMessage(
               adapter,
-              binding.channelId,
+              binding,
               state.progressMessageId,
               truncateForAdapter(finalText, adapter),
               state,
             )
           }
-          // If the run ended with no final text, leave the last status in
-          // place rather than deleting/editing to an empty string — avoids
+          // If the run produced no assistant text at all, leave the last
+          // status in place rather than editing to an empty string — avoids
           // Telegram "message is not modified" errors and keeps a trace.
         } else if (finalText) {
           // Adapter can't edit (WhatsApp) — send one message at the end.
@@ -375,7 +419,7 @@ export class Renderer {
   ): Promise<void> {
     if (!state.progressMessageId) {
       try {
-        const sent = await adapter.sendText(binding.channelId, status)
+        const sent = await adapter.sendText(binding.channelId, status, bindingOpts(binding))
         state.progressMessageId = sent.messageId
         state.progressStatus = status
       } catch {
@@ -385,7 +429,7 @@ export class Renderer {
     }
     if (!adapter.capabilities.messageEditing) return
     if (state.progressStatus === status) return
-    await this.tryEditMessage(adapter, binding.channelId, state.progressMessageId, status, state)
+    await this.tryEditMessage(adapter, binding, state.progressMessageId, status, state)
     state.progressStatus = status
   }
 
@@ -407,14 +451,21 @@ export class Renderer {
         // because it's the only thing we might ever see.
         const isIntermediate = Boolean(event.isIntermediate)
         const text = typeof event.text === 'string' ? event.text : ''
-        if (!isIntermediate && text.trim()) {
-          state.finalBuffer = appendFinal(state.finalBuffer, text)
+        if (text.trim()) {
+          if (!isIntermediate) {
+            state.finalBuffer = appendFinal(state.finalBuffer, text)
+          }
+          // Fallback for runs that never emit a non-intermediate final turn.
+          state.lastAssistantText = text
         }
         return
       }
 
       case 'complete': {
-        const finalText = state.finalBuffer.trim()
+        // Prefer the clean non-intermediate final; fall back to the last
+        // assistant text so final_only still delivers something rather than
+        // staying silent when the run ends on a tool call.
+        const finalText = (state.finalBuffer.trim() || state.lastAssistantText.trim())
         if (finalText) {
           await this.sendText(adapter, binding, finalText)
         }
@@ -444,7 +495,7 @@ export class Renderer {
       this.cancelEditTimer(state)
       await this.tryEditMessage(
         adapter,
-        binding.channelId,
+        binding,
         state.streamingMessageId,
         state.textBuffer.trim(),
         state,
@@ -459,6 +510,7 @@ export class Renderer {
         binding.channelId,
         `⏸ Permission required: ${request.description}
 Approve it in the desktop app to continue.`,
+        bindingOpts(binding),
       )
       return
     }
@@ -469,12 +521,14 @@ Approve it in the desktop app to continue.`,
         { id: `perm:allow:${request.requestId}`, label: '✅ Allow' },
         { id: `perm:deny:${request.requestId}`, label: '❌ Deny' },
       ]
-      await adapter.sendButtons(binding.channelId, text, buttons)
+      const sent = await adapter.sendButtons(binding.channelId, text, buttons, bindingOpts(binding))
+      this.recordPermissionMessage?.(binding, request.requestId, sent.messageId)
     } else {
       await adapter.sendText(
         binding.channelId,
         `⏸ Permission required: ${request.description}
 Approve in the desktop app to continue.`,
+        bindingOpts(binding),
       )
     }
   }
@@ -487,6 +541,7 @@ Approve in the desktop app to continue.`,
     await adapter.sendText(
       binding.channelId,
       '🔐 Credentials are required to continue. Open the desktop app to review and submit them securely.',
+      bindingOpts(binding),
     )
   }
 
@@ -500,18 +555,23 @@ Approve in the desktop app to continue.`,
       await adapter.sendText(
         binding.channelId,
         '📝 A plan is ready for review. Open the desktop app to inspect and approve it.',
+        bindingOpts(binding),
       )
       return
     }
 
-    if (binding.platform !== 'telegram') return
+    // Telegram + Lark both support inline buttons through the same
+    // `sendButtons` contract; either gets the rich plan card. Anything else
+    // is treated like WhatsApp above and gated out earlier.
+    if (binding.platform !== 'telegram' && binding.platform !== 'lark') return
 
     // Token registry is optional for backwards compatibility; without it we
-    // degrade to the generic pointer so Telegram still sees *something*.
+    // degrade to the generic pointer so the bot still sees *something*.
     if (!this.planTokens) {
       await adapter.sendText(
         binding.channelId,
         '📝 A plan is ready for review. Open the desktop app to inspect and approve it.',
+        bindingOpts(binding),
       )
       return
     }
@@ -538,7 +598,7 @@ Approve in the desktop app to continue.`,
         : `${header}\n\n${firstLines(planContent, 15)}\n\n…full plan attached below.`
 
     try {
-      const sent = await adapter.sendButtons(binding.channelId, bodyText, buttons)
+      const sent = await adapter.sendButtons(binding.channelId, bodyText, buttons, bindingOpts(binding))
       this.recordPlanMessage?.(binding, token, sent.messageId)
 
       if (!fitsInline && planContent.length > 0) {
@@ -547,6 +607,7 @@ Approve in the desktop app to continue.`,
           Buffer.from(planContent, 'utf-8'),
           'plan.md',
           'Full plan',
+          bindingOpts(binding),
         )
       }
     } catch (err) {
@@ -556,6 +617,7 @@ Approve in the desktop app to continue.`,
         `📝 A plan is ready for review (couldn't render inline: ${
           err instanceof Error ? err.message : 'unknown error'
         }). Open the desktop app to approve it.`,
+        bindingOpts(binding),
       )
     }
   }
@@ -568,7 +630,7 @@ Approve in the desktop app to continue.`,
   ): Promise<void> {
     const errorMsg = extractErrorMessage(event.error)
     this.cancelEditTimer(state)
-    await adapter.sendText(binding.channelId, `❌ ${errorMsg}`)
+    await adapter.sendText(binding.channelId, `❌ ${errorMsg}`, bindingOpts(binding))
     this.resetRun(state)
   }
 
@@ -578,7 +640,7 @@ Approve in the desktop app to continue.`,
 
   private async tryEditMessage(
     adapter: PlatformAdapter,
-    channelId: string,
+    binding: ChannelBinding,
     messageId: string,
     text: string,
     state: RenderState,
@@ -586,7 +648,9 @@ Approve in the desktop app to continue.`,
     const truncated = truncateForAdapter(text, adapter)
 
     try {
-      await adapter.editMessage(channelId, messageId, truncated)
+      // editMessage on Telegram is keyed by (chat_id, message_id) and ignores
+      // message_thread_id, but we pass it for caller uniformity.
+      await adapter.editMessage(binding.channelId, messageId, truncated, bindingOpts(binding))
       state.currentEditIntervalMs = DEFAULT_EDIT_INTERVAL_MS
     } catch (err: unknown) {
       const is429 =
@@ -617,6 +681,7 @@ Approve in the desktop app to continue.`,
     state.lastEditedLength = 0
     state.processing = false
     state.finalBuffer = ''
+    state.lastAssistantText = ''
     state.progressMessageId = null
     state.progressStatus = null
   }
@@ -628,14 +693,15 @@ Approve in the desktop app to continue.`,
     text: string,
   ): Promise<SentMessage | undefined> {
     const maxLen = adapter.capabilities.maxMessageLength
+    const opts = bindingOpts(binding)
     if (text.length <= maxLen) {
-      return adapter.sendText(binding.channelId, text)
+      return adapter.sendText(binding.channelId, text, opts)
     }
 
     const chunks = splitText(text, maxLen)
     let last: SentMessage | undefined
     for (const chunk of chunks) {
-      last = await adapter.sendText(binding.channelId, chunk)
+      last = await adapter.sendText(binding.channelId, chunk, opts)
     }
     return last
   }

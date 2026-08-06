@@ -53,6 +53,17 @@ export const SESSION_PERSISTENT_FIELDS = [
   'transferredSessionSummaryApplied',
   // Automation origin
   'triggeredBy',
+  // Project binding (workspace-scoped grouping)
+  'projectId',
+  // Kanban: task/subtask hierarchy + board column
+  'parentSessionId',
+  'kanbanColumn',
+  // Tasks Conductor: link a session back to the task spec / run / DAG node that owns it
+  'taskSlug',
+  'taskRunId',
+  'taskNodeId',
+  'taskNodeCount',
+  'taskDraft',
 ] as const;
 
 export type SessionPersistentField = typeof SESSION_PERSISTENT_FIELDS[number];
@@ -197,6 +208,22 @@ export interface SessionConfig {
   transferredSessionSummaryApplied?: boolean;
   /** Metadata for sessions created by automations */
   triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
+  /** Workspace-scoped project id this session belongs to (undefined = unbound). */
+  projectId?: string;
+  /** Parent session id — when set, this session is a subtask of the parent (undefined = top-level task). */
+  parentSessionId?: string;
+  /** Kanban board column id ('todo' | 'in-progress' | 'done'). Drag-to-move target; independent of sessionStatus. */
+  kanbanColumn?: string;
+  /** Tasks Conductor: slug of the task spec this session belongs to (orchestrator + child nodes). */
+  taskSlug?: string;
+  /** Tasks Conductor: id of the run that spawned this child session (child nodes only). */
+  taskRunId?: string;
+  /** Tasks Conductor: id of the DAG node this child session executes (child nodes only). */
+  taskNodeId?: string;
+  /** Tasks Conductor: total DAG node count (orchestrator only) — board progress denominator that stays stable while children spawn lazily. */
+  taskNodeCount?: number;
+  /** Tasks Conductor: generate-time draft orchestrator. Hidden from the board until adopted (promoted) by createTask. */
+  taskDraft?: boolean;
 }
 
 /**
@@ -288,6 +315,22 @@ export interface SessionHeader {
   transferredSessionSummaryApplied?: boolean;
   /** Metadata for sessions created by automations */
   triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
+  /** Workspace-scoped project id this session belongs to (undefined = unbound). */
+  projectId?: string;
+  /** Parent session id — when set, this session is a subtask of the parent (undefined = top-level task). */
+  parentSessionId?: string;
+  /** Kanban board column id ('todo' | 'in-progress' | 'done'). Drag-to-move target; independent of sessionStatus. */
+  kanbanColumn?: string;
+  /** Tasks Conductor: slug of the task spec this session belongs to (orchestrator + child nodes). */
+  taskSlug?: string;
+  /** Tasks Conductor: id of the run that spawned this child session (child nodes only). */
+  taskRunId?: string;
+  /** Tasks Conductor: id of the DAG node this child session executes (child nodes only). */
+  taskNodeId?: string;
+  /** Tasks Conductor: total DAG node count (orchestrator only) — board progress denominator that stays stable while children spawn lazily. */
+  taskNodeCount?: number;
+  /** Tasks Conductor: generate-time draft orchestrator. Hidden from the board until adopted (promoted) by createTask. */
+  taskDraft?: boolean;
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
   messageCount: number;
@@ -322,6 +365,8 @@ export interface SessionMetadata {
   sessionStatus?: SessionStatus;
   /** Labels applied to this session (bare IDs or "id::value" entries) */
   labels?: string[];
+  /** Explicit per-session source selection (absent = follow workspace defaults) */
+  enabledSourceSlugs?: string[];
   /** Permission mode for this session */
   permissionMode?: PermissionMode;
   /** Previous permission mode (used to preserve modeTransition context across restarts) */
@@ -366,4 +411,20 @@ export interface SessionMetadata {
   archivedAt?: number;
   /** Message ID that this session was branched from (hard context cutoff marker). */
   branchFromMessageId?: string;
+  /** Workspace-scoped project id this session belongs to (undefined = unbound). */
+  projectId?: string;
+  /** Parent session id — when set, this session is a subtask of the parent (undefined = top-level task). */
+  parentSessionId?: string;
+  /** Kanban board column id ('todo' | 'in-progress' | 'done'). Drag-to-move target; independent of sessionStatus. */
+  kanbanColumn?: string;
+  /** Tasks Conductor: slug of the task spec this session belongs to (orchestrator + child nodes). */
+  taskSlug?: string;
+  /** Tasks Conductor: id of the run that spawned this child session (child nodes only). */
+  taskRunId?: string;
+  /** Tasks Conductor: id of the DAG node this child session executes (child nodes only). */
+  taskNodeId?: string;
+  /** Tasks Conductor: total DAG node count (orchestrator only) — board progress denominator that stays stable while children spawn lazily. */
+  taskNodeCount?: number;
+  /** Tasks Conductor: generate-time draft orchestrator. Hidden from the board until adopted (promoted) by createTask. */
+  taskDraft?: boolean;
 }

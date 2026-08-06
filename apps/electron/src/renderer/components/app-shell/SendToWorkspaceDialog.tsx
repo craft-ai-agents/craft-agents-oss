@@ -1,19 +1,20 @@
 /**
- * SendToWorkspaceDialog — Transfer sessions to remote workspaces.
+ * SendToWorkspaceDialog — Transfer sessions to another workspace.
  *
- * Shows a workspace picker filtered to remote workspaces only (sending
- * between local workspaces on the same machine is pointless).
- * Disconnected remote workspaces are shown as disabled with a CloudOff icon.
+ * Shows a picker over every other workspace: remote targets are pushed to over
+ * an outbound WS connection (chunked for large bundles), local targets import
+ * in-process — which is how a session moves from a remote workspace back to
+ * this machine. Disconnected remote workspaces are shown as disabled with a
+ * CloudOff icon; local workspaces are always available.
  *
- * Uses invokeOnServer for cross-server transfer:
- * 1. Generate a mini-summary handoff payload from the current server
- * 2. Import that summarized payload on the target server via temporary connection
+ * The main process orchestrates the transfer: export bundle + summary from the
+ * owning server, then import on the target (see session:transferToWorkspace).
  */
 
 import * as React from 'react'
 import { useTranslation } from "react-i18next"
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Cloud, CloudOff, Send } from 'lucide-react'
+import { Cloud, CloudOff, Laptop, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -24,10 +25,11 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { CrossfadeAvatar } from '@/components/ui/avatar'
+import { WorkspaceAvatar } from '@/components/ui/workspace-avatar'
 import { useWorkspaceIcons } from '@/hooks/useWorkspaceIcon'
 import { cn } from '@/lib/utils'
 import type { Workspace } from '../../../shared/types'
+import { getTransferTargets } from './transfer-targets'
 
 export interface SendToWorkspaceDialogProps {
   open: boolean
@@ -77,10 +79,11 @@ export function SendToWorkspaceDialog({
   const [remoteHealthMap, setRemoteHealthMap] = useState<Map<string, 'ok' | 'error' | 'checking'>>(new Map())
   const healthCheckAbort = useRef<AbortController | null>(null)
 
-  // Only show remote workspaces (local-to-local is pointless)
-  const remoteWorkspaces = workspaces.filter(w => w.id !== activeWorkspaceId && w.remoteServer)
+  // Every other workspace is a valid target; only remote ones need a health check
+  const targetWorkspaces = getTransferTargets(workspaces, activeWorkspaceId)
+  const remoteTargets = targetWorkspaces.filter(w => w.remoteServer)
 
-  // Check connectivity for all remote workspaces when dialog opens
+  // Check connectivity for remote targets when dialog opens (locals are always reachable)
   useEffect(() => {
     if (!open) {
       healthCheckAbort.current?.abort()
@@ -92,17 +95,17 @@ export function SendToWorkspaceDialog({
     const abort = new AbortController()
     healthCheckAbort.current = abort
 
-    if (remoteWorkspaces.length === 0) return
+    if (remoteTargets.length === 0) return
 
     // Mark all as checking
     setRemoteHealthMap(() => {
       const next = new Map<string, 'ok' | 'error' | 'checking'>()
-      for (const ws of remoteWorkspaces) next.set(ws.id, 'checking')
+      for (const ws of remoteTargets) next.set(ws.id, 'checking')
       return next
     })
 
     // Fire parallel checks
-    for (const ws of remoteWorkspaces) {
+    for (const ws of remoteTargets) {
       window.electronAPI.testRemoteConnection(ws.remoteServer!.url, ws.remoteServer!.token)
         .then(result => {
           if (abort.signal.aborted) return
@@ -115,13 +118,13 @@ export function SendToWorkspaceDialog({
     }
 
     return () => abort.abort()
-  }, [open, remoteWorkspaces.map(w => w.id).join(',')])
+  }, [open, remoteTargets.map(w => w.id).join(',')])
 
   const handleTransfer = useCallback(async () => {
     if (!selectedWorkspaceId || sessionIds.length === 0) return
 
     const targetWorkspace = workspaces.find(w => w.id === selectedWorkspaceId)
-    if (!targetWorkspace?.remoteServer) return
+    if (!targetWorkspace) return
 
     setIsTransferring(true)
     const targetName = targetWorkspace.name
@@ -180,16 +183,17 @@ export function SendToWorkspaceDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Workspace list — remote only */}
+        {/* Workspace list — every other workspace; locals are always selectable */}
         <div className="flex flex-col gap-1 max-h-64 overflow-y-auto py-1">
-          {remoteWorkspaces.length === 0 ? (
+          {targetWorkspaces.length === 0 ? (
             <p className="text-sm text-muted-foreground px-2 py-4 text-center">
               {t("sendToWorkspace.noRemoteWorkspaces")}
             </p>
           ) : (
-            remoteWorkspaces.map(workspace => {
+            targetWorkspaces.map(workspace => {
+              const isRemote = !!workspace.remoteServer
               const isSelected = selectedWorkspaceId === workspace.id
-              const healthStatus = remoteHealthMap.get(workspace.id)
+              const healthStatus = isRemote ? remoteHealthMap.get(workspace.id) : undefined
               const isDisconnected = healthStatus === 'error'
               const isChecking = healthStatus === 'checking'
 
@@ -206,15 +210,17 @@ export function SendToWorkspaceDialog({
                     isDisconnected && 'opacity-50 cursor-not-allowed hover:bg-transparent',
                   )}
                 >
-                  <CrossfadeAvatar
+                  <WorkspaceAvatar
+                    workspaceId={workspace.id}
+                    workspaceName={workspace.name}
                     src={workspaceIconMap.get(workspace.id)}
-                    alt={workspace.name}
                     className="h-5 w-5 rounded-full ring-1 ring-border/50 shrink-0"
-                    fallbackClassName="bg-muted text-[10px] rounded-full"
-                    fallback={workspace.name?.charAt(0) || 'W'}
+                    fallbackClassName="rounded-full"
                   />
                   <span className="flex-1 truncate">{workspace.name}</span>
-                  {isDisconnected ? (
+                  {!isRemote ? (
+                    <Laptop className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  ) : isDisconnected ? (
                     <CloudOff className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
                   ) : (
                     <Cloud className={cn(

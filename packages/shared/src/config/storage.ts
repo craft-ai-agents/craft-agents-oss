@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync, readdirSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { getCredentialManager } from '../credentials/index.ts';
 import { getOrCreateLatestSession, type SessionConfig } from '../sessions/index.ts';
@@ -46,6 +46,9 @@ import { isValidProviderAuthCombination, getDefaultModelsForConnection, getDefau
 import {
   getModelProvider,
   getModelById,
+  getModelDisplayName,
+  normalizeDeprecatedModelId,
+  type ModelDefinition,
 } from './models.ts';
 
 // Config stored in JSON file (credentials stored in encrypted file, not here)
@@ -74,9 +77,12 @@ export interface StoredConfig {
   richToolDescriptions?: boolean;  // Add intent/action metadata to all tool calls (default: true)
   // Tools
   browserToolEnabled?: boolean;  // Enable built-in browser tool (default: true). Disable for Playwright/Puppeteer.
+  allowRemoteEvaluate?: boolean;  // Allow remote agents to call `browser_tool evaluate` on local browser (default: true).
   // Prompt caching & context
   extendedPromptCache?: boolean;  // Use 1h prompt cache TTL instead of 5m (default: false)
   enable1MContext?: boolean;  // Enable 1M context window for supported models (default: false — opt-in; requires Anthropic Tier 4+)
+  // Token optimization
+  rtkEnabled?: boolean;  // Route Bash commands through rtk to compress tool output (default: false). https://github.com/rtk-ai/rtk
   // Network proxy
   networkProxy?: import('./types.ts').NetworkProxySettings;
   // Windows: path to Git Bash (bash.exe) for the SDK subprocess
@@ -118,6 +124,7 @@ const FALLBACK_CONFIG_DEFAULTS: ConfigDefaults = {
     richToolDescriptions: true,
     extendedPromptCache: false,
     browserToolEnabled: true,
+    allowRemoteEvaluate: true,
   },
   workspaceDefaults: {
     thinkingLevel: 'medium',
@@ -203,12 +210,48 @@ export function ensureConfigDefaults(): void {
 
 let configDirInitialized = false;
 
+const MAX_CONFIG_BACKUPS = 3;
+const CONFIG_BACKUP_DATE_RE = /^config\.json\.bak-\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Snapshot an existing config.json into a dated file (config.json.bak-YYYY-MM-DD)
+ * and keep only the newest MAX_CONFIG_BACKUPS. Runs once at startup, before any
+ * path can mutate or (in failure paths) overwrite the workspace registry.
+ * Best-effort: failures are logged and swallowed so a backup never blocks startup.
+ */
+export function backupConfigFile(): void {
+  try {
+    if (!existsSync(CONFIG_FILE)) return;
+
+    const now = new Date();
+    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const dated = join(CONFIG_DIR, `config.json.bak-${stamp}`);
+    // One backup per day, never overwritten: the first snapshot of the day is taken
+    // before any mutation, so it holds the good pre-reset state. A second startup that
+    // day (e.g. after a reset already nuked the registry) must NOT clobber it.
+    if (existsSync(dated)) return;
+    writeFileSync(dated, readFileSync(CONFIG_FILE, 'utf-8'), 'utf-8');
+
+    // ISO date in the name → lexical sort is chronological; drop all but the newest few.
+    const backups = readdirSync(CONFIG_DIR).filter(f => CONFIG_BACKUP_DATE_RE.test(f)).sort();
+    for (const stale of backups.slice(0, Math.max(0, backups.length - MAX_CONFIG_BACKUPS))) {
+      try { rmSync(join(CONFIG_DIR, stale)); } catch { /* ignore individual cleanup errors */ }
+    }
+  } catch (error) {
+    debug('[config] backupConfigFile failed:', error instanceof Error ? error.message : error);
+  }
+}
+
 export function ensureConfigDir(): void {
   if (configDirInitialized) return;
 
   if (!existsSync(CONFIG_DIR)) {
     mkdirSync(CONFIG_DIR, { recursive: true });
   }
+
+  // Snapshot an existing config.json (dated, keep last 3) before anything can
+  // mutate or — in a failure path — overwrite the workspace registry.
+  backupConfigFile();
   // Initialize bundled docs (creates ~/.craft-agent/docs/ with sources.md, agents.md, permissions.md)
   initializeDocs();
 
@@ -477,6 +520,30 @@ export function setBrowserToolEnabled(enabled: boolean): void {
 }
 
 /**
+ * Whether remote agents may call `browser_tool evaluate <expression>` against this
+ * desktop client's local browser. The check is enforced inside the local capability
+ * dispatcher; the remote server cannot override it.
+ *
+ * Defaults to true. Users can flip it off in Settings → AI → Advanced if they don't
+ * trust the remote workspaces they connect to.
+ */
+export function getAllowRemoteEvaluate(): boolean {
+  const config = loadStoredConfig();
+  if (config?.allowRemoteEvaluate !== undefined) {
+    return config.allowRemoteEvaluate;
+  }
+  const defaults = loadConfigDefaults();
+  return defaults.defaults.allowRemoteEvaluate;
+}
+
+export function setAllowRemoteEvaluate(allowed: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.allowRemoteEvaluate = allowed;
+  saveConfig(config);
+}
+
+/**
  * Get whether 1M context window is enabled.
  * When disabled, models use 200K context and the interceptor strips the context-1m beta header.
  * Defaults to false — the 1M beta requires Anthropic Tier 4+, and enabling it by default
@@ -495,6 +562,28 @@ export function setEnable1MContext(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.enable1MContext = enabled;
+  saveConfig(config);
+}
+
+/**
+ * Get whether rtk Bash-output compression is enabled.
+ * When enabled, the PreToolUse pipeline rewrites Bash commands to their `rtk` equivalents
+ * to reduce token consumption on common dev commands (git, ls, grep, test runners, etc.).
+ * Defaults to false — opt-in. Requires the `rtk` binary on PATH or bundled with the app.
+ * https://github.com/rtk-ai/rtk
+ */
+export function getRtkEnabled(): boolean {
+  const config = loadStoredConfig();
+  return config?.rtkEnabled === true;
+}
+
+/**
+ * Set whether rtk Bash-output compression is enabled.
+ */
+export function setRtkEnabled(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.rtkEnabled = enabled;
   saveConfig(config);
 }
 
@@ -986,7 +1075,7 @@ export function clearWorkspacePlan(workspaceId: string): void {
 const DRAFTS_FILE = join(CONFIG_DIR, 'drafts.json');
 
 export interface DraftAttachmentContent {
-  type: 'image' | 'pdf' | 'text' | 'office' | 'unknown';
+  type: 'image' | 'pdf' | 'text' | 'office' | 'audio' | 'unknown';
   mimeType: string;
   size: number;
   base64?: string;
@@ -1012,7 +1101,7 @@ interface DraftsData {
   updatedAt: number;
 }
 
-const ATTACHMENT_CONTENT_TYPES = new Set(['image', 'pdf', 'text', 'office', 'unknown']);
+const ATTACHMENT_CONTENT_TYPES = new Set(['image', 'pdf', 'text', 'office', 'audio', 'unknown']);
 
 function isAbsoluteDraftPath(p: string): boolean {
   if (!p) return false;
@@ -1150,7 +1239,6 @@ export function getAllSessionDrafts(): Record<string, SessionDraft> {
 // ============================================
 
 import type { ThemeOverrides, ThemeFile, PresetTheme } from './theme.ts';
-import { readdirSync } from 'fs';
 
 const APP_THEME_FILE = join(CONFIG_DIR, 'theme.json');
 const APP_THEMES_DIR = join(CONFIG_DIR, 'themes');
@@ -1734,135 +1822,161 @@ function backfillAllConnectionModels(config: StoredConfig): boolean {
   return changed;
 }
 
-/**
- * Migrate Opus 4.5 to Opus 4.6 for direct Anthropic connections (API key or OAuth).
- * Only applies to anthropic provider type (not compat), as third-party providers
- * like OpenRouter may not support the new model ID yet.
- */
-function migrateOpus45ToOpus46(config: StoredConfig): boolean {
-  if (!config.llmConnections) return false;
+const OPUS_DEFAULT_ID = 'claude-opus-4-8';
+const OPUS_FALLBACK_ID = 'claude-opus-4-7';
 
-  const OPUS_45_ID = 'claude-opus-4-5-20251101';
-  const OPUS_46_ID = 'claude-opus-4-6';
+function defaultModelIdsForConnection(connection: LlmConnection): Set<string> {
+  return new Set(
+    getDefaultModelsForConnection(connection.providerType, connection.piAuthProvider)
+      .map(model => typeof model === 'string' ? model : model.id),
+  );
+}
+
+function normalizeConnectionModelId(connection: LlmConnection, modelId: string): string {
+  const normalized = normalizeDeprecatedModelId(modelId);
+
+  // Bedrock connections run through Pi and need native inference-profile IDs.
+  if (connection.providerType === 'pi' && connection.piAuthProvider === 'amazon-bedrock') {
+    const hasPiPrefix = normalized.startsWith('pi/');
+    const bare = hasPiPrefix ? normalized.slice(3) : normalized;
+    const native = toBedrockNativeId(bare);
+    const defaults = defaultModelIdsForConnection(connection);
+    const prefixedCandidate = `pi/${native}`;
+    const candidate = hasPiPrefix || defaults.has(prefixedCandidate) ? prefixedCandidate : native;
+
+    // Pi 0.73.1 does not yet expose Opus 4.8. Keep 4.7 as the selectable fallback
+    // until the upstream catalog adds 4.8; the preferred-default list is already future-proofed.
+    if (bare === OPUS_DEFAULT_ID || native.endsWith(`.${OPUS_DEFAULT_ID}`)) {
+      const fallbackNative = toBedrockNativeId(OPUS_FALLBACK_ID);
+      const prefixedFallback = `pi/${fallbackNative}`;
+      const fallback = defaults.has(prefixedFallback) ? prefixedFallback : fallbackNative;
+      if (!defaults.has(candidate) && defaults.has(fallback)) return fallback;
+    }
+    return candidate;
+  }
+
+  if (connection.providerType === 'pi') {
+    const defaults = defaultModelIdsForConnection(connection);
+    const hasPiPrefix = normalized.startsWith('pi/');
+    const bare = hasPiPrefix ? normalized.slice(3) : normalized;
+    const prefixedCandidate = `pi/${bare}`;
+    const candidate = hasPiPrefix || defaults.has(prefixedCandidate) ? prefixedCandidate : normalized;
+    const prefixedFallback = `pi/${OPUS_FALLBACK_ID}`;
+    const fallback = defaults.has(prefixedFallback) ? prefixedFallback : OPUS_FALLBACK_ID;
+    if ((bare === OPUS_DEFAULT_ID)
+      && !defaults.has(candidate)
+      && defaults.has(fallback)) {
+      return fallback;
+    }
+    if (bare === OPUS_DEFAULT_ID && candidate !== normalized) {
+      return candidate;
+    }
+  }
+
+  return normalized;
+}
+
+function displayNameForMigratedModel(modelId: string): string {
+  const bareModelId = modelId.startsWith('pi/') ? modelId.slice(3) : modelId;
+  return getModelDisplayName(bareModelId);
+}
+
+function withUpdatedModelEntry(
+  connection: LlmConnection,
+  entry: ModelDefinition | string,
+  nextId: string,
+): ModelDefinition | string {
+  if (typeof entry === 'string') {
+    if (connection.providerType === 'anthropic' && nextId === OPUS_DEFAULT_ID) {
+      return { ...getModelById(OPUS_DEFAULT_ID)! };
+    }
+    return nextId;
+  }
+
+  const nextEntry: ModelDefinition = { ...entry, id: nextId };
+  if (connection.providerType === 'anthropic' && nextId === OPUS_DEFAULT_ID) {
+    return { ...getModelById(OPUS_DEFAULT_ID)! };
+  }
+  if (nextEntry.name && /Opus 4\.[56]/.test(nextEntry.name)) {
+    nextEntry.name = displayNameForMigratedModel(nextId);
+  }
+  return nextEntry;
+}
+
+function modelEntryForDefault(connection: LlmConnection, modelId: string): ModelDefinition | string {
+  if (connection.providerType === 'anthropic' && modelId === OPUS_DEFAULT_ID) {
+    return { ...getModelById(OPUS_DEFAULT_ID)! };
+  }
+  return modelId;
+}
+
+/**
+ * Migrate deprecated Opus 4.5/4.6 IDs and previous direct-Anthropic Opus 4.7 defaults to the current default Opus model.
+ * Custom/compat endpoints are intentionally skipped because provider-specific aliases may differ.
+ */
+function migrateLegacyOpusToDefaultOpus(config: StoredConfig): boolean {
+  if (!config.llmConnections) return false;
 
   let changed = false;
 
   for (const connection of config.llmConnections) {
-    // Only migrate direct Anthropic connections (not compat/third-party)
-    if (connection.providerType !== 'anthropic') continue;
+    if (connection.providerType !== 'anthropic' && connection.providerType !== 'pi') continue;
 
-    // Migrate defaultModel
-    if (connection.defaultModel === OPUS_45_ID) {
-      connection.defaultModel = OPUS_46_ID;
-      changed = true;
-    }
-
-    // Migrate models array
-    if (connection.models && Array.isArray(connection.models)) {
-      const hasNew = connection.models.some(m =>
-        (typeof m === 'string' ? m : m.id) === OPUS_46_ID
-      );
-
-      if (hasNew) {
-        // New model already exists — just remove the old entry to avoid duplicates
-        const before = connection.models.length;
-        connection.models = connection.models.filter(m =>
-          (typeof m === 'string' ? m : m.id) !== OPUS_45_ID
-        );
-        if (connection.models.length !== before) changed = true;
-      } else {
-        // New model doesn't exist — rename the old entry in place
-        for (let i = 0; i < connection.models.length; i++) {
-          const model = connection.models[i];
-          if (typeof model === 'string' && model === OPUS_45_ID) {
-            connection.models[i] = OPUS_46_ID;
-            changed = true;
-          } else if (typeof model === 'object' && model.id === OPUS_45_ID) {
-            model.id = OPUS_46_ID;
-            if (model.name?.includes('4.5')) {
-              model.name = model.name.replace('4.5', '4.6');
-            }
-            changed = true;
-          }
-        }
+    if (connection.defaultModel) {
+      let normalizedDefault = normalizeConnectionModelId(connection, connection.defaultModel);
+      // The previous direct-Anthropic default was Opus 4.7. Move existing
+      // direct-Anthropic defaults to Opus 4.8 while keeping 4.7 in the model list.
+      // Pi stays on 4.7 until the current Pi catalog exposes 4.8.
+      if (connection.providerType === 'anthropic' && normalizedDefault === OPUS_FALLBACK_ID) {
+        normalizedDefault = OPUS_DEFAULT_ID;
       }
-    }
-  }
-
-  return changed;
-}
-
-// TODO(opus-4.6-sunset): delete this migration, its call site, its one-shot
-// marker ('opus-4-6-restored'), and the associated test when Opus 4.6 is
-// deprecated. This reverses the earlier forward migration Opus 4.6 → 4.7
-// that was removed in the same commit — users who were auto-migrated no
-// longer had 4.6 in their connection.models, so the picker wouldn't show it.
-/**
- * Restore claude-opus-4-6 to direct Anthropic connections that were previously
- * force-migrated to 4.7 and no longer list 4.6. Runs once per user (tracked via
- * config.migrationsApplied). Never touches `defaultModel` — users keep whatever
- * default they had, and can switch models themselves.
- */
-function restoreOpus46ToAnthropicConnections(config: StoredConfig): boolean {
-  const OPUS_46_ID = 'claude-opus-4-6';
-  const OPUS_47_ID = 'claude-opus-4-7';
-  const MARKER = 'opus-4-6-restored';
-  const alreadyRan = config.migrationsApplied?.includes(MARKER) ?? false;
-
-  // Anthropic connection.models entries are stored as full ModelDefinition
-  // objects (via backfillAllConnectionModels). The model picker reads
-  // model.name and falls back to the raw ID for bare strings, so we must
-  // push the object form to render as "Opus 4.6".
-  const opus46Model = getModelById(OPUS_46_ID);
-  if (!opus46Model) {
-    // Defensive — 4.6 is registered in this same PR, should never happen.
-    if (!alreadyRan) {
-      config.migrationsApplied = [...(config.migrationsApplied ?? []), MARKER];
-      return true;
-    }
-    return false;
-  }
-
-  let changed = false;
-
-  for (const connection of config.llmConnections ?? []) {
-    if (connection.providerType !== 'anthropic') continue;
-    if (!Array.isArray(connection.models) || connection.models.length === 0) continue;
-
-    // Idempotent shape repair: normalize any bare-string 'claude-opus-4-6'
-    // entry to the ModelDefinition object form. Runs regardless of the
-    // one-shot marker because it's a display-shape fix, not a new entry.
-    for (let i = 0; i < connection.models.length; i++) {
-      const m = connection.models[i];
-      if (typeof m === 'string' && m === OPUS_46_ID) {
-        connection.models[i] = { ...opus46Model };
+      if (normalizedDefault !== connection.defaultModel) {
+        connection.defaultModel = normalizedDefault;
         changed = true;
       }
     }
 
-    // One-shot restore: only append 4.6 on the first run for a given user.
-    // A deliberate removal after the marker is set should stick.
-    if (alreadyRan) continue;
+    if (connection.models && Array.isArray(connection.models)) {
+      const nextModels: Array<ModelDefinition | string> = [];
+      const seen = new Set<string>();
+      let connectionModelsChanged = false;
 
-    const ids = connection.models.map(m => typeof m === 'string' ? m : m.id);
-    if (ids.includes(OPUS_47_ID) && !ids.includes(OPUS_46_ID)) {
-      connection.models.push({ ...opus46Model });
-      changed = true;
+      for (const entry of connection.models) {
+        const currentId = typeof entry === 'string' ? entry : entry.id;
+        const nextId = normalizeConnectionModelId(connection, currentId);
+
+        if (seen.has(nextId)) {
+          connectionModelsChanged = true;
+          continue;
+        }
+        seen.add(nextId);
+
+        if (nextId !== currentId) {
+          nextModels.push(withUpdatedModelEntry(connection, entry, nextId));
+          connectionModelsChanged = true;
+        } else {
+          nextModels.push(entry);
+        }
+      }
+
+      if (connection.defaultModel && !seen.has(connection.defaultModel)) {
+        nextModels.unshift(modelEntryForDefault(connection, connection.defaultModel));
+        connectionModelsChanged = true;
+      }
+
+      if (connectionModelsChanged) {
+        connection.models = nextModels;
+        changed = true;
+      }
     }
   }
 
-  // Mark the migration as seen on the first run — even when no connection
-  // was eligible — so subsequent runs don't keep re-checking.
-  if (!alreadyRan) {
-    config.migrationsApplied = [...(config.migrationsApplied ?? []), MARKER];
-    return true;
-  }
   return changed;
 }
 
 /**
  * Migrate Sonnet 4.5 to Sonnet 4.6 for direct Anthropic connections.
- * Same pattern as migrateOpus45ToOpus46 — updates stored model IDs and names.
+ * Updates stored model IDs and names for direct Anthropic connections.
  */
 function migrateSonnet45ToSonnet46(config: StoredConfig): boolean {
   if (!config.llmConnections) return false;
@@ -1938,21 +2052,19 @@ function migrateWorkspaceSonnet45ToSonnet46(config: StoredConfig): void {
 }
 
 /**
- * Migrate Opus 4.5 to Opus 4.6 in workspace default models.
- * Iterates over all workspaces and updates defaults.model if it's Opus 4.5.
+ * Migrate deprecated/previous Opus defaults in workspace default models to the current default Opus model.
  */
-function migrateWorkspaceOpus45ToOpus46(config: StoredConfig): void {
+function migrateWorkspaceLegacyOpusToDefaultOpus(config: StoredConfig): void {
   if (!config.workspaces) return;
-
-  const OPUS_45_ID = 'claude-opus-4-5-20251101';
-  const OPUS_46_ID = 'claude-opus-4-6';
 
   for (const workspace of config.workspaces) {
     const wsConfig = loadWorkspaceConfig(workspace.rootPath);
     if (!wsConfig?.defaults?.model) continue;
 
-    if (wsConfig.defaults.model === OPUS_45_ID) {
-      wsConfig.defaults.model = OPUS_46_ID;
+    const normalized = normalizeDeprecatedModelId(wsConfig.defaults.model);
+    const nextModel = normalized === OPUS_FALLBACK_ID ? OPUS_DEFAULT_ID : normalized;
+    if (nextModel !== wsConfig.defaults.model) {
+      wsConfig.defaults.model = nextModel;
       saveWorkspaceConfig(workspace.rootPath, wsConfig);
     }
   }
@@ -2046,14 +2158,11 @@ function migrateLegacyProviderTypes(config: StoredConfig): boolean {
   return changed;
 }
 
-/** Normalize a pi/-prefixed model ID for Bedrock: pi/claude-opus-4-7 → pi/anthropic.claude-opus-4-7-v1 */
+/** Normalize a pi/-prefixed model ID for Bedrock: pi/claude-opus-4-8 → pi/us.anthropic.claude-opus-4-8 */
 function normalizePiBedrockId(id: string): string {
-  if (id.startsWith('pi/')) {
-    const bare = id.slice(3);
-    const native = toBedrockNativeId(bare);
-    return native !== bare ? `pi/${native}` : id;
-  }
-  return id;
+  const bare = id.startsWith('pi/') ? id.slice(3) : id;
+  const native = toBedrockNativeId(normalizeDeprecatedModelId(bare));
+  return `pi/${native}`;
 }
 
 /**
@@ -2205,35 +2314,39 @@ export function migrateLegacyLlmConnectionsConfig(): void {
       needsSave = true;
     }
 
-    // Phase 1b: Backfill models/defaultModel on ALL connections (not just compat)
+    // Phase 1b: Normalize legacy Opus IDs/defaults before Pi model-list filtering.
+    if (migrateLegacyOpusToDefaultOpus(config)) {
+      needsSave = true;
+    }
+    // Phase 1c: Backfill models/defaultModel on ALL connections (not just compat)
     // This ensures built-in connections (anthropic, openai) always have models populated
     if (backfillAllConnectionModels(config)) {
       needsSave = true;
     }
-    // Phase 1c: Migrate modelDefaults onto connection.defaultModel, then delete modelDefaults
+    // Phase 1d: Migrate modelDefaults onto connection.defaultModel, then delete modelDefaults
     if (migrateModelDefaultsToConnections(config)) {
       needsSave = true;
     }
-    // Phase 1d: Migrate Opus 4.5 → Opus 4.6 for direct Anthropic connections
-    if (migrateOpus45ToOpus46(config)) {
+    // Phase 1e: Normalize anything introduced by modelDefaults.
+    if (migrateLegacyOpusToDefaultOpus(config)) {
       needsSave = true;
     }
-    // Phase 1e: Migrate Opus 4.5 → Opus 4.6 in workspace default models
-    migrateWorkspaceOpus45ToOpus46(config);
-    // Phase 1f: Migrate Sonnet 4.5 → Sonnet 4.6 for direct Anthropic connections
+    // Phase 1f: Migrate legacy/previous Opus workspace defaults → current default Opus
+    migrateWorkspaceLegacyOpusToDefaultOpus(config);
+    // Phase 1g: Migrate Sonnet 4.5 → Sonnet 4.6 for direct Anthropic connections
     if (migrateSonnet45ToSonnet46(config)) {
       needsSave = true;
     }
-    // Phase 1g: Migrate Sonnet 4.5 → Sonnet 4.6 in workspace default models
+    // Phase 1h: Migrate Sonnet 4.5 → Sonnet 4.6 in workspace default models
     migrateWorkspaceSonnet45ToSonnet46(config);
-    // Phase 1h: Restore Opus 4.6 to direct Anthropic connections that were
-    // previously force-migrated away from it (one-shot, guarded by marker).
-    // TODO(opus-4.6-sunset): drop this call and the function when 4.6 is deprecated.
-    if (restoreOpus46ToAnthropicConnections(config)) {
-      needsSave = true;
-    }
     // Phase 1j: Migrate legacy provider types (bedrock/vertex/anthropic_compat → pi/pi_compat)
     if (migrateLegacyProviderTypes(config)) {
+      needsSave = true;
+    }
+    // Phase 1k: Normalize legacy Opus IDs introduced by provider-type migration.
+    // Important for old Bedrock connections: they become Pi+Bedrock first, then can
+    // fall back from Opus 4.8 to 4.7 while Pi's catalog lacks 4.8.
+    if (migrateLegacyOpusToDefaultOpus(config)) {
       needsSave = true;
     }
 
@@ -2356,6 +2469,8 @@ export function migrateLegacyLlmConnectionsConfig(): void {
   migrateCodexCopilotToPi(config);
   backfillAllConnectionModels(config);
   migrateModelDefaultsToConnections(config);
+  migrateLegacyOpusToDefaultOpus(config);
+  migrateWorkspaceLegacyOpusToDefaultOpus(config);
 
   saveConfig(config);
 }
@@ -2583,6 +2698,14 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
     piAuthProvider: updates.piAuthProvider !== undefined ? updates.piAuthProvider : existing.piAuthProvider,
     // Custom endpoint protocol (Anthropic/OpenAI compatible)
     customEndpoint: updates.customEndpoint !== undefined ? updates.customEndpoint : existing.customEndpoint,
+    // Mid-stream send behavior (steer vs queue) — read via resolveMidStreamBehavior()
+    midStreamBehavior: updates.midStreamBehavior !== undefined ? updates.midStreamBehavior : existing.midStreamBehavior,
+    // Resolved Anthropic OAuth identity (issue #838) — preserved across unrelated saves
+    oauthAccountUuid: updates.oauthAccountUuid !== undefined ? updates.oauthAccountUuid : existing.oauthAccountUuid,
+    oauthAccountEmail: updates.oauthAccountEmail !== undefined ? updates.oauthAccountEmail : existing.oauthAccountEmail,
+    oauthOrganizationUuid: updates.oauthOrganizationUuid !== undefined ? updates.oauthOrganizationUuid : existing.oauthOrganizationUuid,
+    oauthOrganizationName: updates.oauthOrganizationName !== undefined ? updates.oauthOrganizationName : existing.oauthOrganizationName,
+    oauthProfileVerifiedAt: updates.oauthProfileVerifiedAt !== undefined ? updates.oauthProfileVerifiedAt : existing.oauthProfileVerifiedAt,
     // Timestamps
     lastUsedAt: updates.lastUsedAt !== undefined ? updates.lastUsedAt : existing.lastUsedAt,
   };

@@ -21,5 +21,8 @@ export * from './values.ts';
 // Session label resolution (validate user input against configured labels)
 export * from './resolve.ts';
 
+// Label filter matching (the single list/AppShell filter predicate)
+export * from './filter.ts';
+
 // Auto-labels: import directly from '@craft-agent/shared/labels/auto' to keep
 // regex evaluation code out of the renderer bundle (backend-only concern).

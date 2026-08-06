@@ -3,7 +3,7 @@
  * Pi Agent Server
  *
  * Out-of-process Pi agent server communicating via JSONL over stdio.
- * Wraps @mariozechner/pi-coding-agent SDK and communicates with the main
+ * Wraps @earendil-works/pi-coding-agent SDK and communicates with the main
  * Electron process using a line-delimited JSON protocol.
  *
  * The main process spawns this as a child process. All Pi SDK interactions
@@ -33,7 +33,7 @@ import {
   createGrepToolDefinition,
   createFindToolDefinition,
   createLsToolDefinition,
-} from '@mariozechner/pi-coding-agent';
+} from '@earendil-works/pi-coding-agent';
 import type {
   AgentSession,
   AgentSessionEvent,
@@ -41,27 +41,33 @@ import type {
   AuthCredential,
   CreateAgentSessionOptions,
   ToolDefinition,
-} from '@mariozechner/pi-coding-agent';
+} from '@earendil-works/pi-coding-agent';
 
 // Pi AI types
-import type { TextContent as PiTextContent } from '@mariozechner/pi-ai';
+import type { TextContent as PiTextContent } from '@earendil-works/pi-ai';
 
 // Pre-register the Bedrock provider module so the Pi SDK doesn't attempt a
 // dynamic import of "./amazon-bedrock.js" — which fails in the bundled output
 // because bun collapses everything into a single file.
-// With the current Pi SDK (0.70.0 here), pi-ai is deduped (single hoisted
-// copy), so one registration covers both pi-ai and pi-agent-core module scopes.
-import { setBedrockProviderModule } from '@mariozechner/pi-ai';
-import { bedrockProviderModule } from '@mariozechner/pi-ai/bedrock-provider';
+// pi-ai is deduped (single hoisted copy), so one registration covers both
+// pi-ai and pi-agent-core module scopes.
+import { setBedrockProviderModule } from '@earendil-works/pi-ai/api/bedrock-converse-stream.lazy';
+import { bedrockProviderModule } from '@earendil-works/pi-ai/bedrock-provider';
 setBedrockProviderModule(bedrockProviderModule);
 
 // Model resolution (extracted for testability + custom-endpoint precedence)
 import { resolvePiModel, isDeniedMiniModelId, isModelNotFoundError } from './model-resolution.ts';
 import { pickProviderAppropriateMiniModel } from './pick-mini-model.ts';
-import { buildCustomEndpointModelDef, type CustomEndpointModelOverrides } from './custom-endpoint-models.ts';
+import {
+  buildCustomEndpointModelDef,
+  normalizeCustomEndpointModelEntry,
+  stripPiPrefix,
+  type CustomEndpointModelEntry,
+  type CustomEndpointModelOverrides,
+} from './custom-endpoint-models.ts';
 
 // Direct source imports from shared (bundled by bun build)
-import { handleLargeResponse, estimateTokens, TOKEN_LIMIT } from '../../shared/src/utils/large-response.ts';
+import { handleLargeResponse, estimateTokens, tokenLimitFor } from '../../shared/src/utils/large-response.ts';
 import { getSessionPlansPath, getSessionPath } from '../../shared/src/sessions/storage.ts';
 import { buildCallLlmRequest, withTimeout, LLM_QUERY_TIMEOUT_MS } from '../../shared/src/agent/llm-tool.ts';
 import type { LLMQueryRequest, LLMQueryResult } from '../../shared/src/agent/llm-tool.ts';
@@ -71,6 +77,7 @@ import { createWebFetchTool } from './tools/web-fetch.ts';
 import { resolveSearchProvider } from './tools/search/resolve-provider.ts';
 import { createSearchTool } from './tools/search/create-search-tool.ts';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
+import { applySystemPromptOverride } from './system-prompt-override.ts';
 
 // ============================================================
 // Types — JSONL Protocol
@@ -111,6 +118,17 @@ interface InitMessage {
   piAuth?: { provider: string; credential: PiCredential };
 }
 
+interface RuntimeConfigUpdateMessage {
+  type: 'update_runtime_config';
+  id: string;
+  model: string;
+  providerType?: string;
+  authType?: string;
+  baseUrl?: string;
+  customEndpoint?: { api: CustomEndpointApi; supportsImages?: boolean };
+  customModels?: Array<string | { id: string; contextWindow?: number; supportsImages?: boolean }>;
+}
+
 /** Messages from main process (stdin) */
 type InboundMessage =
   | InitMessage
@@ -126,6 +144,7 @@ type InboundMessage =
   | { type: 'set_thinking_level'; level: string }
   | { type: 'compact'; id: string; customInstructions?: string }
   | { type: 'set_auto_compaction'; id: string; enabled: boolean }
+  | RuntimeConfigUpdateMessage
   | { type: 'steer'; message: string }
   | { type: 'token_update'; piAuth: { provider: string; credential: PiCredential } }
   | { type: 'shutdown' };
@@ -189,6 +208,13 @@ interface OutboundSetAutoCompactionResult {
   enabled: boolean;
   errorMessage?: string;
 }
+interface OutboundRuntimeConfigUpdateResult {
+  type: 'update_runtime_config_result';
+  id: string;
+  success: boolean;
+  updated: boolean;
+  errorMessage?: string;
+}
 interface OutboundSessionIdUpdate { type: 'session_id_update'; sessionId: string }
 interface OutboundError { type: 'error'; message: string; code?: string }
 
@@ -203,6 +229,7 @@ type OutboundMessage =
   | OutboundEnsureSessionReadyResult
   | OutboundCompactResult
   | OutboundSetAutoCompactionResult
+  | OutboundRuntimeConfigUpdateResult
   | OutboundSessionIdUpdate
   | OutboundError;
 
@@ -367,11 +394,6 @@ function setInterceptorApiHints(model: { api?: string; provider?: string; baseUr
   );
 }
 
-/** Strip bare model IDs (remove pi/ prefix if present) */
-function stripPiPrefix(id: string): string {
-  return id.startsWith('pi/') ? id.slice(3) : id;
-}
-
 /**
  * Resolve the API key for custom endpoint auth.
  * Returns empty string for local endpoints (Ollama etc.) that don't need auth.
@@ -407,10 +429,6 @@ function isLocalhostUrl(url: string): boolean {
 /** Model IDs currently registered under the custom-endpoint provider */
 let customEndpointModelIds: Set<string> = new Set();
 
-interface CustomModelEntry extends CustomEndpointModelOverrides {
-  id: string;
-}
-
 /**
  * Register (or re-register) the custom-endpoint provider with the given models.
  * Note: registerProvider replaces the entire provider, so we maintain a Set of all
@@ -422,7 +440,7 @@ function registerCustomEndpointModels(
   registry: PiModelRegistry,
   api: CustomEndpointApi,
   baseUrl: string,
-  models: CustomModelEntry[],
+  models: CustomEndpointModelEntry[],
 ): void {
   for (const m of models) {
     customEndpointModelIds.add(m.id);
@@ -484,12 +502,10 @@ function createAuthenticatedRegistry(): {
   const hasCustomEndpoint = !!initConfig?.baseUrl?.trim();
   if (hasCustomEndpoint && initConfig?.customEndpoint) {
     const { api } = initConfig.customEndpoint;
-    const modelEntries: CustomModelEntry[] = (initConfig.customModels?.length
+    const modelEntries: CustomEndpointModelEntry[] = (initConfig.customModels?.length
       ? initConfig.customModels
       : [initConfig.model || 'default']
-    ).map(m => typeof m === 'string'
-      ? { id: stripPiPrefix(m) }
-      : { id: stripPiPrefix(m.id), contextWindow: m.contextWindow });
+    ).map(normalizeCustomEndpointModelEntry);
     customEndpointModelIds = new Set();  // Reset on fresh registry creation
     registerCustomEndpointModels(modelRegistry, api, initConfig.baseUrl!.trim(), modelEntries);
   } else if (hasCustomEndpoint && !initConfig?.customEndpoint) {
@@ -751,7 +767,11 @@ function wrapSingleTool(tool: ToolDefinition<any, any>): ToolDefinition<any, any
       .map(c => c.text)
       .join('');
 
-    if (estimateTokens(resultText) > TOKEN_LIMIT && initConfig) {
+    // Source the active model's contextWindow each call so the threshold
+    // tracks set_model mid-session, not the model that was active at session
+    // creation. Falls back to the fixed default when the model isn't set yet.
+    const modelContextWindow = piSession?.agent.state.model?.contextWindow;
+    if (estimateTokens(resultText) > tokenLimitFor(modelContextWindow) && initConfig) {
       try {
         const sessionPath = getSessionPath(
           initConfig.workspaceRootPath,
@@ -768,6 +788,7 @@ function wrapSingleTool(tool: ToolDefinition<any, any>): ToolDefinition<any, any
             userRequest: currentUserMessage,
           },
           summarize: runMiniCompletion,
+          contextWindow: modelContextWindow,
         });
 
         if (largeResult) {
@@ -938,12 +959,11 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
 
     debugLog(`[queryLlm] Created ephemeral session: ${ephemeralSession.sessionId}`);
 
-    // Set system prompt
-    if (request.systemPrompt) {
-      ephemeralSession.agent.state.systemPrompt = request.systemPrompt;
-    } else {
-      ephemeralSession.agent.state.systemPrompt = 'Reply with ONLY the requested text. No explanation.';
-    }
+    // Force the system prompt — see system-prompt-override.ts for why direct
+    // assignment to `state.systemPrompt` doesn't survive `session.prompt()`.
+    const promptForSession =
+      request.systemPrompt ?? 'Reply with ONLY the requested text. No explanation.';
+    applySystemPromptOverride(ephemeralSession, promptForSession);
 
     // Collect response text and errors from events
     let result = '';
@@ -1106,15 +1126,48 @@ function handleSessionEvent(event: AgentSessionEvent): void {
     }
 
     if (msg?.role === 'assistant' && piSession) {
-      const sdkTurnAnchor = piSession.sessionManager.getLeafId();
-      if (sdkTurnAnchor) {
-        // Enrichment: main process reads `sdkTurnAnchor` off the forwarded event to
-        // set branch cutoff points. The SDK's event shape doesn't declare this field,
-        // so the cast is intentional.
+      // CRITICAL: do NOT read `getLeafId()` here.
+      //
+      // The Pi SDK fires `message_end` synchronously BEFORE calling
+      // `appendMessage(event.message)` (see `agent-session.js:_processAgentEvent`).
+      // At this moment the assistant entry does not yet exist in the
+      // SessionManager — `leafId` still points at the *previous* leaf, which for
+      // a plain text turn is the user message that triggered the response.
+      // Recording that wrong anchor and using it for `branch()` makes the next
+      // turn a sibling of the assistant message, dropping the assistant reply
+      // from the LLM's view of history (craft-agents-oss#782).
+      //
+      // Instead, attach the SDK's message id to the forwarded event so the main
+      // process can correlate this turn, then queue a microtask to read the
+      // correct leaf AFTER `appendMessage` has run. The microtask drains before
+      // any subsequent SDK event is dispatched, so the follow-up
+      // `pi_turn_anchor` event is delivered to the main process in the right
+      // order (after this `message_end`, before the next event).
+      const sdkMessageId = (msg as { id?: string }).id;
+      if (sdkMessageId) {
         forwardedEvent = {
           ...(event as Record<string, unknown>),
-          sdkTurnAnchor,
+          sdkMessageId,
         } as unknown as OutboundAgentEvent;
+
+        const sessionManagerSnapshot = piSession.sessionManager;
+        queueMicrotask(() => {
+          // Defensive: session may have been disposed between the message_end
+          // emit and the microtask drain.
+          if (!piSession || piSession.sessionManager !== sessionManagerSnapshot) {
+            return;
+          }
+          const sdkTurnAnchor = sessionManagerSnapshot.getLeafId();
+          if (!sdkTurnAnchor) return;
+          send({
+            type: 'event',
+            event: {
+              type: 'pi_turn_anchor',
+              sdkMessageId,
+              sdkTurnAnchor,
+            } as unknown as OutboundAgentEvent,
+          });
+        });
       }
 
       // Speculative prefetch: if the assistant message contains 2+ prefetchable tool calls,
@@ -1218,29 +1271,21 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
   });
 }
 
-function isContextOverflowErrorMessage(message: string): boolean {
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes('context_length_exceeded') ||
-    normalized.includes('exceeds the context window') ||
-    normalized.includes('context window') && normalized.includes('exceed') ||
-    normalized.includes('too many tokens') ||
-    normalized.includes('token limit exceeded')
-  );
-}
-
 /**
- * Wait for any in-flight compaction to finish before sending a prompt.
- * Prevents a race in the Pi SDK where concurrent _runAutoCompaction calls
- * crash on a shared AbortController (see craft-agents-oss#464).
+ * Wait for any in-flight compaction to finish before sending a prompt or
+ * starting another compaction. Prevents a race in the Pi SDK where concurrent
+ * _runAutoCompaction calls crash on a shared AbortController
+ * (see craft-agents-oss#464). Default timeout matches the RPC compact timeout
+ * in PiAgent.requestCompact (300 s), since GPT compactions can legitimately
+ * take 60–120 s.
  */
-async function waitForCompaction(session: { isCompacting: boolean }, timeoutMs = 60_000): Promise<void> {
+async function waitForCompaction(session: { isCompacting: boolean }, timeoutMs = 300_000): Promise<void> {
   if (!session.isCompacting) return;
   debugLog('Waiting for in-flight compaction to finish before prompt...');
   const start = Date.now();
   while (session.isCompacting) {
     if (Date.now() - start > timeoutMs) {
-      debugLog('Compaction wait timed out after 60s, proceeding anyway');
+      debugLog(`Compaction wait timed out after ${Math.floor(timeoutMs / 1000)}s, proceeding anyway`);
       break;
     }
     await new Promise(resolve => setTimeout(resolve, 200));
@@ -1269,9 +1314,11 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
 
     const session = await ensureSession();
 
-    // Set system prompt
+    // Force the Craft-built system prompt onto the Pi session. Direct assignment
+    // to `state.systemPrompt` is wiped on every `session.prompt()` call by the Pi
+    // SDK (see system-prompt-override.ts).
     if (msg.systemPrompt) {
-      session.agent.state.systemPrompt = msg.systemPrompt;
+      applySystemPromptOverride(session, msg.systemPrompt);
     }
 
     // Wire up event handler
@@ -1292,37 +1339,20 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
 
-    // Fallback hardening: if the provider surfaced a context-overflow error,
-    // force a manual compact and retry this prompt once.
-    if (isContextOverflowErrorMessage(errorMsg)) {
-      debugLog(`Prompt overflow detected, attempting compact+retry: ${errorMsg}`);
-      try {
-        const session = await ensureSession();
-        await session.compact();
-        await waitForCompaction(session);
-        await session.prompt(msg.message, {
-          images: msg.images && msg.images.length > 0 ? msg.images : undefined,
-          streamingBehavior: 'followUp',
-        });
-        debugLog('Compact+retry succeeded after overflow');
-        return;
-      } catch (retryError) {
-        const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
-        debugLog(`Compact+retry failed: ${retryMsg}`);
-        send({
-          type: 'error',
-          message: `Prompt overflow recovery failed: ${retryMsg}`,
-          code: 'prompt_overflow_recovery_failed',
-        });
-        send({ type: 'event', event: { type: 'agent_end', messages: [] } });
-        return;
-      }
-    }
+    // No wrapper-side overflow recovery here. The Pi SDK's _checkCompaction
+    // already runs `_runAutoCompaction("overflow", true)` on overflow and
+    // calls agent.continue() to retry once. Running our own session.compact()
+    // in parallel raced against the SDK and is the documented cause of the
+    // AbortController crash in `_runAutoCompaction` (see
+    // plans/fix-pi-gpt-compaction.md). PiEventAdapter holds the Craft event
+    // queue open across the SDK's recovery flow so the recovered turn
+    // reaches the UI.
 
     debugLog(`Prompt failed: ${errorMsg}`);
     send({ type: 'error', message: errorMsg, code: 'prompt_error' });
-    // Send synthetic agent_end so the main process event queue unblocks
-    send({ type: 'event', event: { type: 'agent_end', messages: [] } });
+    // Send synthetic agent_end so the main process event queue unblocks.
+    // willRetry: false — this is the terminal error path, no retry follows.
+    send({ type: 'event', event: { type: 'agent_end', messages: [], willRetry: false } });
   }
 }
 
@@ -1427,6 +1457,13 @@ async function handleEnsureSessionReady(msg: Extract<InboundMessage, { type: 'en
 async function handleCompact(msg: Extract<InboundMessage, { type: 'compact' }>): Promise<void> {
   try {
     const session = await ensureSession();
+    // Serialize manual /compact behind any in-flight auto-compaction. Public
+    // session.compact() calls agent.abort() and uses its own controller; if
+    // it runs while _runAutoCompaction is suspended, agent state churns and
+    // the SDK's race surface widens. Wait for the auto-compaction to drain
+    // before starting a manual one. waitForCompaction has its own timeout
+    // fallback so we don't deadlock on a stuck subprocess.
+    await waitForCompaction(session);
     const result = await session.compact(msg.customInstructions);
     send({
       type: 'compact_result',
@@ -1470,6 +1507,61 @@ async function handleSetAutoCompaction(msg: Extract<InboundMessage, { type: 'set
       enabled: msg.enabled,
       errorMessage: errorMsg,
     });
+  }
+}
+
+async function handleUpdateRuntimeConfig(msg: RuntimeConfigUpdateMessage): Promise<void> {
+  try {
+    if (!initConfig) {
+      throw new Error('Runtime config update received before init');
+    }
+
+    initConfig = {
+      ...initConfig,
+      model: msg.model,
+      providerType: msg.providerType ?? initConfig.providerType,
+      authType: msg.authType ?? initConfig.authType,
+      baseUrl: msg.baseUrl,
+      customEndpoint: msg.customEndpoint,
+      customModels: msg.customModels,
+    };
+
+    if (piModelRegistry && initConfig.baseUrl?.trim() && initConfig.customEndpoint) {
+      const modelEntries: CustomEndpointModelEntry[] = (initConfig.customModels?.length
+        ? initConfig.customModels
+        : [initConfig.model || 'default']
+      ).map(normalizeCustomEndpointModelEntry);
+
+      customEndpointModelIds = new Set();
+      customModelOverrides.clear();
+      registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint.api, initConfig.baseUrl.trim(), modelEntries);
+    }
+
+    if (piSession && piModelRegistry) {
+      let piModel = resolvePiModel(piModelRegistry, msg.model, initConfig.piAuth?.provider, shouldPreferCustomEndpoint());
+      if (!piModel && initConfig.baseUrl?.trim() && initConfig.customEndpoint) {
+        const bareId = stripPiPrefix(msg.model);
+        registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint.api, initConfig.baseUrl.trim(), [{ id: bareId }]);
+        piModel = piModelRegistry.find('custom-endpoint', bareId) ?? undefined;
+        debugLog(`[runtime_config] Dynamically registered custom endpoint model: ${bareId}`);
+      }
+
+      if (!piModel) {
+        throw new Error(`Could not resolve model after runtime update: ${msg.model}`);
+      }
+
+      await piSession.setModel(piModel);
+      setInterceptorApiHints(piModel as { api?: string; provider?: string; baseUrl?: string });
+      debugLog(`[runtime_config] Updated runtime config and active model: ${piModel.provider}/${piModel.id}`);
+    } else {
+      debugLog('[runtime_config] Stored update; no active session/model registry yet');
+    }
+
+    send({ type: 'update_runtime_config_result', id: msg.id, success: true, updated: true });
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    debugLog(`[runtime_config] Failed: ${errorMsg}`);
+    send({ type: 'update_runtime_config_result', id: msg.id, success: false, updated: false, errorMessage: errorMsg });
   }
 }
 
@@ -1617,6 +1709,10 @@ async function processMessage(msg: InboundMessage): Promise<void> {
 
     case 'set_auto_compaction':
       await handleSetAutoCompaction(msg);
+      break;
+
+    case 'update_runtime_config':
+      await handleUpdateRuntimeConfig(msg);
       break;
 
     case 'steer':

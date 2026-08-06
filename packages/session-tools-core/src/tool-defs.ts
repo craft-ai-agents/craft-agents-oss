@@ -38,6 +38,9 @@ import { handleSetSessionLabels } from './handlers/set-session-labels.ts';
 import { handleSetSessionStatus } from './handlers/set-session-status.ts';
 import { handleGetSessionInfo } from './handlers/get-session-info.ts';
 import { handleListSessions } from './handlers/list-sessions.ts';
+import { handleListBackgroundTasks } from './handlers/list-background-tasks.ts';
+import { handleCreateTask } from './handlers/create-task.ts';
+import { handleArchiveSession } from './handlers/archive-session.ts';
 import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
 import { handleListMessagingChannels, handleUnbindMessagingChannel } from './handlers/messaging.ts';
 
@@ -123,7 +126,6 @@ export const UpdatePreferencesSchema = z.object({
   city: z.string().optional().describe("The user's city"),
   region: z.string().optional().describe("The user's state/region/province"),
   country: z.string().optional().describe("The user's country"),
-  language: z.string().optional().describe("The user's preferred language for responses"),
   notes: z.string().optional().describe('Additional notes about the user that would be helpful to remember (preferences, context, etc.). Replaces any existing notes.'),
   includeCoAuthoredBy: z.boolean().optional().describe("Whether to include 'Co-Authored-By: Craft Agent' trailer on git commits. Defaults to true."),
 });
@@ -194,6 +196,23 @@ export const GetSessionInfoSchema = z.object({
   sessionId: z.string().optional().describe('Session ID to query. Omit to get info about the current session.'),
 });
 
+export const ArchiveSessionSchema = z.object({
+  sessionId: z.string().describe('Session ID to archive or unarchive. Required — you cannot archive your own session.'),
+  archived: z.boolean().optional().describe('true to archive (default), false to unarchive.'),
+});
+
+export const CreateTaskSchema = z.object({
+  title: z.string().describe('Short task title shown on the board (also drives the slug)'),
+  description: z.string().describe('What the task should accomplish — becomes the task goal and the initial node prompt'),
+  acceptanceCriteria: z.string().optional().describe('Freeform rubric the final result is verified against'),
+  sources: z.array(z.string()).optional().describe('Source slugs to enable on the task sessions'),
+  skills: z.array(z.string()).optional().describe('Skill slugs applied to dispatched task prompts'),
+  llmConnection: z.string().optional().describe('LLM connection slug serving the model'),
+  model: z.string().optional().describe('Model ID for the task sessions (workspace default when omitted)'),
+  workingDirectory: z.string().optional().describe('Working directory for the task sessions'),
+  projectId: z.string().optional().describe("Project ID to bind the task to (defaults to the invoking session's project)"),
+});
+
 export const ListSessionsSchema = z.object({
   status: z.string().optional().describe('Filter by status'),
   label: z.string().optional().describe('Filter by label'),
@@ -201,6 +220,10 @@ export const ListSessionsSchema = z.object({
   sortBy: z.enum(['recent', 'name', 'status']).optional().describe('Sort order (default: recent)'),
   limit: z.number().optional().describe('Max sessions to return (default 20, max 100)'),
   offset: z.number().optional().describe('Skip first N results (for pagination)'),
+});
+
+export const ListBackgroundTasksSchema = z.object({
+  sessionId: z.string().optional().describe('Session ID to query. Omit to list background tasks for the current session.'),
 });
 
 // Inter-session messaging
@@ -329,7 +352,7 @@ The user will see a secure input UI with appropriate fields based on the auth mo
 
 **IMPORTANT:** After calling this tool, execution will be paused for user input.`,
 
-  update_user_preferences: `Update stored user preferences. Use this when you learn information about the user that would be helpful to remember for future conversations. This includes their name, timezone, location, preferred language, or any other relevant notes. Only update fields you have confirmed information about - don't guess.`,
+  update_user_preferences: `Update stored user preferences. Use this when you learn information about the user that would be helpful to remember for future conversations. This includes their name, timezone, location, or any other relevant notes. Only update fields you have confirmed information about - don't guess.`,
 
   transform_data: `Transform data files using a script and write structured output for datatable/spreadsheet blocks, or extract HTML content for html-preview blocks.
 
@@ -456,20 +479,46 @@ Use this to share anything that would help improve the product — issues you hi
 Use this to tag sessions for filtering or to trigger label-based automations (LabelAdd/LabelRemove events).
 Pass an empty array to clear all labels. Omit sessionId to target the current session.`,
 
-  set_session_status: `Set the status of the current session or a specific session by ID (e.g., "todo", "in_progress", "done").
+  set_session_status: `Set the status of the current session or a specific session by ID (e.g., "todo", "in_progress").
 
-Use this to signal completion or trigger status-based automations (SessionStatusChange events).
-Omit sessionId to target the current session.`,
+Use this to reflect progress or trigger status-based automations (SessionStatusChange events).
+Omit sessionId to target the current session.
+
+IMPORTANT: never move a task into a closed status (such as "done" or "cancelled") yourself — closing a task is the user's decision, made on the board. You may prepare and hand off work by setting an open status like "needs-review"; the user reviews and closes it. Closed-status calls are rejected.`,
+
+  archive_session: `Archive or unarchive another session in this workspace by ID.
+
+Archiving removes a session from the active list and unread counts — it does NOT delete it (pass archived=false to restore). Use it to tidy up finished or superseded sessions.
+Requires an explicit sessionId and cannot target your own session. Use list_sessions / get_session_info to find the target session's ID.`,
+
+  create_task: `Create a Craft Agents Task on the kanban board — writes tasks/<slug>/task.yaml and creates its orchestrator session. CREATION ONLY: the task lands in "todo" and is NOT run; starting it is the user's (or an automation's) decision.
+
+Provide title + description (the description becomes the task goal and the initial node prompt). Optional: acceptanceCriteria (verification rubric), sources / skills (workspace slugs), llmConnection + model, workingDirectory, projectId. When projectId is omitted, the task inherits the invoking session's project.
+
+Returns { slug, orchestratorSessionId, taskLabelId, warnings } — unknown source/skill slugs are reported as warnings, not errors. Use it when the user asks to capture or queue work as a task; to execute work right now, use the current session or spawn_session instead.`,
 
   get_session_info: `Get metadata about the current session or a specific session by ID.
 
-Returns labels, status, name, permission mode, and other details.
+Returns labels, status, name, permission mode, projectId (if the session is bound to a project), workingDirectory, and other details.
 Call with no arguments to introspect your own session state.`,
 
   list_sessions: `List sessions in the workspace. Returns total count + paginated results.
 
 Use filters (status, label, search) to narrow results instead of fetching everything. Default limit is 20 sessions.
 Use get_session_info for full details on a specific session (list-then-detail pattern).`,
+
+  list_background_tasks: `List background agents/tasks tracked for a session (running, finished, or orphaned).
+
+This is the authoritative way to answer a "what background work is running / what's the status?" question.
+It reads the main-process registry, which tracks tasks ACROSS turns — unlike the SDK's in-subprocess task tools,
+which only see tasks launched in the current subprocess and lose visibility of tasks from prior turns.
+
+Status meanings:
+- running: backgrounded and not yet reported finished.
+- completed / failed / stopped: a terminal notification was received.
+- orphaned: the turn that launched the task ended before it finished, so it was terminated with that turn's subprocess.
+
+Never guess or claim "the app restarted" — report exactly what this tool returns. Omit sessionId for the current session.`,
 
   send_agent_message: `Send a message to another session. The message is delivered with your session ID so the target can reply back.
 
@@ -551,8 +600,11 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   // Session self-management tools (registry — use context callbacks to reach SessionManager)
   { name: 'set_session_labels', description: TOOL_DESCRIPTIONS.set_session_labels, inputSchema: SetSessionLabelsSchema, executionMode: 'registry', safeMode: 'block', handler: handleSetSessionLabels },
   { name: 'set_session_status', description: TOOL_DESCRIPTIONS.set_session_status, inputSchema: SetSessionStatusSchema, executionMode: 'registry', safeMode: 'block', handler: handleSetSessionStatus },
+  { name: 'archive_session', description: TOOL_DESCRIPTIONS.archive_session, inputSchema: ArchiveSessionSchema, executionMode: 'registry', safeMode: 'block', handler: handleArchiveSession },
+  { name: 'create_task', description: TOOL_DESCRIPTIONS.create_task, inputSchema: CreateTaskSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateTask },
   { name: 'get_session_info', description: TOOL_DESCRIPTIONS.get_session_info, inputSchema: GetSessionInfoSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetSessionInfo },
   { name: 'list_sessions', description: TOOL_DESCRIPTIONS.list_sessions, inputSchema: ListSessionsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSessions },
+  { name: 'list_background_tasks', description: TOOL_DESCRIPTIONS.list_background_tasks, inputSchema: ListBackgroundTasksSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListBackgroundTasks },
   // Inter-session messaging
   { name: 'send_agent_message', description: TOOL_DESCRIPTIONS.send_agent_message, inputSchema: SendAgentMessageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSendAgentMessage },
   // Messaging gateway tools

@@ -16,15 +16,18 @@ export const GUI_HANDLED_CHANNELS = [
  * Connect to a remote server and wait for handshake.
  * When workspaceId is provided, the handshake is scoped to that workspace so
  * workspace-context RPC handlers (for example sessions:export) can resolve it.
+ * opts.requestTimeout overrides the 30s default — session transfers pull whole
+ * bundles as one response frame and need more headroom over WAN.
  * Returns the connected client or null + error message.
  */
-export async function connectToRemote(url: string, token: string, workspaceId?: string) {
+export async function connectToRemote(url: string, token: string, workspaceId?: string, opts?: { requestTimeout?: number }) {
   const { WsRpcClient } = await import('../../transport/client')
   const client = new WsRpcClient(url, {
     token,
     workspaceId,
     autoReconnect: false,
     tlsRejectUnauthorized: false,
+    requestTimeout: opts?.requestTimeout,
   })
 
   const connected = await new Promise<boolean>((resolve) => {

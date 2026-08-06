@@ -48,6 +48,8 @@ function createMockServer(): RpcServer {
     },
     push() {},
     async invokeClient() {},
+    hasClientCapability() { return false },
+    findClientsWithCapability() { return [] },
   }
 }
 
@@ -92,14 +94,18 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     labels,
     llm,
     oauth,
+    projects,
     sessions,
     settings,
     skills,
     sources,
     statuses,
     system,
+    tasks,
     workspace,
     onboarding,
+    resources,
+    transfer,
   ] = await Promise.all([
     import('@craft-agent/server-core/handlers/rpc/auth'),
     import('@craft-agent/server-core/handlers/rpc/automations'),
@@ -107,14 +113,18 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     import('@craft-agent/server-core/handlers/rpc/labels'),
     import('@craft-agent/server-core/handlers/rpc/llm-connections'),
     import('@craft-agent/server-core/handlers/rpc/oauth'),
+    import('@craft-agent/server-core/handlers/rpc/projects'),
     import('@craft-agent/server-core/handlers/rpc/sessions'),
     import('@craft-agent/server-core/handlers/rpc/settings'),
     import('@craft-agent/server-core/handlers/rpc/skills'),
     import('@craft-agent/server-core/handlers/rpc/sources'),
     import('@craft-agent/server-core/handlers/rpc/statuses'),
     import('@craft-agent/server-core/handlers/rpc/system'),
+    import('@craft-agent/server-core/handlers/rpc/tasks'),
     import('@craft-agent/server-core/handlers/rpc/workspace'),
     import('@craft-agent/server-core/handlers/rpc/onboarding'),
+    import('@craft-agent/server-core/handlers/rpc/resources'),
+    import('@craft-agent/server-core/handlers/rpc/transfer'),
   ])
 
   return new Set([
@@ -124,14 +134,18 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     ...labels.HANDLED_CHANNELS,
     ...llm.HANDLED_CHANNELS,
     ...oauth.HANDLED_CHANNELS,
+    ...projects.HANDLED_CHANNELS,
     ...sessions.HANDLED_CHANNELS,
     ...settings.HANDLED_CHANNELS,
     ...skills.HANDLED_CHANNELS,
     ...sources.HANDLED_CHANNELS,
     ...statuses.HANDLED_CHANNELS,
     ...system.CORE_HANDLED_CHANNELS,
+    ...tasks.HANDLED_CHANNELS,
     ...workspace.CORE_HANDLED_CHANNELS,
     ...onboarding.HANDLED_CHANNELS,
+    ...resources.HANDLED_CHANNELS,
+    ...transfer.HANDLED_CHANNELS,
   ])
 }
 

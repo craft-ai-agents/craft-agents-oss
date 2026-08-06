@@ -36,6 +36,13 @@ interface TransferState {
 
 const DEFAULT_TRANSFER_TTL_MS = 5 * 60 * 1000
 
+export const HANDLED_CHANNELS = [
+  RPC_CHANNELS.transfer.START,
+  RPC_CHANNELS.transfer.CHUNK,
+  RPC_CHANNELS.transfer.COMMIT,
+  RPC_CHANNELS.transfer.ABORT,
+] as const
+
 const activeTransfers = new Map<string, TransferState>()
 const transferableHandlers = new Map<string, HandlerFn>()
 

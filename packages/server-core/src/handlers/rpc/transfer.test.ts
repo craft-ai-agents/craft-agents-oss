@@ -19,6 +19,8 @@ function createHarness() {
     async invokeClient() {
       return undefined
     },
+    hasClientCapability() { return false },
+    findClientsWithCapability() { return [] },
   }
 
   registerTransferHandlers(server)

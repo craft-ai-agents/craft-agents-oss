@@ -28,6 +28,19 @@ export const CHANNEL_MAP = {
   cancelProcessing: invoke(RPC_CHANNELS.sessions.CANCEL),
   killShell: invoke(RPC_CHANNELS.sessions.KILL_SHELL),
   getTaskOutput: invoke(RPC_CHANNELS.tasks.GET_OUTPUT),
+
+  // Tasks (Conductor)
+  validateTask: invoke(RPC_CHANNELS.tasks.VALIDATE),
+  createTask: invoke(RPC_CHANNELS.tasks.CREATE),
+  generateTask: invoke(RPC_CHANNELS.tasks.GENERATE),
+  runTask: invoke(RPC_CHANNELS.tasks.RUN),
+  pauseTask: invoke(RPC_CHANNELS.tasks.PAUSE),
+  resumeTask: invoke(RPC_CHANNELS.tasks.RESUME),
+  stopTask: invoke(RPC_CHANNELS.tasks.STOP),
+  getTask: invoke(RPC_CHANNELS.tasks.GET),
+  listTasks: invoke(RPC_CHANNELS.tasks.LIST),
+  getTaskResults: invoke(RPC_CHANNELS.tasks.GET_RESULTS),
+  onTaskGenerated: listener(RPC_CHANNELS.tasks.GENERATED),
   respondToPermission: invoke(RPC_CHANNELS.sessions.RESPOND_TO_PERMISSION),
   respondToCredential: invoke(RPC_CHANNELS.sessions.RESPOND_TO_CREDENTIAL),
   sessionCommand: invoke(RPC_CHANNELS.sessions.COMMAND),
@@ -305,6 +318,12 @@ export const CHANNEL_MAP = {
   getEnable1MContext: invoke(RPC_CHANNELS.caching.GET_ENABLE_1M_CONTEXT),
   setEnable1MContext: invoke(RPC_CHANNELS.caching.SET_ENABLE_1M_CONTEXT),
 
+  // RTK token optimization
+  getRtkEnabled: invoke(RPC_CHANNELS.rtk.GET_ENABLED),
+  setRtkEnabled: invoke(RPC_CHANNELS.rtk.SET_ENABLED),
+  getRtkStatus: invoke(RPC_CHANNELS.rtk.GET_STATUS),
+  getRtkGain: invoke(RPC_CHANNELS.rtk.GET_GAIN),
+
   // Badge
   refreshBadge: invoke(RPC_CHANNELS.badge.REFRESH),
   setDockIconWithBadge: invoke(RPC_CHANNELS.badge.SET_ICON),
@@ -364,6 +383,17 @@ export const CHANNEL_MAP = {
   setDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_DEFAULT),
   setWorkspaceDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT),
 
+  // Projects
+  getProjects: invoke(RPC_CHANNELS.projects.GET),
+  getProject: invoke(RPC_CHANNELS.projects.GET_ONE),
+  createProject: invoke(RPC_CHANNELS.projects.CREATE),
+  updateProject: invoke(RPC_CHANNELS.projects.UPDATE),
+  deleteProject: invoke(RPC_CHANNELS.projects.DELETE),
+  listProjectAssets: invoke(RPC_CHANNELS.projects.LIST_ASSETS),
+  uploadProjectAsset: invoke(RPC_CHANNELS.projects.UPLOAD_ASSET),
+  deleteProjectAsset: invoke(RPC_CHANNELS.projects.DELETE_ASSET),
+  onProjectsChanged: listener(RPC_CHANNELS.projects.CHANGED),
+
   // Automations
   getAutomations: invoke(RPC_CHANNELS.automations.GET),
   testAutomation: invoke(RPC_CHANNELS.automations.TEST),
@@ -384,10 +414,15 @@ export const CHANNEL_MAP = {
   updateMessagingConfig: invoke(RPC_CHANNELS.messaging.UPDATE_CONFIG),
   testTelegramToken: invoke(RPC_CHANNELS.messaging.TEST_TELEGRAM),
   saveTelegramToken: invoke(RPC_CHANNELS.messaging.SAVE_TELEGRAM),
+  testLarkCredentials: invoke(RPC_CHANNELS.messaging.TEST_LARK),
+  saveLarkCredentials: invoke(RPC_CHANNELS.messaging.SAVE_LARK),
   disconnectMessagingPlatform: invoke(RPC_CHANNELS.messaging.DISCONNECT),
   forgetMessagingPlatform: invoke(RPC_CHANNELS.messaging.FORGET),
   getMessagingBindings: invoke(RPC_CHANNELS.messaging.GET_BINDINGS),
   generateMessagingPairingCode: invoke(RPC_CHANNELS.messaging.GENERATE_CODE),
+  generateMessagingSupergroupCode: invoke(RPC_CHANNELS.messaging.GENERATE_SUPERGROUP_CODE),
+  getMessagingSupergroup: invoke(RPC_CHANNELS.messaging.GET_SUPERGROUP),
+  unbindMessagingSupergroup: invoke(RPC_CHANNELS.messaging.UNBIND_SUPERGROUP),
   unbindMessagingSession: invoke(RPC_CHANNELS.messaging.UNBIND),
   unbindMessagingBinding: invoke(RPC_CHANNELS.messaging.UNBIND_BINDING),
   onMessagingBindingChanged: listener(RPC_CHANNELS.messaging.BINDING_CHANGED),
@@ -395,4 +430,15 @@ export const CHANNEL_MAP = {
   startWhatsAppConnect: invoke(RPC_CHANNELS.messaging.WA_START_CONNECT),
   submitWhatsAppPhone: invoke(RPC_CHANNELS.messaging.WA_SUBMIT_PHONE),
   onWhatsAppEvent: listener(RPC_CHANNELS.messaging.WA_UI_EVENT),
+
+  // Messaging access control (Phase 3)
+  getMessagingPlatformOwners: invoke(RPC_CHANNELS.messaging.GET_PLATFORM_OWNERS),
+  setMessagingPlatformOwners: invoke(RPC_CHANNELS.messaging.SET_PLATFORM_OWNERS),
+  getMessagingPlatformAccessMode: invoke(RPC_CHANNELS.messaging.GET_PLATFORM_ACCESS_MODE),
+  setMessagingPlatformAccessMode: invoke(RPC_CHANNELS.messaging.SET_PLATFORM_ACCESS_MODE),
+  getMessagingPendingSenders: invoke(RPC_CHANNELS.messaging.GET_PENDING_SENDERS),
+  dismissMessagingPendingSender: invoke(RPC_CHANNELS.messaging.DISMISS_PENDING_SENDER),
+  allowMessagingPendingSender: invoke(RPC_CHANNELS.messaging.ALLOW_PENDING_SENDER),
+  setMessagingBindingAccess: invoke(RPC_CHANNELS.messaging.SET_BINDING_ACCESS),
+  onMessagingPendingChanged: listener(RPC_CHANNELS.messaging.PENDING_CHANGED),
 } satisfies ChannelMap

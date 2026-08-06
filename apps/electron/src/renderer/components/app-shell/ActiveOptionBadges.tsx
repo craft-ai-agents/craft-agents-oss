@@ -5,11 +5,12 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { SlashCommandMenu, DEFAULT_SLASH_COMMAND_GROUPS, type SlashCommandId } from '@/components/ui/slash-command-menu'
 import { ChevronDown, Info } from 'lucide-react'
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from '@craft-agent/shared/agent/modes'
-import type { BackgroundTask } from './ActiveTasksBar'
+import { ActiveTasksBar, type BackgroundTask } from './ActiveTasksBar'
+import type { TerminalOverlayData } from './TaskActionMenu'
 import { LabelIcon, LabelValueTypeIcon } from '@/components/ui/label-icon'
 import { LabelValuePopover } from '@/components/ui/label-value-popover'
 import type { LabelConfig } from '@craft-agent/shared/labels'
-import { flattenLabels, parseLabelEntry, formatLabelEntry } from '@craft-agent/shared/labels'
+import { flattenLabels, parseLabelEntry, formatLabelEntry, formatDisplayValue } from '@craft-agent/shared/labels'
 import { resolveEntityColor } from '@craft-agent/shared/colors'
 import { useTheme } from '@/context/ThemeContext'
 import { useDynamicStack } from '@/hooks/useDynamicStack'
@@ -17,6 +18,7 @@ import type { SessionStatus } from '@/config/session-status-config'
 import { getState } from '@/config/session-status-config'
 import { SessionStatusMenu } from '@/components/ui/session-status-menu'
 import { MetadataBadge } from '@/components/ui/metadata-badge'
+import { openLabelLink } from '@/lib/open-label-link'
 import { SessionInfoPopover } from './SessionInfoPopover'
 
 // ============================================================================
@@ -55,6 +57,8 @@ export interface ActiveOptionBadgesProps {
   onKillTask?: (taskId: string) => void
   /** Callback to insert message into input field */
   onInsertMessage?: (text: string) => void
+  /** Callback to show a task's output in a terminal overlay (optional) */
+  onShowTerminalOverlay?: (data: TerminalOverlayData) => void
   /** Label entries applied to this session (e.g., ["bug", "priority::3"]) */
   sessionLabels?: string[]
   /** Available label configs (tree structure) for resolving label display */
@@ -93,6 +97,7 @@ export function ActiveOptionBadges({
   sessionFolderPath,
   onKillTask,
   onInsertMessage,
+  onShowTerminalOverlay,
   sessionLabels = [],
   labels = [],
   onRemoveLabel,
@@ -144,6 +149,22 @@ export function ActiveOptionBadges({
   }
 
   return (
+    <>
+      {/* Background tasks row — running / done / orphaned chips. Rendered above the
+       * options row so a growing number of tasks wraps without disturbing the
+       * mode/label badges. Only present when there are active/recent tasks. */}
+      {tasks.length > 0 && sessionId && (
+        <div className="flex items-center flex-wrap gap-2 mb-2 px-px">
+          <ActiveTasksBar
+            tasks={tasks}
+            sessionId={sessionId}
+            onKillTask={onKillTask}
+            onInsertMessage={onInsertMessage}
+            onShowTerminalOverlay={onShowTerminalOverlay}
+          />
+        </div>
+      )}
+
     <div className={cn("flex items-start gap-2 mb-2 px-px pt-px pb-0.5", className)}>
       {/* Left side: mode → state → labels stack */}
       <div className="flex items-start gap-2 min-w-0 flex-1">
@@ -223,26 +244,13 @@ export function ActiveOptionBadges({
         <FilesPopoverButton sessionId={sessionId} sessionFolderPath={sessionFolderPath} />
       </div>
     </div>
+    </>
   )
 }
 
 // ============================================================================
 // Label Badge Component
 // ============================================================================
-
-/**
- * Format a raw value for display based on the label's valueType.
- * Dates render as locale short format; numbers and strings pass through.
- */
-function formatDisplayValue(rawValue: string, valueType?: 'string' | 'number' | 'date'): string {
-  if (valueType === 'date') {
-    const date = new Date(rawValue.includes('T') ? rawValue + ':00Z' : rawValue + 'T00:00:00Z')
-    if (!isNaN(date.getTime())) {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    }
-  }
-  return rawValue
-}
 
 /**
  * Renders a single label badge with LabelValuePopover for editing/removal.
@@ -300,6 +308,7 @@ function LabelBadge({
       <MetadataBadge
         label={label.name}
         value={displayValue}
+        onValueClick={label.valueType === 'link' && value ? () => openLabelLink(value) : undefined}
         icon={<LabelIcon label={label} size="lg" />}
         valueHintIcon={label.valueType ? <LabelValueTypeIcon valueType={label.valueType} /> : undefined}
         badgeColor={resolvedColor}

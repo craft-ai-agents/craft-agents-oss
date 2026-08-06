@@ -14,6 +14,7 @@
  * - CommandExpansion: $(...) substitution
  */
 
+/// <reference path="./bash-parser.d.ts" />
 import bashParser from 'bash-parser';
 import { debug } from '../utils/debug.ts';
 import type { CompiledBashPattern } from './mode-types.ts';

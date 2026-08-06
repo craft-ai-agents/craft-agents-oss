@@ -23,6 +23,7 @@ import { useAppShellContext } from '@/context/AppShellContext'
 import { getStateColor, getStateIcon, type SessionStatusId } from '@/config/session-status-config'
 import { extractLabelId } from '@craft-agent/shared/labels'
 import { LabelMenuItems, StatusMenuItems } from './SessionMenuParts'
+import { hasTransferTargets } from './transfer-targets'
 
 export interface BatchSessionMenuProps {
   /** Callback to open Send to Workspace dialog for the selected sessions */
@@ -51,7 +52,7 @@ export function BatchSessionMenu({ onSendToWorkspace }: BatchSessionMenuProps = 
     labels = [],
   } = useAppShellContext()
 
-  const hasRemoteWorkspaces = workspaces?.some(w => w.remoteServer) ?? false
+  const canSendToWorkspace = hasTransferTargets(workspaces)
 
   // Hydrate selected session metadata
   const selectedMetas = useMemo(() => {
@@ -237,7 +238,7 @@ export function BatchSessionMenu({ onSendToWorkspace }: BatchSessionMenuProps = 
       </MenuItem>
 
       {/* Send to Workspace */}
-      {hasRemoteWorkspaces && (
+      {canSendToWorkspace && (
         <MenuItem onClick={handleSendToWorkspace}>
           <Send className="h-3.5 w-3.5" />
           <span className="flex-1">{t("sessionMenu.sendToWorkspace")}</span>

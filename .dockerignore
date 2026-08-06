@@ -1,5 +1,12 @@
-# Dependencies (rebuilt inside container)
+# Dependencies (rebuilt inside container).
+# Both patterns are required: `node_modules/` matches the top-level only,
+# `**/node_modules` catches the per-package + per-app nested copies that
+# Bun materialises in a monorepo. Without the second pattern the host's
+# `apps/cli/node_modules/@types/bun` (a real directory on macOS) overwrites
+# the symlink that `bun install --frozen-lockfile` creates inside the
+# container, triggering "cannot copy to non-directory" during `COPY . .`.
 node_modules/
+**/node_modules
 
 # Build artifacts
 dist/

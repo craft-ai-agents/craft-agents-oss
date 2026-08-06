@@ -74,6 +74,8 @@ Only use 'attachments' for existing file paths on disk — the tool reads them a
         .describe('Labels for the new session'),
       workingDirectory: z.string().optional()
         .describe('Working directory for the new session'),
+      projectId: z.string().optional()
+        .describe('Workspace project id to bind the new session to. Inherits the project working directory unless overridden.'),
       attachments: z.array(z.object({
         path: z.string().describe('Absolute file path on disk'),
         name: z.string().optional().describe('Display name (defaults to file basename)'),

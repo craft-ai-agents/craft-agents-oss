@@ -102,12 +102,8 @@ export function TelegramConnectDialog({
         <DialogHeader>
           <DialogTitle>
             {reconfigure
-              ? t('settings.messaging.telegram.reconfigureTitle', {
-                  defaultValue: 'Replace Telegram token',
-                })
-              : t('settings.messaging.telegram.connectTitle', {
-                  defaultValue: 'Connect Telegram',
-                })}
+              ? t('settings.messaging.telegram.reconfigureTitle')
+              : t('settings.messaging.telegram.connectTitle')}
           </DialogTitle>
           <DialogDescription className="whitespace-pre-line">
             {t('settings.messaging.telegram.instructions')}

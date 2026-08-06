@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useTranslation } from "react-i18next"
 import { cn } from "../../lib/utils"
 
 /**
@@ -40,11 +41,12 @@ export interface SpinnerProps {
  * ```
  */
 export function Spinner({ className }: SpinnerProps) {
+  const { t } = useTranslation()
   return (
     <span
       className={cn("spinner", className)}
       role="status"
-      aria-label="Loading"
+      aria-label={t("common.loading")}
     >
       <span className="spinner-cube" />
       <span className="spinner-cube" />

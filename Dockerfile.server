@@ -46,8 +46,13 @@ RUN groupadd -r craftagents && \
 
 WORKDIR /app
 
-# Copy dependency manifests first for layer caching
-COPY package.json bun.lock ./
+# Copy dependency manifests first for layer caching.
+# `bunfig.toml` MUST be in the WORKDIR before `bun install` runs — it sets
+# `linker = "hoisted"`, which is required for the WebUI / renderer build
+# (transitive deps like i18next, @tiptap/*, pdfjs-dist resolve at top-level
+# node_modules). Without it Bun defaults to isolated installs and the Vite
+# build fails on the first transitive bare-package import.
+COPY package.json bun.lock bunfig.toml ./
 COPY packages/server/package.json packages/server/
 COPY packages/server-core/package.json packages/server-core/
 COPY packages/shared/package.json packages/shared/

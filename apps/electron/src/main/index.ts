@@ -59,8 +59,22 @@ Sentry.init({
 })
 
 // Initialize i18n for main process (menus, dialogs, etc.)
-import { setupI18n, i18n } from '@craft-agent/shared/i18n'
+//
+// The main-process i18n instance has no detection plugin (no localStorage in Node)
+// — it always starts at `fallbackLng: 'en'`. We hydrate it here from the persisted
+// `uiLanguage` preference, which is maintained by the `i18n:changeLanguage` IPC
+// handler whenever the user changes Appearance → Language. Without this, the
+// renderer would restore its language from localStorage on every restart while
+// the main process silently stayed at English — breaking session title language,
+// the system prompt's "Preferred language" line, and the native menu.
+import { setupI18n, i18n, SUPPORTED_LANGUAGE_CODES, type LanguageCode } from '@craft-agent/shared/i18n'
+import { getPersistedUiLanguage, setPersistedUiLanguage } from '@craft-agent/shared/config'
 setupI18n()
+const persistedUiLanguage = getPersistedUiLanguage()
+if (persistedUiLanguage) {
+  void i18n.changeLanguage(persistedUiLanguage)
+}
+// Note: deferred startup log lives below where mainLog is available (after log.initialize()).
 
 // Set anonymous machine ID for Sentry user tracking (no PII — just a hash).
 // Uses hostname + homedir to produce a stable per-machine identifier.
@@ -97,17 +111,24 @@ import { handleDeepLink } from './deep-link'
 import { BrowserPaneManager } from './browser-pane-manager'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
 import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-protocol'
-import log, { isDebugMode, mainLog, getLogFilePath, getMessagingGatewayLogFilePath, messagingGatewayLog } from './logger'
+import log, { isDebugMode, mainLog, getLogFilePath, getMessagingGatewayLogFilePath, messagingGatewayLog, autoUpdateLog } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { registerPiModelResolver } from '@craft-agent/shared/config'
 import { getPiModelsForAuthProvider, getAllPiModels } from '@craft-agent/shared/config'
 import { initNotificationService, initBadgeIcon, initInstanceBadge, updateBadgeCount } from './notifications'
-import { checkForUpdatesOnLaunch, setAutoUpdateEventSink, isUpdating } from './auto-update'
+import { checkForUpdatesOnLaunch, setAutoUpdateEventSink, isUpdating, setBeforeUpdateQuitHook, setBeforeUpdateInstallHook, setInstallQuitFailedHook } from './auto-update'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import { validateGitBashPath, checkVCRedistInstalled } from '@craft-agent/server-core/services'
 
 // Initialize electron-log for renderer process support
 log.initialize()
+
+// Diagnostic: report main-process i18n hydration result. We log here (not inline
+// at the hydration site above) because mainLog is only available after this point.
+mainLog.info('[i18n] startup hydration', {
+  persistedUiLanguage: persistedUiLanguage ?? null,
+  resolvedLanguageAfterHydration: i18n.resolvedLanguage ?? null,
+})
 
 // Enable debug/perf in dev mode (running from source)
 if (isDebugMode) {
@@ -177,7 +198,7 @@ if (isDebugMode) {
 }
 
 // Register Pi model resolver so llm-connections.ts can resolve Pi models
-// without importing @mariozechner/pi-ai (which breaks the Vite renderer build)
+// without importing @earendil-works/pi-ai (which breaks the Vite renderer build)
 registerPiModelResolver((piAuthProvider) =>
   piAuthProvider ? getPiModelsForAuthProvider(piAuthProvider) : getAllPiModels()
 )
@@ -455,6 +476,7 @@ app.whenReady().then(async () => {
     browserPaneManager = new BrowserPaneManager()
     browserPaneManager.setWindowManager(windowManager)
     browserPaneManager.registerToolbarIpc()
+    browserPaneManager.registerCapabilityIpc()
 
     // Build real PlatformServices from Electron APIs
     const platform: PlatformServices = createElectronPlatform({
@@ -635,6 +657,7 @@ app.whenReady().then(async () => {
           sm.setBrowserPaneManager(browserPaneManager!)
           return sm
         },
+        bindRpcServer: (sm, server) => sm.setRpcServer(server),
         createHandlerDeps: ({ sessionManager: sm, platform: p, oauthFlowStore: ofs }) => {
           // The messaging handle is built here because it needs sessionManager.
           // The WS publisher is attached after bootstrapServer resolves (via
@@ -760,17 +783,25 @@ app.whenReady().then(async () => {
         }
       })
 
-      // Transfer session to another workspace — orchestrated in main process
-      // so large bundles can be moved directly between owning servers.
-      ipcMain.handle('session:transferToRemoteWorkspace', async (_event, sessionId: string, targetWorkspaceId: string, sessionIndex?: number, sessionCount?: number) => {
+      // Transfer session to another workspace — orchestrated in main process so
+      // bundles can be moved directly between owning servers. Every connection is
+      // outbound from this process: remote sources/targets are reached over WS,
+      // a local target imports in-process on the embedded server — the local
+      // machine never needs to accept an inbound connection.
+      ipcMain.handle('session:transferToWorkspace', async (_event, sessionId: string, targetWorkspaceId: string, sessionIndex?: number, sessionCount?: number) => {
         const idx = sessionIndex ?? 0
         const count = sessionCount ?? 1
         const { getWorkspaceByNameOrId } = await import('@craft-agent/shared/config')
         const { connectToRemote } = await import('./handlers/workspace')
         const { CHUNKED_TRANSFER_THRESHOLD, getChunkCount, invokeChunked, prepareChunkedPayload } = await import('./chunked-rpc')
 
+        // The pull side (sessions:export) returns the whole bundle as a single
+        // unchunked response frame — up to MAX_BUNDLE_SIZE_BYTES over WAN — so
+        // the 30s default request timeout is not enough for transfer clients.
+        const TRANSFER_REQUEST_TIMEOUT_MS = 120_000
+
         const targetWorkspace = getWorkspaceByNameOrId(targetWorkspaceId)
-        if (!targetWorkspace?.remoteServer) throw new Error(`Workspace ${targetWorkspaceId} has no remote server`)
+        if (!targetWorkspace) throw new Error(`Workspace ${targetWorkspaceId} not found`)
         if (!sessionManager) throw new Error('Session manager not initialized')
 
         const sourceWorkspaceLocalId = windowManager?.getWorkspaceForWindow(_event.sender.id)
@@ -784,7 +815,7 @@ app.whenReady().then(async () => {
         if (sourceWorkspace.remoteServer) {
           const { url: sourceUrl, token: sourceToken, remoteWorkspaceId: sourceRemoteWorkspaceId } = sourceWorkspace.remoteServer
           console.log(`[Transfer] Exporting remote-owned session ${sessionId} from workspace ${sourceRemoteWorkspaceId}...`)
-          const { client: sourceClient, error: sourceError } = await connectToRemote(sourceUrl, sourceToken, sourceRemoteWorkspaceId)
+          const { client: sourceClient, error: sourceError } = await connectToRemote(sourceUrl, sourceToken, sourceRemoteWorkspaceId, { requestTimeout: TRANSFER_REQUEST_TIMEOUT_MS })
           if (!sourceClient) throw new Error(sourceError ?? 'Connection failed to source remote server')
 
           try {
@@ -825,9 +856,24 @@ app.whenReady().then(async () => {
 
         console.log(`[Transfer] Export complete: ${bundle.session?.messages?.length ?? 0} messages, ${bundle.files?.length ?? 0} files`)
 
+        const emitProgress = (chunkSent: number, chunkTotal: number) => {
+          try { _event.sender.send('transfer:progress', { sessionIndex: idx, sessionCount: count, chunkSent, chunkTotal }) } catch { /* renderer may be gone */ }
+        }
+
+        if (!targetWorkspace.remoteServer) {
+          // Local target — import in-process on the embedded server. Same method
+          // the sessions:import RPC handler runs on a remote target, so the
+          // result shape matches the remote path.
+          console.log(`[Transfer] Target workspace ${targetWorkspace.id} is local → importing in-process`)
+          emitProgress(0, 1)
+          const result = await sessionManager.importSession(targetWorkspace.id, bundle, 'fork')
+          emitProgress(1, 1)
+          return result
+        }
+
         const { url, token, remoteWorkspaceId } = targetWorkspace.remoteServer
         console.log(`[Transfer] Connecting to target remote server: ${url}`)
-        const { client, error } = await connectToRemote(url, token, remoteWorkspaceId)
+        const { client, error } = await connectToRemote(url, token, remoteWorkspaceId, { requestTimeout: TRANSFER_REQUEST_TIMEOUT_MS })
         if (!client) throw new Error(error ?? 'Connection failed to target remote server')
         console.log('[Transfer] Connected to target remote server')
 
@@ -835,10 +881,6 @@ app.whenReady().then(async () => {
           const preparedBundle = prepareChunkedPayload(bundle)
           const payloadSize = preparedBundle.bytes.length
           const payloadMB = (payloadSize / (1024 * 1024)).toFixed(1)
-
-          const emitProgress = (chunkSent: number, chunkTotal: number) => {
-            try { _event.sender.send('transfer:progress', { sessionIndex: idx, sessionCount: count, chunkSent, chunkTotal }) } catch { /* renderer may be gone */ }
-          }
 
           if (payloadSize < CHUNKED_TRANSFER_THRESHOLD) {
             console.log(`[Transfer] Bundle size: ${payloadMB}MB (< 5MB threshold) → using direct RPC`)
@@ -869,9 +911,28 @@ app.whenReady().then(async () => {
         app.exit(0)
       })
 
-      // Language change: sync from renderer to main process and rebuild native menu
-      ipcMain.handle('i18n:changeLanguage', async (_event, lang: string) => {
-        i18n.changeLanguage(lang)
+      // Language change: sync from renderer to main process, persist, and rebuild native menu.
+      // Persistence here is what lets the next app launch hydrate main's i18n correctly —
+      // see the `getPersistedUiLanguage()` block at the top of this file.
+      ipcMain.handle('i18n:changeLanguage', async (_event, lang: unknown) => {
+        const previousResolved = i18n.resolvedLanguage ?? null
+        if (typeof lang !== 'string' || !SUPPORTED_LANGUAGE_CODES.includes(lang as LanguageCode)) {
+          // Defense-in-depth: renderer guarantees a supported code, but if a renegade
+          // caller hands us garbage we drop it silently rather than poison i18n state.
+          mainLog.warn('[i18n] changeLanguage IPC rejected — unsupported code', {
+            incoming: lang,
+            previousResolved,
+          })
+          return
+        }
+        const code = lang as LanguageCode
+        await i18n.changeLanguage(code)
+        setPersistedUiLanguage(code)
+        mainLog.info('[i18n] changeLanguage IPC applied', {
+          incoming: code,
+          previousResolved,
+          newResolved: i18n.resolvedLanguage ?? null,
+        })
         const { rebuildMenu } = await import('./menu')
         await rebuildMenu()
       })
@@ -1043,6 +1104,34 @@ app.whenReady().then(async () => {
     // Initialize auto-update (check immediately on launch)
     // Skip in dev mode to avoid replacing /Applications app and launching it instead
     if (moduleSink) setAutoUpdateEventSink(moduleSink)
+    // Snapshot multi-window state BEFORE quitAndInstall. electron-updater
+    // (Squirrel.Mac) destroys BrowserWindows between quitAndInstall and
+    // before-quit firing; saving from before-quit alone would overwrite
+    // window-state.json with an empty array.
+    setBeforeUpdateQuitHook(() => captureAndSaveWindowState('pre-update'))
+    // Before the installer hands off, run the full quit cleanup and mark the app
+    // as quitting so before-quit's guard returns early instead of cancelling
+    // Squirrel.Mac's quit with preventDefault (#891).
+    setBeforeUpdateInstallHook(async () => {
+      isQuitting = true
+      windowManager?.setAppQuitting(true)
+      await performQuitCleanup()
+    })
+    // If quitAndInstall throws after the cleanup above already ran, the process
+    // is a zombie: sessions flushed but no watchers/messaging/lock, and isQuitting
+    // makes the next quit skip the flush. The only honest recovery is a controlled
+    // relaunch into a fresh process (#891).
+    setInstallQuitFailedHook(() => {
+      mainLog.error('[auto-update] quitAndInstall failed after cleanup — relaunching')
+      dialog.showMessageBoxSync({
+        type: 'error',
+        title: 'Update failed',
+        message: 'The update could not be installed.',
+        detail: 'Craft Agents will restart now. The update will be retried on the next launch.',
+      })
+      app.relaunch()
+      app.exit(0)
+    })
     if (app.isPackaged) {
       checkForUpdatesOnLaunch().catch(err => {
         mainLog.error('[auto-update] Launch check failed:', err)
@@ -1098,6 +1187,82 @@ app.on('window-all-closed', () => {
 // Track if we're in the process of quitting (to avoid re-entry)
 let isQuitting = false
 
+/**
+ * Capture the current multi-window state and persist it to disk.
+ * Called from two sites:
+ *   - before-quit (normal quit path, reason='before-quit')
+ *   - installUpdate hook (auto-update path, reason='pre-update'), because
+ *     electron-updater destroys BrowserWindows between quitAndInstall and
+ *     before-quit firing — by the time before-quit runs, getWindowStates()
+ *     returns an empty array and would clobber the on-disk state.
+ * Returns the number of windows saved, or -1 if windowManager isn't ready.
+ */
+function captureAndSaveWindowState(reason: 'before-quit' | 'pre-update'): number {
+  if (!windowManager) return -1
+  const windows = windowManager.getWindowStates()
+  const focusedWindow = BrowserWindow.getFocusedWindow()
+  const lastFocusedWorkspaceId = focusedWindow
+    ? windowManager.getWorkspaceForWindow(focusedWindow.webContents.id) ?? undefined
+    : undefined
+  saveWindowState({ windows, lastFocusedWorkspaceId })
+  mainLog.info('[window-state] saved', { windowCount: windows.length, reason })
+  return windows.length
+}
+
+// Flush sessions and release all quit-time resources. Shared by the normal quit
+// path (before-quit) and the update-install handoff (beforeUpdateInstallHook), so
+// the two cleanup sequences can't drift (#891).
+let quitCleanupRan = false
+async function performQuitCleanup(): Promise<void> {
+  // Idempotent: a failed update install may retry, and the update path plus a
+  // subsequent quit must not dispose already-disposed services.
+  if (quitCleanupRan) {
+    mainLog.info('Quit cleanup already ran, skipping')
+    return
+  }
+  quitCleanupRan = true
+
+  if (sessionManager) {
+    try {
+      await sessionManager.flushAllSessions()
+      mainLog.info('Flushed all pending session writes')
+    } catch (error) {
+      mainLog.error('Failed to flush sessions:', error)
+    }
+    // Clean up SessionManager resources (file watchers, timers, etc.)
+    sessionManager.cleanup()
+  }
+
+  // Clean up browser pane instances
+  if (browserPaneManager) {
+    browserPaneManager.destroyAll()
+  }
+
+  // Clean up OAuth flow store (stop periodic cleanup timer)
+  if (oauthFlowStore) {
+    oauthFlowStore.dispose()
+  }
+
+  // Stop all model refresh timers
+  getModelRefreshService().stopAll()
+
+  // Stop messaging gateways so the WhatsApp worker subprocess exits cleanly.
+  if (messagingHandle) {
+    try {
+      await messagingHandle.dispose()
+    } catch (err) {
+      mainLog.error('[messaging] dispose failed:', err)
+    }
+  }
+
+  // Clean up power manager (release power blocker)
+  const { cleanup: cleanupPowerManager } = await import('./power-manager')
+  cleanupPowerManager()
+
+  // Release the server lock file so the next launch doesn't see a stale PID.
+  releaseServerLock()
+}
+
 // Save window state and clean up resources before quitting
 app.on('before-quit', async (event) => {
   // Avoid re-entry when we call app.exit()
@@ -1108,74 +1273,40 @@ app.on('before-quit', async (event) => {
   windowManager?.setAppQuitting(true)
 
   if (windowManager) {
-    // Get full window states (includes bounds, type, and query)
     const windows = windowManager.getWindowStates()
-    // Get the focused window's workspace as last focused
-    const focusedWindow = BrowserWindow.getFocusedWindow()
-    let lastFocusedWorkspaceId: string | undefined
-    if (focusedWindow) {
-      lastFocusedWorkspaceId = windowManager.getWorkspaceForWindow(focusedWindow.webContents.id) ?? undefined
+    // Empty-snapshot guard: during update-quit, electron-updater has already
+    // destroyed all BrowserWindows by the time before-quit fires. The pre-update
+    // hook already saved the real state — don't let this late save overwrite it.
+    if (windows.length === 0 && isUpdating()) {
+      mainLog.warn('[window-state] skip save: empty snapshot during update-quit (pre-update snapshot wins)')
+    } else {
+      captureAndSaveWindowState('before-quit')
     }
-
-    saveWindowState({
-      windows,
-      lastFocusedWorkspaceId,
-    })
-    mainLog.info('Saved window state:', windows.length, 'windows')
+    // Diagnostic correlation with installUpdate's [update-flow] log. During an
+    // update-quit, record it to the dedicated always-on auto-update log (#891)
+    // so the install/quit handoff is diagnosable in production; normal quits
+    // stay on the debug-only main log.
+    const isUpdateQuit = isUpdating()
+    const beforeQuitSave = {
+      windowCount: windows.length,
+      electronWindowCount: BrowserWindow.getAllWindows().length,
+      isUpdating: isUpdateQuit,
+      reason: isUpdateQuit ? 'update-quit' : 'user-quit',
+    }
+    if (isUpdateQuit) {
+      autoUpdateLog.info('before-quit save', beforeQuitSave)
+    } else {
+      mainLog.info('[update-flow] before-quit save', beforeQuitSave)
+    }
   }
 
-  // Flush all pending session writes before quitting
+  // Normal quit: flush + clean up, then exit. The update-install path does NOT
+  // reach here — installUpdate's beforeUpdateInstallHook already ran
+  // performQuitCleanup and set isQuitting, so the guard at the top returns early
+  // and Squirrel.Mac's quit proceeds uninterrupted so the update installs (#891).
   if (sessionManager) {
-    // Prevent quit until sessions are flushed
     event.preventDefault()
-    try {
-      await sessionManager.flushAllSessions()
-      mainLog.info('Flushed all pending session writes')
-    } catch (error) {
-      mainLog.error('Failed to flush sessions:', error)
-    }
-    // Clean up SessionManager resources (file watchers, timers, etc.)
-    sessionManager.cleanup()
-
-    // Clean up browser pane instances
-    if (browserPaneManager) {
-      browserPaneManager.destroyAll()
-    }
-
-    // Clean up OAuth flow store (stop periodic cleanup timer)
-    if (oauthFlowStore) {
-      oauthFlowStore.dispose()
-    }
-
-    // Stop all model refresh timers
-    getModelRefreshService().stopAll()
-
-    // Stop messaging gateways so the WhatsApp worker subprocess exits cleanly.
-    if (messagingHandle) {
-      try {
-        await messagingHandle.dispose()
-      } catch (err) {
-        mainLog.error('[messaging] dispose failed:', err)
-      }
-    }
-
-    // Clean up power manager (release power blocker)
-    const { cleanup: cleanupPowerManager } = await import('./power-manager')
-    cleanupPowerManager()
-
-    // Release the server lock file so the next launch doesn't see a stale PID.
-    // This must happen regardless of the exit path (normal quit or update quit).
-    releaseServerLock()
-
-    // If update is in progress, let electron-updater handle the quit flow
-    // Force exit breaks the NSIS installer on Windows
-    if (isUpdating()) {
-      mainLog.info('Update in progress, letting electron-updater handle quit')
-      app.quit()
-      return
-    }
-
-    // Now actually quit
+    await performQuitCleanup()
     app.exit(0)
   }
 })

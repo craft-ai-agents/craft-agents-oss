@@ -14,6 +14,13 @@ export interface ClaudeSdkErrorContext {
   capturedApiError: LastApiError | null;
   providerType?: string;
   piAuthProvider?: string;
+  /**
+   * True when the just-sent user turn included image/PDF attachments. Used to
+   * decide whether the generic invalid_request fallback should mention
+   * attachments at all — when the user sent a plain-text turn, attachment
+   * advice is misleading.
+   */
+  userTurnHadAttachments?: boolean;
 }
 
 type FailureKind = 'provider' | 'network' | 'unknown';
@@ -41,16 +48,50 @@ const NETWORK_HINTS = [
   'connection refused',
 ] as const;
 
-// Signals that an invalid_request error is caused by the 1M context beta
-// (the user's API tier doesn't support it, or the request exceeded even 1M).
-// Anthropic's error strings evolve — match on multiple hints.
+// Signals specific to the 1M context beta. When these fire, the user is told
+// to disable "Extended Context (1M)" in settings — only correct for users on
+// the 1M tier, so the matcher must be precise.
 const ONE_M_CONTEXT_HINTS = [
   'context-1m',
   'context_1m',
+] as const;
+
+// Phrases that, when paired with the word "tier", confirm the error is about
+// 1M context access specifically (vs. tier-gated images, models, audio,
+// document support, etc.). The bare word "tier" is far too broad on its own.
+const ONE_M_TIER_PHRASES = [
+  'context',
+  '1m',
+  'extended',
+  '200k',
+  '1000k',
+] as const;
+
+// Signals that the request exceeded the model's context window in general,
+// not specifically 1M. These map to a "Context Window Exceeded" error with
+// /compact + new-session advice — appropriate for any tier.
+const CONTEXT_OVERFLOW_HINTS = [
   'context window',
   'context_window',
-  'tier',
   'exceeds the context',
+  'prompt is too long',
+  'prompt exceeds',
+  'too many tokens',
+  'maximum context',
+  'context length',
+  'input is too long',
+] as const;
+
+// Phrases that indicate the API actually rejected an attachment (vs. a
+// generic context/format issue mislabeled as invalid_request). Only when one
+// of these fires — or the user-sent turn included an attachment — do we
+// surface attachment-specific advice.
+const ATTACHMENT_REJECTION_HINTS = [
+  'image',
+  'attachment',
+  'media',
+  'unsupported format',
+  'could not process',
 ] as const;
 
 function isOneMContextError(context: ClaudeSdkErrorContext): boolean {
@@ -58,7 +99,30 @@ function isOneMContextError(context: ClaudeSdkErrorContext): boolean {
     normalize(context.capturedApiError?.message),
     normalize(context.actualError?.message),
   ].join(' ');
-  return includesAny(haystack, ONE_M_CONTEXT_HINTS);
+  if (includesAny(haystack, ONE_M_CONTEXT_HINTS)) return true;
+  // "tier" alone is ambiguous — only counts as 1M when it co-occurs with a
+  // context-window-specific phrase. Image/model/audio/feature-tier errors
+  // are deliberately excluded.
+  if (haystack.includes('tier') && includesAny(haystack, ONE_M_TIER_PHRASES)) {
+    return true;
+  }
+  return false;
+}
+
+function isContextOverflowError(context: ClaudeSdkErrorContext): boolean {
+  const haystack = [
+    normalize(context.capturedApiError?.message),
+    normalize(context.actualError?.message),
+  ].join(' ');
+  return includesAny(haystack, CONTEXT_OVERFLOW_HINTS);
+}
+
+function isAttachmentRejection(context: ClaudeSdkErrorContext): boolean {
+  const haystack = [
+    normalize(context.capturedApiError?.message),
+    normalize(context.actualError?.message),
+  ].join(' ');
+  return includesAny(haystack, ATTACHMENT_REJECTION_HINTS);
 }
 
 function normalize(value?: string | null): string {
@@ -224,7 +288,7 @@ export function mapClaudeSdkAssistantError(
         providerInfo,
       };
 
-    case 'invalid_request':
+    case 'invalid_request': {
       if (isOneMContextError(context)) {
         return {
           code: 'invalid_request',
@@ -237,27 +301,65 @@ export function mapClaudeSdkAssistantError(
           ],
           actions: [
             { key: 's', label: 'Settings', action: 'settings' },
-            { key: 'r', label: 'Retry', action: 'retry' },
+            { key: 'c', label: 'Compact', command: '/compact' },
           ],
-          canRetry: true,
-          retryDelayMs: 1000,
+          // Retrying the same payload won't help — user must change settings
+          // or compact history first. Hiding the button is correct UX.
+          canRetry: false,
           providerInfo,
         };
       }
+
+      if (isContextOverflowError(context)) {
+        return {
+          code: 'invalid_request',
+          title: 'Context Window Exceeded',
+          message: 'The conversation has grown larger than the model can handle.',
+          details: [
+            ...apiDetails,
+            'Run /compact to summarize history and free up context',
+            'Or start a new conversation to keep going',
+          ],
+          actions: [
+            { key: 'c', label: 'Compact', command: '/compact' },
+          ],
+          // Same as 1M case: retrying without changing the payload hits the
+          // same wall, so suppress the button.
+          canRetry: false,
+          providerInfo,
+        };
+      }
+
+      // Generic fallback. Only surface attachment hints when the API actually
+      // mentioned an attachment-shaped problem OR the user-sent turn included
+      // attachments. Otherwise the "remove attachments" advice misleads users
+      // whose conversation history is poisoned by oversized tool results.
+      const showAttachmentHints =
+        context.userTurnHadAttachments === true || isAttachmentRejection(context);
+      const fallbackHints: string[] = [];
+      if (showAttachmentHints) {
+        fallbackHints.push('Try removing any attachments and resending');
+        fallbackHints.push('Check if images are in a supported format (PNG, JPEG, GIF, WebP)');
+      } else {
+        fallbackHints.push('If this keeps repeating, the conversation may have grown too large — try /compact or start a new session');
+      }
+      // When neither error source provided detail, tell the user where to look
+      // instead of leaving them with vague advice.
+      if (apiDetails.length === 0) {
+        fallbackHints.push("No detailed error info available — check the app's main process log for the raw response");
+      }
+
       return {
         code: 'invalid_request',
         title: 'Invalid Request',
         message: 'The API rejected this request.',
-        details: [
-          ...apiDetails,
-          'Try removing any attachments and resending',
-          'Check if images are in a supported format (PNG, JPEG, GIF, WebP)',
-        ],
+        details: [...apiDetails, ...fallbackHints],
         actions: retryAction,
         canRetry: true,
         retryDelayMs: 1000,
         providerInfo,
       };
+    }
 
     case 'server_error':
       return failureKind === 'network' ? networkError : providerError;

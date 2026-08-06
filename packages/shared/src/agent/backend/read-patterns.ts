@@ -8,6 +8,7 @@
  * Used by event adapters to emit these as "Read" tool events for better UI display.
  */
 
+/// <reference path="../bash-parser.d.ts" />
 import bashParser from 'bash-parser';
 import { looksLikePowerShell, extractPowerShellReadTarget } from '../powershell-validator.ts';
 

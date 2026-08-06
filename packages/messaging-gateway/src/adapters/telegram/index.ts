@@ -15,12 +15,22 @@ import type {
   AdapterCapabilities,
   IncomingAttachment,
   IncomingMessage,
+  SendOptions,
   SentMessage,
   InlineButton,
   ButtonPress,
   MessagingLogger,
 } from '../../types'
 import { formatForTelegram } from './format'
+
+/**
+ * Discriminated chat metadata returned by `getChatInfo`. Phase A's supergroup
+ * pairing flow uses this to validate that the user typed `/pair` in an
+ * actual forum supergroup before binding it as the workspace's supergroup.
+ */
+export type TelegramChatInfo =
+  | { type: 'supergroup'; isForum: boolean; title: string }
+  | { type: 'group' | 'channel' | 'private'; title?: string }
 
 /**
  * Hard cap for downloaded attachment size. Matches `MAX_FILE_SIZE` in
@@ -101,14 +111,34 @@ function describeError(err: unknown, depth = 0): Record<string, unknown> {
 }
 
 /**
- * DM-only guard for Phase 1. Groups/supergroups/channels are ignored because
- * the current trust model treats `channelId` as the authorization boundary —
- * in a DM, the chat IS the authorized party. Opening to groups requires
- * per-sender authorization keyed by `(channelId, senderId)` everywhere
- * (bind, /pair consume, permission/plan callbacks), which doesn't exist yet.
+ * DM-only guard. Retained because tests use it directly; new code paths
+ * should call `isAcceptedChat()` which also accepts the workspace's
+ * configured supergroup chat (forum).
  */
 export function isPrivateChat(ctx: Context): boolean {
   return ctx.chat?.type === 'private'
+}
+
+/**
+ * Decide whether an inbound update should be processed.
+ *
+ * - DMs (`private` chats) are always accepted — same as Phase 1.
+ * - When the workspace has a paired supergroup, that exact `chat.id` is
+ *   also accepted (forum topics live inside it).
+ * - Everything else (other groups, channels, basic groups the bot was
+ *   added to without explicit configuration) is dropped.
+ *
+ * Sender-level authorization for groups/topics is intentionally NOT enforced
+ * here — pairing the supergroup in Settings is the per-workspace consent
+ * boundary, and topic-scoped bindings determine which session each topic
+ * routes to.
+ */
+export function isAcceptedChat(ctx: Context, supergroupChatId?: string): boolean {
+  const chat = ctx.chat
+  if (!chat) return false
+  if (chat.type === 'private') return true
+  if (!supergroupChatId) return false
+  return String(chat.id) === supergroupChatId
 }
 
 export class TelegramAdapter implements PlatformAdapter {
@@ -141,20 +171,79 @@ export class TelegramAdapter implements PlatformAdapter {
   private messageHandler: ((msg: IncomingMessage) => Promise<void>) | null = null
   private buttonHandler: ((press: ButtonPress) => Promise<void>) | null = null
   private connected = false
+  private destroyed = false
+  private reconnectAttempts = 0
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private log: MessagingLogger = NOOP_LOGGER
+  /**
+   * The supergroup chatId this adapter accepts non-DM messages from.
+   * Updated at runtime via `setAcceptedSupergroupChatId()` after the user
+   * pairs/unpairs a supergroup in Settings, so polling doesn't need to
+   * restart on reconfigure.
+   */
+  private supergroupChatId: string | undefined
 
   /**
-   * Emit one structured log line per dropped non-private update. Deliberately
+   * Emit one structured log line per dropped non-accepted update. Deliberately
    * `info` (not `debug`) so a user who notices "bot isn't responding in my
    * group" can confirm via logs without toggling levels.
    */
-  private logNonPrivateDropped(handler: string, ctx: Context): void {
-    this.log.info('[telegram] ignored non-private chat update', {
-      event: 'telegram_non_private_dropped',
+  private logRejectedChat(handler: string, ctx: Context): void {
+    this.log.info('[telegram] ignored non-accepted chat update', {
+      event: 'telegram_chat_rejected',
       handler,
       chatType: ctx.chat?.type,
       chatId: ctx.chat?.id,
     })
+  }
+
+  /** Idempotent runtime reconfigure for the accepted supergroup chatId. */
+  setAcceptedSupergroupChatId(chatId: string | undefined): void {
+    this.supergroupChatId = chatId
+    this.log.info('[telegram] accepted supergroup updated', {
+      event: 'telegram_supergroup_set',
+      supergroupChatId: chatId ?? null,
+    })
+  }
+
+  /**
+   * Resolve a chat's metadata via Bot API. Returns `null` on any failure
+   * (network, "chat not found", missing permissions, etc.). The caller is
+   * expected to handle the null case explicitly — for the supergroup-pairing
+   * flow that means refusing to bind, rather than guessing defaults.
+   *
+   * Forum supergroups are the only chat type that can host topics. The
+   * `isForum` flag distinguishes a regular supergroup from one with topics
+   * enabled, which is required for Phase B's `createForumTopic` to work.
+   */
+  async getChatInfo(chatId: string): Promise<TelegramChatInfo | null> {
+    if (!this.bot) return null
+    try {
+      const chat = await this.bot.api.getChat(Number(chatId))
+      if (chat.type === 'supergroup') {
+        return {
+          type: 'supergroup',
+          isForum: Boolean((chat as { is_forum?: boolean }).is_forum),
+          title: chat.title ?? `Group ${chatId}`,
+        }
+      }
+      return {
+        type: chat.type,
+        title: 'title' in chat && typeof chat.title === 'string' ? chat.title : undefined,
+      }
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Telegram-specific helper: extract the optional `message_thread_id` from
+   * an inbound update. Returns undefined for DMs and for the General topic
+   * (Telegram omits the field there).
+   */
+  private extractThreadId(ctx: Context): number | undefined {
+    const tid = ctx.message?.message_thread_id
+    return typeof tid === 'number' ? tid : undefined
   }
 
   async initialize(config: PlatformConfig): Promise<void> {
@@ -164,21 +253,37 @@ export class TelegramAdapter implements PlatformAdapter {
 
     this.log = config.logger ?? NOOP_LOGGER
     this.bot = new Bot(config.token)
+    if (config.acceptedSupergroupChatId) {
+      this.supergroupChatId = config.acceptedSupergroupChatId
+    }
 
-    // Handle incoming text messages
+    // Handle incoming text messages.
+    //
+    // Narrow exception to `isAcceptedChat`: `/pair <code>` is allowed from
+    // *any* chat, even if the workspace hasn't paired this chat yet. This is
+    // the bootstrap mechanism that registers a supergroup — without this
+    // exception, `/pair` typed in a fresh supergroup is silently dropped
+    // (chicken-and-egg). Codes are workspace-scoped, single-use, 5-min TTL,
+    // and rate-limited per-sender, so the exception is bounded.
     this.bot.on('message:text', async (ctx: Context) => {
       if (!this.messageHandler || !ctx.message || !ctx.chat) return
-      if (!isPrivateChat(ctx)) {
-        this.logNonPrivateDropped('message:text', ctx)
+      const text = ctx.message.text ?? ''
+      const isPairAttempt = /^\/pair(\s|$|@)/i.test(text)
+      if (!isAcceptedChat(ctx, this.supergroupChatId) && !isPairAttempt) {
+        this.logRejectedChat('message:text', ctx)
         return
       }
 
+      const threadId = this.extractThreadId(ctx)
       const msg: IncomingMessage = {
         platform: 'telegram',
         channelId: String(ctx.chat.id),
+        ...(threadId !== undefined ? { threadId } : {}),
         messageId: String(ctx.message.message_id),
         senderId: String(ctx.from?.id ?? ''),
         senderName: ctx.from?.first_name ?? undefined,
+        ...(ctx.from?.username ? { senderUsername: ctx.from.username } : {}),
+        ...(ctx.from?.is_bot ? { senderIsBot: true } : {}),
         text: ctx.message.text ?? '',
         timestamp: ctx.message.date * 1000,
         raw: ctx.message,
@@ -193,8 +298,8 @@ export class TelegramAdapter implements PlatformAdapter {
     // with `attachments[0].localPath` set. The router resolves the path
     // via readFileAttachment() and forwards a FileAttachment to the session.
     this.bot.on('message:photo', async (ctx: Context) => {
-      if (!isPrivateChat(ctx)) {
-        this.logNonPrivateDropped('message:photo', ctx)
+      if (!isAcceptedChat(ctx, this.supergroupChatId)) {
+        this.logRejectedChat('message:photo', ctx)
         return
       }
       const photos = ctx.message?.photo
@@ -210,8 +315,8 @@ export class TelegramAdapter implements PlatformAdapter {
     })
 
     this.bot.on('message:document', async (ctx: Context) => {
-      if (!isPrivateChat(ctx)) {
-        this.logNonPrivateDropped('message:document', ctx)
+      if (!isAcceptedChat(ctx, this.supergroupChatId)) {
+        this.logRejectedChat('message:document', ctx)
         return
       }
       const doc = ctx.message?.document
@@ -226,8 +331,8 @@ export class TelegramAdapter implements PlatformAdapter {
     })
 
     this.bot.on('message:voice', async (ctx: Context) => {
-      if (!isPrivateChat(ctx)) {
-        this.logNonPrivateDropped('message:voice', ctx)
+      if (!isAcceptedChat(ctx, this.supergroupChatId)) {
+        this.logRejectedChat('message:voice', ctx)
         return
       }
       const voice = ctx.message?.voice
@@ -241,8 +346,8 @@ export class TelegramAdapter implements PlatformAdapter {
     })
 
     this.bot.on('message:video', async (ctx: Context) => {
-      if (!isPrivateChat(ctx)) {
-        this.logNonPrivateDropped('message:video', ctx)
+      if (!isAcceptedChat(ctx, this.supergroupChatId)) {
+        this.logRejectedChat('message:video', ctx)
         return
       }
       const video = ctx.message?.video
@@ -257,8 +362,8 @@ export class TelegramAdapter implements PlatformAdapter {
     })
 
     this.bot.on('message:audio', async (ctx: Context) => {
-      if (!isPrivateChat(ctx)) {
-        this.logNonPrivateDropped('message:audio', ctx)
+      if (!isAcceptedChat(ctx, this.supergroupChatId)) {
+        this.logRejectedChat('message:audio', ctx)
         return
       }
       const audio = ctx.message?.audio
@@ -275,8 +380,8 @@ export class TelegramAdapter implements PlatformAdapter {
     // Handle callback queries (button presses)
     this.bot.on('callback_query:data', async (ctx: Context) => {
       if (!this.buttonHandler || !ctx.callbackQuery) return
-      if (!isPrivateChat(ctx)) {
-        this.logNonPrivateDropped('callback_query:data', ctx)
+      if (!isAcceptedChat(ctx, this.supergroupChatId)) {
+        this.logRejectedChat('callback_query:data', ctx)
         // Answer the callback so Telegram stops showing the spinner, but
         // don't route it — same rationale as message handlers.
         await ctx.answerCallbackQuery().catch(() => {})
@@ -285,16 +390,45 @@ export class TelegramAdapter implements PlatformAdapter {
 
       await ctx.answerCallbackQuery().catch(() => {})
 
+      // The button is attached to a message; reading the message's thread id
+      // ensures responses (allow/deny acks, plan accept confirmations) post
+      // back into the same topic the prompt came from.
+      const threadId = typeof ctx.callbackQuery.message?.message_thread_id === 'number'
+        ? ctx.callbackQuery.message.message_thread_id
+        : undefined
+
       const press: ButtonPress = {
         platform: 'telegram',
         channelId: String(ctx.chat?.id ?? ''),
+        ...(threadId !== undefined ? { threadId } : {}),
         messageId: String(ctx.callbackQuery.message?.message_id ?? ''),
         senderId: String(ctx.from?.id ?? ''),
+        ...(ctx.from?.first_name ? { senderName: ctx.from.first_name } : {}),
+        ...(ctx.from?.username ? { senderUsername: ctx.from.username } : {}),
+        ...(ctx.from?.is_bot ? { senderIsBot: true } : {}),
         buttonId: ctx.callbackQuery.data ?? '',
         data: ctx.callbackQuery.data ?? undefined,
       }
 
-      await this.buttonHandler(press)
+      // Diagnostic for #726: timestamp callback receipt vs. handler return so
+      // we can tell from logs whether the gateway is slow or grammY's
+      // sequential polling is stalling on a previous update.
+      const receivedAt = Date.now()
+      this.log.info('[telegram] callback_query received', {
+        event: 'telegram_callback_received',
+        buttonId: press.buttonId,
+        senderId: press.senderId,
+      })
+      try {
+        await this.buttonHandler(press)
+      } finally {
+        this.log.info('[telegram] callback_query handler returned', {
+          event: 'telegram_callback_handled',
+          buttonId: press.buttonId,
+          senderId: press.senderId,
+          elapsedMs: Date.now() - receivedAt,
+        })
+      }
     })
 
     this.log.info('[telegram] initializing')
@@ -330,29 +464,9 @@ export class TelegramAdapter implements PlatformAdapter {
       throw err
     }
 
-    // Launch polling in the background. grammY's bot.start() returns a
-    // long-lived Promise that only resolves on stop() and rejects on fatal
-    // polling errors (most commonly 409 Conflict from overlapping pollers
-    // sharing the same token). We MUST catch it so the rejection doesn't
-    // become an unhandled promise and so `connected` reflects reality.
-    this.bot.start({
-      onStart: () => {
-        this.connected = true
-        this.log.info('[telegram] polling started')
-        // Diagnostic: confirm webhook is really gone + show backlog once.
-        // Fire-and-forget; errors here are not fatal to polling.
-        this.bot?.api.getWebhookInfo().then(
-          (info) => this.log.info('[telegram] webhook state after start:', {
-            url: info.url || null,
-            pending_update_count: info.pending_update_count,
-          }),
-          () => {},
-        )
-      },
-    }).catch((err: unknown) => {
-      this.connected = false
-      this.log.error('[telegram] polling stopped with error:', describeError(err))
-    })
+    this.destroyed = false
+    this.reconnectAttempts = 0
+    this.startPolling()
     // Do NOT set this.connected = true here — wait for onStart.
   }
 
@@ -414,12 +528,16 @@ export class TelegramAdapter implements PlatformAdapter {
       localPath: downloaded.localPath,
     }
 
+    const threadId = this.extractThreadId(ctx)
     const msg: IncomingMessage = {
       platform: 'telegram',
       channelId: String(ctx.chat.id),
+      ...(threadId !== undefined ? { threadId } : {}),
       messageId: String(ctx.message.message_id),
       senderId: String(ctx.from?.id ?? ''),
       senderName: ctx.from?.first_name ?? undefined,
+      ...(ctx.from?.username ? { senderUsername: ctx.from.username } : {}),
+      ...(ctx.from?.is_bot ? { senderIsBot: true } : {}),
       text: ctx.message.caption ?? '',
       attachments: [attachment],
       timestamp: ctx.message.date * 1000,
@@ -481,8 +599,75 @@ export class TelegramAdapter implements PlatformAdapter {
     return { localPath, fileName, fileSize: buf.byteLength }
   }
 
+  /**
+   * Launch polling. grammY's bot.start() runs until stop() is called or a
+   * fatal error occurs. On unexpected failure we schedule a reconnect with
+   * exponential backoff so transient issues (network blip, 409 from a
+   * competing instance that quickly exits) self-heal without user action.
+   *
+   * 409 Conflict means another poller is active — we wait longer on the first
+   * attempt to give the other instance time to exit before we retry.
+   */
+  private startPolling(): void {
+    if (this.destroyed || !this.bot) return
+
+    this.bot.start({
+      onStart: () => {
+        this.connected = true
+        this.reconnectAttempts = 0
+        this.log.info('[telegram] polling started')
+        this.bot?.api.getWebhookInfo().then(
+          (info) => this.log.info('[telegram] webhook state after start:', {
+            url: info.url || null,
+            pending_update_count: info.pending_update_count,
+          }),
+          () => {},
+        )
+      },
+    }).catch((err: unknown) => {
+      this.connected = false
+      this.log.error('[telegram] polling stopped with error:', describeError(err))
+      if (!this.destroyed) {
+        this.scheduleReconnect(err)
+      }
+    })
+  }
+
+  private scheduleReconnect(err: unknown): void {
+    if (this.destroyed || !this.bot) return
+
+    this.reconnectAttempts++
+    // 409 = another poller is competing; wait 30 s before first retry so the
+    // other process has a chance to exit. Other errors start at 5 s.
+    const is409 = err instanceof Error && err.message.includes('409')
+    const baseDelay = is409 ? 30_000 : 5_000
+    const delay = Math.min(baseDelay * Math.pow(2, this.reconnectAttempts - 1), 5 * 60_000)
+
+    this.log.warn('[telegram] scheduling reconnect', {
+      event: 'telegram_reconnect_scheduled',
+      attempt: this.reconnectAttempts,
+      delayMs: delay,
+      is409,
+    })
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
+      if (this.destroyed || !this.bot) return
+      this.log.info('[telegram] attempting reconnect', {
+        event: 'telegram_reconnect_attempt',
+        attempt: this.reconnectAttempts,
+      })
+      this.startPolling()
+    }, delay)
+  }
+
   async destroy(): Promise<void> {
+    this.destroyed = true
     this.connected = false
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
     if (this.bot) {
       await this.bot.stop()
       this.bot = null
@@ -501,10 +686,14 @@ export class TelegramAdapter implements PlatformAdapter {
     this.buttonHandler = handler
   }
 
-  async sendText(channelId: string, text: string): Promise<SentMessage> {
+  async sendText(channelId: string, text: string, opts?: SendOptions): Promise<SentMessage> {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
     const formatted = formatForTelegram(text)
-    const sent = await this.bot.api.sendMessage(Number(channelId), formatted)
+    const sent = await this.bot.api.sendMessage(
+      Number(channelId),
+      formatted,
+      threadParams(opts),
+    )
     return {
       platform: 'telegram',
       channelId,
@@ -512,13 +701,16 @@ export class TelegramAdapter implements PlatformAdapter {
     }
   }
 
-  async editMessage(channelId: string, messageId: string, text: string): Promise<void> {
+  async editMessage(channelId: string, messageId: string, text: string, _opts?: SendOptions): Promise<void> {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
     const formatted = formatForTelegram(text)
+    // editMessageText is keyed by (chat_id, message_id) — Telegram does not
+    // accept message_thread_id here. We accept the option for caller
+    // uniformity but ignore it.
     await this.bot.api.editMessageText(Number(channelId), Number(messageId), formatted)
   }
 
-  async sendButtons(channelId: string, text: string, buttons: InlineButton[]): Promise<SentMessage> {
+  async sendButtons(channelId: string, text: string, buttons: InlineButton[], opts?: SendOptions): Promise<SentMessage> {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
 
     const keyboard = {
@@ -530,6 +722,7 @@ export class TelegramAdapter implements PlatformAdapter {
 
     const sent = await this.bot.api.sendMessage(Number(channelId), text, {
       reply_markup: keyboard,
+      ...threadParams(opts),
     })
 
     return {
@@ -539,16 +732,22 @@ export class TelegramAdapter implements PlatformAdapter {
     }
   }
 
-  async sendTyping(channelId: string): Promise<void> {
+  async sendTyping(channelId: string, opts?: SendOptions): Promise<void> {
     if (!this.bot) return
-    await this.bot.api.sendChatAction(Number(channelId), 'typing').catch(() => {})
+    await this.bot.api
+      .sendChatAction(Number(channelId), 'typing', threadParams(opts))
+      .catch(() => {})
   }
 
-  async sendFile(channelId: string, file: Buffer, filename: string, caption?: string): Promise<SentMessage> {
+  async sendFile(channelId: string, file: Buffer, filename: string, caption?: string, opts?: SendOptions): Promise<SentMessage> {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
 
     const inputFile = new InputFile(file, filename)
-    const sent = await this.bot.api.sendDocument(Number(channelId), inputFile, { caption })
+    const sent = await this.bot.api.sendDocument(
+      Number(channelId),
+      inputFile,
+      { caption, ...threadParams(opts) },
+    )
 
     return {
       platform: 'telegram',
@@ -557,9 +756,10 @@ export class TelegramAdapter implements PlatformAdapter {
     }
   }
 
-  async clearButtons(channelId: string, messageId: string): Promise<void> {
+  async clearButtons(channelId: string, messageId: string, _opts?: SendOptions): Promise<void> {
     if (!this.bot) return
     try {
+      // editMessageReplyMarkup is also keyed by (chat_id, message_id) only.
       await this.bot.api.editMessageReplyMarkup(Number(channelId), Number(messageId), {
         reply_markup: { inline_keyboard: [] },
       })
@@ -567,4 +767,36 @@ export class TelegramAdapter implements PlatformAdapter {
       // Non-fatal: message may have been deleted by the user or already cleared.
     }
   }
+
+  /**
+   * Phase B prep: create a new forum topic in a supergroup. Telegram returns
+   * `{ message_thread_id, name, ... }`; we surface a normalised shape.
+   *
+   * Requires the bot to have "Manage Topics" admin permission in the
+   * supergroup. If the call fails (privilege missing, chat is not a forum,
+   * etc.), the error propagates so the caller can surface it.
+   *
+   * `iconColor` is intentionally omitted from this stub — grammY's typing
+   * accepts only the six Telegram-defined palette ints. We'll plumb it
+   * properly in Phase B when the automation feature actually picks colours.
+   */
+  async createForumTopic(
+    chatId: string,
+    name: string,
+  ): Promise<{ threadId: number; name: string }> {
+    if (!this.bot) throw new Error('Telegram adapter not initialized')
+    const result = await this.bot.api.createForumTopic(Number(chatId), name)
+    return { threadId: result.message_thread_id, name: result.name }
+  }
+}
+
+/**
+ * Build the `{ message_thread_id }` fragment passed to grammY API calls.
+ * Returns an empty object when no thread is requested so the spread is a
+ * no-op and Telegram receives no `message_thread_id` (which is what the
+ * General topic / DM shapes expect).
+ */
+function threadParams(opts?: SendOptions): { message_thread_id?: number } {
+  if (opts?.threadId === undefined) return {}
+  return { message_thread_id: opts.threadId }
 }

@@ -41,6 +41,10 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.tools.SET_BROWSER_TOOL_ENABLED,
   RPC_CHANNELS.settings.GET_NETWORK_PROXY,
   RPC_CHANNELS.dialog.OPEN_FOLDER,
+  RPC_CHANNELS.rtk.GET_ENABLED,
+  RPC_CHANNELS.rtk.SET_ENABLED,
+  RPC_CHANNELS.rtk.GET_STATUS,
+  RPC_CHANNELS.rtk.GET_GAIN,
 ] as const
 
 export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -311,6 +315,34 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
   server.handle(RPC_CHANNELS.caching.SET_ENABLE_1M_CONTEXT, async (_ctx, enabled: boolean) => {
     const { setEnable1MContext } = await import('@craft-agent/shared/config/storage')
     setEnable1MContext(enabled)
+  })
+
+  // ============================================================
+  // RTK Token-Optimization Settings
+  // ============================================================
+
+  // Get rtk Bash-output compression setting
+  server.handle(RPC_CHANNELS.rtk.GET_ENABLED, async () => {
+    const { getRtkEnabled } = await import('@craft-agent/shared/config/storage')
+    return getRtkEnabled()
+  })
+
+  // Set rtk Bash-output compression setting
+  server.handle(RPC_CHANNELS.rtk.SET_ENABLED, async (_ctx, enabled: boolean) => {
+    const { setRtkEnabled } = await import('@craft-agent/shared/config/storage')
+    setRtkEnabled(enabled)
+  })
+
+  // Detect rtk installation (used by Settings UI to swap install prompt ↔ toggle)
+  server.handle(RPC_CHANNELS.rtk.GET_STATUS, async (_ctx, opts?: { forceRecheck?: boolean }) => {
+    const { getRtkStatus } = await import('@craft-agent/shared/agent')
+    return getRtkStatus(opts)
+  })
+
+  // Token-savings summary from `rtk gain --format json` (efficiency meter)
+  server.handle(RPC_CHANNELS.rtk.GET_GAIN, async () => {
+    const { getRtkGain } = await import('@craft-agent/shared/agent')
+    return getRtkGain()
   })
 
   // ============================================================

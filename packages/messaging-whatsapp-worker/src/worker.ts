@@ -22,7 +22,8 @@ import {
   type WorkerCommand,
   type WorkerEvent,
 } from './protocol'
-import { bareJid, classifyInbound, rememberSentId } from './filter'
+import { bareJid, rememberSentId } from './filter'
+import { processUpsertMessage } from './upsert'
 
 /**
  * Build-time constants injected by `scripts/build-wa-worker.ts`
@@ -83,7 +84,7 @@ const silentLogger: SilentLogger = {
 // Baileys lifecycle (isolated — only referenced after dynamic import succeeds)
 // ---------------------------------------------------------------------------
 
-interface BaileysModule {
+export interface BaileysModule {
   /**
    * Factory exported as both `default` and `makeWASocket`. We prefer the
    * named export because CJS→ESM interop via esbuild's `await import()` does
@@ -95,6 +96,17 @@ interface BaileysModule {
   DisconnectReason: Record<string, number>
   Browsers: { macOS: (name: string) => [string, string, string] }
   fetchLatestBaileysVersion: () => Promise<{ version: number[]; isLatest: boolean }>
+  /**
+   * Download a media message (image / audio / video / document). Returns a
+   * Buffer when called with `'buffer'`. Throws if the message has no media
+   * payload — callers should guard with the variant key check first.
+   * Signature mirrors `@whiskeysockets/baileys@^6.7.0`.
+   */
+  downloadMediaMessage: (
+    message: { message?: unknown; key?: unknown },
+    type: 'buffer',
+    options: Record<string, unknown>,
+  ) => Promise<Buffer>
 }
 
 type BaileysSock = {
@@ -352,52 +364,25 @@ async function startSession(
       const selfJid = bareJid(sock.user?.id)
       const selfLid = bareJid(sock.user?.lid)
 
-      for (const msg of upsert.messages as Array<Record<string, unknown>>) {
-        const ts = Number((msg as { messageTimestamp?: unknown }).messageTimestamp)
-        if (Number.isFinite(ts) && ts > 0 && ts < cutoff) {
-          log(`upsert skip: history (ts=${ts} cutoff=${cutoff})`)
-          continue
+      // Per-message work is async (media download). Fire-and-forget the
+      // batch with a per-message try/catch — Baileys' event handler must
+      // not throw, and one bad media download must not poison the rest.
+      const sess = session
+      void (async () => {
+        for (const msg of upsert.messages as Array<Record<string, unknown>>) {
+          try {
+            await processUpsertMessage(
+              msg,
+              { cutoff, selfJid, selfLid },
+              sess,
+              emit,
+              log,
+            )
+          } catch (err) {
+            log(`upsert error: ${err instanceof Error ? err.message : String(err)}`)
+          }
         }
-
-        // Debug context: surface the exact signals classifyInbound uses so
-        // silent-skip cases ('own_outbound', 'empty') are visible.
-        const dbgKey = (msg.key ?? {}) as {
-          remoteJid?: string
-          fromMe?: boolean
-          id?: string
-        }
-        const msgKeys = msg.message
-          ? Object.keys(msg.message as Record<string, unknown>).join(',')
-          : '<no message>'
-        log(
-          `upsert msg fromMe=${!!dbgKey.fromMe} remoteJid=${dbgKey.remoteJid ?? '?'} ` +
-            `selfJid=${selfJid ?? '?'} selfLid=${selfLid ?? '?'} ` +
-            `bareRemote=${bareJid(dbgKey.remoteJid) ?? '?'} msgKeys=${msgKeys}`,
-        )
-
-        const decision = classifyInbound(msg, {
-          selfChatMode: session.selfChatMode,
-          responsePrefix: session.responsePrefix,
-          selfJid,
-          selfLid,
-          sentIds: session.sentIds,
-        })
-        if (decision.action === 'skip') {
-          log(`upsert skip: ${decision.reason}`)
-          continue
-        }
-        const key = msg.key as { remoteJid?: string; id?: string }
-        log(`upsert emit: channelId=${key.remoteJid} textLen=${decision.text.length}`)
-        emit({
-          type: 'incoming',
-          channelId: key.remoteJid!,
-          messageId: key.id!,
-          senderId: key.remoteJid!,
-          senderName: (msg.pushName as string | undefined) ?? undefined,
-          text: decision.text,
-          timestamp: Number(msg.messageTimestamp) * 1000 || Date.now(),
-        })
-      }
+      })()
     })
 
     return sock

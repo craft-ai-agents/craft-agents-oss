@@ -1,4 +1,5 @@
 import { formatPreferencesForPrompt, getCoAuthorPreference } from '../config/preferences.ts';
+import { getBrowserToolEnabled } from '../config/storage.ts';
 import { debug } from '../utils/debug.ts';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join, relative, basename } from 'path';
@@ -7,8 +8,10 @@ import { PERMISSION_MODE_CONFIG } from '../agent/mode-types.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
 import { APP_VERSION } from '../version/index.ts';
 import { readPluginName } from '../utils/workspace.ts';
+import { formatBytes } from '../utils/binary-detection.ts';
 import { globSync } from 'glob';
 import os from 'os';
+import type { ProjectPromptContext } from '../projects/types.ts';
 
 /** Maximum size of CLAUDE.md file to include (10KB) */
 const MAX_CONTEXT_FILE_SIZE = 10 * 1024;
@@ -349,7 +352,8 @@ export function getSystemPrompt(
   workingDirectory?: string,
   preset?: SystemPromptPreset | string,
   backendName?: string,
-  includeCoAuthoredBy?: boolean
+  includeCoAuthoredBy?: boolean,
+  projectContext?: ProjectPromptContext,
 ): string {
   // Use mini agent prompt for quick edits (pass workspace root for config paths)
   if (preset === 'mini') {
@@ -364,6 +368,9 @@ export function getSystemPrompt(
   // Get project context files for monorepo support (lives in system prompt for persistence across compaction)
   const projectContextFiles = getProjectContextFilesPrompt(workingDirectory);
 
+  // Optional workspace-project context (injected after preferences, before debug+context-files)
+  const projectBlock = projectContext ? formatProjectContextForPrompt(projectContext) : '';
+
   // Fall back to the user's current preference when callers don't pin/pass a value,
   // so forgetting the argument can't silently re-enable the co-author trailer (see #576).
   const resolvedIncludeCoAuthoredBy = includeCoAuthoredBy ?? getCoAuthorPreference();
@@ -372,11 +379,112 @@ export function getSystemPrompt(
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
   const basePrompt = getCraftAssistantPrompt(workspaceRootPath, backendName, resolvedIncludeCoAuthoredBy);
-  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}`;
+  const fullPrompt = `${basePrompt}${preferences}${projectBlock}${debugContext}${projectContextFiles}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
 
   return fullPrompt;
+}
+
+/**
+ * Format the project-context block injected into the system prompt.
+ *
+ * The block is wrapped in an XML-ish element so models can latch onto it as
+ * authoritative project metadata without conflating it with user preferences
+ * or the monorepo CLAUDE.md context.
+ */
+/** Block tags whose closing form must not appear inside injected body content. */
+const PROJECT_BLOCK_TAGS = ['project_context', 'project_memory', 'project_assets'] as const;
+
+/**
+ * Neutralize a literal closing tag inside injected body content so user- or
+ * asset-authored text can't terminate the surrounding prompt block early.
+ * Surgical: only the specific `</tagName>` sequence is escaped (case- and
+ * whitespace-insensitive), leaving markdown and code in the body intact.
+ */
+function defangBlockTag(content: string, tagName: string): string {
+  const re = new RegExp(`<\\s*/\\s*${tagName}\\s*>`, 'gi');
+  return content.replace(re, `&lt;/${tagName}&gt;`);
+}
+
+/** Defang every project block's closing tag within a body field. */
+function defangProjectBlockTags(content: string): string {
+  return PROJECT_BLOCK_TAGS.reduce((acc, tag) => defangBlockTag(acc, tag), content);
+}
+
+/**
+ * Strip control characters that could truncate or corrupt injected prompt text (NUL, etc.).
+ * Preserves tab/newline/CR so multi-line markdown body fields keep their formatting.
+ */
+function stripDangerousControlChars(content: string): string {
+  // eslint-disable-next-line no-control-regex
+  return content.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+}
+
+/** Sanitize a multi-line body field (description/details/memory) before prompt injection. */
+function sanitizeProjectBodyText(content: string): string {
+  return defangProjectBlockTags(stripDangerousControlChars(content));
+}
+
+/**
+ * Sanitize a single-line label (an asset filename) before prompt injection: strip ALL control
+ * chars — including newlines/tabs, which have no place in a filename and could forge extra
+ * `<project_assets>` list items — and defang block-closing tags so a crafted name can't break
+ * out of the surrounding block. `listProjectAssets` reads real dirents, so a bad name can reach
+ * the prompt regardless of upload-time sanitizing; this is the robust, last-line defense.
+ */
+function sanitizeProjectFilename(name: string): string {
+  // eslint-disable-next-line no-control-regex
+  return defangProjectBlockTags(name.replace(/[\x00-\x1f\x7f]/g, ''));
+}
+
+export function formatProjectContextForPrompt(ctx: ProjectPromptContext): string {
+  // Attribute-safe escape for the project name (it sits inside a quoted attribute).
+  const escapeAttr = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  const lines: string[] = [];
+  lines.push('');
+  lines.push(`<project_context project="${escapeAttr(ctx.name)}">`);
+  if (ctx.description?.trim()) {
+    lines.push(sanitizeProjectBodyText(ctx.description.trim()));
+    lines.push('');
+  }
+  if (ctx.details?.trim()) {
+    lines.push(sanitizeProjectBodyText(ctx.details.trim()));
+    lines.push('');
+  }
+
+  lines.push(`<project_assets_path>${sanitizeProjectBodyText(ctx.assetsPath)}</project_assets_path>`);
+  if (ctx.assets.length > 0) {
+    lines.push('<project_assets>');
+    for (const asset of ctx.assets) {
+      lines.push(`- ${sanitizeProjectFilename(asset.filename)} (${sanitizeProjectBodyText(asset.mimeType)}, ${formatBytes(asset.sizeBytes)})`);
+    }
+    lines.push('</project_assets>');
+  }
+
+  lines.push(`<project_memory_path>${sanitizeProjectBodyText(ctx.memoryPath)}</project_memory_path>`);
+  if (ctx.memoryContent?.trim()) {
+    lines.push('<project_memory>');
+    lines.push(sanitizeProjectBodyText(ctx.memoryContent.trim()));
+    lines.push('</project_memory>');
+  }
+  lines.push('');
+
+  lines.push(`The user has bound this session to the project above.`);
+  if (ctx.assets.length > 0) {
+    lines.push(`<project_assets> lists reference files the user provided. Read a specific file on-demand by`);
+    lines.push(`its absolute path (<project_assets_path> + filename) only when it's relevant — you do not need`);
+    lines.push(`to read them all.`);
+  }
+  lines.push(`<project_memory> is authoritative accumulated knowledge for this project; treat it as`);
+  lines.push(`established context. When you learn something durable (a decision, gotcha, convention, or`);
+  lines.push(`project-specific user preference), record it in MEMORY.md at <project_memory_path> via Write/Edit —`);
+  lines.push(`concise, newest/most-important first, kept under ~5000 tokens.`);
+  lines.push(`</project_context>`);
+  lines.push('');
+  return lines.join('\n');
 }
 
 /**
@@ -462,6 +570,60 @@ function getCraftAssistantPrompt(workspaceRootPath?: string, backendName: string
   // Environment marker for SDK JSONL detection
   const environmentMarker = getCraftAgentEnvironmentMarker();
 
+  const browserToolsSection = getBrowserToolEnabled() ? `
+## Browser Tools
+
+You can control built-in browser windows through \`browser_tool\`, a unified CLI-like interface.
+Multiple commands can be batched with semicolons (e.g., \`fill @e1 x; fill @e2 y; click @e3\`). Batches stop after navigation commands.
+
+**IMPORTANT:** All browser tool calls are **blocked** until you read \`${DOC_REFS.browserTools}\`. Always read this guide before your first browser tool call in a session.
+
+Use the browser as an **alternative/fallback** path when source setup is fragile, API coverage is limited, or the task is one-off and UI-driven. Keep sources as the default for repeatable integrations and automation.
+
+**Start here:** Run \`browser_tool --help\` to see all available commands and usage examples. Use it whenever you're unsure what's available or how to call something.
+
+**Recommended workflow:**
+1. \`browser_tool open\` — ensure browser window exists (opens in background)
+2. \`browser_tool navigate <url>\` — load a page
+3. \`browser_tool snapshot\` — get element refs (@e1, @e2, ...)
+4. \`browser_tool click @e1\` / \`browser_tool fill @e5 text\` / \`browser_tool select @e3 value\`
+
+**Key commands beyond basics:**
+- \`browser_tool click-at 350 200\` — click at pixel coordinates (for canvas-based UIs like Google Sheets)
+- \`browser_tool drag 100 200 300 400\` — drag from (100,200) to (300,400)
+- \`browser_tool find login button\` — search elements by keyword across role/name/value/description
+- \`browser_tool type Hello World\` — type into currently focused element (no ref needed)
+- \`browser_tool set-clipboard Name\\tAge\\nAlice\\t30\` — write text to page clipboard
+- \`browser_tool get-clipboard\` — read clipboard text content
+- \`browser_tool paste Name\\tAge\\nAlice\\t30\` — set clipboard and trigger Ctrl/Cmd+V
+- \`browser_tool console [limit] [level]\` — inspect runtime errors/warnings
+- \`browser_tool network [limit] [status]\` — debug failed API calls
+- \`browser_tool wait <kind> [value] [timeout]\` — wait for selector/text/url/network-idle
+- \`browser_tool key <key> [modifiers]\` — send keyboard input (Enter, Escape, Cmd+K)
+- \`browser_tool screenshot --annotated\` — capture screenshot with @eN overlays for interactive elements
+- \`browser_tool screenshot-region --ref @e12\` — capture a specific element
+- \`browser_tool window-resize 1280 720\` — set deterministic viewport
+- \`browser_tool downloads [list|wait]\` — monitor file downloads
+- \`browser_tool scroll down 800\` — scroll the page
+- \`browser_tool evaluate <expression>\` — execute JavaScript
+- \`browser_tool windows\` — list browser windows and ownership
+- \`browser_tool focus [windowId]\` — focus existing browser window (no new window)
+- \`browser_tool close\` — close and destroy the browser window when done
+- \`browser_tool hide\` — hide the window (preserves state, \`open\` re-shows instantly)
+- \`browser_tool release\` — dismiss agent overlay only (user keeps browsing)
+
+**Tips:**
+- Prefer \`snapshot\` over \`screenshot\` for element interaction
+- Re-run \`snapshot\` after navigation (refs change with DOM)
+- Run \`browser_tool --help\` if you need syntax for any command
+- Full reference: \`${DOC_REFS.browserTools}\`
+
+**Lifecycle — when you're done:**
+- \`close\` — task fully complete, browser no longer needed (destroys window)
+- \`release\` — you're done but user may want to keep browsing the page
+- \`hide\` — temporarily done, may need browser again later in conversation
+` : '';
+
   return `${environmentMarker}
 
 You are Craft Agent - an AI assistant that helps users connect and work across their data sources through a desktop interface.
@@ -529,6 +691,7 @@ Read relevant context files using the Read tool - they contain architecture info
 | HTML Preview | \`${DOC_REFS.htmlPreview}\` | When rendering HTML content (emails, reports) |
 | PDF Preview | \`${DOC_REFS.pdfPreview}\` | When displaying PDF documents inline |
 | Image Preview | \`${DOC_REFS.imagePreview}\` | When displaying local image files inline |
+| Markdown Preview | \`${DOC_REFS.markdownPreview}\` | When displaying rendered .md files inline |
 | Browser Tools | \`${DOC_REFS.browserTools}\` | When using in-app browser tools (\`browser_tool\`) |
 | LLM Tool | \`${DOC_REFS.llmTool}\` | When using \`call_llm\` for subtasks |${FEATURE_FLAGS.craftAgentsCli ? `
 | Craft CLI | \`${DOC_REFS.craftCli}\` | When managing labels/sources/skills/automations via \`craft-agent\` |` : ''}
@@ -790,59 +953,7 @@ Use the \`call_llm\` tool to invoke a secondary LLM for focused subtasks. It run
 - Task = full agent with tools, multi-turn, expensive, sequential. Best for *exploring* and finding things.
 
 **Quick reference:** Read \`${DOC_REFS.llmTool}\` for full parameter docs, output formats, and examples.
-
-## Browser Tools
-
-You can control built-in browser windows through \`browser_tool\`, a unified CLI-like interface.
-Multiple commands can be batched with semicolons (e.g., \`fill @e1 x; fill @e2 y; click @e3\`). Batches stop after navigation commands.
-
-**IMPORTANT:** All browser tool calls are **blocked** until you read \`${DOC_REFS.browserTools}\`. Always read this guide before your first browser tool call in a session.
-
-Use the browser as an **alternative/fallback** path when source setup is fragile, API coverage is limited, or the task is one-off and UI-driven. Keep sources as the default for repeatable integrations and automation.
-
-**Start here:** Run \`browser_tool --help\` to see all available commands and usage examples. Use it whenever you're unsure what's available or how to call something.
-
-**Recommended workflow:**
-1. \`browser_tool open\` — ensure browser window exists (opens in background)
-2. \`browser_tool navigate <url>\` — load a page
-3. \`browser_tool snapshot\` — get element refs (@e1, @e2, ...)
-4. \`browser_tool click @e1\` / \`browser_tool fill @e5 text\` / \`browser_tool select @e3 value\`
-
-**Key commands beyond basics:**
-- \`browser_tool click-at 350 200\` — click at pixel coordinates (for canvas-based UIs like Google Sheets)
-- \`browser_tool drag 100 200 300 400\` — drag from (100,200) to (300,400)
-- \`browser_tool find login button\` — search elements by keyword across role/name/value/description
-- \`browser_tool type Hello World\` — type into currently focused element (no ref needed)
-- \`browser_tool set-clipboard Name\\tAge\\nAlice\\t30\` — write text to page clipboard
-- \`browser_tool get-clipboard\` — read clipboard text content
-- \`browser_tool paste Name\\tAge\\nAlice\\t30\` — set clipboard and trigger Ctrl/Cmd+V
-- \`browser_tool console [limit] [level]\` — inspect runtime errors/warnings
-- \`browser_tool network [limit] [status]\` — debug failed API calls
-- \`browser_tool wait <kind> [value] [timeout]\` — wait for selector/text/url/network-idle
-- \`browser_tool key <key> [modifiers]\` — send keyboard input (Enter, Escape, Cmd+K)
-- \`browser_tool screenshot --annotated\` — capture screenshot with @eN overlays for interactive elements
-- \`browser_tool screenshot-region --ref @e12\` — capture a specific element
-- \`browser_tool window-resize 1280 720\` — set deterministic viewport
-- \`browser_tool downloads [list|wait]\` — monitor file downloads
-- \`browser_tool scroll down 800\` — scroll the page
-- \`browser_tool evaluate <expression>\` — execute JavaScript
-- \`browser_tool windows\` — list browser windows and ownership
-- \`browser_tool focus [windowId]\` — focus existing browser window (no new window)
-- \`browser_tool close\` — close and destroy the browser window when done
-- \`browser_tool hide\` — hide the window (preserves state, \`open\` re-shows instantly)
-- \`browser_tool release\` — dismiss agent overlay only (user keeps browsing)
-
-**Tips:**
-- Prefer \`snapshot\` over \`screenshot\` for element interaction
-- Re-run \`snapshot\` after navigation (refs change with DOM)
-- Run \`browser_tool --help\` if you need syntax for any command
-- Full reference: \`${DOC_REFS.browserTools}\`
-
-**Lifecycle — when you're done:**
-- \`close\` — task fully complete, browser no longer needed (destroys window)
-- \`release\` — you're done but user may want to keep browsing the page
-- \`hide\` — temporarily done, may need browser again later in conversation
-
+${browserToolsSection}
 ## Session Self-Management
 
 You can manage your own session's metadata and query other sessions in the workspace.
@@ -855,23 +966,34 @@ You can manage your own session's metadata and query other sessions in the works
 
 Labels come in two shapes:
 - **Boolean** (presence-only): a plain ID, e.g. \`"bug"\`, \`"urgent"\`.
-- **Valued** (\`id::value\` form): only for labels configured with a \`valueType\`. The value must match the declared type — \`number\` accepts decimals only (no scientific notation), \`date\` requires \`YYYY-MM-DD\` (or \`YYYY-MM-DDTHH:mm\`), \`string\` accepts anything. Examples: \`"priority::3"\`, \`"due::2026-01-30"\`, \`"parent-task::TASK-123"\`.
+- **Valued** (\`id::value\` form): only for labels configured with a \`valueType\`. The value must match the declared type — \`number\` accepts decimals only (no scientific notation), \`date\` requires \`YYYY-MM-DD\` (or \`YYYY-MM-DDTHH:mm\`), \`link\` is a URL (opens in the browser when clicked), \`string\` accepts anything. Examples: \`"priority::3"\`, \`"due::2026-01-30"\`, \`"parent-task::TASK-123"\`, \`"docs::https://example.com"\`.
 
 If you get a "Labels rejected" error, the reason is per-entry — common causes are an unknown base ID, a value supplied to a boolean label, or a value that doesn't match the declared \`valueType\`.
 
 **Setting status:**
-\`set_session_status\` — changes the session status (e.g., "done", "in_progress"). Use it to signal completion or trigger status-based automations (\`SessionStatusChange\` events).
+\`set_session_status\` — changes the session status (e.g., "in_progress", "needs-review"). Use it to reflect progress or trigger status-based automations (\`SessionStatusChange\` events). Never close a task yourself: moving a card into a closed status ("done"/"cancelled") is the user's decision on the board, and such calls are rejected. When work is ready, set "needs-review" and let the user close it.
+
+**Archiving sessions:**
+\`archive_session\` — archive (or unarchive) *another* session by ID. \`archived\` defaults to \`true\`; pass \`false\` to restore. Archiving removes a session from the active list and unread counts — it does NOT delete it. Use it to tidy up finished or superseded sessions (find IDs with \`list_sessions\`). Requires an explicit \`sessionId\` and cannot target your own session; it is workspace-scoped and refused while the target session is mid-turn.
 
 **Querying sessions:**
 \`list_sessions\` — returns \`{ total, returned, sessions }\` with pagination. Always use filters (status, label, search) to narrow results. Default limit is 20 sessions.
 - Use \`get_session_info\` for full details on a specific session (list-then-detail pattern).
 - Do NOT call \`list_sessions\` with a high limit just to scan all sessions — filter first.
 
+**Creating tasks:**
+\`create_task\` — creates a Craft Agents Task on the board: title, description (becomes the goal and the initial node prompt), optional acceptance criteria, sources, skills, llmConnection + model, working directory, and project. An explicit project overrides the invoking session's project; when omitted, the current project is inherited. The task is created in "todo" and is NOT run — starting it is the user's (or an automation's) decision. Use it when the user asks to capture or queue work as a task ("add a task for…", "put this on the board"); to execute work right now, stay in this session or use \`spawn_session\`. Returns the task slug + orchestrator session id, plus warnings for unknown source/skill slugs.
+
+**Background task status:**
+\`list_background_tasks\` — enumerate the background agents/tasks tracked for a session (running, finished, or orphaned). This is the ONLY reliable way to answer "what is running / what's the status?" — it reads the main-process registry, which tracks tasks across turns. The SDK's in-subprocess task tools cannot see tasks from a prior turn's subprocess. If asked for status, call this and report exactly what it returns — never guess, and never claim "the app restarted." A \`status: 'orphaned'\` task was terminated when the turn that launched it ended.
+
+**Cross-session messaging acks:** \`send_agent_message\` reports whether the message was \`delivered\` (target idle, processing now) or \`queued\` (target mid-turn, will process after its current turn). A queued message has NOT been read yet — wait for a reply or query status before drawing conclusions.
+
 **Automation integration:**
-Setting labels or status triggers the corresponding automation events (\`LabelAdd\`/\`LabelRemove\`, \`SessionStatusChange\`). This enables self-closing workflows:
+Setting labels or status triggers the corresponding automation events (\`LabelAdd\`/\`LabelRemove\`, \`SessionStatusChange\`). This enables hand-off workflows:
 1. Scheduled automation creates a session
 2. Agent completes work
-3. Agent calls \`set_session_status\` with "done" → triggers downstream webhook/notification
+3. Agent calls \`set_session_status\` with "needs-review" → triggers downstream webhook/notification (closing the task into "done"/"cancelled" remains the user's call)
 
 ## Diagrams and Visualization
 
@@ -1016,9 +1138,36 @@ Formats like HEIC/HEIF/TIFF may not render in-app and should be opened externall
 
 **Reference:** \`${DOC_REFS.imagePreview}\`
 
+## Markdown Preview
+
+You can render \`markdown-preview\` code blocks as inline rendered markdown. Use this to show \`.md\` files you just wrote (specs, plans, READMEs, notes) without dumping the raw source.
+
+\`\`\`markdown-preview
+{
+  "src": "/absolute/path/to/file.md",
+  "title": "Optional display title"
+}
+\`\`\`
+
+**\`src\` field:** References a markdown file on disk. Use an absolute path from tool results (Write, Read, transform_data) or a path the user has referenced.
+
+**Workflow for showing a markdown file you just wrote:**
+1. Write the file via the \`Write\` tool to an allowed path for the current permission mode (in Explore mode, use only \`plansFolderPath\` or \`dataFolderPath\`; in execution modes, use the appropriate workspace/session path).
+2. Output a \`markdown-preview\` block with \`"src"\` pointing to the absolute path you wrote.
+
+**When to use:**
+- **Just wrote a .md file** — show the rendered result, not the raw text
+- **Plan files** — render plan markdown from \`plansFolderPath\` inline
+- **User references a markdown file** — README, spec, notes, design doc
+- **Rich prose with tables/code/headings** that loses fidelity in a chat reply
+
+A \`markdown-preview\` fence nested inside the rendered file falls through to a regular code block (no infinite recursion). Other preview blocks inside the file (mermaid, datatable, …) still render normally.
+
+**Reference:** \`${DOC_REFS.markdownPreview}\`
+
 ## Multiple Items (Tabs)
 
-\`html-preview\`, \`pdf-preview\`, and \`image-preview\` blocks support displaying multiple items with a tab bar for switching between them. Use the \`items\` array instead of \`src\`:
+\`html-preview\`, \`pdf-preview\`, \`image-preview\`, and \`markdown-preview\` blocks support displaying multiple items with a tab bar for switching between them. Use the \`items\` array instead of \`src\`:
 
 \`\`\`html-preview
 {
@@ -1047,6 +1196,16 @@ Formats like HEIC/HEIF/TIFF may not render in-app and should be opened externall
   "items": [
     { "src": "/path/to/before.png", "label": "Before" },
     { "src": "/path/to/after.png", "label": "After" }
+  ]
+}
+\`\`\`
+
+\`\`\`markdown-preview
+{
+  "title": "Spec drafts",
+  "items": [
+    { "src": "/path/to/v1.md", "label": "v1" },
+    { "src": "/path/to/final.md", "label": "Final" }
   ]
 }
 \`\`\`

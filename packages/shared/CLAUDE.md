@@ -10,6 +10,7 @@ Core business logic package for Craft Agent:
 - `src/agent/` — `claude-agent.ts`, `pi-agent.ts`, `base-agent.ts`, tools, permissions
 - `src/sources/` — source storage/types/services
 - `src/sessions/` — session persistence/index
+- `src/projects/` — workspace-scoped projects (config + assets); sessions bind via `projectId`
 - `src/config/` — config/preferences/theme/watcher
 - `src/credentials/` — encrypted credential management
 
@@ -27,17 +28,28 @@ cd packages/shared && bun run tsc --noEmit
 
 ## Notes
 - `ClaudeAgent` is the primary class in `src/agent/claude-agent.ts`.
-- Claude SDK subprocess env is sanitized to strip Claude-specific Bedrock routing vars (`CLAUDE_CODE_USE_BEDROCK`, `AWS_BEARER_TOKEN_BEDROCK`, `ANTHROPIC_BEDROCK_BASE_URL`). Pi Bedrock uses its own AWS env path instead.
+- **Reserved "Task" labels.** Task flows tag each task's whole family (orchestrator + subtasks) with a per-task ITEM label — a child of the plain root `Task` label, named `TASK-<slug>-<N>` (no valueType; N = max counter across the root's TASK-named children + 1, never recycled — unrelated children of an adopted user root don't feed it). Mint/inherit only via `SessionManager.applyTaskLabel` (which uses `ensureTaskLabel`/`ensureTaskItemLabel` in `labels/crud.ts`); resolve only via `findTaskLabel` / `findTaskItemLabelId` / `resolveTaskScopeLabelId` (`labels/filter.ts`). Never assume literal ids — slugs collide-shift, so always use the resolved id (surfaced as `TaskCreateResult.taskLabelId`). Legacy `task::N` valued entries still filter under the root; `ensureTaskLabel` converges a legacy `valueType: 'number'` root to a plain label but adopts a user's own root "Task" label as-is (shape + children untouched).
+- **Single label-filter predicate.** `matchesLabelFilter` (`labels/filter.ts`, browser-safe) is the only implementation of "session matches a label filter" (descendants, `__all__`, optional `projectId` scope). The session list, AppShell filtered set, and NavigationContext auto-select all route through it — do not hand-roll label matching in feature code.
+- Claude SDK subprocess env is sanitized to strip Claude-specific Bedrock routing vars (`CLAUDE_CODE_USE_BEDROCK`, `AWS_BEARER_TOKEN_BEDROCK`, `ANTHROPIC_BEDROCK_BASE_URL`). Pi Bedrock uses its own AWS env path instead. On Windows the same builder (`agent/options.ts:buildClaudeSubprocessEnv`) also injects `CLAUDE_CODE_GIT_BASH_PATH` from the user-configured `gitBashPath` (`config/storage.ts:getGitBashPath`) when unset, so the SDK's Bash tool honors per-user Git installs instead of only the hardcoded `Program Files` search (#935).
+- MCP proxy tool names are built ONLY via `proxyToolName(slug, name)` (`mcp/proxy-tool-name.ts`), which sanitizes characters outside `[a-zA-Z0-9_-]` (e.g. dots) so OpenAI/Codex accept them. The name is an opaque exact-match key in `McpClientPool.proxyTools`, so build (`registerClient`), emit (`getProxyToolDefs`), Pi registration, and the Claude-side `pool.callTool` (`claude-agent.ts`) must ALL use this one builder or the dispatch key drifts (#864, regression of #498). Post-sanitization collisions keep the FIRST tool and `console.warn` the skipped one (a silently vanishing tool must leave a trail); deterministic disambiguation is a known possible follow-up.
 - Backward alias export (`CraftAgent`) exists for compatibility.
 - Prefer routing new model vendors through the existing Pi path (`providerType: 'pi'` + `piAuthProvider`) unless they truly need a distinct runtime/backend. The Pi provider catalog and display metadata live in `src/config/models-pi.ts`.
+- Custom endpoint model capabilities must preserve explicit per-model overrides end-to-end. In particular, `supportsImages: true` enables image input for one model and `supportsImages: false` must remain available to override a global endpoint image default. Active Pi custom-endpoint sessions refresh runtime capabilities via `updateRuntimeConfig`; capability changes are pushed proactively from the `llmConnections.SAVE` handler through `SessionManager.refreshConnectionRuntime`, with the lazy `getOrCreateAgent` path acting as a backstop. The session layer still gates image attachments at send time so disabled images are not sent even if a subprocess refresh fails.
+- `update_runtime_config` IPC carries `model, providerType, authType, baseUrl, customEndpoint, customModels` only — `piAuthProvider`, `slug`, and the broader credential/provider routing state cannot be re-routed inside a live Pi subprocess. `runtime-config.ts:buildRestartRequiredSignature` hashes those fields separately from the in-place-safe ones; when the restart signature drifts, `tryRefreshAgentRuntime` skips the in-place attempt and goes straight to dispose + recreate so the new auth/provider state actually takes effect.
 - Session lifecycle distinguishes **hard aborts** from **UI handoff interrupts**:
   - use hard aborts for true cancellation/teardown (`UserStop`, redirect fallback)
   - use handoff interrupts for pause points where control moves to the UI (`AuthRequest`, `PlanSubmitted`)
 - Remote workspace handoff summaries are injected as one-shot hidden context on the destination session's first turn.
+- **Task creation is a shared core.** `createTaskFromSpec` / `finishTaskOrchestrator` (`packages/server-core/src/tasks/create-task.ts`) implement "create the task on the board without running it" (task.yaml + orchestrator session + reserved TASK label + spec sources, fail-soft on label/sources). Both the `tasks:create` RPC fresh path and the agent-facing `create_task` session tool call it — never re-implement the flow. The tool path derives the slug via `uniqueTaskSlug` (`shared/tasks/slug.ts`, never overwrites; the TaskEditor keeps its own `slugify` copy because this barrel pulls Node fs code), inherits the invoking session's project unless `projectId` explicitly overrides it, and synthesizes the required single `main` node from the description; DAG authoring stays with the editor/`tasks:generate`. Running remains exclusively `tasks:run`/TaskRunner.
 - WebUI source OAuth uses a stable relay redirect URI (`https://agents.craft.do/auth/callback`); the deployment-specific callback target is carried in a relay-owned outer `state` envelope and unwrapped by the router worker.
 - Automations matching is unified through canonical matcher adapters in `src/automations/utils.ts` (`matcherMatches*`). Avoid direct primitive-only matcher checks in feature code so condition gating stays consistent across app and agent events.
-- The OpenAI Chat Completions strip stream (`unified-network-interceptor.ts:createOpenAiSseStrippingStream`) emits **one consolidated SSE event per logical tool call** with `id + name + cleanArgs` together — never split across init + args-only deltas. Some downstream SDKs (Pi SDK) treat args-only deltas as new tool_calls instead of merging by index, which produces duplicate empty-id entries on parallel-tool turns from DeepSeek and other relays. `sanitizeOpenAiHistoryInPlace` recovers sessions whose history was persisted by the pre-fix split-emit version.
-- In dev / monorepo runs, the network interceptor preloads from `packages/shared/src/unified-network-interceptor.ts` directly so source changes propagate without a manual `bun run build:interceptor`. Packaged builds use `apps/electron/dist/interceptor.cjs`. See `agent/backend/internal/runtime-resolver.ts:resolveInterceptorBundlePath`.
+- Automation matchers may declare an optional `telegramTopic?: string` to route spawned sessions into a Telegram forum topic in the workspace's paired supergroup. The field is plumbed through `PendingPrompt` and `ExecutePromptAutomationInput`; runtime resolution and topic creation live in `@craft-agent/messaging-gateway`'s `TopicRegistry` and `MessagingGatewayRegistry.bindAutomationSession`. SessionManager picks up the resolution via the optional `setAutomationBinder` hook installed by the messaging-gateway bootstrap.
+- The OpenAI Chat Completions strip stream (`unified-network-interceptor.ts:createOpenAiSseStrippingStream`) emits **one consolidated SSE event per logical tool call** with `id + name + cleanArgs` together — never split across init + args-only deltas. Some downstream SDKs (Pi SDK) treat args-only deltas as new tool_calls instead of merging by index, which produces duplicate empty-id entries on parallel-tool turns from DeepSeek and other relays. `sanitizeOpenAiHistoryInPlace` recovers sessions whose history was persisted by the pre-fix split-emit version. A present-but-empty `tool_calls: []` delta is NOT a tool-call delta (the guard requires `length > 0`), so terminal `finish_reason` chunks that also carry `tool_calls: []` are no longer dropped — that dropping made custom OpenAI-compatible endpoints fail validation with "Stream ended without finish_reason" (#995). Forwarded chunks additionally get the empty `tool_calls` key stripped (re-serialized) so the Pi SDK never sees it at all.
+- `LlmConnection.midStreamBehavior` controls whether mid-stream user sends try to steer the in-flight turn or hold for the next turn. Default is per-`providerType` via `defaultMidStreamBehavior()` (anthropic→`'queue'`, pi/pi_compat→`'steer'`). **Read everywhere via `resolveMidStreamBehavior(connection)`** — never branch on `providerType` directly for this decision; legacy connections without the field rely on the resolver's fallback. New connections persist the explicit default at `createBuiltInConnection` time so the Settings → AI submenu shows a checkmark on first load. The decision is made in `SessionManager.sendMessage`'s mid-stream branch only — backend code (`claude-agent.ts`, `pi-agent.ts`) is unchanged: `'queue'` mode skips `agent.redirect()` entirely and lets the current turn finish before replay. Two correctness invariants live in this branch: (1) `managed.wasInterrupted` is set **only** on the steer path (where an actual `forceAbort` happened) — pure `'queue'` mode must NOT set it, otherwise the replayed turn injects the "previous response was interrupted and may be incomplete" reminder for a turn that actually completed, confusing the model. (2) The mid-stream user message is created with a queue-time timestamp (mid-stream, i.e. *before* the in-flight assistant reply is finalized at `text_complete`); `processNextQueuedMessage` **re-stamps** it via `this.monotonic()` on replay so it sorts after the prior turn's finalized reply — `groupMessagesByTurn` (`@craft-agent/ui`) orders by timestamp. The emitted `user_message` event with `status: 'processing'` is the live-renderer reconciliation point: `handleUserMessage` must copy that canonical timestamp onto the already-mounted optimistic message while preserving its optimistic ID. Persisting the re-stamp server-side alone fixes reload order but leaves the live transcript wrong.
+- The network interceptor (`unified-network-interceptor.ts`) is currently **Pi-only**: it preloads into the Pi subprocess via Bun `--preload`. The Claude SDK no longer runs under Bun (since 0.2.113 it spawns a per-platform native `claude` binary), so `--preload` is not available there. Features that used to live in the interceptor for Claude (rich tool intent, fast-mode override, MalformedBodyError validation, etc.) are Phase-2 work — they'll need to move to SDK hooks or a local proxy. In dev / monorepo runs, the Pi interceptor still preloads from the .ts source so changes propagate without a rebuild; packaged builds use `apps/electron/dist/interceptor.cjs`. See `agent/backend/internal/runtime-resolver.ts:resolveInterceptorBundlePath`.
+- Per-message context is split into **volatile** vs **stable** blocks (`PromptBuilder.buildVolatileContextParts()` / `buildStableContextParts()`, composed by `buildContextParts()`). Volatile = date/time, `session_state`, `sources` (change per turn); stable = workspace capabilities, working directory (invariant per session). **Claude** keeps all blocks on the user-message tail (system prompt stays cacheable). **Pi** folds only stable blocks into the system prefix and routes volatile blocks to the user tail — otherwise a per-minute re-stamp invalidates pi-ai's cached system prefix and all downstream history (#862). `buildVolatileContextParts` consumes the one-shot mode-change signal (`consumeModeChangeUserSignal`), so call it **exactly once per turn** — never re-invoke a builder to compute a cache-debug hash (hash the produced string instead).
+- Anthropic OAuth identity (account/org) is captured from the token-exchange response in `auth/claude-oauth.ts` (`parseClaudeOAuthIdentity`; fields are optional/fail-soft, never block login) and persisted on `LlmConnection` (`oauthAccountUuid/Email`, `oauthOrganizationUuid/Name`, `oauthProfileVerifiedAt`) by threading it through the `SETUP_LLM_CONNECTION` payload (`oauthIdentity`), **not** the EXCHANGE handler — the connection record is created by SETUP, which runs after the exchange. `updateLlmConnection` rebuilds connections from a hardcoded allowlist, so any new persisted field must be added there too or it is dropped on the next save (#838).
+- **Mythos-class thinking (Claude Fable 5 / Mythos 5).** These models have adaptive thinking **always on** and the Messages API **rejects `thinking: { type: 'disabled' }`** (unlike Opus/Sonnet/Haiku, whose API is unchanged). `resolveClaudeThinkingOptions` therefore detects them via `isAdaptiveThinkingAlwaysOnModel()` (`config/models.ts`) and maps the "off"/`minimizeThinking` case to `{ thinking: { type: 'adaptive' }, effort: 'low' }` instead of `disabled` — there is no way to turn thinking off on these models. `runMiniCompletion` is unaffected (it runs on the resolved mini model, which is always Haiku). Model id is the dateless pinned snapshot `claude-fable-5` (1M context, 128k max output); registered in `MODEL_REGISTRY`.
 
 ## i18n (Internationalization)
 
@@ -98,17 +110,31 @@ Keys use **flat dot-notation** with a category prefix:
 4. **Include `...` in the translation value** if the UI needs an ellipsis — don't append it in JSX.
 5. **Use `<Trans>` component** for translations containing HTML tags (e.g. `<strong>`).
 6. **Use `i18n.resolvedLanguage`** (not `i18n.language`) when comparing against supported language codes.
-7. **Keys must exist in all locale files** (`en.json`, `es.json`, `zh-Hans.json`, and any future locales). Keep alphabetically sorted.
+7. **Keys must exist in every locale file** in `src/i18n/locales/` (not just `en.json` — `lint:i18n:parity` enforces this across the full set). Keep alphabetically sorted.
 8. **Watch translation length for constrained UI elements.** Translations can be 20-100%+ longer than English. For buttons, badges, tab labels, and dropdown items, keep translations concise — use shorter synonyms if needed. High-risk areas:
    - Permission mode badges (3-5 characters max)
    - Settings tab labels (≤10 characters ideal)
    - Button labels (avoid exceeding 2x the English length)
    - Menu items (flexible, but avoid 3x+ growth)
 
+### Validation
+
+Three checks gate i18n correctness, all wired into pre-commit (`lint:i18n:staged`) and `validate:ci`:
+
+| Script | Catches |
+|--------|---------|
+| `lint:i18n:sorted` | locale keys not alphabetical |
+| `lint:i18n:parity` | non-EN locale missing keys present in `en.json`, or vice versa |
+| `lint:i18n:coverage` | `t('...')` callsite referencing a key that doesn't exist in `en.json` |
+
+`parity` alone is insufficient — it can't detect symmetric losses across all locales (a merge that drops the same 50 keys from every locale file passes parity but breaks the UI). `coverage` closes that gap by verifying every literal `t(...)` / `i18n.t(...)` / `<Trans i18nKey>` reference resolves against `en.json`. Dynamic keys (`t(\`status.${id}\`)`) are skipped — those surface via i18next's runtime missing-key warnings.
+
+When resolving locale merge conflicts, run `bun run validate:ci` and trust the result — no manual key auditing needed if all three pass.
+
 ### Adding a new translated string
 
 1. Add the key + English value to `en.json` (alphabetical order)
-2. Add the key + translated value to all other locale files (`es.json`, `zh-Hans.json`)
+2. Add the key + translated value to **every other** `src/i18n/locales/*.json` file (run `bun run lint:i18n:parity` to confirm none were missed)
 3. Use `t("your.key")` in the component (add `useTranslation()` hook if not present)
 4. For non-React code, use `i18n.t("your.key")` — but only inside functions, never at module level
 
@@ -117,6 +143,19 @@ Keys use **flat dot-notation** with a category prefix:
 1. Create `src/i18n/locales/{code}.json` with all keys from `en.json`
 2. Add the entry to `LOCALE_REGISTRY` in `src/i18n/registry.ts` (messages + date-fns locale + native name)
 3. Run tests — the registry tests will catch any missing wiring
+
+### Cross-process language persistence
+
+The main-process i18n instance has **no detection plugin** (no `localStorage` in Node) and would otherwise reset to `fallbackLng: 'en'` on every restart. To keep main + renderer in sync across launches:
+
+- **Renderer** uses `i18next-browser-languagedetector` → `localStorage` (`i18nextLng`). Survives restart.
+- **Main** hydrates on startup from `preferences.uiLanguage` in `~/.craft-agent/preferences.json`. Maintained only by the `i18n:changeLanguage` IPC handler in `apps/electron/src/main/index.ts`.
+- **Renderer → main sync** happens on every Appearance change AND once at renderer startup (so a freshly-installed app immediately learns the persisted language).
+- The IPC handler validates the incoming code against `SUPPORTED_LANGUAGE_CODES` and `setPersistedUiLanguage()` no-ops if the value is unchanged — startup pushes don't churn the file or the config watcher.
+
+`uiLanguage` is **not** user-editable through `update_user_preferences`. The Appearance dropdown is the only writer.
+
+**Session-title language** resolves from this same persisted `uiLanguage` via `resolveTitleLanguageName()` (`config/preferences.ts`), **not** `i18n.resolvedLanguage`. The main-process i18n value hydrates asynchronously at startup and can still read the `'en'` fallback when an early title generates, which forced English titles for non-English chats (#885). When no language is persisted the helper returns `undefined`, so the title prompt auto-detects the conversation language instead of defaulting to English. Used at both `SessionManager` title sites (`generateTitle`, `refreshTitle`).
 
 ## Token refresh for API sources
 

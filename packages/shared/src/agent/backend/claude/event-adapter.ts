@@ -2,10 +2,10 @@
  * Claude Event Adapter
  *
  * Maps Claude SDK messages (SDKMessage) to Craft Agent's AgentEvent format.
- * Extracted from ClaudeAgent.convertSDKMessage() for testability and
- * consistency with the Codex/Copilot adapter pattern.
+ * Extracted from ClaudeAgent.convertSDKMessage() for testability and to share
+ * lifecycle scaffolding with PiEventAdapter via BaseEventAdapter.
  *
- * Key differences from Codex/Copilot adapters:
+ * Key Claude-specific behavior:
  * - Uses extractToolStarts/extractToolResults from tool-matching.ts (stateless, ID-based)
  * - Handles stream_event for real-time text deltas and tool start detection
  * - Manages pendingText for deferred text_complete (waits for stop_reason from message_delta)
@@ -17,6 +17,7 @@ import type { AgentEvent } from '@craft-agent/core/types';
 import type { AgentError } from '../../errors.ts';
 import { BaseEventAdapter } from '../base-event-adapter.ts';
 import { ToolIndex, extractToolStarts, extractToolResults, isParentTaskTool, type ContentBlock } from '../../tool-matching.ts';
+import { classifyClaudeTaskNotification } from './task-notification.ts';
 
 /**
  * Callbacks injected by ClaudeAgent for operations that depend on agent state.
@@ -68,25 +69,6 @@ interface AssistantUsage {
   cache_read_input_tokens: number;
   cache_creation_input_tokens: number;
 }
-
-/**
- * Shape of the SDK's `task_notification` system message.
- * The SDK doesn't export a type for this, so we define it locally
- * and validate fields before use to catch silent breakage.
- */
-interface TaskNotificationMessage {
-  type: 'system';
-  subtype: 'task_notification';
-  task_id: string;
-  status?: string;
-  output_file?: string;
-  summary?: string;
-  session_id?: string;
-}
-
-/** Valid terminal statuses for background tasks */
-const VALID_TASK_STATUSES = ['completed', 'failed', 'stopped'] as const;
-type TaskStatus = typeof VALID_TASK_STATUSES[number];
 
 export class ClaudeEventAdapter extends BaseEventAdapter {
   // Per-turn state (reset on each startTurn)
@@ -533,22 +515,21 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
     } else if (msg.subtype === 'status' && msg.status === 'compacting') {
       events.push({ type: 'status', message: 'Compacting conversation...' });
     } else if (msg.subtype === 'task_notification') {
-      const notification = msg as TaskNotificationMessage;
-      if (!notification.task_id) {
+      const classification = classifyClaudeTaskNotification(message);
+      if (classification.kind === 'missing-task-id') {
         this.callbacks.onDebug?.('[EventAdapter] task_notification missing task_id, skipping');
         return;
       }
-      const status: TaskStatus = VALID_TASK_STATUSES.includes(notification.status as TaskStatus)
-        ? (notification.status as TaskStatus)
-        : 'completed';
-      events.push({
-        type: 'task_completed',
-        taskId: notification.task_id,
-        status,
-        outputFile: notification.output_file,
-        summary: notification.summary,
-        turnId: this.currentTurnId || undefined,
-      });
+      if (classification.kind === 'valid') {
+        events.push({
+          type: 'task_completed',
+          taskId: classification.notification.taskId,
+          status: classification.notification.status,
+          outputFile: classification.notification.outputFile,
+          summary: classification.notification.summary,
+          turnId: this.currentTurnId || undefined,
+        });
+      }
     }
   }
 

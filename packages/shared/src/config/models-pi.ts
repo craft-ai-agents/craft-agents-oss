@@ -1,7 +1,7 @@
 /**
  * Pi Model & Provider Discovery (from SDK)
  *
- * Separated from models.ts because @mariozechner/pi-ai transitively pulls in
+ * Separated from models.ts because @earendil-works/pi-ai transitively pulls in
  * @aws-sdk/client-bedrock-runtime → @smithy/node-http-handler → Node.js `stream`,
  * which breaks the Vite renderer build (browser context, no Node.js modules).
  *
@@ -13,8 +13,8 @@
  * NEVER import this file from renderer components or from files that the renderer imports.
  */
 
-import { getProviders, getModels } from '@mariozechner/pi-ai';
-import type { KnownProvider, Model, Api } from '@mariozechner/pi-ai';
+import { getProviders, getModels } from '@earendil-works/pi-ai/compat';
+import type { KnownProvider, Model, Api } from '@earendil-works/pi-ai';
 import type { ModelDefinition } from './models.ts';
 
 // ============================================
@@ -67,14 +67,25 @@ const PI_EXCLUDED_MODEL_PREFIXES: string[] = [
   'gpt-4',
 ];
 
+export function isDeprecatedClaudeOpus46Model(modelId: string): boolean {
+  const lower = modelId.toLowerCase().replace(/^pi\//, '');
+  return lower === 'claude-opus-4-6'
+    || lower === 'claude-opus-4.6'
+    || lower === 'anthropic/claude-opus-4-6'
+    || lower === 'anthropic/claude-opus-4.6'
+    || lower.endsWith('.anthropic.claude-opus-4-6-v1')
+    || lower === 'anthropic.claude-opus-4-6-v1';
+}
+
 function isExcludedPiModel(modelId: string): boolean {
   if (PI_EXCLUDED_MODELS.has(modelId)) return true;
+  if (isDeprecatedClaudeOpus46Model(modelId)) return true;
   return PI_EXCLUDED_MODEL_PREFIXES.some(prefix => modelId.startsWith(prefix));
 }
 
 /**
  * Check if a Bedrock model ID is a bare Claude model without a region prefix.
- * Bare IDs like `anthropic.claude-opus-4-7-v1` are rejected by Bedrock which
+ * Bare IDs like `anthropic.claude-opus-4-8` are rejected by Bedrock which
  * requires inference profile IDs with a region prefix (`us.`, `eu.`, `global.`).
  * The Pi SDK catalog includes proper regional variants, so filtering bare models
  * doesn't remove any usable entries.
@@ -129,8 +140,12 @@ export function getAllPiModels(): ModelDefinition[] {
 
 /**
  * Display metadata for Pi SDK providers.
+ *
+ * Keep this keyed by string instead of `KnownProvider` so the UI metadata can
+ * stay ahead of or lag behind the SDK's exact provider union without blocking
+ * typecheck/commits when providers are added or renamed upstream.
  */
-const PI_PROVIDER_DISPLAY: Partial<Record<KnownProvider, { label: string; placeholder: string }>> = {
+const PI_PROVIDER_DISPLAY: Partial<Record<string, { label: string; placeholder: string }>> = {
   'anthropic':              { label: 'Anthropic',          placeholder: 'sk-ant-...' },
   'google':                 { label: 'Google AI Studio',   placeholder: 'AIza...' },
   'openai':                 { label: 'OpenAI',             placeholder: 'sk-...' },
@@ -156,8 +171,6 @@ const PI_EXCLUDED_PROVIDERS: Set<string> = new Set([
   'github-copilot',
   'openai-codex',
   'google-vertex',
-  'google-gemini-cli',
-  'google-antigravity',
 ]);
 
 /** Info for a Pi provider available in the API key flow. */

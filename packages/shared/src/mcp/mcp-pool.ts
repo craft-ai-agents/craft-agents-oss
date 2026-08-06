@@ -15,6 +15,7 @@
 
 import { CraftMcpClient, type McpClientConfig, type PoolClient } from './client.ts';
 import { ApiSourcePoolClient } from './api-source-pool-client.ts';
+import { proxyToolName } from './proxy-tool-name.ts';
 import type { SdkMcpServerConfig } from '../agent/backend/types.ts';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -159,7 +160,19 @@ export class McpClientPool {
     this.toolCache.set(slug, tools);
 
     for (const tool of tools) {
-      const proxyName = `mcp__${slug}__${tool.name}`;
+      const proxyName = proxyToolName(slug, tool.name);
+      const existing = this.proxyTools.get(proxyName);
+      if (existing && existing.originalName !== tool.name) {
+        // Two distinct MCP tool names sanitized to the same proxy name (e.g.
+        // `pat.batch` and `pat_batch`). Keep the first; a silent overwrite would
+        // route later calls to the wrong original tool (#864). Known limitation:
+        // the skipped tool is not callable this session — deterministic
+        // disambiguation (suffixing) is a possible follow-up if this ever hits
+        // a real server. Warn loudly so a "missing" tool is diagnosable.
+        console.warn(`[McpClientPool] Proxy name collision on ${proxyName} (source ${slug}): keeping ${existing.originalName}, skipping ${tool.name} — the skipped tool will not be callable`);
+        this.debug(`Proxy name collision on ${proxyName}: keeping ${existing.originalName}, skipping ${tool.name}`);
+        continue;
+      }
       this.proxyTools.set(proxyName, { slug, originalName: tool.name });
     }
 
@@ -339,15 +352,21 @@ export class McpClientPool {
   getProxyToolDefs(slugs?: string[]): ProxyToolDef[] {
     const targetSlugs = slugs || Array.from(this.toolCache.keys());
     const defs: ProxyToolDef[] = [];
+    const seen = new Set<string>();
 
     for (const slug of targetSlugs) {
       const tools = this.toolCache.get(slug) || [];
       for (const tool of tools) {
+        const name = proxyToolName(slug, tool.name);
+        // Skip a name that collided after sanitization — keep the first, matching
+        // registerClient so the emitted defs and the dispatch map stay in sync (#864).
+        if (seen.has(name)) continue;
+        seen.add(name);
         // Strip $schema — AJV (Pi agent) fails on unregistered meta-schema URIs.
         // Same pattern as getToolDefsAsJsonSchema() in tool-defs.ts.
         const { $schema, ...cleanSchema } = (tool.inputSchema as Record<string, unknown>) || {};
         defs.push({
-          name: `mcp__${slug}__${tool.name}`,
+          name,
           description: tool.description || `Tool from ${slug}`,
           inputSchema: Object.keys(cleanSchema).length > 0 ? cleanSchema : { type: 'object', properties: {} },
         });

@@ -2,7 +2,7 @@
  * Tests for EventQueue
  *
  * EventQueue bridges async event handlers (.on() listeners) with AsyncGenerator<AgentEvent>.
- * Used by CodexAgent and CopilotAgent where events arrive asynchronously.
+ * Used by PiAgent where events arrive asynchronously from the subprocess.
  */
 import { describe, it, expect } from 'bun:test';
 import { EventQueue } from '../backend/event-queue.ts';

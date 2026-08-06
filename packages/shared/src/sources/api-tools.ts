@@ -40,10 +40,28 @@ export function buildAuthorizationHeader(authScheme: string | undefined, token: 
 }
 
 /**
- * API credential source - can be a static credential or a function that returns a token.
- * Token getter functions are used for OAuth sources that need auto-refresh.
+ * API credential source — either a static credential value or a function that
+ * resolves one on demand.
+ *
+ * Static form: a string / BasicAuthCredential / MultiHeaderCredential captured
+ * at tool creation time. Used for the legacy path and for public APIs (empty
+ * string).
+ *
+ * Getter form: a function called before each request. Two return shapes are
+ * supported:
+ *   - `() => Promise<string>` — OAuth / renew-endpoint sources that always
+ *     resolve to a non-null access token.
+ *   - `() => Promise<ApiCredential | null>` — non-OAuth API sources that read
+ *     the latest credential from the vault on every call. Null is returned
+ *     when the user has not (yet) provided a credential.
+ *
+ * Using a getter is what makes mid-session credential updates take effect
+ * without restarting the in-process tool.
  */
-export type ApiCredentialSource = ApiCredential | (() => Promise<string>);
+export type ApiCredentialSource =
+  | ApiCredential
+  | (() => Promise<string>)
+  | (() => Promise<ApiCredential | null>);
 
 /**
  * Type guard to check if credential is BasicAuthCredential
@@ -53,9 +71,13 @@ function isBasicAuthCredential(cred: ApiCredential): cred is BasicAuthCredential
 }
 
 /**
- * Type guard to check if credential source is a token getter function
+ * Type guard to check if credential source is a token getter function.
+ * Both narrow shapes (Promise<string> and Promise<ApiCredential | null>) flow
+ * through the same call site and are normalized by the caller.
  */
-function isTokenGetter(cred: ApiCredentialSource): cred is () => Promise<string> {
+function isTokenGetter(
+  cred: ApiCredentialSource
+): cred is () => Promise<string> | Promise<ApiCredential | null> {
   return typeof cred === 'function';
 }
 
@@ -165,28 +187,30 @@ function buildUrl(
 }
 
 /**
- * Build tool description from API config
+ * Build tool description from API config.
+ *
+ * The description is sent to the LLM with every request, so we keep it small
+ * and point to `sources/{slug}/guide.md` for endpoint-specific detail. The
+ * agent's PrerequisiteManager already blocks calls to this tool until the
+ * guide has been Read in the current context window, so the guide always
+ * lands in conversation history before the model can call anything — making
+ * a duplicate copy here pure waste (and the cause of #683-style provider
+ * rejections when guide.md is large).
+ *
+ * Exported only for unit testing; treat as internal.
  */
-function buildToolDescription(config: ApiConfig): string {
-  let desc = `Make authenticated requests to ${config.name} API (${config.baseUrl})\n\n`;
-  desc += `Authentication is handled automatically - just specify path, method, and params.\n`;
+export function buildToolDescription(config: ApiConfig): string {
+  // config.name is the source slug (set by SourceServerBuilder.buildApiConfig).
+  let desc = `Make authenticated requests to the ${config.name} API (${config.baseUrl}).\n\n`;
+  desc += `Authentication is handled automatically — pass path, method, and params.\n`;
   desc += `For non-JSON request bodies, use params: { _rawBody: "raw content", _contentType: "text/plain" }. The _rawBody value is sent as-is without JSON encoding.\n\n`;
-
-  // Check for old cache format (no documentation field)
-  if (!config.documentation) {
-    desc += `⚠️ This API was cached with an older format. You can still make requests but you'll need to figure out the endpoints yourself.`;
-    return desc;
-  }
-
-  // Include the rich documentation extracted from the agent definition
-  desc += config.documentation;
+  desc += `**Before the first call, Read the source guide at sources/${config.name}/guide.md** — `;
+  desc += `it documents available endpoints, required params, and any quirks. The Read is required before the first call (enforced) and again after compaction.\n\n`;
+  desc += `**Binary responses** (PDFs, images, archives) are auto-saved to the session downloads folder; reference the returned path when telling the user about downloaded files.`;
 
   if (config.docsUrl) {
     desc += `\n\nOfficial docs: ${config.docsUrl}`;
   }
-
-  // Inform agent about binary file handling
-  desc += `\n\n**Binary Files:** Binary responses (PDFs, images, archives, etc.) are automatically detected and saved to the session downloads folder. You'll receive a message with the file path and size. Reference the path when telling users about downloaded files.`;
 
   return desc;
 }
@@ -225,10 +249,14 @@ export function createApiTool(
       const { path, method, params, _intent } = args;
 
       try {
-        // Resolve credential - if it's a token getter function, call it to get fresh token
-        const resolvedCredential: ApiCredential = isTokenGetter(credential)
+        // Resolve credential — if a getter, call it to get a fresh credential.
+        // A null result (vault has nothing for this source) is normalized to
+        // an empty string; buildHeaders / buildUrl already treat that as
+        // "no auth", letting the upstream API surface its own 401.
+        const rawCredential = isTokenGetter(credential)
           ? await credential()
           : credential;
+        const resolvedCredential: ApiCredential = rawCredential ?? '';
 
         const url = buildUrl(config.baseUrl, path, method, params, config.auth, resolvedCredential);
         const headers = buildHeaders(config.auth, resolvedCredential, config.defaultHeaders);

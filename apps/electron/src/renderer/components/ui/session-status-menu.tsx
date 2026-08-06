@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from "react-i18next"
 import { Command as CommandPrimitive } from 'cmdk'
-import { Archive, ArchiveRestore } from 'lucide-react'
+import { Archive, ArchiveRestore, Ban } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   type SessionStatusId,
@@ -55,6 +55,10 @@ export interface SessionStatusMenuProps {
   onArchive?: () => void
   /** Unarchive action - shows Unarchive item at bottom when provided and archived */
   onUnarchive?: () => void
+  /** Clear action - shows a "clear" item at bottom (e.g. "No status change") when provided */
+  onClear?: () => void
+  /** Label for the clear item. Defaults to "Clear". */
+  clearLabel?: string
   className?: string
 }
 
@@ -65,6 +69,8 @@ export function SessionStatusMenu({
   isArchived,
   onArchive,
   onUnarchive,
+  onClear,
+  clearLabel,
   className,
 }: SessionStatusMenuProps) {
   const { t } = useTranslation()
@@ -117,6 +123,26 @@ export function SessionStatusMenu({
             </CommandPrimitive.Item>
           )
         })}
+        {/* Clear item - only shown when handler provided and no filter active */}
+        {!filter && onClear && (
+          <>
+            <div className="border-t border-border/50 mx-2 my-1" />
+            <CommandPrimitive.Item
+              value="clear-status"
+              onSelect={() => onClear()}
+              className={cn(
+                MENU_ITEM_STYLE,
+                'outline-none',
+                !activeState ? 'bg-foreground/7' : 'data-[selected=true]:bg-foreground/3'
+              )}
+            >
+              <span className="shrink-0 flex items-center opacity-60">
+                <Ban className="w-3.5 h-3.5" />
+              </span>
+              <div className="flex-1 min-w-0">{clearLabel ?? 'Clear'}</div>
+            </CommandPrimitive.Item>
+          </>
+        )}
         {/* Archive/Unarchive item - only shown when handler provided and no filter active */}
         {!filter && (isArchived ? onUnarchive : onArchive) && (
           <>

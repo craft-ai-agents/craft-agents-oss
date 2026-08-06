@@ -147,6 +147,9 @@ export const AutomationMatcherSchema = z.object({
   labels: z.array(z.string()).optional(),
   enabled: z.boolean().optional(),
   conditions: z.array(AutomationConditionSchema).optional(),
+  // Telegram forum-topic name (1–128 chars). Silently ignored at runtime when
+  // no supergroup is paired or the Telegram adapter is not connected.
+  telegramTopic: z.string().min(1).max(128).optional(),
   actions: z.array(ActionDefinitionSchema).min(1, 'At least one action required'),
 });
 

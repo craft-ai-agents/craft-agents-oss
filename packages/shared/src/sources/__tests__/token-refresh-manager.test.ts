@@ -6,17 +6,17 @@
  * - API OAuth sources (Google, Slack, Microsoft)
  */
 
-import { describe, test, expect, mock, beforeEach } from 'bun:test';
+import { describe, test, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
 import { isOAuthSource, hasRenewEndpoint, isRefreshableSource, type LoadedSource, type FolderSourceConfig } from '../types.ts';
 import { TokenRefreshManager } from '../token-refresh-manager.ts';
 import { isSourceUsable } from '../storage.ts';
+import * as storage from '../storage.ts';
 import type { SourceCredentialManager } from '../credential-manager.ts';
 
-// Mock storage module to prevent disk I/O
-const mockMarkSourceAuthenticated = mock(() => true);
-mock.module('../storage.ts', () => ({
-  markSourceAuthenticated: mockMarkSourceAuthenticated,
-}));
+// Spy instead of mock.module(): Bun module mocks leak across files in the same
+// process, which can mask storage.ts regressions in neighboring source tests.
+let mockMarkSourceAuthenticated = mock(() => true);
+let markSourceAuthenticatedSpy: { mockRestore: () => void } | null = null;
 
 /**
  * Helper to create a mock LoadedSource for testing
@@ -314,7 +314,13 @@ function createMockCredManager(overrides: Partial<SourceCredentialManager> = {})
 
 describe('TokenRefreshManager', () => {
   beforeEach(() => {
-    mockMarkSourceAuthenticated.mockClear();
+    mockMarkSourceAuthenticated = mock(() => true);
+    markSourceAuthenticatedSpy = spyOn(storage, 'markSourceAuthenticated').mockImplementation(mockMarkSourceAuthenticated);
+  });
+
+  afterEach(() => {
+    markSourceAuthenticatedSpy?.mockRestore();
+    markSourceAuthenticatedSpy = null;
   });
 
   describe('needsRefresh', () => {
@@ -468,6 +474,71 @@ describe('TokenRefreshManager', () => {
       expect(result.success).toBe(false);
       expect(isSourceUsable(source)).toBe(false);
       expect(mockMarkSourceAuthenticated).not.toHaveBeenCalled();
+    });
+
+    test('failed refresh (returns null) mutates in-memory source.config — #710', async () => {
+      // Source starts as authenticated (cred just expired in-memory copy not yet updated).
+      // Failed refresh must mirror the markSourceNeedsReauth disk write to in-memory state
+      // so isSourceUsable returns false and callers exclude it from intendedSlugs.
+      const credManager = createMockCredManager({
+        load: mock(() => Promise.resolve({
+          value: 'expired-token',
+          refreshToken: 'refresh-123',
+          expiresAt: Date.now() - 60_000,
+        })),
+        isExpired: mock(() => true),
+        refresh: mock(() => Promise.resolve(null)),
+      });
+
+      const manager = new TokenRefreshManager(credManager);
+      const source = createMockSource({
+        slug: 'craft-mcp',
+        type: 'mcp',
+        provider: 'craft',
+        mcp: { url: 'https://mcp.craft.do/my/mcp', authType: 'oauth' },
+        isAuthenticated: true,
+        connectionStatus: 'connected',
+      });
+
+      expect(isSourceUsable(source)).toBe(true); // precondition
+
+      await manager.ensureFreshToken(source);
+
+      expect(source.config.isAuthenticated).toBe(false);
+      expect(source.config.connectionStatus).toBe('needs_auth');
+      expect(source.config.connectionError).toBe('Token refresh failed');
+      expect(isSourceUsable(source)).toBe(false);
+    });
+
+    test('failed refresh (throws) mutates in-memory source.config — #710', async () => {
+      const credManager = createMockCredManager({
+        load: mock(() => Promise.resolve({
+          value: 'expired-token',
+          refreshToken: 'refresh-123',
+          expiresAt: Date.now() - 60_000,
+        })),
+        isExpired: mock(() => true),
+        refresh: mock(() => Promise.reject(new Error('network down'))),
+      });
+
+      const manager = new TokenRefreshManager(credManager);
+      const source = createMockSource({
+        slug: 'craft-mcp',
+        type: 'mcp',
+        provider: 'craft',
+        mcp: { url: 'https://mcp.craft.do/my/mcp', authType: 'oauth' },
+        isAuthenticated: true,
+        connectionStatus: 'connected',
+      });
+
+      expect(isSourceUsable(source)).toBe(true);
+
+      await manager.ensureFreshToken(source);
+
+      expect(source.config.isAuthenticated).toBe(false);
+      expect(source.config.connectionStatus).toBe('needs_auth');
+      expect(source.config.connectionError).toBe('Refresh error: network down');
+      expect(isSourceUsable(source)).toBe(false);
     });
   });
 

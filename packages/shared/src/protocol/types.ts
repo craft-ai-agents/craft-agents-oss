@@ -87,6 +87,51 @@ export type ErrorCode =
   | 'CAPABILITY_UNAVAILABLE'
   | 'CLIENT_DISCONNECTED'
   | 'CLIENT_REQUEST_TIMEOUT'
+  | 'BROWSER_NO_CAPABLE_CLIENT'
+  | 'BROWSER_INSTANCE_NOT_OWNED'
+  | 'BROWSER_REMOTE_UPLOAD_NOT_SUPPORTED'
+  | 'BROWSER_REMOTE_EVALUATE_BLOCKED'
+
+const KNOWN_ERROR_CODES: ReadonlySet<string> = new Set<ErrorCode>([
+  'HANDLER_ERROR',
+  'CHANNEL_NOT_FOUND',
+  'AUTH_FAILED',
+  'PROTOCOL_VERSION_UNSUPPORTED',
+  'SESSION_NOT_IDLE',
+  'SESSION_ID_CONFLICT',
+  'ARTIFACT_NOT_PORTABLE',
+  'TRANSFER_TOO_LARGE',
+  'TRANSFER_TIMEOUT',
+  'TRANSFER_VERIFICATION_FAILED',
+  'REQUEST_TIMEOUT',
+  'CAPABILITY_UNAVAILABLE',
+  'CLIENT_DISCONNECTED',
+  'CLIENT_REQUEST_TIMEOUT',
+  'BROWSER_NO_CAPABLE_CLIENT',
+  'BROWSER_INSTANCE_NOT_OWNED',
+  'BROWSER_REMOTE_UPLOAD_NOT_SUPPORTED',
+  'BROWSER_REMOTE_EVALUATE_BLOCKED',
+])
+
+export function isErrorCode(value: unknown): value is ErrorCode {
+  return typeof value === 'string' && KNOWN_ERROR_CODES.has(value)
+}
+
+/**
+ * Sender-side helper for throwing transport errors with a typed `code`.
+ *
+ * Class identity is lost across the wire — the transport reconstructs a plain
+ * `Error` with `.code` on the receiving side. Receivers MUST branch on
+ * `err.code === 'X'`, never `err instanceof CodedError`.
+ */
+export class CodedError extends Error {
+  readonly code: ErrorCode
+  constructor(code: ErrorCode, message: string) {
+    super(message)
+    this.code = code
+    this.name = 'CodedError'
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Push target (server → clients)

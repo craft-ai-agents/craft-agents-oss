@@ -53,9 +53,28 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'archiveSession', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.archiveSessionFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'listSessions', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.listSessionsFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  // listBackgroundTasks defaults sid → sessionId (like getSessionInfo)
+  Object.defineProperty(context, 'listBackgroundTasks', {
+    get() {
+      const fn = getSessionScopedToolCallbacks(sessionId)?.listBackgroundTasksFn;
+      if (!fn) return undefined;
+      return (sid?: string) => fn(sid ?? sessionId);
     },
     configurable: true,
     enumerable: true,
@@ -109,6 +128,14 @@ export function attachSessionSelfManagementBindings(
       const fn = getSessionScopedToolCallbacks(sessionId)?.unbindMessagingChannelFn;
       if (!fn) return undefined;
       return (sid: string, platform?: string) => fn(sid ?? sessionId, platform);
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'createTask', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.createTaskFn;
     },
     configurable: true,
     enumerable: true,

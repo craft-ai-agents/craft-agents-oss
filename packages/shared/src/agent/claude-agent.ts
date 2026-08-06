@@ -1,4 +1,4 @@
-import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
+import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessage, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions, resetClaudeConfigCheck } from './options.ts';
 // Local type for SDK user message content blocks (text, image, document)
 // Replaces import from @anthropic-ai/sdk/resources — keeps SDK as agent-only dependency
@@ -21,8 +21,10 @@ import {
   resolveAuthEnvVars,
 } from '../config/llm-connections.ts';
 import type { McpClientPool } from '../mcp/mcp-pool.ts';
+import { proxyToolName } from '../mcp/proxy-tool-name.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
-import { DEFAULT_MODEL, isClaudeModel, getDefaultSummarizationModel, getModelContextWindow } from '../config/models.ts';
+import { loadProjectById, getProjectAssetsPath, listProjectAssets, getProjectMemoryPath, loadProjectMemory } from '../projects/storage.ts';
+import { DEFAULT_MODEL, isClaudeModel, isAdaptiveThinkingAlwaysOnModel, getDefaultSummarizationModel, getModelContextWindow } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { loadPreferences, formatPreferencesForPrompt, getCoAuthorPreference } from '../config/preferences.ts';
 import type { FileAttachment } from '../utils/files.ts';
@@ -30,6 +32,9 @@ import type { LLMQueryRequest, LLMQueryResult } from './llm-tool.ts';
 import { consumeLlmQueryMessages } from './claude-llm-query.ts';
 import { debug } from '../utils/debug.ts';
 import { guardLargeResult } from '../utils/large-response.ts';
+import { SourceActivationDrainController } from './source-activation-drain.ts';
+import { resolveKeepBackgroundTasksAlive, createPushableInputStream, type PushableInputStream } from './backend/claude/persistent-input.ts';
+import { classifyClaudeTaskNotification } from './backend/claude/task-notification.ts';
 import {
   getSessionPlansDir,
   getLastPlanFilePath,
@@ -67,6 +72,9 @@ import {
   type PreToolUseCheckResult,
   BUILT_IN_TOOLS,
 } from './core/pre-tool-use.ts';
+import { getRtkPath } from './core/rtk-detector.ts';
+import { getRtkEnabled } from '../config/storage.ts';
+import type { RtkContext } from './core/rtk-rewrite.ts';
 import { type ThinkingLevel, THINKING_TO_EFFORT, getThinkingTokens, DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
 import { generateConversationSummary } from './conversation-summary.ts';
 import type { LoadedSource } from '../sources/types.ts';
@@ -80,7 +88,13 @@ import type {
   SourceChangeCallback,
   SourceActivationCallback,
 } from './backend/types.ts';
+import { existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
+import {
+  isExistingDirectory,
+  extractSdkReportedBinaryPath,
+  isSpawnEnoent as detectSpawnEnoent,
+} from './spawn-helpers.ts';
 import { IMAGE_LIMITS } from '../utils/files.ts';
 
 /** Image extensions that may need size-guard in PreToolUse (matches Read tool's image detection) */
@@ -104,7 +118,7 @@ import type { AgentEvent } from '@craft-agent/core/types';
 export type { AgentEvent };
 
 // Stateless tool matching — pure functions for SDK message → AgentEvent conversion
-import { ToolIndex } from './tool-matching.ts';
+import { ToolIndex, parseWorkflowIdFromTranscriptPath } from './tool-matching.ts';
 
 // Claude event adapter — extracts SDK message → AgentEvent conversion into testable class
 import { ClaudeEventAdapter, buildWindowsSkillsDirError as buildWindowsSkillsDirErrorFn } from './backend/claude/event-adapter.ts';
@@ -137,8 +151,15 @@ export function resolveClaudeThinkingOptions(args: {
   const effort = THINKING_TO_EFFORT[thinkingLevel];
   const isHaiku = model.toLowerCase().includes('haiku');
   const supportsAdaptiveThinking = isClaude && !isHaiku;
+  // Mythos-class models (Fable 5 / Mythos 5) have adaptive thinking ALWAYS ON and
+  // reject `thinking: { type: 'disabled' }`. There's no way to turn thinking off;
+  // the lowest we can go is adaptive + 'low' effort.
+  const adaptiveAlwaysOn = isAdaptiveThinkingAlwaysOnModel(model);
 
   if (minimizeThinking || !isClaude || !effort) {
+    if (adaptiveAlwaysOn) {
+      return { thinking: { type: 'adaptive' as const }, effort: 'low' as const };
+    }
     return supportsAdaptiveThinking
       ? { thinking: { type: 'disabled' as const } }
       : { maxThinkingTokens: 0 };
@@ -164,6 +185,12 @@ export interface ClaudeAgentConfig {
   thinkingLevel?: ThinkingLevel; // Initial thinking level (defaults to 'medium')
   onSdkSessionIdUpdate?: (sdkSessionId: string) => void;  // Callback when SDK session ID is captured
   onSdkSessionIdCleared?: () => void;  // Callback when SDK session ID is cleared (e.g., after failed resume)
+  /**
+   * Callback when branch-fork metadata is invalidated (parent cwd missing on this machine,
+   * or SDK fork spawn failed). Clears branchFromSdk* + sdkSessionId atomically.
+   * See BackendConfig.onBranchForkInvalidated for details.
+   */
+  onBranchForkInvalidated?: () => void;
   /**
    * Callback to get recent messages for recovery context.
    * Called when SDK resume fails and we need to inject previous conversation context into retry.
@@ -203,7 +230,7 @@ export interface ClaudeAgentConfig {
   mcpPool?: McpClientPool;
   /** LLM connection slug for credential lookup in postInit(). */
   connectionSlug?: string;
-  /** Enable 1M context window for Opus 4.7. Default: true. Set false to use 200K and conserve usage limits. */
+  /** Enable 1M context window for current Opus models. Default: true. Set false to use 200K and conserve usage limits. */
   enable1MContext?: boolean;
 }
 
@@ -414,7 +441,9 @@ function createSourceProxyServers(pool: McpClientPool): Record<string, ReturnTyp
     if (mcpTools.length === 0) continue;
 
     const proxyTools = mcpTools.map(mcpTool => {
-      const proxyName = `mcp__${slug}__${mcpTool.name}`;
+      // Must match the pool's dispatch-map key (mcp-pool.ts sanitizes dotted
+      // names), or pool.callTool(proxyName) would miss for dotted tools (#864).
+      const proxyName = proxyToolName(slug, mcpTool.name);
       return tool(
         mcpTool.name,
         mcpTool.description || `Tool from ${slug}`,
@@ -452,6 +481,10 @@ export class ClaudeAgent extends BaseAgent {
   private currentQueryAbortController: AbortController | null = null;
   private lastAbortReason: AbortReason | null = null;
   private sessionId: string | null = null;
+  // Whether the most recent user turn included image/PDF attachments. Read by
+  // mapSDKErrorToTypedError to decide whether attachment-related hints belong
+  // in the invalid_request error message.
+  private lastTurnHadAttachments: boolean = false;
   private branchFromSdkSessionId: string | null = null;
   private branchFromSdkCwd: string | null = null;
   private branchFromSdkTurnId: string | null = null;
@@ -469,12 +502,178 @@ export class ClaudeAgent extends BaseAgent {
   // Pinned system prompt components (captured on first chat, used for consistency after compaction)
   private pinnedPreferencesPrompt: string | null = null;
   private pinnedIncludeCoAuthoredBy: boolean | null = null;
+  private pinnedProjectContext: import('../projects/types.ts').ProjectPromptContext | null = null;
   // Track if preference drift notification has been shown this session
   private preferencesDriftNotified: boolean = false;
   // Captured stderr from SDK subprocess (for error diagnostics when process exits with code 1)
   private lastStderrOutput: string[] = [];
   /** Pending steer message — injected via additionalContext on next PreToolUse */
   private pendingSteerMessage: string | null = null;
+
+  /**
+   * WS2 keep-alive: when true, use one long-lived streaming-input `query()` per
+   * session so background sub-agents survive across turns (instead of a fresh
+   * per-turn subprocess that tears them down at turn end). Resolved once from
+   * `CRAFT_KEEP_BG_AGENTS_ALIVE` via the shared resolver. Default is ON (opt-out);
+   * set `CRAFT_KEEP_BG_AGENTS_ALIVE=0` to force the per-turn kill-switch path.
+   */
+  private readonly keepBackgroundTasksAlive: boolean = resolveKeepBackgroundTasksAlive();
+
+  // ── WS2 persistent streaming-input query state (flag ON only) ─────────────
+  /** Pushable prompt feeding the one long-lived `query()`; `push()` per turn, `end()` to tear down. */
+  private persistentInput: PushableInputStream<SDKUserMessage> | null = null;
+  /** The sole iterator over the persistent query — owned exclusively by the consumer loop. */
+  private persistentIterator: AsyncIterator<SDKMessage> | null = null;
+  /** AbortController bound to the persistent query for its whole life (hard-kill backstop). */
+  private persistentAbortController: AbortController | null = null;
+  /** True while the single always-on consumer loop is running. */
+  private persistentConsumerActive = false;
+  /** The current turn's SDK-message channel; the consumer routes into it, chatImpl drains it. */
+  private activeTurnChannel: PushableInputStream<SDKMessage> | null = null;
+  /** Sink for background task events that arrive between turns (wired by the session layer). */
+  private onBackgroundEvent: ((event: AgentEvent) => void) | null = null;
+
+  /**
+   * Tear down the persistent query. Idempotent, and the single funnel for ALL
+   * teardown paths (dispose/destroy, auth-fail, recreate-on-change, clearHistory,
+   * consumer exit). Guarantees no subprocess leak: ends the input, returns the
+   * iterator, and — as a hard backstop — aborts the controller (SIGTERM/SIGKILL)
+   * so the subprocess dies even if the graceful close is ignored.
+   */
+  private teardownPersistentQuery(reason: string = 'teardown'): void {
+    if (!this.persistentInput && !this.persistentIterator && !this.persistentAbortController) {
+      return; // already torn down
+    }
+    debug(`[bg-lifecycle] teardownPersistentQuery (${reason})`, { sessionId: this.config.session?.id });
+    try { this.persistentInput?.end(); } catch { /* already ended */ }
+    try { void this.persistentIterator?.return?.(undefined); } catch { /* best-effort */ }
+    try { this.persistentAbortController?.abort(); } catch { /* best-effort hard backstop */ }
+    try { this.activeTurnChannel?.end(); } catch { /* best-effort */ }
+    this.persistentInput = null;
+    this.persistentIterator = null;
+    this.persistentAbortController = null;
+    this.activeTurnChannel = null;
+    this.persistentConsumerActive = false;
+  }
+
+  /**
+   * Begin a turn in persistent streaming-input mode. First call builds the one
+   * long-lived query (with this turn's resume/fork options) + starts the single
+   * consumer; later calls reuse it. Always sets up a fresh per-turn channel and
+   * pushes the user message. Returns the channel stream for chatImpl to drain —
+   * ending that channel at `result` completes the turn WITHOUT closing the real
+   * query (the subprocess, and its background sub-agents, stay alive).
+   */
+  private beginPersistentTurn(prompt: SDKUserMessage, options: Options): AsyncIterable<SDKMessage> {
+    if (!this.persistentInput || !this.currentQuery) {
+      // First turn: create the persistent query + consumer.
+      this.persistentInput = createPushableInputStream<SDKUserMessage>();
+      this.persistentAbortController = this.currentQueryAbortController;
+      this.currentQuery = query({ prompt: this.persistentInput.stream, options });
+      this.persistentIterator = this.currentQuery[Symbol.asyncIterator]();
+      this.startPersistentConsumer();
+    } else {
+      // Subsequent turn: keep redirect()/forceAbort() targeting the LIVE query by
+      // restoring its controller (the per-turn setup created a fresh, unused one).
+      if (this.persistentAbortController) {
+        this.currentQueryAbortController = this.persistentAbortController;
+      }
+    }
+    const channel = createPushableInputStream<SDKMessage>();
+    this.activeTurnChannel = channel;
+    this.persistentInput.push(prompt);
+    return channel.stream;
+  }
+
+  /**
+   * The single always-on consumer — the SOLE caller of the persistent iterator's
+   * `.next()` (so there is never a concurrent `.next()`). Routes each SDK message
+   * to the active turn's channel; on that turn's `result` it ends the channel
+   * (completing chatImpl's for-await without closing the query). Between turns it
+   * forwards background task-completion events via `onBackgroundEvent`, and keeps
+   * draining so the subprocess never stalls on pipe backpressure.
+   */
+  private startPersistentConsumer(): void {
+    if (this.persistentConsumerActive) return;
+    this.persistentConsumerActive = true;
+    const iterator = this.persistentIterator;
+    if (!iterator) {
+      this.persistentConsumerActive = false;
+      return;
+    }
+    void (async () => {
+      try {
+        while (true) {
+          const { done, value } = await iterator.next();
+          if (done) break;
+          const channel = this.activeTurnChannel;
+          if (channel) {
+            channel.push(value);
+            const type = (value as { type?: string } | undefined)?.type;
+            if (type === 'result') {
+              // Turn boundary: detach + end the channel so chatImpl's for-await
+              // completes. Do NOT touch the real iterator — the query lives on.
+              this.activeTurnChannel = null;
+              channel.end();
+            }
+          } else {
+            this.routeBackgroundMessage(value);
+          }
+        }
+      } catch (err) {
+        this.debug(`[bg-lifecycle] persistent consumer error: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        this.teardownPersistentQuery('consumer-exit');
+      }
+    })();
+  }
+
+  /**
+   * Convert a between-turns background SDK message to an AgentEvent and emit it
+   * via `onBackgroundEvent`. Only terminal task notifications are forwarded (the
+   * important signal — completion/failure); progress ticks between turns are
+   * cosmetic (the UI derives elapsed from startTime). Uses the same notification
+   * classifier as the turn-scoped event adapter so validation cannot drift.
+   */
+  private routeBackgroundMessage(message: SDKMessage): void {
+    const classification = classifyClaudeTaskNotification(message);
+    if (classification.kind === 'valid') {
+      this.onBackgroundEvent?.({
+        type: 'task_completed',
+        taskId: classification.notification.taskId,
+        status: classification.notification.status,
+        ...(classification.notification.outputFile ? { outputFile: classification.notification.outputFile } : {}),
+        ...(classification.notification.summary ? { summary: classification.notification.summary } : {}),
+      });
+      return;
+    }
+
+    const msg = message as unknown as {
+      type?: string;
+      subtype?: string;
+      status?: string;
+    };
+    if (classification.kind === 'missing-task-id') {
+      // This malformed terminal notification is the one dropped-message shape
+      // that can strand a task chip. Keep the warning metadata-only.
+      console.warn('[bg-lifecycle] task_notification missing task_id', {
+        type: msg?.type,
+        subtype: msg?.subtype,
+        status: msg?.status,
+      });
+      return;
+    }
+
+    // Progress and other between-turn SDK traffic is expected and intentionally
+    // ignored; keep it at debug level so normal background work does not flood
+    // warning logs and hide the malformed notification above.
+    this.debug(`[bg-lifecycle] dropping expected between-turns message: ${msg?.type}/${msg?.subtype ?? ''}`);
+  }
+
+  /** Wire the between-turns background-event sink (SessionManager forwards to registry/renderer). */
+  setBackgroundEventSink(sink: ((event: AgentEvent) => void) | null): void {
+    this.onBackgroundEvent = sink;
+  }
 
   /**
    * Get the session ID for mode operations.
@@ -489,6 +688,38 @@ export class ClaudeAgent extends BaseAgent {
    */
   private get workspaceRootPath(): string {
     return this.config.workspace.rootPath;
+  }
+
+  /**
+   * Look up the bound project (if any) and return a snapshot for system-prompt injection.
+   * Resolution silently no-ops when the session is unbound or the project no longer exists,
+   * so this never blocks a chat() call.
+   */
+  private resolveProjectContext(): import('../projects/types.ts').ProjectPromptContext | null {
+    const projectId = this.config.session?.projectId;
+    if (!projectId) return null;
+
+    try {
+      const project = loadProjectById(this.workspaceRootPath, projectId);
+      if (!project) return null;
+      const slug = project.config.slug;
+      return {
+        name: project.config.name,
+        description: project.config.description,
+        details: project.config.details,
+        assetsPath: getProjectAssetsPath(this.workspaceRootPath, slug),
+        assets: listProjectAssets(this.workspaceRootPath, slug).map((a) => ({
+          filename: a.filename,
+          mimeType: a.mimeType,
+          sizeBytes: a.sizeBytes,
+        })),
+        memoryPath: getProjectMemoryPath(this.workspaceRootPath, slug),
+        memoryContent: loadProjectMemory(this.workspaceRootPath, slug) ?? undefined,
+      };
+    } catch (error) {
+      debug(`[resolveProjectContext] Failed to load project ${projectId}:`, error);
+      return null;
+    }
   }
 
   // Callback for permission requests - set by application to receive permission prompts
@@ -535,8 +766,8 @@ export class ClaudeAgent extends BaseAgent {
   public onUsageUpdate: ((update: { inputTokens: number; contextWindow?: number; cacheHitRate?: number }) => void) | null = null;
 
   constructor(config: ClaudeAgentConfig) {
-    // Resolve model: prioritize session model > config model (caller must provide via connection)
-    const model = config.session?.model ?? config.model!;
+    // Resolve model: prioritize session model > config model > current Anthropic default.
+    const model = config.session?.model ?? config.model ?? DEFAULT_MODEL;
 
     // Build BackendConfig for BaseAgent
     // Context window from registry (1M for Opus/Sonnet 4.6, 200K for others)
@@ -554,6 +785,7 @@ export class ClaudeAgent extends BaseAgent {
       systemPromptPreset: config.systemPromptPreset,
       onSdkSessionIdUpdate: config.onSdkSessionIdUpdate,
       onSdkSessionIdCleared: config.onSdkSessionIdCleared,
+      onBranchForkInvalidated: config.onBranchForkInvalidated,
       getRecoveryMessages: config.getRecoveryMessages,
       getBranchFallbackMessages: config.getBranchFallbackMessages,
       getBranchSeedMessages: config.getBranchSeedMessages,
@@ -795,6 +1027,7 @@ export class ClaudeAgent extends BaseAgent {
         // First chat in this session - pin current values
         this.pinnedPreferencesPrompt = currentPreferencesPrompt;
         this.pinnedIncludeCoAuthoredBy = currentCoAuthorPref;
+        this.pinnedProjectContext = this.resolveProjectContext();
         debug('[chat] Pinned system prompt components for session consistency');
       } else {
         // Detect drift: warn user if context has changed since session started
@@ -812,11 +1045,28 @@ export class ClaudeAgent extends BaseAgent {
 
       // Check if we have binary attachments that need the AsyncIterable interface
       const hasBinaryAttachments = attachments?.some(a => a.type === 'image' || a.type === 'pdf');
+      this.lastTurnHadAttachments = !!hasBinaryAttachments;
 
       // Validate we have something to send
       if (!userMessage.trim() && (!attachments || attachments.length === 0)) {
         yield { type: 'error', message: 'Cannot send empty message' };
         yield { type: 'complete' };
+        return;
+      }
+
+      // Pre-spawn detection: a stale `branchFromSdkCwd` carried across machines
+      // (via "Send to Workspace") points at a directory that doesn't exist
+      // locally. Feeding that into spawn() returns ENOENT, which the SDK
+      // wraps as "Claude Code native binary not found at …" — sending users
+      // hunting for a bundling bug. Catch it here and route through the same
+      // branch fallback recovery the post-failure path uses.
+      if (
+        !_isRetry &&
+        this.branchFromSdkCwd &&
+        this.branchFromSdkSessionId &&
+        !isExistingDirectory(this.branchFromSdkCwd)
+      ) {
+        yield* this.recoverFromStaleBranchFork(userMessage, attachments, /* isPreSpawn */ true);
         return;
       }
 
@@ -919,12 +1169,40 @@ export class ClaudeAgent extends BaseAgent {
         ? `${model}[1m]`
         : model;
 
+      // Capture the resolved spawn cwd here (rather than via an instance
+      // field) so the catch handler reads the value passed to *this*
+      // chatImpl invocation, not state left over from an earlier call.
+      const resolvedCwd = this.resolveSpawnCwd({ isRetry: _isRetry, sessionId });
+
       const options: Options = {
         ...getDefaultOptions(this.config.envOverrides),
         model: effectiveModel,
         // Capture stderr from SDK subprocess for error diagnostics
         // This helps identify why sessions fail with "process exited with code 1"
         stderr: (data: string) => {
+          // The SDK dumps its ENTIRE minified source whenever a hook callback
+          // throws. The common (benign) case is a background sub-agent whose
+          // PreToolUse hook fires *after* the turn's input stream has closed at
+          // turn-end teardown — "Error in hook callback hook_N: … Stream closed"
+          // (a can_use_tool control request on a closed stream). That is the
+          // WS2 background-agent-dies-at-turn-end race: expected until keep-alive
+          // lands, and not actionable. Collapse it to a one-line warning instead
+          // of flooding the log/console with kilobytes of minified bundle.
+          const isHookStreamClosedNoise =
+            data.includes('Error in hook callback') &&
+            (data.includes('Stream closed') ||
+              data.includes('stream closed before response'));
+          if (isHookStreamClosedNoise) {
+            const concise =
+              '[SDK stderr] hook callback raced turn-end teardown (stream closed): a background tool call was cut off when the turn ended. Expected until background keep-alive lands.';
+            debug(concise);
+            console.error(concise);
+            this.lastStderrOutput.push('hook callback: Stream closed (turn-end teardown)');
+            if (this.lastStderrOutput.length > 20) {
+              this.lastStderrOutput.shift();
+            }
+            return;
+          }
           // Log to both debug file AND console for visibility
           debug('[SDK stderr]', data);
           console.error('[SDK stderr]', data);
@@ -955,7 +1233,8 @@ export class ClaudeAgent extends BaseAgent {
                 this.config.session?.workingDirectory,
                 undefined, // preset
                 undefined, // backendName
-                this.pinnedIncludeCoAuthoredBy ?? undefined
+                this.pinnedIncludeCoAuthoredBy ?? undefined,
+                this.pinnedProjectContext ?? undefined,
               ),
             },
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
@@ -964,10 +1243,7 @@ export class ClaudeAgent extends BaseAgent {
         // For fork attempts: use the parent's sdkCwd so the SDK subprocess can find the parent's
         // session file (stored under ~/.claude/projects/{cwd-hash}/). Without this, cross-CWD
         // branches (e.g., worktree ↔ main repo) fail with "No conversation found".
-        cwd: (!_isRetry && this.branchFromSdkCwd && this.branchFromSdkSessionId)
-          ? this.branchFromSdkCwd
-          : (this.config.session?.sdkCwd ??
-            (sessionId ? getSessionPath(this.workspaceRootPath, sessionId) : this.workspaceRootPath)),
+        cwd: resolvedCwd,
         includePartialMessages: true,
         // Tools configuration:
         // - Mini agents: minimal set for quick config edits (reduces token count ~70%)
@@ -1059,6 +1335,13 @@ export class ClaudeAgent extends BaseAgent {
 
               const toolInput = input.tool_input as Record<string, unknown>;
 
+              // Build RTK context fresh per call so toggling the preference
+              // takes effect without restart. `getRtkPath()` is cached per
+              // process; only the storage read happens each time.
+              const rtkContext: RtkContext | undefined = getRtkEnabled()
+                ? { enabled: true, path: getRtkPath(), exclude: [] }
+                : undefined;
+
               // Run centralized PreToolUse checks
               const checkResult = runPreToolUseChecks({
                 toolName: input.tool_name,
@@ -1075,6 +1358,7 @@ export class ClaudeAgent extends BaseAgent {
                 hasSourceActivation: !!this.onSourceActivationRequest,
                 permissionManager: this.permissionManager,
                 prerequisiteManager: this.prerequisiteManager,
+                rtkContext,
                 onDebug: (msg) => this.onDebug?.(msg),
               });
 
@@ -1253,6 +1537,19 @@ export class ClaudeAgent extends BaseAgent {
             hooks: [async (input, _toolUseID) => {
               const typedInput = input as { agent_id?: string; agent_transcript_path?: string };
               debug(`[ClaudeAgent] SubagentStop: agent_id=${typedInput.agent_id}, transcript=${typedInput.agent_transcript_path ?? 'none'}`);
+              // If this sub-agent belongs to a running Workflow (its transcript
+              // lives under .../workflows/wf_XXX/), attribute its completion to the
+              // owning workflow chip so the user sees live fan-out progress. The
+              // transcript path is the only place the wf_ id is exposed to us;
+              // ordinary sub-agents live under .../subagents/agent-* and return null.
+              const workflowId = parseWorkflowIdFromTranscriptPath(typedInput.agent_transcript_path);
+              if (workflowId && this.onBackgroundEvent) {
+                this.onBackgroundEvent({
+                  type: 'workflow_agent_completed',
+                  workflowId,
+                  agentId: typedInput.agent_id ?? '',
+                });
+              }
               return { continue: true };
             }],
           }],
@@ -1289,18 +1586,22 @@ export class ClaudeAgent extends BaseAgent {
               }
             : {}),
         mcpServers,
-        // NOTE: This callback is NOT called by the SDK because we set `permissionMode: 'bypassPermissions'` above.
+        // No `canUseTool`: `permissionMode: 'bypassPermissions'` shadows it (SDK never calls it,
+        // and since SDK 0.3.198 the combination triggers a runtime warning on every query).
         // All permission logic is handled via the PreToolUse hook instead (see hooks.PreToolUse above).
         // Bash permission logic is in PreToolUse where it actually executes.
-        canUseTool: async (_toolName, input) => {
-          return { behavior: 'allow' as const, updatedInput: input as Record<string, unknown> };
-        },
         // Selectively disable tools - file tools are disabled (use MCP), web/code controlled by settings
         disallowedTools,
         // No plugins — skills are handled by BaseAgent.chat() via read-before-execute
         // (the model reads SKILL.md files directly, enforced by PrerequisiteManager)
         plugins: [],
       };
+
+      // Capture the binary path the SDK will actually use (Electron-bundled custom
+      // path, CLI/dev-runtime path from getDefaultOptions, or undefined for SDK
+      // auto-discovery via node_modules). Used by the ENOENT classifier to tell
+      // "binary missing" apart from "cwd missing" — both surface as ENOENT from spawn().
+      const resolvedBinaryPath = options.pathToClaudeCodeExecutable;
 
       // Track whether we're trying to resume a session (for error handling)
       // Also covers branch fork attempts where sessionId is null but branchFromSdkSessionId is set
@@ -1354,22 +1655,36 @@ This is a branched conversation. All prior messages in this conversation are par
         debug('[chat] Injected SDK-fork branch context hint into first message');
       }
 
-      // Create the query - handle slash commands, binary attachments, or regular messages
-      if (isSlashCommand) {
+      // Create the query - handle slash commands, binary attachments, or regular messages.
+      //
+      // WS2 keep-alive: for non-slash turns, ride ONE persistent streaming-input
+      // query (created on the first turn, reused thereafter) so background
+      // sub-agents survive across turns. chatImpl then drains a per-turn *channel*
+      // (fed by the single consumer) instead of the raw query — ending that channel
+      // at `result` finishes the turn without closing the subprocess. Slash commands
+      // (e.g. /compact) always use the per-turn path (they mutate session state).
+      let turnMessageSource: AsyncIterable<SDKMessage>;
+      if (this.keepBackgroundTasksAlive && !isSlashCommand) {
+        const sdkMessage = this.buildSDKUserMessage(effectiveUserMessage, attachments);
+        turnMessageSource = this.beginPersistentTurn(sdkMessage, optionsWithAbort);
+      } else if (isSlashCommand) {
         // Send slash commands directly to SDK without context wrapping.
         // The SDK processes these as internal commands (e.g., /compact triggers compaction).
         debug(`[chat] Detected SDK slash command: ${trimmedMessage}`);
         this.currentQuery = query({ prompt: trimmedMessage, options: optionsWithAbort });
+        turnMessageSource = this.currentQuery;
       } else if (hasBinaryAttachments) {
         const sdkMessage = this.buildSDKUserMessage(effectiveUserMessage, attachments);
         async function* singleMessage(): AsyncIterable<SDKUserMessage> {
           yield sdkMessage;
         }
         this.currentQuery = query({ prompt: singleMessage(), options: optionsWithAbort });
+        turnMessageSource = this.currentQuery;
       } else {
         // Simple string prompt for text-only messages (may include text file contents)
         const prompt = this.buildTextPrompt(effectiveUserMessage, attachments);
         this.currentQuery = query({ prompt, options: optionsWithAbort });
+        turnMessageSource = this.currentQuery;
       }
 
       // Initialize event adapter for this turn
@@ -1386,8 +1701,16 @@ This is a branched conversation. All prior messages in this conversation are par
       let receivedAssistantContent = false;
       let suppressedSessionExpiredError = false;
       let suppressedBranchCutoffError = false;
+      // Source-activation auto-restart drain controller (#790). Captures the
+      // pending restart on the first triggering tool_result and drains sibling
+      // tool_results from the same parallel-tool batch before firing
+      // `source_activated` + `forceAbort` — otherwise the session journal
+      // ends up with orphan `tool_use` IDs that block subsequent sends.
+      const sourceActivationDrain = new SourceActivationDrainController('batch-boundary');
       try {
-        for await (const message of this.currentQuery) {
+        // Flag-OFF: `turnMessageSource === this.currentQuery` (unchanged). Flag-ON:
+        // it's the per-turn channel, so breaking/ending here never closes the query.
+        for await (const message of turnMessageSource) {
           // Track if we got any text content from assistant
           if ('type' in message && message.type === 'assistant' && 'message' in message) {
             const assistantMsg = message.message as { content?: unknown[] };
@@ -1421,23 +1744,15 @@ This is a branched conversation. All prior messages in this conversation are par
           for (const event of events) {
             // After source_test (or any session-scoped tool) successfully activates a
             // new source, activateSourceInSessionFn stashes a restart descriptor on the
-            // agent. Consume it here — right after the source_test tool_result has
-            // landed — so the model sees "activated" in its prior turn, then the
-            // renderer auto-resends the user's original message with a
-            // "[{slug} activated]" suffix. Same machinery as the tool-call-error path.
-            if (event.type === 'tool_result') {
-              const pendingRestart = this.consumePendingSourceActivationRestart();
-              if (pendingRestart) {
-                yield event;
-                this.onDebug?.(`source_test activated "${pendingRestart.sourceSlug}", interrupting turn for auto-retry`);
-                yield {
-                  type: 'source_activated' as const,
-                  sourceSlug: pendingRestart.sourceSlug,
-                  originalMessage: pendingRestart.userMessage,
-                };
-                this.forceAbort(AbortReason.SourceActivated);
-                return;
-              }
+            // agent. The drain controller captures the descriptor on the first
+            // triggering tool_result and short-circuits per-event handling for any
+            // sibling tool_results / synthetic background events in the same
+            // adapted batch. The fire (yield source_activated + forceAbort) happens
+            // at end-of-batch below, NOT here — see #790 for the symptoms when
+            // siblings were dropped.
+            if (sourceActivationDrain.observe(event, () => this.consumePendingSourceActivationRestart())) {
+              yield event;
+              continue;
             }
 
             // Check for tool-not-found errors on inactive sources and attempt auto-activation
@@ -1500,6 +1815,7 @@ This is a branched conversation. All prior messages in this conversation are par
                 toolName: event.toolName || 'unknown',
                 input: event.input,
                 summarize: summarizeCallback,
+                contextWindow: this.usageTracker.getContextWindow(),
               });
               if (guarded) {
                 yield { ...event, result: guarded };
@@ -1564,6 +1880,32 @@ This is a branched conversation. All prior messages in this conversation are par
             }
             yield event;
           }
+
+          // End-of-batch fire (#790): if the drain controller captured a
+          // pending source-activation restart while iterating this adapted
+          // SDK message, all sibling tool_results / interleaved synthetic
+          // events have now been yielded. Emit `source_activated` and abort.
+          const sourceActivationFire = sourceActivationDrain.shouldFireAtBoundary();
+          if (sourceActivationFire) {
+            this.onDebug?.(`source_test activated "${sourceActivationFire.sourceSlug}", drained sibling tool_results, restarting turn`);
+            yield sourceActivationFire;
+            this.forceAbort(AbortReason.SourceActivated);
+            return;
+          }
+        }
+
+        // Stream-end fallback (#790): the SDK stream ended without any batch
+        // boundary firing — defensive against the SDK closing in the same
+        // adapted batch the capture happened in. `return` is critical here —
+        // without it we fall through to flushPending + the defensive
+        // `complete` emission below, which would corrupt the auto-restart
+        // contract (renderer expects `source_activated` to be the final event).
+        const sourceActivationFireAtEnd = sourceActivationDrain.shouldFireAtBoundary();
+        if (sourceActivationFireAtEnd) {
+          this.onDebug?.(`source_test activated "${sourceActivationFireAtEnd.sourceSlug}", stream ended mid-batch, restarting turn`);
+          yield sourceActivationFireAtEnd;
+          this.forceAbort(AbortReason.SourceActivated);
+          return;
         }
 
         // Missing-UUID fallback: branch cutoff failed because resumeSessionAt target
@@ -1583,38 +1925,27 @@ This is a branched conversation. All prior messages in this conversation are par
           debug('[SESSION_DEBUG] >>> DETECTED EMPTY RESPONSE - triggering recovery');
           const wasBranchFork = !!this.branchFromSdkSessionId;
           if (wasBranchFork) {
-            debug(`[ClaudeAgent] Branch fork failed (empty response) before child session establishment (parent=${this.branchFromSdkSessionId}), recovering as fresh session`);
+            // Branch-fork failure: route through the shared helper so all four
+            // fork fields are persisted atomically (sdkSessionId + branchFromSdk*),
+            // and the parent conversation summary is injected into the retry.
+            yield* this.recoverFromStaleBranchFork(userMessage, attachments, /* isPreSpawn */ false);
+            return;
           }
-          // SDK resume failed silently - clear session and retry with context
+          // Regular resume failure (no branch fork): clear the session and retry
+          // with raw recovery context. onSdkSessionIdCleared persists the
+          // cleared sdkSessionId; there are no branch fields to clear here.
           this.sessionId = null;
-          this.branchFromSdkSessionId = null; // prevent retry from re-attempting fork with dead parent
-          this.branchFromSdkCwd = null;
-          this.branchFromSdkTurnId = null;
-          // Notify that we're clearing the session ID (for persistence)
           this.config.onSdkSessionIdCleared?.();
-          // Clear pinned state for fresh start
           this.pinnedPreferencesPrompt = null;
           this.pinnedIncludeCoAuthoredBy = null;
+          this.pinnedProjectContext = null;
           this.preferencesDriftNotified = false;
 
-          // Build fallback context: for branch failures, summarize parent conversation
-          // via mini completion; for regular resume failures, use last 6 raw messages.
           let retryMessage = userMessage;
-          if (wasBranchFork) {
-            const summary = await this.generateBranchFallbackContext();
-            if (summary) {
-              retryMessage = `<branch_context_summary>\nThis is a branched conversation. The SDK-level fork failed, but here is a summary of the parent conversation:\n\n${summary}\n</branch_context_summary>\n\n${userMessage}`;
-            } else {
-              const recoveryContext = this.buildRecoveryContext();
-              if (recoveryContext) retryMessage = recoveryContext + userMessage;
-            }
-          } else {
-            const recoveryContext = this.buildRecoveryContext();
-            if (recoveryContext) retryMessage = recoveryContext + userMessage;
-          }
+          const recoveryContext = this.buildRecoveryContext();
+          if (recoveryContext) retryMessage = recoveryContext + userMessage;
 
-          yield { type: 'info', message: wasBranchFork ? 'Branch fork failed, restoring context from history...' : 'Restoring conversation context...' };
-          // Retry with fresh session, injecting conversation history into the message
+          yield { type: 'info', message: 'Restoring conversation context...' };
           yield* this.chat(retryMessage, attachments, { isRetry: true });
           return;
         }
@@ -1794,38 +2125,128 @@ This is a branched conversation. All prior messages in this conversation are par
         if (isSessionExpired && wasResuming && !_isRetry) {
           debug('[SESSION_DEBUG] >>> TAKING PATH: Session expired recovery');
           const wasBranchFork = !!this.branchFromSdkSessionId;
-          if (wasBranchFork) {
-            debug(`[ClaudeAgent] Branch fork failed (session expired) before child session establishment (parent=${this.branchFromSdkSessionId}), recovering as fresh session`);
-          }
           console.error('[ClaudeAgent] SDK session expired server-side, clearing and retrying fresh');
           debug('[ClaudeAgent] SDK session expired server-side, clearing and retrying fresh');
-          this.sessionId = null;
-          this.branchFromSdkSessionId = null; // prevent retry from re-attempting fork with dead parent
-          this.branchFromSdkCwd = null;
-          this.branchFromSdkTurnId = null;
-          this.config.onSdkSessionIdCleared?.(); // persist cleared ID to JSONL header
-          // Clear pinned state so retry captures fresh values
-          this.pinnedPreferencesPrompt = null;
-          this.pinnedIncludeCoAuthoredBy = null;
-          this.preferencesDriftNotified = false;
 
-          // Inject fallback context for branch failures, recovery context for regular resume
-          let retryMessage = userMessage;
           if (wasBranchFork) {
-            const summary = await this.generateBranchFallbackContext();
-            if (summary) {
-              retryMessage = `<branch_context_summary>\nThis is a branched conversation. The SDK-level fork failed, but here is a summary of the parent conversation:\n\n${summary}\n</branch_context_summary>\n\n${userMessage}`;
-            } else {
-              const recoveryContext = this.buildRecoveryContext();
-              if (recoveryContext) retryMessage = recoveryContext + userMessage;
-            }
-          } else {
-            const recoveryContext = this.buildRecoveryContext();
-            if (recoveryContext) retryMessage = recoveryContext + userMessage;
+            // Branch-fork failure: route through the shared helper so the
+            // four fork fields are persisted atomically (avoids next launch
+            // reloading the dead parent and re-failing).
+            yield* this.recoverFromStaleBranchFork(userMessage, attachments, /* isPreSpawn */ false);
+            return;
           }
 
-          yield { type: 'info', message: wasBranchFork ? 'Branch fork failed, restoring context from history...' : 'Session expired, restoring context...' };
+          // Regular resume failure: clear sessionId and retry with raw recovery context.
+          this.sessionId = null;
+          this.config.onSdkSessionIdCleared?.();
+          this.pinnedPreferencesPrompt = null;
+          this.pinnedIncludeCoAuthoredBy = null;
+          this.pinnedProjectContext = null;
+          this.preferencesDriftNotified = false;
+
+          let retryMessage = userMessage;
+          const recoveryContext = this.buildRecoveryContext();
+          if (recoveryContext) retryMessage = recoveryContext + userMessage;
+
+          yield { type: 'info', message: 'Session expired, restoring context...' };
           yield* this.chat(retryMessage, attachments, { isRetry: true });
+          return;
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        // ENOENT handling — runs BEFORE the `if (isProcessError)` gate
+        // because the SDK throws spawn ENOENT as a `ReferenceError` with
+        // message "Claude Code native binary not found at …", which does
+        // not contain "process exited with code". Pre-uplift, the
+        // detection lived inside `isProcessError` and never fired for the
+        // case we actually care about.
+        // ─────────────────────────────────────────────────────────────────
+        const spawnError = sdkError as NodeJS.ErrnoException;
+        const isSpawnEnoent = detectSpawnEnoent({
+          errorCode: spawnError.code,
+          errorSyscall: spawnError.syscall,
+          rawErrorMsg,
+          stderr: stderrContext,
+        });
+
+        if (isSpawnEnoent) {
+          const reportedBinaryPath = extractSdkReportedBinaryPath(rawErrorMsg || '');
+          const { getPathToClaudeCodeExecutable } = await import('./options.ts');
+          const probedBinary = reportedBinaryPath || resolvedBinaryPath || getPathToClaudeCodeExecutable();
+          const probedCwd = resolvedCwd || undefined;
+          const binaryExists = probedBinary ? existsSync(probedBinary) : false;
+          const cwdExists = probedCwd ? isExistingDirectory(probedCwd) : false;
+
+          debug('[ClaudeAgent] ENOENT detected', {
+            probedBinary, probedCwd, binaryExists, cwdExists,
+            reportedBinaryPath,
+            errorCode: spawnError.code, errorSyscall: spawnError.syscall,
+          });
+
+          // Stale cwd plus a branch parent → route to recovery (covers the
+          // rare race where the pre-spawn guard didn't catch a cwd that
+          // vanished between check and spawn).
+          if (!cwdExists && !_isRetry && this.branchFromSdkSessionId) {
+            yield* this.recoverFromStaleBranchFork(userMessage, attachments, /* isPreSpawn */ false);
+            return;
+          }
+
+          // First attempt: retry once after 2s. Covers transient causes
+          // (auto-update bundle-swap window, sandbox/quarantine, race)
+          // regardless of which path looks missing.
+          if (!_isRetry) {
+            console.error('[ClaudeAgent] spawn ENOENT, retrying in 2s', {
+              sessionId: this.config.session?.id,
+              probedBinary, probedCwd,
+              errorCode: spawnError.code, errorSyscall: spawnError.syscall,
+              stderr: (stderrContext || '').slice(0, 200),
+            });
+            yield { type: 'info', message: 'Reconnecting after update...' };
+            await new Promise(r => setTimeout(r, 2000));
+            yield* this.chat(userMessage, attachments, { isRetry: true });
+            return;
+          }
+
+          // Retry exhausted: surface a typed error pointed at the more-likely
+          // cause. Cwd missing is more actionable when the binary is fine
+          // (we can recover from a parent summary); otherwise blame the
+          // binary (reinstall is the user's fix).
+          const isCwdCause = !cwdExists && binaryExists;
+          yield {
+            type: 'typed_error',
+            error: isCwdCause ? {
+              code: 'sdk_cwd_missing',
+              title: 'Branch source unavailable on this machine',
+              message:
+                "The folder this branched session was forked from doesn't exist on this machine. " +
+                'This typically happens after importing a session from another workspace. ' +
+                'Retrying will start a fresh fork from a summary of the parent conversation.',
+              details: [
+                probedCwd ? `Subprocess cwd: ${probedCwd}` : '',
+                probedBinary ? `Binary: ${probedBinary} (${binaryExists ? 'exists' : 'missing'})` : '',
+              ].filter(Boolean) as string[],
+              actions: [{ key: 'r', label: 'Retry', action: 'retry' as const }],
+              canRetry: true,
+              retryDelayMs: 1000,
+              originalError: rawErrorMsg,
+            } : {
+              code: 'sdk_binary_missing',
+              title: 'Claude Code binary missing from app bundle',
+              message:
+                'The Claude Agent SDK binary expected on disk is not present. ' +
+                'This usually means the app bundle is incomplete (interrupted download, partial update, ' +
+                'or a security tool removed it). Reinstalling Craft Agents typically fixes this.',
+              details: [
+                probedBinary ? `Expected binary: ${probedBinary}` : 'Binary path: unknown',
+                probedCwd ? `Subprocess cwd: ${probedCwd} (${cwdExists ? 'exists' : 'missing'})` : '',
+              ].filter(Boolean) as string[],
+              actions: [{ key: 'r', label: 'Retry', action: 'retry' as const }],
+              canRetry: true,
+              retryDelayMs: 1000,
+              originalError: rawErrorMsg,
+            },
+          };
+          yield { type: 'complete' };
           return;
         }
 
@@ -1839,28 +2260,6 @@ This is a branched conversation. All prior messages in this conversation are par
           if (windowsSkillsError) {
             yield windowsSkillsError;
             yield { type: 'complete' };
-            return;
-          }
-
-          // Detect spawn ENOENT — Node.js error when the SDK subprocess binary has
-          // been moved/deleted (e.g., during app bundle swap on auto-update).
-          // Structured fields first (precise), regex fallback for stringified stderr.
-          const spawnError = sdkError as NodeJS.ErrnoException;
-          const isSpawnEnoent =
-            (spawnError.code === 'ENOENT' && spawnError.syscall?.startsWith('spawn')) ||
-            /\bspawn\b[\s\S]*\bENOENT\b/.test(stderrContext || '') ||
-            /\bspawn\b[\s\S]*\bENOENT\b/.test(rawErrorMsg || '');
-
-          if (isSpawnEnoent && !_isRetry) {
-            console.error('[ClaudeAgent] spawn ENOENT detected, retrying in 2s', {
-              sessionId: this.config.session?.id,
-              errorCode: spawnError.code,
-              errorSyscall: spawnError.syscall,
-              stderr: (stderrContext || '').slice(0, 200),
-            });
-            yield { type: 'info', message: 'Reconnecting after update...' };
-            await new Promise(r => setTimeout(r, 2000));
-            yield* this.chat(userMessage, attachments, { isRetry: true });
             return;
           }
 
@@ -1932,40 +2331,30 @@ This is a branched conversation. All prior messages in this conversation are par
         if (wasResuming && !_isRetry) {
           debug('[SESSION_DEBUG] >>> TAKING PATH: wasResuming fallback retry');
           const wasBranchFork = !!this.branchFromSdkSessionId;
+
           if (wasBranchFork) {
-            debug(`[ClaudeAgent] Branch fork failed (generic error) before child session establishment (parent=${this.branchFromSdkSessionId}), recovering as fresh session`);
+            // Generic error during a fork attempt: route through the shared
+            // helper so all four fork fields are persisted atomically and
+            // the parent summary is injected into the retry.
+            yield* this.recoverFromStaleBranchFork(userMessage, attachments, /* isPreSpawn */ false);
+            return;
           }
+
+          // Regular resume failure (no branch fork): clear sessionId only.
           this.sessionId = null;
-          this.branchFromSdkSessionId = null; // prevent retry from re-attempting fork with dead parent
-          this.branchFromSdkCwd = null;
-          this.branchFromSdkTurnId = null;
-          this.config.onSdkSessionIdCleared?.(); // persist cleared ID to JSONL header
-          // Clear pinned state so retry captures fresh values
+          this.config.onSdkSessionIdCleared?.();
           this.pinnedPreferencesPrompt = null;
           this.pinnedIncludeCoAuthoredBy = null;
+          this.pinnedProjectContext = null;
           this.preferencesDriftNotified = false;
 
-          // Inject fallback context for branch failures, recovery context for regular resume
           let retryMessage = userMessage;
-          if (wasBranchFork) {
-            const summary = await this.generateBranchFallbackContext();
-            if (summary) {
-              retryMessage = `<branch_context_summary>\nThis is a branched conversation. The SDK-level fork failed, but here is a summary of the parent conversation:\n\n${summary}\n</branch_context_summary>\n\n${userMessage}`;
-            } else {
-              const recoveryContext = this.buildRecoveryContext();
-              if (recoveryContext) retryMessage = recoveryContext + userMessage;
-            }
-          } else {
-            const recoveryContext = this.buildRecoveryContext();
-            if (recoveryContext) retryMessage = recoveryContext + userMessage;
-          }
+          const recoveryContext = this.buildRecoveryContext();
+          if (recoveryContext) retryMessage = recoveryContext + userMessage;
 
-          // Provide context-aware message
-          const statusMessage = wasBranchFork
-            ? 'Branch fork failed, restoring context from history...'
-            : errorMsg.includes('session') || errorMsg.includes('resume')
-              ? 'Conversation sync failed, restoring context...'
-              : 'Request failed, retrying with context...';
+          const statusMessage = errorMsg.includes('session') || errorMsg.includes('resume')
+            ? 'Conversation sync failed, restoring context...'
+            : 'Request failed, retrying with context...';
 
           yield { type: 'info', message: statusMessage };
           yield* this.chat(retryMessage, attachments, { isRetry: true });
@@ -2001,7 +2390,20 @@ This is a branched conversation. All prior messages in this conversation are par
       // emit complete even on error so application knows we're done
       yield { type: 'complete' };
     } finally {
-      this.currentQuery = null;
+      // [bg-lifecycle] Nulling currentQuery closes the SDK query iterator, which
+      // tears down the per-turn subprocess and any background sub-agents it
+      // launched. This is the teardown point referenced by WS2-step0: background
+      // agents die HERE at turn end, not when a second user message arrives.
+      // WS2: in keep-alive mode the persistent query is kept open across turns —
+      // the per-turn channel already ended at `result`, and teardown happens only
+      // via teardownPersistentQuery() (dispose/auth-fail/recreate/clearHistory).
+      // Flag-OFF path is unchanged: null currentQuery → subprocess teardown.
+      if (this.keepBackgroundTasksAlive && this.persistentInput) {
+        debug(`[bg-lifecycle] chat() turn finished — persistent query kept alive`, { sessionId: this.config.session?.id, sdkSessionId: this.sessionId });
+      } else {
+        debug(`[bg-lifecycle] chat() finally — currentQuery nulled, subprocess torn down`, { sessionId: this.config.session?.id, sdkSessionId: this.sessionId, keepAlive: this.keepBackgroundTasksAlive });
+        this.currentQuery = null;
+      }
 
       // If a steer message was never delivered (no PreToolUse fired), notify the session
       // layer so it can re-queue the message for the next turn.
@@ -2264,6 +2666,7 @@ This is a branched conversation. All prior messages in this conversation are par
     const error = mapClaudeSdkAssistantError(errorCode, {
       actualError,
       capturedApiError,
+      userTurnHadAttachments: this.lastTurnHadAttachments,
     });
 
     return {
@@ -2345,6 +2748,7 @@ This is a branched conversation. All prior messages in this conversation are par
     // Clear pinned state so next chat() will capture fresh values
     this.pinnedPreferencesPrompt = null;
     this.pinnedIncludeCoAuthoredBy = null;
+    this.pinnedProjectContext = null;
     this.preferencesDriftNotified = false;
   }
 
@@ -2423,7 +2827,7 @@ This is a branched conversation. All prior messages in this conversation are par
 
   /**
    * Check if running in mini agent mode.
-   * Uses centralized detection for consistency with CodexAgent.
+   * Uses the centralized `systemPromptPreset` flag from BaseAgent.
    */
   isMiniAgent(): boolean {
     return this.config.systemPromptPreset === 'mini';
@@ -2511,11 +2915,15 @@ This is a branched conversation. All prior messages in this conversation are par
   destroy(): void {
     // Claude-specific cleanup first
     this.currentQueryAbortController?.abort();
+    // WS2: tear down the persistent streaming-input query (if any) so no
+    // subprocess/background sub-agents leak past the agent's lifetime.
+    this.teardownPersistentQuery('destroy');
     this.pendingPermissions.clear();
 
     // Clear pinned system prompt state
     this.pinnedPreferencesPrompt = null;
     this.pinnedIncludeCoAuthoredBy = null;
+    this.pinnedProjectContext = null;
     this.preferencesDriftNotified = false;
 
     // Clear Claude-specific callbacks (not handled by BaseAgent)
@@ -2630,6 +3038,90 @@ This is a branched conversation. All prior messages in this conversation are par
   }
 
   /**
+   * Pick the first existing directory among the cwd candidates.
+   *
+   * `branchFromSdkCwd` is consulted only on the first attempt of a branched
+   * session — pre-spawn detection (in `chat()`) routes stale-branch cases
+   * through `recoverFromStaleBranchFork` before this method runs, so the
+   * branch candidate here is only relevant in the rare race where the cwd
+   * vanishes between the pre-spawn check and the actual spawn.
+   */
+  private resolveSpawnCwd({
+    isRetry,
+    sessionId,
+  }: {
+    isRetry: boolean;
+    sessionId: string | null;
+  }): string {
+    const candidates: Array<string | null | undefined> = [
+      !isRetry && this.branchFromSdkSessionId ? this.branchFromSdkCwd : null,
+      this.config.session?.sdkCwd,
+      sessionId ? getSessionPath(this.workspaceRootPath, sessionId) : null,
+      this.workspaceRootPath,
+    ];
+    for (const c of candidates) {
+      if (isExistingDirectory(c)) return c!;
+    }
+    // workspaceRootPath itself is missing — pathological, but we have nothing
+    // better to fall back to. Let the SDK surface the spawn failure.
+    debug('[ClaudeAgent] No cwd candidate exists; falling back to workspaceRootPath anyway', {
+      candidates,
+    });
+    return this.workspaceRootPath;
+  }
+
+  /**
+   * Recover from a branch-fork session whose parent cwd is no longer
+   * reachable on this machine, or whose SDK fork spawn failed before
+   * establishing a child session.
+   *
+   * `isPreSpawn` selects the user-facing status text only — the recovery
+   * mechanics are identical for pre-spawn (cwd missing on disk before the
+   * SDK runs) and post-failure (anything that broke the fork attempt
+   * after spawn).
+   */
+  private async *recoverFromStaleBranchFork(
+    userMessage: string,
+    attachments: FileAttachment[] | undefined,
+    isPreSpawn: boolean,
+  ): AsyncGenerator<AgentEvent> {
+    debug('[ClaudeAgent] Recovering from stale branch fork', {
+      isPreSpawn,
+      sessionId: this.config.session?.id,
+      parent: this.branchFromSdkSessionId,
+      parentCwd: this.branchFromSdkCwd,
+    });
+
+    this.sessionId = null;
+    this.branchFromSdkSessionId = null;
+    this.branchFromSdkCwd = null;
+    this.branchFromSdkTurnId = null;
+    this.pinnedPreferencesPrompt = null;
+    this.pinnedIncludeCoAuthoredBy = null;
+    this.pinnedProjectContext = null;
+    this.preferencesDriftNotified = false;
+    // Atomic on-disk persistence: clears all four fork fields at once. This
+    // supersedes onSdkSessionIdCleared, which only persists sdkSessionId and
+    // would leave the branchFromSdk* fields on disk to reload next launch.
+    this.config.onBranchForkInvalidated?.();
+
+    let retryMessage = userMessage;
+    const summary = await this.generateBranchFallbackContext();
+    if (summary) {
+      retryMessage = `<branch_context_summary>\nThis is a branched conversation. The SDK-level fork is unavailable on this machine; here is a summary of the parent conversation:\n\n${summary}\n</branch_context_summary>\n\n${userMessage}`;
+    } else {
+      const recoveryContext = this.buildRecoveryContext();
+      if (recoveryContext) retryMessage = recoveryContext + userMessage;
+    }
+
+    const statusMessage = isPreSpawn
+      ? 'Branch source unavailable on this machine, restoring context from history...'
+      : 'Branch fork failed, restoring context from history...';
+    yield { type: 'info', message: statusMessage };
+    yield* this.chat(retryMessage, attachments, { isRetry: true });
+  }
+
+  /**
    * Generate a mini-summarized fallback context from parent conversation messages.
    * Called when SDK-level branch fork fails and we need to inject parent context
    * into the retry without overflowing the context window with raw messages.
@@ -2656,7 +3148,7 @@ This is a branched conversation. All prior messages in this conversation are par
     const options = {
       ...getDefaultOptions(this.config.envOverrides),
       model,
-      // Reasoning-model outputs (Opus 4.7 extended thinking) can span multiple SDK-counted
+      // Reasoning-model outputs (Opus extended thinking) can span multiple SDK-counted
       // turns even with no tools exposed. Tool surface here is empty, so no tool-use loop risk.
       maxTurns: 10,
       systemPrompt: request.systemPrompt ?? 'Reply with ONLY the requested text. No explanation.',

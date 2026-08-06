@@ -28,7 +28,7 @@ import {
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getDocUrl, type DocFeature } from '@craft-agent/shared/docs/doc-links'
 
-export type SidebarMenuType = 'allSessions' | 'flagged' | 'status' | 'sources' | 'skills' | 'automations' | 'labels' | 'views' | 'newSession'
+export type SidebarMenuType = 'allSessions' | 'flagged' | 'status' | 'sources' | 'skills' | 'automations' | 'projects' | 'labels' | 'views' | 'newSession'
 
 export interface SidebarMenuProps {
   /** Type of sidebar item (determines available menu items) */
@@ -53,6 +53,8 @@ export interface SidebarMenuProps {
   onAddSkill?: () => void
   /** Handler for "Add Automation" action - only for automations type */
   onAddAutomation?: () => void
+  /** Handler for "Add Project" action - only for projects type */
+  onAddProject?: () => void
   /** Source type filter for "Learn More" link - determines which docs page to open */
   sourceType?: 'api' | 'mcp' | 'local'
   /** Handler for "Edit Views" action - for views type */
@@ -79,6 +81,7 @@ export function SidebarMenu({
   onAddSource,
   onAddSkill,
   onAddAutomation,
+  onAddProject,
   sourceType,
   onConfigureViews,
   viewId,
@@ -214,6 +217,20 @@ export function SidebarMenu({
         <Plus className="h-3.5 w-3.5" />
         <span className="flex-1">{t("sidebarMenu.addSkill")}</span>
       </MenuItem>
+    )
+  }
+
+  // Projects: show "Add Project"
+  if (type === 'projects') {
+    return (
+      <>
+        {onAddProject && (
+          <MenuItem onClick={onAddProject}>
+            <Plus className="h-3.5 w-3.5" />
+            <span className="flex-1">{t("sidebarMenu.addProject")}</span>
+          </MenuItem>
+        )}
+      </>
     )
   }
 

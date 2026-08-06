@@ -99,6 +99,7 @@ export function useAutomations(
       actions: automation.actions,
       permissionMode: automation.permissionMode,
       labels: automation.labels,
+      telegramTopic: automation.telegramTopic,
     }).then((result) => {
       const actions = result.actions
       if (!actions || actions.length === 0) {

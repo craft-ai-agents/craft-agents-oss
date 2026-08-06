@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { classifyExternalUrl, isSafeExternalUrl } from '../url-safety.ts'
+import { classifyExternalUrl, isSafeExternalUrl, formatBlockedUrlError } from '../url-safety.ts'
 
 describe('classifyExternalUrl — safe external (standard web schemes)', () => {
   it('classifies http:// as safe-external', () => {
@@ -51,27 +51,48 @@ describe('classifyExternalUrl — internal deep links', () => {
 
 describe('classifyExternalUrl — dangerous schemes', () => {
   it.each([
-    ['javascript:alert(1)'],
-    ['JavaScript:alert(1)'],
-    ['JAVASCRIPT:alert(1)'],
-    ['data:text/html,<script>alert(1)</script>'],
-    ['vbscript:msgbox("hi")'],
-    ['blob:https://example.com/abc'],
-    ['file:///etc/passwd'],
-    ['FILE:///etc/passwd'],
-  ])('classifies %s as dangerous', (url) => {
+    ['javascript:alert(1)', 'javascript:'],
+    ['JavaScript:alert(1)', 'javascript:'],
+    ['JAVASCRIPT:alert(1)', 'javascript:'],
+    ['data:text/html,<script>alert(1)</script>', 'data:'],
+    ['vbscript:msgbox("hi")', 'vbscript:'],
+    ['blob:https://example.com/abc', 'blob:'],
+    ['file:///etc/passwd', 'file:'],
+    ['FILE:///etc/passwd', 'file:'],
+  ])('classifies %s as dangerous with scheme %s', (url, expectedScheme) => {
     const result = classifyExternalUrl(url)
     expect(result.kind).toBe('dangerous')
     if (result.kind === 'dangerous') {
+      expect(result.scheme).toBe(expectedScheme)
       expect(result.reason).toBeTruthy()
+    }
+  })
+
+  it('attaches a file-specific reason that mentions preview blocks for file: URLs', () => {
+    const result = classifyExternalUrl('file:///tmp/test.md')
+    expect(result.kind).toBe('dangerous')
+    if (result.kind === 'dangerous') {
+      expect(result.reason).toMatch(/markdown-preview/)
+    }
+  })
+
+  it('attaches a JS-specific reason for javascript: URLs', () => {
+    const result = classifyExternalUrl('javascript:alert(1)')
+    expect(result.kind).toBe('dangerous')
+    if (result.kind === 'dangerous') {
+      expect(result.reason).toMatch(/JavaScript/)
     }
   })
 })
 
 describe('classifyExternalUrl — malformed input', () => {
-  it('rejects empty string', () => {
+  it('rejects empty string with a scheme-less reason', () => {
     const result = classifyExternalUrl('')
     expect(result.kind).toBe('dangerous')
+    if (result.kind === 'dangerous') {
+      expect(result.scheme).toBeUndefined()
+      expect(result.reason).toMatch(/empty/i)
+    }
   })
 
   it('rejects whitespace-only string', () => {
@@ -79,13 +100,35 @@ describe('classifyExternalUrl — malformed input', () => {
     expect(result.kind).toBe('dangerous')
   })
 
-  it('rejects plain text that is not a URL', () => {
+  it('rejects plain text that is not a URL with a malformed reason', () => {
     const result = classifyExternalUrl('not a url')
     expect(result.kind).toBe('dangerous')
+    if (result.kind === 'dangerous') {
+      expect(result.scheme).toBeUndefined()
+      expect(result.reason).toMatch(/malformed/i)
+    }
   })
 
   it('trims leading/trailing whitespace before classifying', () => {
     expect(classifyExternalUrl('  https://example.com  ').kind).toBe('safe-external')
+  })
+})
+
+describe('formatBlockedUrlError', () => {
+  it('formats a scheme-bearing dangerous classification with parenthesized scheme', () => {
+    const message = formatBlockedUrlError(classifyExternalUrl('file:///tmp/x'))
+    expect(message).toMatch(/^URL blocked \(file:\)\. /)
+  })
+
+  it('omits the parenthesized scheme when no scheme is present', () => {
+    const message = formatBlockedUrlError(classifyExternalUrl(''))
+    expect(message).toMatch(/^URL blocked\. /)
+    expect(message).not.toMatch(/\(/)
+  })
+
+  it('returns an empty string for non-dangerous classifications', () => {
+    expect(formatBlockedUrlError(classifyExternalUrl('https://example.com'))).toBe('')
+    expect(formatBlockedUrlError(classifyExternalUrl('craftagents://settings'))).toBe('')
   })
 })
 

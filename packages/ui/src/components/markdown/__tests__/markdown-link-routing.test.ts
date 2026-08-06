@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'bun:test'
+import * as React from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import { classifyMarkdownLinkTarget, resolveMarkdownLinkTarget } from '../link-target'
+import { markdownUrlTransform } from '../url-transform'
 
 describe('resolveMarkdownLinkTarget', () => {
   it('resolves absolute unix file paths as file targets', () => {
@@ -37,6 +41,20 @@ describe('resolveMarkdownLinkTarget', () => {
     })
   })
 
+  it('decodes a percent-encoded space in a BARE local file path (#944)', () => {
+    expect(resolveMarkdownLinkTarget('/Users/tester/My%20Docs/report%20final.pptx')).toEqual({
+      kind: 'file',
+      path: '/Users/tester/My Docs/report final.pptx',
+    })
+  })
+
+  it('leaves a bare path with an invalid percent-sequence untouched (#944)', () => {
+    expect(resolveMarkdownLinkTarget('/Users/tester/100%done/notes.md')).toEqual({
+      kind: 'file',
+      path: '/Users/tester/100%done/notes.md',
+    })
+  })
+
   it('normalizes windows drive-letter file URLs to local paths', () => {
     expect(resolveMarkdownLinkTarget('file:///C:/Users/Tester/Deck.pptx')).toEqual({
       kind: 'file',
@@ -56,6 +74,56 @@ describe('resolveMarkdownLinkTarget', () => {
       kind: 'url',
       url: 'mailto:test@example.com',
     })
+  })
+})
+
+describe('markdownUrlTransform', () => {
+  it('preserves dangerous anchor hrefs for custom click routing', () => {
+    const anchorNode = { tagName: 'a' }
+    expect(markdownUrlTransform('file:///tmp/test.md', 'href', anchorNode as never)).toBe('file:///tmp/test.md')
+    expect(markdownUrlTransform('javascript:alert(1)', 'href', anchorNode as never)).toBe('javascript:alert(1)')
+  })
+
+  it('still sanitizes dangerous non-anchor URL attributes', () => {
+    const imageNode = { tagName: 'img' }
+    expect(markdownUrlTransform('javascript:alert(1)', 'src', imageNode as never)).toBe('')
+  })
+
+  it('keeps safe anchor hrefs unchanged', () => {
+    const anchorNode = { tagName: 'a' }
+    expect(markdownUrlTransform('https://example.com', 'href', anchorNode as never)).toBe('https://example.com')
+  })
+})
+
+describe('ReactMarkdown anchor rendering with markdownUrlTransform', () => {
+  function render(markdown: string): string {
+    return renderToStaticMarkup(React.createElement(ReactMarkdown, {
+      urlTransform: markdownUrlTransform,
+      components: {
+        a: ({ href, children }) => React.createElement('a', {
+          href: href ? defaultUrlTransform(href) || undefined : undefined,
+          'data-raw-href': href,
+        }, children),
+      },
+      children: markdown,
+    }))
+  }
+
+  it('lets file links reach the custom anchor while keeping the DOM href sanitized', () => {
+    const html = render('[report](file:///Users/tester/report.pdf)')
+    expect(html).toContain('data-raw-href="file:///Users/tester/report.pdf"')
+    expect(html).not.toContain('<a href="file:///Users/tester/report.pdf"')
+  })
+
+  it('lets javascript links reach the custom anchor while keeping the DOM href sanitized', () => {
+    const html = render('[boom](javascript:alert(1))')
+    expect(html).toContain('data-raw-href="javascript:alert(1)"')
+    expect(html).not.toContain('<a href="javascript:alert')
+  })
+
+  it('keeps safe web links in the DOM href for normal browser affordances', () => {
+    const html = render('[site](https://example.com/path)')
+    expect(html).toContain('href="https://example.com/path"')
   })
 })
 

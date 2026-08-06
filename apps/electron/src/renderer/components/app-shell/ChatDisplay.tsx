@@ -17,6 +17,7 @@ import { toast } from "sonner"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
+import { coerceInputText, appendRestoredInput } from "@/lib/input-text"
 import { Markdown, CollapsibleMarkdownProvider, StreamingMarkdown, type RenderMode } from "@/components/markdown"
 import { AnimatedCollapsibleContent } from "@/components/ui/collapsible"
 import {
@@ -207,6 +208,12 @@ interface ChatDisplayProps {
   // Lazy loading
   /** When true, messages are still loading - show spinner in messages area */
   messagesLoading?: boolean
+  /** Message load failure shown instead of an infinite spinner */
+  messagesLoadError?: string | null
+  /** Whether a retry is currently in flight */
+  messagesRetrying?: boolean
+  /** Retry lazy-loading the session transcript */
+  onRetryMessagesLoad?: () => void
   // Tutorial
   /** Disable send action (for tutorial guidance) */
   disableSend?: boolean
@@ -217,9 +224,15 @@ interface ChatDisplayProps {
   isSearchModeActive?: boolean
   /** Callback when match info changes - for immediate UI updates */
   onMatchInfoChange?: (info: { count: number; index: number; isHighlighting: boolean; sessionId: string | null }) => void
-  // Compact mode (for EditPopover embedding)
+  // Compact mode (for EditPopover embedding and auto-compact / WebUI mobile)
   /** Enable compact mode - hides non-essential UI elements for popover embedding */
   compactMode?: boolean
+  /**
+   * When compactMode is true, enable the compact (drawer-based) model selector
+   * next to the permission-mode pill. Defaults to false so EditPopover keeps
+   * its current behavior; ChatPage opts in when in auto-compact / mobile.
+   */
+  enableCompactModelPicker?: boolean
   /** Custom placeholder for input (used in compact mode for edit context) */
   placeholder?: string | string[]
   /** Label shown as empty state in compact mode (e.g., "Permission Settings") */
@@ -466,14 +479,18 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   sessionFolderPath,
   // Lazy loading
   messagesLoading = false,
+  messagesLoadError,
+  messagesRetrying = false,
+  onRetryMessagesLoad,
   // Tutorial
   disableSend = false,
   // Search highlighting
   searchQuery: externalSearchQuery,
   isSearchModeActive = false,
   onMatchInfoChange,
-  // Compact mode (for EditPopover embedding)
+  // Compact mode (for EditPopover embedding and auto-compact / WebUI mobile)
   compactMode = false,
+  enableCompactModelPicker = false,
   placeholder,
   emptyStateLabel,
   // Connection unavailable
@@ -647,7 +664,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     if (!searchQuery.trim() || !session?.messages) return []
     const startTime = performance.now()
     const query = searchQuery.toLowerCase()
-    const turns = groupMessagesByTurn(session.messages)
+    const turns = groupMessagesByTurn(session.messages, { isSessionProcessing: session.isProcessing })
     const matches: { matchId: string; turnId: string; turnIndex: number; matchIndexInTurn: number }[] = []
 
     for (let turnIndex = 0; turnIndex < turns.length; turnIndex++) {
@@ -688,7 +705,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       }
     }
     return matches
-  }, [searchQuery, session?.messages, countOccurrences])
+  }, [searchQuery, session?.messages, session?.isProcessing, countOccurrences])
 
   // Auto-expand pagination when search is active to show all matching turns
   // This ensures match count is stable and all matches are highlightable from the start
@@ -700,7 +717,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       (min, m) => m.turnIndex < min ? m.turnIndex : min,
       matchingOccurrences[0]!.turnIndex
     )
-    const totalTurns = groupMessagesByTurn(session?.messages || []).length
+    const totalTurns = groupMessagesByTurn(session?.messages || [], { isSessionProcessing: session?.isProcessing }).length
 
     // Calculate how many turns we need to show to include all matches
     // totalTurns - visibleTurnCount = startIndex, so we need visibleTurnCount = totalTurns - earliestMatchTurnIndex + buffer
@@ -709,7 +726,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     if (requiredVisibleCount > visibleTurnCount) {
       setVisibleTurnCount(requiredVisibleCount)
     }
-  }, [isSearchActive, matchingOccurrences, session?.messages, visibleTurnCount])
+  }, [isSearchActive, matchingOccurrences, session?.messages, session?.isProcessing, visibleTurnCount])
 
   // Extract unique turn IDs that have matches (for highlighting)
   const matchingTurnIds = useMemo(() => {
@@ -1282,6 +1299,19 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // silent=true when redirecting (sending new message), silent=false when user clicks Stop button
   const handleStop = (silent = false) => {
     if (!session?.isProcessing) return
+
+    // Explicit Stop (not a redirect/new-message send): put the in-flight prompt
+    // back in the input so the user can tweak and resend. Append to any draft.
+    // Exclude isQueued messages — those are restored separately by the backend
+    // `restore_input` effect (App.tsx) and would otherwise double up here.
+    if (!silent) {
+      const lastUserMsg = [...session.messages].reverse().find(m => m.role === 'user' && !m.isQueued)
+      const restoredText = coerceInputText(lastUserMsg?.content)
+      if (restoredText) {
+        onInputChange?.(appendRestoredInput(inputValue, restoredText))
+      }
+    }
+
     window.electronAPI.cancelProcessing(session.id, silent).catch(error => {
       console.error('[ChatDisplay] Failed to cancel processing:', error)
     })
@@ -1356,8 +1386,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Memoize turn grouping - avoids O(n) iteration on every render/keystroke
   const allTurns = React.useMemo(() => {
     if (!session) return []
-    return groupMessagesByTurn(session.messages)
-  }, [session?.messages])
+    return groupMessagesByTurn(session.messages, { isSessionProcessing: session.isProcessing })
+  }, [session?.messages, session?.isProcessing])
 
   // Keep ref in sync for scroll handler
   totalTurnCountRef.current = allTurns.length
@@ -1453,6 +1483,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // At render time, prevSessionIdForScrollRef still has the OLD session ID, so we can detect the switch
   const isSessionSwitchForScroll = prevSessionIdForScrollRef.current !== null && prevSessionIdForScrollRef.current !== session?.id
   const skipScrollToBottom = isSessionSwitchForScroll && isSearchActive
+  const hasUnrenderedLoadedMessages = !messagesLoading
+    && turns.length === 0
+    && ((session?.messages?.length ?? 0) > 0 || (session?.messageCount ?? 0) > 0)
 
   return (
     <div ref={zoneRef} className="flex h-full flex-col min-w-0" data-focus-zone="chat">
@@ -1485,8 +1518,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                     exit={{ opacity: 0 }}
                     transition={compactMode ? { duration: 0 } : { duration: 0.1, ease: 'easeOut' }}
                   >
-                    {/* Loading/Content AnimatePresence: Handles spinner ↔ content transition */}
-                    <AnimatePresence mode={compactMode ? "sync" : "wait"} initial={false}>
+                    {/* Loading/Content AnimatePresence: sync mode avoids stale loading exits masking ready content */}
+                    <AnimatePresence mode="sync" initial={false}>
                     {messagesLoading ? (
                       /* Loading State: Show spinner while messages are being lazy loaded */
                       <motion.div
@@ -1498,6 +1531,37 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         className="flex items-center justify-center h-64"
                       >
                         <Spinner className="text-foreground/30" />
+                      </motion.div>
+                    ) : messagesLoadError ? (
+                      <motion.div
+                        key="load-error"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={compactMode ? { duration: 0 } : { duration: 0.1 }}
+                        className="flex items-center justify-center h-64 px-4"
+                      >
+                        <div
+                          className="max-w-sm rounded-[8px] border border-destructive/20 px-4 py-3 text-center shadow-tinted"
+                          style={{
+                            backgroundColor: 'oklch(from var(--destructive) l c h / 0.03)',
+                            '--shadow-color': 'var(--destructive-rgb)',
+                          } as React.CSSProperties}
+                        >
+                          <AlertTriangle className="mx-auto mb-2 h-4 w-4 text-destructive/70" />
+                          <div className="text-sm font-medium text-destructive">{t("chat.failedToLoadConversation")}</div>
+                          <p className="mt-1 break-words text-xs text-destructive/70">{messagesLoadError}</p>
+                          {onRetryMessagesLoad && (
+                            <button
+                              type="button"
+                              onClick={onRetryMessagesLoad}
+                              disabled={messagesRetrying}
+                              className="mt-3 rounded border border-destructive/20 px-2 py-0.5 text-xs text-destructive/70 transition-colors hover:border-destructive/40 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {messagesRetrying ? t("common.retrying") : t("common.retry")}
+                            </button>
+                          )}
+                        </div>
                       </motion.div>
                     ) : (
                     /* Turn-based Message Display - memoized to avoid re-grouping on every render */
@@ -1523,6 +1587,15 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                     <div className="absolute inset-0 flex flex-col items-center justify-center select-none gap-1 pointer-events-none">
                       <span className="text-sm text-muted-foreground">{t("editPopover.whatToChange")}</span>
                       <span className="text-xs text-muted-foreground/50">{t("editPopover.justDescribe")}</span>
+                    </div>
+                  )}
+                  {!compactMode && hasUnrenderedLoadedMessages && (
+                    <div className="flex h-64 items-center justify-center px-4 text-center">
+                      <div className="max-w-sm rounded-[8px] border border-border/50 bg-foreground/[0.03] px-4 py-3">
+                        <CircleAlert className="mx-auto mb-2 h-4 w-4 text-foreground/50" />
+                        <div className="text-sm font-medium text-foreground/70">Conversation loaded, but no renderable messages were found.</div>
+                        <p className="mt-1 text-xs text-foreground/50">Try reloading the session. If this persists, the message history may contain an unsupported format.</p>
+                      </div>
                     </div>
                   )}
                   {/* Load more indicator - shown when there are older messages */}
@@ -1847,7 +1920,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             tasks={backgroundTasks}
             sessionId={session.id}
             sessionFolderPath={sessionFolderPath}
-            onKillTask={(taskId) => killTask(taskId, backgroundTasks.find(t => t.id === taskId)?.type ?? 'shell')}
+            onKillTask={(taskId) => killTask(taskId, backgroundTasks.find(t => t.id === taskId)?.type === 'shell' ? 'shell' : 'agent')}
             onInsertMessage={onInputChange}
             sessionLabels={session.labels}
             labels={labels}
@@ -1868,6 +1941,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               thinkingLevel,
               onThinkingLevelChange,
               enabledModes,
+              enableCompactModelPicker,
               structuredInput,
               onStructuredResponse: handleStructuredResponse,
               inputValue,
@@ -2181,6 +2255,7 @@ function MessageBubble({
           {onPopOut && !message.isStreaming && (
             <button
               onClick={() => onPopOut(message)}
+              data-touch-reveal="true"
               className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-foreground/5"
               title={t("sidebarMenu.openInNewWindow")}
             >

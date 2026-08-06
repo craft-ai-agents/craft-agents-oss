@@ -12,15 +12,33 @@
 import type { AgentEvent as CraftAgentEvent } from '@craft-agent/core/types';
 import type {
   AgentEvent as PiAgentEvent,
-} from '@mariozechner/pi-agent-core';
+} from '@earendil-works/pi-agent-core';
 import type {
   AgentSessionEvent,
-} from '@mariozechner/pi-coding-agent';
-import type { AssistantMessageEvent } from '@mariozechner/pi-ai';
+} from '@earendil-works/pi-coding-agent';
+import type { AssistantMessage, AssistantMessageEvent } from '@earendil-works/pi-ai';
+import { isContextOverflow } from '@earendil-works/pi-ai';
 import { BaseEventAdapter } from '../base-event-adapter.ts';
 import { PI_TOOL_NAME_MAP } from './constants.ts';
 import { toolMetadataStore } from '../../../interceptor-common.ts';
 import { parseError } from '../../errors.ts';
+
+/**
+ * Pi SDK auto-compaction race signature — the AbortController crash described
+ * in `_runAutoCompaction` (`@earendil-works/pi-coding-agent` agent-session.ts).
+ * When two `_runAutoCompaction` calls overlap, one's `finally` clears the
+ * shared `_autoCompactionAbortController` field while the other is still
+ * suspended on an await; the next `.signal` read crashes. Matched against
+ * `compaction_end.errorMessage` to surface a friendly message instead of the
+ * raw stack until the upstream fix lands. See plans/fix-pi-gpt-compaction.md.
+ */
+const SDK_AUTOCOMPACT_RACE_SIGNATURE = /_autoCompactionAbortController\.signal/;
+
+/** How long to wait after a held overflow `agent_end` for a `compaction_start`
+ *  before giving up and surfacing the original error. The SDK fires
+ *  `_checkCompaction` on the same event-queue tick, so the only delay is event
+ *  serialization — 5 s is well above any plausible jitter. */
+const OVERFLOW_FALLBACK_TIMEOUT_MS = 5_000;
 
 /**
  * Combined event type the adapter can handle.
@@ -53,7 +71,7 @@ export class PiEventAdapter extends BaseEventAdapter {
   // Track whether a final (non-intermediate) text_complete has been emitted this turn
   private hasEmittedFinalText: boolean = false;
 
-  // Sub-turnId isolation (same pattern as CopilotEventAdapter)
+  // Sub-turnId isolation for tool calls within a single Pi turn
   private subTurnCounter: number = 0;
   private messageSubTurnId: string | null = null;
 
@@ -69,6 +87,31 @@ export class PiEventAdapter extends BaseEventAdapter {
   // Track last usage for emitting with complete event
   private lastUsage: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number; cost: { total: number } } | undefined;
 
+  // ============================================================
+  // Overflow-recovery state machine
+  // ============================================================
+  //
+  // When a Pi-routed assistant message returns a context_length_exceeded
+  // error, the Pi SDK's `_checkCompaction` fires `_runAutoCompaction("overflow",
+  // true)` and, on success, calls `agent.continue()` to retry. That recovered
+  // turn arrives AFTER the original `agent_end`. If we yield `complete` and
+  // call `eventQueue.complete()` on the original `agent_end` (the historic
+  // behavior), the recovered turn lands in a closed iterator. The state
+  // machine below holds the queue open across the SDK's recovery flow so the
+  // recovered response reaches the UI.
+  private overflowState: 'none' | 'held' | 'awaiting' | 'compacting' | 'recovering' = 'none';
+  private heldOverflowError: string | null = null;
+  private fallbackTimerId: ReturnType<typeof setTimeout> | null = null;
+  /** Set when the adapter wants the caller to call `eventQueue.complete()`
+   *  on a non-`agent_end` event (e.g. `compaction_end` failure). Consumed by
+   *  `shouldCompleteQueue()`. */
+  private pendingQueueComplete: boolean = false;
+  /** Caller-supplied callbacks for the asynchronous fallback timer path —
+   *  the timer fires outside `adaptEvent()` so we can't yield through the
+   *  generator. */
+  private onFallbackEvent: ((event: CraftAgentEvent) => void) | null = null;
+  private onFallbackComplete: (() => void) | null = null;
+
   constructor() {
     super('pi-event');
   }
@@ -78,6 +121,70 @@ export class PiEventAdapter extends BaseEventAdapter {
    */
   setContextWindow(cw: number): void {
     this.contextWindow = cw;
+  }
+
+  /**
+   * Register handlers invoked when the overflow-recovery fallback timer fires
+   * (the SDK didn't emit a `compaction_start` after a held overflow `agent_end`
+   * within `OVERFLOW_FALLBACK_TIMEOUT_MS`). Adapter calls `onEvent` to enqueue
+   * the buffered original error, then `onComplete` to terminate the iterator.
+   */
+  setOverflowFallbackHandlers(
+    onEvent: (event: CraftAgentEvent) => void,
+    onComplete: () => void,
+  ): void {
+    this.onFallbackEvent = onEvent;
+    this.onFallbackComplete = onComplete;
+  }
+
+  /**
+   * Decide whether the caller should call `eventQueue.complete()` after
+   * processing this SDK event. The historical rule was "always on
+   * `agent_end`"; with overflow recovery we defer completion until the
+   * recovered turn finishes (or recovery fails / times out).
+   */
+  shouldCompleteQueue(isAgentEnd: boolean): boolean {
+    if (this.pendingQueueComplete) {
+      this.pendingQueueComplete = false;
+      return true;
+    }
+    return isAgentEnd && this.overflowState === 'none';
+  }
+
+  /**
+   * Reset overflow-recovery state. Call from session disposal so a stale
+   * fallback timer doesn't fire on a torn-down adapter.
+   */
+  resetOverflowState(): void {
+    this.cancelOverflowFallbackTimer();
+    this.overflowState = 'none';
+    this.heldOverflowError = null;
+    this.pendingQueueComplete = false;
+  }
+
+  private armOverflowFallbackTimer(): void {
+    this.cancelOverflowFallbackTimer();
+    this.fallbackTimerId = setTimeout(() => {
+      this.fallbackTimerId = null;
+      // Re-check state at fire time — a late `compaction_start` may have
+      // already transitioned us to `compacting`.
+      if (this.overflowState !== 'awaiting') return;
+      const errorMessage = this.heldOverflowError ?? 'Context overflow';
+      this.heldOverflowError = null;
+      this.overflowState = 'none';
+      this.log.warn('Overflow recovery fallback fired — SDK emitted no compaction events', {
+        timeoutMs: OVERFLOW_FALLBACK_TIMEOUT_MS,
+      });
+      this.onFallbackEvent?.({ type: 'error', message: errorMessage });
+      this.onFallbackComplete?.();
+    }, OVERFLOW_FALLBACK_TIMEOUT_MS);
+  }
+
+  private cancelOverflowFallbackTimer(): void {
+    if (this.fallbackTimerId !== null) {
+      clearTimeout(this.fallbackTimerId);
+      this.fallbackTimerId = null;
+    }
   }
 
   /**
@@ -111,6 +218,23 @@ export class PiEventAdapter extends BaseEventAdapter {
    * Adapt a Pi SDK event to zero or more Craft AgentEvents.
    */
   *adaptEvent(event: PiEvent): Generator<CraftAgentEvent> {
+    // Craft-injected event from pi-agent-server (not part of the Pi SDK).
+    // The subprocess emits this immediately after each `message_end` to deliver
+    // the correct `sdkTurnAnchor` (the leaf id AFTER the SDK has appended the
+    // assistant entry). We forward it through as-is — SessionManager correlates
+    // it to a Craft assistant message via `sdkMessageId`. See craft-agents-oss#782.
+    if ((event as { type?: string }).type === 'pi_turn_anchor') {
+      const e = event as unknown as { sdkMessageId?: string; sdkTurnAnchor?: string };
+      if (e.sdkMessageId && e.sdkTurnAnchor) {
+        yield {
+          type: 'pi_turn_anchor',
+          sdkMessageId: e.sdkMessageId,
+          sdkTurnAnchor: e.sdkTurnAnchor,
+        };
+      }
+      return;
+    }
+
     switch (event.type) {
       // ============================================================
       // Agent lifecycle events
@@ -121,6 +245,24 @@ export class PiEventAdapter extends BaseEventAdapter {
         break;
 
       case 'agent_end':
+        // Overflow recovery: hold the queue open while the SDK runs
+        // _runAutoCompaction("overflow") + agent.continue(). The recovered
+        // turn will arrive as a fresh agent_start … agent_end pair.
+        if (this.overflowState === 'held') {
+          this.overflowState = 'awaiting';
+          this.armOverflowFallbackTimer();
+          break;
+        }
+        if (this.overflowState === 'awaiting' || this.overflowState === 'compacting') {
+          // Defensive: an agent_end while still mid-recovery shouldn't happen
+          // in the SDK's normal flow. Keep the queue open and wait for
+          // compaction_end (success → recovering, error → drain).
+          break;
+        }
+        if (this.overflowState === 'recovering') {
+          // Recovered turn just finished — fall through to normal completion.
+          this.overflowState = 'none';
+        }
         if (this.lastUsage) {
           const inputTokens = this.lastUsage.input + (this.lastUsage.cacheRead || 0);
           yield {
@@ -186,12 +328,27 @@ export class PiEventAdapter extends BaseEventAdapter {
       case 'message_end': {
         // Pi SDK emits message_end for ALL messages (user, assistant, toolResult).
         // Only process assistant messages — skip user prompts and tool results.
-        const msg = event.message as { role?: string; stopReason?: string; errorMessage?: string; usage?: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number; cost: { total: number } } } | undefined;
-        const sdkTurnAnchor = (event as { sdkTurnAnchor?: string }).sdkTurnAnchor;
+        const msg = event.message as { role?: string; stopReason?: string; errorMessage?: string; usage?: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number; cost: { total: number } }; id?: string } | undefined;
+        // SDK message id, set by pi-agent-server when forwarding the event.
+        // SessionManager uses this to correlate the follow-up `pi_turn_anchor`
+        // event to the Craft assistant message created here (#782).
+        const sdkMessageId = (event as { sdkMessageId?: string }).sdkMessageId ?? msg?.id;
         if (msg?.role !== 'assistant') break;
 
         // Surface API errors — Pi SDK sets stopReason: 'error' and errorMessage on failures
         if (msg.stopReason === 'error' && msg.errorMessage) {
+          // Context overflow: hand recovery to the SDK's _runAutoCompaction
+          // and keep the UI quiet until we know the outcome (recovered turn
+          // arrives, or compaction fails). Suppress the raw provider error.
+          if (
+            this.overflowState === 'none' &&
+            isContextOverflow(event.message as AssistantMessage, this.contextWindow)
+          ) {
+            this.overflowState = 'held';
+            this.heldOverflowError = msg.errorMessage;
+            break;
+          }
+
           // Classify the error — auth/billing errors should be typed so SessionManager
           // can trigger its auth-retry pipeline (refresh token + resend).
           const parsed = parseError(new Error(msg.errorMessage));
@@ -220,7 +377,7 @@ export class PiEventAdapter extends BaseEventAdapter {
             text: textContent,
             isIntermediate,
             turnId: mTurnId,
-            sdkTurnAnchor,
+            sdkMessageId,
           };
           this.hasStreamedDeltas = false;
         }
@@ -381,6 +538,13 @@ export class PiEventAdapter extends BaseEventAdapter {
       // ============================================================
 
       case 'compaction_start':
+        // Cancel the overflow fallback timer — the SDK is now actively
+        // recovering, so we no longer need the "no compaction event arrived"
+        // safety net. State transitions: held|awaiting → compacting.
+        if (this.overflowState === 'held' || this.overflowState === 'awaiting') {
+          this.cancelOverflowFallbackTimer();
+          this.overflowState = 'compacting';
+        }
         // Use "Compacting" keyword so session handler detects statusType: 'compacting'
         yield { type: 'status', message: 'Compacting context...' };
         break;
@@ -388,10 +552,50 @@ export class PiEventAdapter extends BaseEventAdapter {
       case 'compaction_end': {
         const compactionEvent = event as Extract<AgentSessionEvent, { type: 'compaction_end' }>;
         if (compactionEvent.result && !compactionEvent.aborted) {
+          // Success: stay open and wait for the recovered agent_end. State
+          // transitions: compacting → recovering. Threshold-only compactions
+          // (state was 'none') just emit the info and continue normally.
+          if (this.overflowState === 'compacting') {
+            this.overflowState = 'recovering';
+            this.heldOverflowError = null;
+          }
           // Use "Compacted" keyword so session handler detects statusType: 'compaction_complete'
           yield { type: 'info', message: 'Compacted context to fit within limits' };
         } else if (compactionEvent.errorMessage) {
-          yield { type: 'error', message: `Context compaction failed: ${compactionEvent.errorMessage}` };
+          // Defensive handler for the Pi SDK auto-compaction race (cause A
+          // in plans/fix-pi-gpt-compaction.md). The raw stack
+          // `undefined is not an object (evaluating 'this._autoCompactionAbortController.signal')`
+          // is unhelpful to the user; convert it to a friendly retry hint and
+          // log for diagnostics. Remove once the upstream fix ships.
+          if (SDK_AUTOCOMPACT_RACE_SIGNATURE.test(compactionEvent.errorMessage)) {
+            this.log.warn('Pi SDK auto-compaction race; recommend manual /compact', {
+              errorMessage: compactionEvent.errorMessage,
+            });
+            yield {
+              type: 'error',
+              message: 'Auto-compaction hit a transient error. Try /compact manually.',
+            };
+          } else {
+            yield {
+              type: 'error',
+              message: `Context compaction failed: ${compactionEvent.errorMessage}`,
+            };
+          }
+          // If we were holding the queue open for overflow recovery, finalize
+          // the turn now — no recovered agent_end will arrive on the failure
+          // path. pendingQueueComplete signals the caller to terminate the
+          // iterator since this is a non-agent_end event.
+          if (
+            this.overflowState === 'compacting' ||
+            this.overflowState === 'awaiting' ||
+            this.overflowState === 'held'
+          ) {
+            yield { type: 'complete' };
+            this.pendingQueueComplete = true;
+            this.overflowState = 'none';
+            this.heldOverflowError = null;
+            this.cancelOverflowFallbackTimer();
+          }
         }
         break;
       }

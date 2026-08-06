@@ -13,9 +13,23 @@
 import { randomInt } from 'node:crypto'
 import type { PlatformType } from './types'
 
+/**
+ * Pairing-code intent.
+ *
+ * - `session`: classic flow — typing `/pair <code>` in a chat binds that
+ *   chat (DM, or a Telegram supergroup topic) to the originating session.
+ * - `workspace-supergroup`: workspace-level setup — typing `/pair <code>`
+ *   in a Telegram supergroup registers that supergroup as the workspace's
+ *   accepted forum, after which sessions can be bound to specific topics
+ *   inside it. The `sessionId` field is unused for this kind.
+ */
+export type PairingKind = 'session' | 'workspace-supergroup'
+
 export interface PairingEntry {
+  kind: PairingKind
   workspaceId: string
-  sessionId: string
+  /** Only set for `kind: 'session'`. */
+  sessionId?: string
   platform: PlatformType
   code: string
   expiresAt: number
@@ -60,20 +74,39 @@ export class PairingCodeManager {
    * @throws Error with code 'RATE_LIMIT' when the workspace exceeds the per-minute cap.
    */
   generate(workspaceId: string, sessionId: string, platform: PlatformType): GeneratedPairing {
-    this.checkRate(workspaceId)
+    return this.generateInternal({ kind: 'session', workspaceId, sessionId, platform })
+  }
+
+  /**
+   * Issue a workspace-supergroup pairing code. Used for the one-time setup
+   * flow that captures a Telegram supergroup's chat_id when the user types
+   * `/pair <code>` inside it.
+   */
+  generateForSupergroup(workspaceId: string, platform: PlatformType): GeneratedPairing {
+    return this.generateInternal({ kind: 'workspace-supergroup', workspaceId, platform })
+  }
+
+  private generateInternal(args: {
+    kind: PairingKind
+    workspaceId: string
+    sessionId?: string
+    platform: PlatformType
+  }): GeneratedPairing {
+    this.checkRate(args.workspaceId)
     this.gc()
 
     // Collision-resistant: retry a few times if we clash with a live code.
     let code = this.randomCode()
-    for (let i = 0; i < 5 && this.entries.has(this.key(platform, code)); i++) {
+    for (let i = 0; i < 5 && this.entries.has(this.key(args.platform, code)); i++) {
       code = this.randomCode()
     }
 
     const expiresAt = Date.now() + this.ttlMs
-    this.entries.set(this.key(platform, code), {
-      workspaceId,
-      sessionId,
-      platform,
+    this.entries.set(this.key(args.platform, code), {
+      kind: args.kind,
+      workspaceId: args.workspaceId,
+      ...(args.sessionId !== undefined ? { sessionId: args.sessionId } : {}),
+      platform: args.platform,
       code,
       expiresAt,
     })

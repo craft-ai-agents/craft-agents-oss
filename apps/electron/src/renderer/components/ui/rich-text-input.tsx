@@ -779,6 +779,9 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
           contentEditable={!disabled}
           suppressContentEditableWarning
           tabIndex={disabled ? -1 : 0}
+          // Disable auto-capitalization/correction that breaks IME (e.g. CJK pinyin) input (#837/#878)
+          autoCapitalize="none"
+          autoCorrect="off"
           className={cn(
             'outline-none text-sm whitespace-pre-wrap break-words',
             'min-h-[1.5em]',

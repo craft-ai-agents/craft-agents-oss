@@ -210,7 +210,7 @@ export function WorkspaceCreationScreen({
               "mr-[-8px] mt-2",
               isCreating && "opacity-50 cursor-not-allowed"
             )}
-            aria-label="Close"
+            aria-label={t('common.close')}
           >
             <X className="h-4 w-4" />
           </motion.button>
