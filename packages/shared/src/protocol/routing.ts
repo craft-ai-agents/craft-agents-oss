@@ -472,6 +472,10 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.media.COMFY_RUN,
   RPC_CHANNELS.media.COMFY_STATUS,
   RPC_CHANNELS.media.COMFY_CANCEL,
+  RPC_CHANNELS.media.STEM_SPLIT,
+  RPC_CHANNELS.media.BEAT_RENDER,
+  RPC_CHANNELS.media.AUDIO_PROCESS,
+  RPC_CHANNELS.media.AUDIO_JOB_STATUS,
 
   // automations — workspace automations
   RPC_CHANNELS.automations.GET,

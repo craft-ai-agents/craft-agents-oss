@@ -236,6 +236,10 @@ export const CHANNEL_MAP = {
   comfyRun: invoke(RPC_CHANNELS.media.COMFY_RUN),
   comfyStatus: invoke(RPC_CHANNELS.media.COMFY_STATUS),
   comfyCancel: invoke(RPC_CHANNELS.media.COMFY_CANCEL),
+  audioStemSplit: invoke(RPC_CHANNELS.media.STEM_SPLIT),
+  audioBeatRender: invoke(RPC_CHANNELS.media.BEAT_RENDER),
+  audioProcess: invoke(RPC_CHANNELS.media.AUDIO_PROCESS),
+  audioJobStatus: invoke(RPC_CHANNELS.media.AUDIO_JOB_STATUS),
 
   // Sources
   getSources: invoke(RPC_CHANNELS.sources.GET),

@@ -477,6 +477,27 @@ export const RPC_CHANNELS = {
     COMFY_RUN: 'media:comfy-run',
     COMFY_STATUS: 'media:comfy-status',
     COMFY_CANCEL: 'media:comfy-cancel',
+
+    /**
+     * Start a stem separation job (Demucs). Request: `StemSplitRequest`.
+     * Response: `AudioJobStartResult` with a `jobId` for polling.
+     */
+    STEM_SPLIT: 'media:stem-split',
+    /**
+     * Render a beat pattern to WAV. Request: `BeatRenderRequest`.
+     * Response: `AudioJobStartResult`.
+     */
+    BEAT_RENDER: 'media:beat-render',
+    /**
+     * Process audio (stretch, transpose, trim, normalize, mix). Request:
+     * `AudioProcessRequest`. Response: `AudioJobStartResult`.
+     */
+    AUDIO_PROCESS: 'media:audio-process',
+    /**
+     * Poll any audio job by id. Request: `{ jobId: string }`.
+     * Response: `AudioJobStatus`.
+     */
+    AUDIO_JOB_STATUS: 'media:audio-job-status',
   },
   browserPane: {
     CREATE: 'browser-pane:create',

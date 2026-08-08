@@ -685,6 +685,71 @@ export interface ComfyJobStatus {
   error?: string
 }
 
+// ---------------------------------------------------------------------------
+// Audio Studio (Demucs stem splitting + beat making + remixing)
+// ---------------------------------------------------------------------------
+
+export type AudioJobState = 'queued' | 'running' | 'completed' | 'failed' | 'unknown'
+
+export interface AudioJobStartResult {
+  jobId: string
+}
+
+export interface AudioJobStatus {
+  jobId: string
+  state: AudioJobState
+  progress: number
+  stage?: string
+  /** Absolute paths to output files, keyed by stem/track name. */
+  outputs?: Record<string, string>
+  output?: string
+  error?: string
+  startedAt?: number
+  finishedAt?: number
+}
+
+export interface StemSplitRequest {
+  /** Absolute path to the input audio file. */
+  inputPath: string
+  /** Demucs model name (default: htdemucs). */
+  model?: string
+}
+
+export interface BeatTrackStep {
+  name: string
+  sample: string
+  steps: number[]
+  volume?: number
+  freq?: number
+}
+
+export interface BeatRenderRequest {
+  bpm: number
+  bars: number
+  steps: number
+  tracks: BeatTrackStep[]
+}
+
+export type AudioProcessOperation = 'stretch' | 'transpose' | 'trim' | 'normalize' | 'mix'
+
+export interface AudioProcessRequest {
+  operation: AudioProcessOperation
+  /** Input file path (for single-input ops). */
+  inputPath?: string
+  /** Output file path. */
+  outputPath?: string
+  /** Stretch ratio (stretch op). 1.0 = original, 0.5 = half speed. */
+  ratio?: number
+  /** Semitones to shift (transpose op). */
+  semitones?: number
+  /** Start time in seconds (trim op). */
+  start?: number
+  /** Duration in seconds (trim op). */
+  duration?: number
+  /** Mix inputs (mix op). */
+  mixInputs?: Array<{ path: string; gain?: number; pan?: number }>
+}
+
 export interface FileSearchResult {
   name: string
   path: string

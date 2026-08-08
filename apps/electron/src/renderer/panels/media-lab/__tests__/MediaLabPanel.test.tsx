@@ -358,7 +358,7 @@ describe('MediaLabPanel smoke test', () => {
     // Click Library tab.
     await act(async () => {
       const buttons = container.querySelectorAll('button.media-tab')
-      expect(buttons.length).toBe(3)
+      expect(buttons.length).toBe(6)
       const libraryButton = Array.from(buttons).find(
         (button: any) => button.textContent?.includes('Library'),
       ) as HTMLButtonElement

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { VariableSizeGrid, type VariableSizeGrid as VariableSizeGridType } from 'react-window'
-import { Clapperboard, Image, Music, Video, FileText, Loader2, ExternalLink, Sparkles, Wand2, Download, EyeOff, X, CheckSquare, FolderOpen, Power, Cpu, Gauge, Clock3, Layers3, ChevronDown, RotateCcw, PlayCircle, Pause, Volume2, VolumeX, Maximize2, SkipBack } from 'lucide-react'
+import { Clapperboard, Image, Music, Video, FileText, Loader2, ExternalLink, Sparkles, Wand2, Download, EyeOff, X, CheckSquare, FolderOpen, Power, Cpu, Gauge, Clock3, Layers3, ChevronDown, RotateCcw, PlayCircle, Pause, Volume2, VolumeX, Maximize2, SkipBack, Scissors, Drum } from 'lucide-react'
 import type {
   ComfyHealth,
   ComfyJobStatus,
@@ -11,7 +11,11 @@ import type {
   MediaListRequest,
 } from '@archstudio/shared/protocol'
 import { useAppShellContext } from '../../context/AppShellContext'
+import { StemSplitterPanel } from './StemSplitterPanel'
+import { BeatMakerPanel } from './BeatMakerPanel'
+import { RemixTimelinePanel } from './RemixTimelinePanel'
 import './MediaLabPanel.css'
+import './MusicStudio.css'
 
 const KIND_ICON: Record<MediaKind, typeof Image> = {
   image: Image,
@@ -242,7 +246,7 @@ export function MediaLabPanel() {
   const { onOpenFile } = useAppShellContext()
   const [kindFilter, setKindFilter] = useState<MediaKind | 'all'>('all')
   const [previewVideo, setPreviewVideo] = useState<MediaItem | null>(null)
-  const [creationTab, setCreationTab] = useState<'create' | 'library'>('create')
+  const [creationTab, setCreationTab] = useState<'create' | 'library' | 'stems' | 'beats' | 'remix'>('create')
   const [comfyHealth, setComfyHealth] = useState<ComfyHealth | null>(null)
   const [comfyWorkflows, setComfyWorkflows] = useState<ComfyWorkflowSummary[]>([])
   const [comfyRejectedCount, setComfyRejectedCount] = useState(0)
@@ -895,8 +899,21 @@ export function MediaLabPanel() {
             <Video size={14} /> Library
             {isLibraryLoading ? <Loader2 size={12} className="media-panel__spinner" /> : recentArtifacts.length > 0 && <span>{recentArtifacts.length}</span>}
           </button>
+          <button type="button" className={`media-tab${creationTab === 'stems' ? ' is-active' : ''}`} onClick={() => setCreationTab('stems')}>
+            <Scissors size={14} /> Stems
+          </button>
+          <button type="button" className={`media-tab${creationTab === 'beats' ? ' is-active' : ''}`} onClick={() => setCreationTab('beats')}>
+            <Drum size={14} /> Beats
+          </button>
+          <button type="button" className={`media-tab${creationTab === 'remix' ? ' is-active' : ''}`} onClick={() => setCreationTab('remix')}>
+            <Layers3 size={14} /> Remix
+          </button>
         </div>
       </div>
+
+      {creationTab === 'stems' && <StemSplitterPanel />}
+      {creationTab === 'beats' && <BeatMakerPanel />}
+      {creationTab === 'remix' && <RemixTimelinePanel />}
 
       {creationTab === 'create' ? (
         <div className="media-studio">

@@ -11,6 +11,10 @@ export * from '@archstudio/shared/protocol'
 // re-exports it publicly but does not bring it into this module's scope, so the
 // local annotation below needs an explicit import.
 import type {
+  AudioJobStartResult,
+  AudioJobStatus,
+  AudioProcessRequest,
+  BeatRenderRequest,
   ComfyHealth,
   ComfyJobStatus,
   ComfyJobStatusRequest,
@@ -18,6 +22,7 @@ import type {
   ComfyRunResult,
   ComfyWorkflowList,
   GitFileDiffResult,
+  StemSplitRequest,
 } from '@archstudio/shared/protocol'
 
 // Core types
@@ -533,6 +538,10 @@ export interface ElectronAPI {
   comfyRun(request: ComfyRunRequest): Promise<ComfyRunResult>
   comfyStatus(request: ComfyJobStatusRequest): Promise<ComfyJobStatus>
   comfyCancel(): Promise<void>
+  audioStemSplit(request: StemSplitRequest): Promise<AudioJobStartResult>
+  audioBeatRender(request: BeatRenderRequest): Promise<AudioJobStartResult>
+  audioProcess(request: AudioProcessRequest): Promise<AudioJobStartResult>
+  audioJobStatus(request: { jobId: string }): Promise<AudioJobStatus>
   getSessionNotes(sessionId: string): Promise<string>
   setSessionNotes(sessionId: string, content: string): Promise<void>
   watchSessionFiles(sessionId: string): Promise<void>
