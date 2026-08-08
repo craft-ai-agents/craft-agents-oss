@@ -28,6 +28,17 @@ import { join } from 'node:path'
 const FIXTURES_DIR = join(import.meta.dir, '__eslint-fixtures__')
 const ESLINT_CONFIG = join(import.meta.dir, '../../eslint.config.mjs')
 
+// Resolve npx through PATH explicitly. Bun.spawnSync on Windows can otherwise
+// race against the extensionless POSIX `npx` shim shipped next to `npx.cmd`,
+// intermittently failing with ENOENT. Bun.which() returns the PATHEXT-preferred
+// executable deterministically.
+function resolveNpx(): string {
+  const npx = Bun.which('npx')
+  if (!npx) {
+    throw new Error('npx not found on PATH — the ESLint restriction tests cannot run.')
+  }
+  return npx
+}
 if (!existsSync(ESLINT_CONFIG)) {
   throw new Error(
     `ESLint config not found at ${ESLINT_CONFIG}. ` +
@@ -65,7 +76,7 @@ function runEslintOnFixture(
 
   const result = Bun.spawnSync({
     cmd: [
-      'npx',
+      resolveNpx(),
       '--no-install',
       'eslint',
       '--config',

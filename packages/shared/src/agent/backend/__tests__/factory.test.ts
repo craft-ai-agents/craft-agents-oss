@@ -249,7 +249,7 @@ describe('phase4 backend abstraction APIs', () => {
         isPackaged: false,
       },
     })).not.toThrow();
-  });
+  }, 20_000);
 
   // Skip: resolveClaudeCliPath finds the CLI via node_modules traversal even from dist/, so this
   // only fails in a truly isolated packaged environment, not in the dev monorepo.

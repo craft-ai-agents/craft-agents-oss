@@ -15,6 +15,14 @@ function input(overrides: Partial<SdkAutomationInput> = {}): SdkAutomationInput 
 const hostileKeys = ['ARCHSTUDIO_T_UNDEF_LITERAL', 'ARCHSTUDIO_T_UNDEF_VALUE', 'ARCHSTUDIO_T_EMPTY'] as const;
 const originalValues = Object.fromEntries(hostileKeys.map((k) => [k, process.env[k]]));
 
+// Path var lookup that tolerates platform key casing: Unix exposes `PATH`,
+// Windows exposes `Path`. cleanEnv copies keys verbatim, so the assertion must
+// match case-insensitively instead of hardcoding `env.PATH`.
+function findPathVar(env: Record<string, string>): string | undefined {
+  const key = Object.keys(env).find((k) => k.toLowerCase() === 'path');
+  return key ? env[key] : undefined;
+}
+
 afterEach(() => {
   for (const k of hostileKeys) {
     const v = originalValues[k];
@@ -32,8 +40,8 @@ describe('sdk-bridge', () => {
 
     it('should include process.env variables', () => {
       const env = buildEnvFromSdkInput('PreToolUse', input());
-      // PATH should be inherited from process.env
-      expect(env.PATH).toBeDefined();
+      // PATH should be inherited from process.env (key casing varies by OS)
+      expect(findPathVar(env)).toBeDefined();
     });
 
     it('should not include undefined values from process.env', () => {
@@ -57,7 +65,7 @@ describe('sdk-bridge', () => {
       }
       // KEEP marker proves cleanEnv still returns real process.env vars,
       // so the hostile filtering didn't accidentally drop everything.
-      expect(env.PATH).toBeDefined();
+      expect(findPathVar(env)).toBeDefined();
     });
 
     describe('PreToolUse / PostToolUse', () => {
@@ -147,7 +155,7 @@ describe('sdk-bridge', () => {
         const env = buildEnvFromSdkInput('Stop' as any, input());
         expect(env.ARCHSTUDIO_EVENT).toBe('Stop');
         // Should still have process.env vars
-        expect(env.PATH).toBeDefined();
+        expect(findPathVar(env)).toBeDefined();
       });
     });
 
