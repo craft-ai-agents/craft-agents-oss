@@ -167,6 +167,11 @@ const comfyStart = mock(async () => ({
   version: '0.28.3',
   device: 'NVIDIA GeForce RTX 5070 Ti',
 }))
+const comfyStop = mock(async () => ({
+  connected: false,
+  baseUrl: 'http://127.0.0.1:8188',
+  error: 'ComfyUI is offline',
+}))
 const comfyWorkflows = mock(async () => ({
   rejectedCount: 2,
   workflows: [
@@ -202,6 +207,7 @@ const comfyCancel = mock(async () => undefined)
   comfyArtifacts: mediaList,
   comfyHealth,
   comfyStart,
+  comfyStop,
   comfyWorkflows,
   comfyRun,
   comfyStatus,
@@ -297,6 +303,7 @@ describe('MediaLabPanel smoke test', () => {
     comfyConnected = true
     comfyHealth.mockClear()
     comfyStart.mockClear()
+    comfyStop.mockClear()
     comfyWorkflows.mockClear()
     comfyRun.mockClear()
     comfyStatus.mockClear()
@@ -351,7 +358,7 @@ describe('MediaLabPanel smoke test', () => {
     // Click Library tab.
     await act(async () => {
       const buttons = container.querySelectorAll('button.media-tab')
-      expect(buttons.length).toBe(2)
+      expect(buttons.length).toBe(3)
       const libraryButton = Array.from(buttons).find(
         (button: any) => button.textContent?.includes('Library'),
       ) as HTMLButtonElement
@@ -460,6 +467,31 @@ describe('MediaLabPanel smoke test', () => {
     expect(comfyStart).toHaveBeenCalledTimes(1)
     expect(comfyWorkflows).toHaveBeenCalledTimes(2)
     expect(container.textContent).toContain('Online')
+  })
+
+  it('stops an online ComfyUI service from the header', async () => {
+    const { container, root } = await renderPanel()
+    lastContainer = container
+    lastRoot = root
+
+    await act(async () => {
+      await flush()
+      await flush()
+    })
+
+    const stopButton = Array.from(container.querySelectorAll('button')).find(
+      (button: any) => button.textContent?.includes('Stop engine'),
+    ) as HTMLButtonElement
+    expect(stopButton).toBeTruthy()
+
+    await act(async () => {
+      stopButton.click()
+      await flush()
+      await flush()
+    })
+
+    expect(comfyStop).toHaveBeenCalledTimes(1)
+    expect(container.textContent).toContain('Offline')
   })
 
   it('switches to Music Studio and submits the audio workflow', async () => {

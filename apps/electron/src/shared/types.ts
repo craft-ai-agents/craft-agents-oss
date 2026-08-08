@@ -527,6 +527,7 @@ export interface ElectronAPI {
   mediaList(request: MediaListRequest, signal?: AbortSignal): Promise<MediaListPage>
   comfyHealth(): Promise<ComfyHealth>
   comfyStart(): Promise<ComfyHealth>
+  comfyStop(): Promise<ComfyHealth>
   comfyWorkflows(): Promise<ComfyWorkflowList>
   comfyArtifacts(request: MediaListRequest, signal?: AbortSignal): Promise<MediaListPage>
   comfyRun(request: ComfyRunRequest): Promise<ComfyRunResult>

@@ -1,6 +1,7 @@
 import { access, readdir, stat } from 'node:fs/promises'
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 import type { RpcServer } from '@archstudio/server-core/transport'
 import {
   RPC_CHANNELS,
@@ -28,6 +29,7 @@ import { classifyMedia } from './sessions'
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.media.COMFY_HEALTH,
   RPC_CHANNELS.media.COMFY_START,
+  RPC_CHANNELS.media.COMFY_STOP,
   RPC_CHANNELS.media.COMFY_WORKFLOWS,
   RPC_CHANNELS.media.COMFY_ARTIFACTS,
   RPC_CHANNELS.media.COMFY_RUN,
@@ -175,6 +177,45 @@ export function registerComfyUIHandlers(server: RpcServer, deps: HandlerDeps): v
       if (health.connected) return health
     }
     throw new Error('ComfyUI did not become ready within 60 seconds')
+  })
+
+  server.handle(RPC_CHANNELS.media.COMFY_STOP, async (ctx): Promise<ComfyHealth> => {
+    const existing = await readHealth(healthClient)
+    if (!existing.connected) return existing
+    if (process.platform !== 'win32') {
+      throw new Error('Stopping ComfyUI from Media Lab is currently configured for Windows only')
+    }
+
+    const execFileAsync = promisify(execFile)
+    const port = new URL(baseUrl).port || '8188'
+    const { stdout } = await execFileAsync('netstat.exe', ['-ano', '-p', 'tcp'], { windowsHide: true })
+    const pids = new Set<string>()
+    for (const rawLine of stdout.split(/\r?\n/)) {
+      const line = rawLine.trim()
+      const match = /^(?:TCP)\s+[^\s]+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/i.exec(line)
+      if (!match) continue
+      if (match[1] !== port) continue
+      const pid = match[2]
+      if (pid !== '0') pids.add(pid)
+    }
+    if (pids.size === 0) {
+      deps.platform.logger.warn('ComfyUI health reported online but no listener found on port', { port })
+      return existing
+    }
+
+    for (const pid of pids) {
+      await execFileAsync('taskkill.exe', ['/PID', pid, '/T', '/F'], { windowsHide: true })
+    }
+    deps.platform.logger.info('Stopped local ComfyUI process', { port, pids: [...pids] })
+
+    const deadline = Date.now() + 30_000
+    while (Date.now() < deadline) {
+      if (ctx.signal.aborted) throw new Error('ComfyUI shutdown was cancelled')
+      await wait(1_000)
+      const health = await readHealth(healthClient)
+      if (!health.connected) return health
+    }
+    throw new Error('ComfyUI is still responding 30 seconds after shutdown')
   })
 
   server.handle(RPC_CHANNELS.media.COMFY_ARTIFACTS, async (ctx, request: MediaListRequest = {}): Promise<MediaListPage> => {

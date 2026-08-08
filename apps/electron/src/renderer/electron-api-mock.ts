@@ -359,6 +359,7 @@ const mock: ElectronAPI = {
   } as any),
   comfyHealth: () => Promise.resolve({ connected: false, baseUrl: 'http://127.0.0.1:8188' }),
   comfyStart: () => Promise.resolve({ connected: true, baseUrl: 'http://127.0.0.1:8188' }),
+  comfyStop: () => Promise.resolve({ connected: false, baseUrl: 'http://127.0.0.1:8188' }),
   comfyWorkflows: () => Promise.resolve({ workflows: [], rejectedCount: 0 }),
   comfyArtifacts: () => Promise.resolve({ items: [], hasMore: false, nextCursor: null }),
   comfyRun: () => Promise.resolve({ promptId: 'mock-comfy-prompt' }),

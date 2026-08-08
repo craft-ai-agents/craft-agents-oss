@@ -254,6 +254,7 @@ export function MediaLabPanel() {
   const [comfyJob, setComfyJob] = useState<ComfyJobStatus | null>(null)
   const [comfySubmitting, setComfySubmitting] = useState(false)
   const [comfyStarting, setComfyStarting] = useState(false)
+  const [comfyStopping, setComfyStopping] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [jobStartedAt, setJobStartedAt] = useState<number | null>(null)
   const [now, setNow] = useState(Date.now())
@@ -427,6 +428,20 @@ export function MediaLabPanel() {
       setComfyStarting(false)
     }
   }, [comfyHealth?.connected, comfyStarting])
+
+  const stopComfyUI = useCallback(async () => {
+    if (comfyStopping || !comfyHealth?.connected) return
+    setComfyStopping(true)
+    setComfyError(null)
+    try {
+      const health = await window.electronAPI.comfyStop()
+      setComfyHealth(health)
+    } catch (stopError) {
+      setComfyError(stopError instanceof Error ? stopError.message : String(stopError))
+    } finally {
+      setComfyStopping(false)
+    }
+  }, [comfyHealth?.connected, comfyStopping])
 
   // ---------- Virtualization plumbing (unchanged from prior refactor) ----------
 
@@ -862,7 +877,12 @@ export function MediaLabPanel() {
           </div>
         </div>
         <div className="media-panel__tabs">
-          {!comfyHealth?.connected && (
+          {comfyHealth?.connected ? (
+            <button type="button" className="media-tab media-tab--service is-online" disabled={comfyStopping} onClick={() => void stopComfyUI()}>
+              {comfyStopping ? <Loader2 size={14} className="media-panel__spinner" /> : <Power size={14} />}
+              {comfyStopping ? 'Stopping…' : 'Stop engine'}
+            </button>
+          ) : (
             <button type="button" className="media-tab media-tab--service" disabled={comfyStarting} onClick={() => void startComfyUI()}>
               {comfyStarting ? <Loader2 size={14} className="media-panel__spinner" /> : <Power size={14} />}
               {comfyStarting ? 'Starting…' : 'Start engine'}

@@ -230,6 +230,7 @@ export const CHANNEL_MAP = {
   mediaList: invoke(RPC_CHANNELS.media.LIST),
   comfyHealth: invoke(RPC_CHANNELS.media.COMFY_HEALTH),
   comfyStart: invoke(RPC_CHANNELS.media.COMFY_START),
+  comfyStop: invoke(RPC_CHANNELS.media.COMFY_STOP),
   comfyWorkflows: invoke(RPC_CHANNELS.media.COMFY_WORKFLOWS),
   comfyArtifacts: invoke(RPC_CHANNELS.media.COMFY_ARTIFACTS),
   comfyRun: invoke(RPC_CHANNELS.media.COMFY_RUN),
