@@ -48,6 +48,10 @@ import { handleMemoryRecall } from './handlers/memory-recall.ts';
 import { handleMemoryCreate } from './handlers/memory-create.ts';
 import { handleMemoryUpdate } from './handlers/memory-update.ts';
 import { handleMemoryArchive } from './handlers/memory-archive.ts';
+import { handleSplitStems } from './handlers/split-stems.ts';
+import { handleRenderBeat } from './handlers/render-beat.ts';
+import { handleMixTracks } from './handlers/mix-tracks.ts';
+import { handleAudioProcess } from './handlers/audio-process.ts';
 
 // ============================================================
 // Canonical Zod Schemas
@@ -283,6 +287,45 @@ export { MemoryRecallSchema } from './handlers/memory-schemas.ts';
 export { MemoryCreateSchema } from './handlers/memory-schemas.ts';
 export { MemoryUpdateSchema } from './handlers/memory-schemas.ts';
 export { MemoryArchiveSchema } from './handlers/memory-schemas.ts';
+
+// ============================================================
+// Music Studio audio tool schemas
+// ============================================================
+
+export const SplitStemsSchema = z.object({
+  inputPath: z.string().describe('Absolute path to the audio file to split (wav, mp3, flac, ogg, m4a, aac)'),
+  model: z.string().optional().describe('Demucs model name (default: htdemucs). Options: htdemucs, htdemucs_ft, mdx, mdx_extra, demucs_universe'),
+});
+
+export const RenderBeatSchema = z.object({
+  bpm: z.number().min(60).max(200).describe('Beats per minute (60-200)'),
+  bars: z.number().min(1).max(16).optional().describe('Number of bars (default: 1)'),
+  steps: z.number().min(4).max(64).optional().describe('Steps per bar (default: 16, must divide evenly into 4)'),
+  tracks: z.array(z.object({
+    name: z.string().describe('Track name for display'),
+    sample: z.enum(['kick', 'snare', 'hihat', 'clap', 'bass']).describe('Synthesized drum/sample to use'),
+    steps: z.array(z.number()).describe('Step pattern array (1 = hit, 0 = silence). Length must match the steps parameter.'),
+    volume: z.number().min(0).max(2).optional().describe('Track volume 0-2 (default: 1.0)'),
+    freq: z.number().optional().describe('Frequency for bass synth (default: 80)'),
+  })).describe('Array of drum tracks with step patterns'),
+});
+
+export const MixTracksSchema = z.object({
+  tracks: z.array(z.object({
+    path: z.string().describe('Absolute path to the audio file'),
+    gain: z.number().min(0).max(2).optional().describe('Gain multiplier 0-2 (default: 1.0)'),
+    pan: z.number().min(-1).max(1).optional().describe('Pan -1 (left) to 1 (right), 0 = center (default: 0)'),
+  })).min(2).describe('Array of at least 2 audio tracks to mix together'),
+});
+
+export const AudioProcessSchema = z.object({
+  operation: z.enum(['stretch', 'transpose', 'trim', 'normalize']).describe('Audio processing operation'),
+  inputPath: z.string().describe('Absolute path to the input audio file'),
+  ratio: z.number().min(0.1).max(10).optional().describe('Time-stretch ratio for stretch (1.0 = original, 0.5 = half speed, 2.0 = double speed)'),
+  semitones: z.number().min(-24).max(24).optional().describe('Semitones to shift for transpose (-24 to 24)'),
+  start: z.number().min(0).optional().describe('Start position in seconds for trim (default: 0)'),
+  duration: z.number().min(0.1).optional().describe('Length in seconds for trim'),
+});
 
 // ============================================================
 // Canonical Tool Descriptions (base — no DOC_REFS)
@@ -629,6 +672,46 @@ memory is stale, incorrect, or superseded by newer information.
 
 Returns the archived memory's metadata (id, class, title). Errors if the
 id doesn't exist.`,
+
+  // Music Studio audio tools
+  split_stems: `Separate any audio file into 4 stems (vocals, drums, bass, other)
+using Demucs (ML source separation). Outputs 4 WAV files.
+
+Requires: Python + Demucs installed (pip install -r tools/audio/requirements.txt).
+GPU acceleration used automatically when available.
+
+Returns the 4 stem file paths. Use with mix_tracks to remix stems, or
+audio_process to stretch/transpose individual stems before mixing.`,
+
+  render_beat: `Render a drum beat pattern to a WAV file using synthesized drums.
+Specify BPM, number of bars, steps per bar, and an array of tracks
+(each with a sample type and step pattern).
+
+Available samples: kick, snare, hihat, clap, bass.
+Steps are arrays of 0/1 — length must match the steps parameter.
+
+Returns the output WAV file path. Use with mix_tracks to combine beats
+with stems or other audio.`,
+
+  mix_tracks: `Mix multiple audio files (stems, beats, any audio) into a single
+output WAV. Each track has an independent gain (0-2) and pan (-1 to 1)
+control. Requires at least 2 tracks.
+
+Requires: Python + ffmpeg installed.
+
+Returns the mixed output file path. This is the final step in a remix
+workflow: split_stems → render_beat → audio_process → mix_tracks.`,
+
+  audio_process: `Apply a single audio processing operation to an audio file:
+- stretch: time-stretch by a ratio (0.5 = half speed, 2.0 = double)
+- transpose: pitch-shift by semitones (-24 to 24)
+- trim: extract a segment from start seconds for duration seconds
+- normalize: normalize loudness to broadcast standard
+
+Requires: Python + ffmpeg installed.
+
+Returns the processed output file path. Use on individual stems or
+beats before mixing with mix_tracks.`,
 } as const;
 
 // ============================================================
@@ -714,6 +797,11 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'memory_create', description: TOOL_DESCRIPTIONS.memory_create, inputSchema: MemoryCreateSchema, executionMode: 'registry', safeMode: 'block', handler: handleMemoryCreate },
   { name: 'memory_update', description: TOOL_DESCRIPTIONS.memory_update, inputSchema: MemoryUpdateSchema, executionMode: 'registry', safeMode: 'block', handler: handleMemoryUpdate },
   { name: 'memory_archive', description: TOOL_DESCRIPTIONS.memory_archive, inputSchema: MemoryArchiveSchema, executionMode: 'registry', safeMode: 'block', handler: handleMemoryArchive },
+  // Music Studio audio tools (spawns Python + Demucs/ffmpeg)
+  { name: 'split_stems', description: TOOL_DESCRIPTIONS.split_stems, inputSchema: SplitStemsSchema, executionMode: 'registry', safeMode: 'block', handler: handleSplitStems },
+  { name: 'render_beat', description: TOOL_DESCRIPTIONS.render_beat, inputSchema: RenderBeatSchema, executionMode: 'registry', safeMode: 'block', handler: handleRenderBeat },
+  { name: 'mix_tracks', description: TOOL_DESCRIPTIONS.mix_tracks, inputSchema: MixTracksSchema, executionMode: 'registry', safeMode: 'block', handler: handleMixTracks },
+  { name: 'audio_process', description: TOOL_DESCRIPTIONS.audio_process, inputSchema: AudioProcessSchema, executionMode: 'registry', safeMode: 'block', handler: handleAudioProcess },
 ];
 
 export interface SessionToolFilterOptions {

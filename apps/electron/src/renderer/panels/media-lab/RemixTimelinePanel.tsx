@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Layers, Play, Pause, Download, Loader2, Plus, Upload } from 'lucide-react'
 import type { AudioJobStatus } from '@archstudio/shared/protocol'
+import { WaveformDisplay } from './WaveformDisplay'
 
 interface RemixTrack {
   id: string
@@ -207,6 +208,7 @@ interface RemixTrackRowProps {
 function RemixTrackRow({ track, audioRef, onRemove, onGainChange, onPanChange }: RemixTrackRowProps) {
   const [src, setSrc] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
+  const [progress, setProgress] = useState(0)
   const localAudioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
@@ -226,6 +228,14 @@ function RemixTrackRow({ track, audioRef, onRemove, onGainChange, onPanChange }:
     }
     setPlaying(!playing)
   }, [playing])
+
+  const seek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!localAudioRef.current || !localAudioRef.current.duration) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = (e.clientX - rect.left) / rect.width
+    localAudioRef.current.currentTime = x * localAudioRef.current.duration
+    setProgress(x)
+  }, [])
 
   return (
     <div className="remix-track">
@@ -262,6 +272,9 @@ function RemixTrackRow({ track, audioRef, onRemove, onGainChange, onPanChange }:
           <span>{track.pan === 0 ? 'C' : track.pan < 0 ? 'L' : 'R'}</span>
         </div>
       </div>
+      <div className="remix-track__waveform" onClick={seek}>
+        <WaveformDisplay audioPath={track.path} height={36} color={track.color} progress={progress} />
+      </div>
       <audio
         ref={(el) => {
           localAudioRef.current = el
@@ -269,6 +282,10 @@ function RemixTrackRow({ track, audioRef, onRemove, onGainChange, onPanChange }:
         }}
         src={src ?? undefined}
         onEnded={() => setPlaying(false)}
+        onTimeUpdate={(e) => {
+          const audio = e.currentTarget
+          if (audio.duration) setProgress(audio.currentTime / audio.duration)
+        }}
       />
     </div>
   )

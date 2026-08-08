@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Scissors, Loader2, Upload, Download, Play, Pause } from 'lucide-react'
 import type { AudioJobStatus } from '@archstudio/shared/protocol'
+import { WaveformDisplay } from './WaveformDisplay'
 
 interface StemResult {
   name: string
@@ -140,6 +141,7 @@ export function StemSplitterPanel() {
 function StemPlayer({ name, path }: { name: string; path: string }) {
   const [src, setSrc] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
+  const [waveProgress, setWaveProgress] = useState(0)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
@@ -167,10 +169,20 @@ function StemPlayer({ name, path }: { name: string; path: string }) {
       <div className="stem-player__info">
         <span className={`stem-player__icon stem-player__icon--${name}`}>{capitalize(name)}</span>
       </div>
+      <div className="stem-player__waveform">
+        <WaveformDisplay audioPath={path} height={40} color={stemColor(name)} progress={waveProgress} />
+      </div>
       <audio
         ref={audioRef}
         src={src ?? undefined}
         onEnded={() => setPlaying(false)}
+        onTimeUpdate={(e) => {
+          const audio = e.currentTarget
+          if (audio.duration) {
+            // Force re-render of waveform progress via state
+            setWaveProgress(audio.currentTime / audio.duration)
+          }
+        }}
       />
       <button type="button" className="stem-player__play" onClick={toggle} disabled={!src}>
         {playing ? <Pause size={14} /> : <Play size={14} />}
@@ -180,4 +192,14 @@ function StemPlayer({ name, path }: { name: string; path: string }) {
       </button>
     </div>
   )
+}
+
+function stemColor(name: string): string {
+  switch (name) {
+    case 'vocals': return '#c084fc'
+    case 'drums': return '#f87171'
+    case 'bass': return '#60a5fa'
+    case 'other': return '#4ade80'
+    default: return '#a855f7'
+  }
 }

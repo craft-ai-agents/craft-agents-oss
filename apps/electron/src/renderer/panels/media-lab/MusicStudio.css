@@ -199,6 +199,12 @@
   cursor: not-allowed;
 }
 
+.stem-player__waveform {
+  flex: 1;
+  min-width: 0;
+  padding: 0 8px;
+}
+
 /* — Beat Maker — */
 
 .beat-maker {
@@ -402,6 +408,21 @@
 .beat-maker__add-track:hover { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
 .beat-maker__render:hover:not(:disabled) { border-color: #22c55e; background: rgba(34, 197, 94, 0.1); }
 .beat-maker__download-btn:hover { border-color: #22c55e; background: rgba(34, 197, 94, 0.1); }
+.beat-maker__upload-sample {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--border-color, #333);
+  background: var(--bg-elevated, #1a1a1a);
+  color: var(--text-primary, #e5e5e5);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.beat-maker__upload-sample:hover { border-color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
 .beat-maker__render:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .beat-maker__error {
@@ -532,6 +553,12 @@
 .remix-track__play:hover:not(:disabled) { background: rgba(34, 197, 94, 0.1); border-color: #22c55e; }
 .remix-track__play:disabled { opacity: 0.4; cursor: not-allowed; }
 .remix-track__remove:hover { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+
+.remix-track__waveform {
+  flex: 1;
+  min-width: 80px;
+  cursor: pointer;
+}
 
 .remix-track__controls {
   display: flex;

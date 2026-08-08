@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Play, Pause, Square, Download, Loader2, Plus } from 'lucide-react'
+import { Play, Pause, Square, Download, Loader2, Plus, Upload } from 'lucide-react'
 import type { AudioJobStatus, BeatRenderRequest, BeatTrackStep } from '@archstudio/shared/protocol'
 
 const STEPS = 16
@@ -40,6 +40,7 @@ export function BeatMakerPanel() {
   const schedulerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const nextStepRef = useRef(0)
   const nextTimeRef = useRef(0)
+  const customSamplesRef = useRef<Map<string, AudioBuffer>>(new Map())
 
   const toggleStep = useCallback((trackIdx: number, stepIdx: number) => {
     setTracks((prev) => prev.map((track, i) => {
@@ -74,7 +75,45 @@ export function BeatMakerPanel() {
     ))
   }, [])
 
+  const loadCustomSample = useCallback(async () => {
+    try {
+      const paths = await window.electronAPI.openFileDialog()
+      if (paths.length === 0) return
+      const path = paths[0]
+      const dataUrl = await window.electronAPI.readFileDataUrl(path)
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
+      const arrayBuffer = await fetch(dataUrl).then((r) => r.arrayBuffer())
+      const buffer = await audioCtxRef.current.decodeAudioData(arrayBuffer)
+      const sampleName = `custom_${Date.now().toString(36)}`
+      customSamplesRef.current.set(sampleName, buffer)
+      SAMPLE_NAMES.push(sampleName)
+      SAMPLE_LABELS[sampleName] = path.split(/[\\/]/).pop() ?? 'Custom'
+      const name = SAMPLE_LABELS[sampleName]
+      setTracks((prev) => [...prev, {
+        name,
+        sample: sampleName,
+        volume: 0.8,
+        steps: new Array(STEPS).fill(0),
+      }])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [])
+
   const synthHit = useCallback((ctx: AudioContext, sample: string, time: number, volume: number) => {
+    // Custom uploaded sample
+    if (sample.startsWith('custom_')) {
+      const buffer = customSamplesRef.current.get(sample)
+      if (buffer) {
+        const src = ctx.createBufferSource()
+        const gain = ctx.createGain()
+        src.buffer = buffer
+        src.connect(gain).connect(ctx.destination)
+        gain.gain.setValueAtTime(volume, time)
+        src.start(time)
+      }
+      return
+    }
     if (sample === 'kick') {
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
@@ -321,6 +360,9 @@ export function BeatMakerPanel() {
       <div className="beat-maker__actions">
         <button type="button" className="beat-maker__add-track" onClick={addTrack}>
           <Plus size={14} /> Add track
+        </button>
+        <button type="button" className="beat-maker__upload-sample" onClick={loadCustomSample}>
+          <Upload size={14} /> Load sample
         </button>
         <button
           type="button"
