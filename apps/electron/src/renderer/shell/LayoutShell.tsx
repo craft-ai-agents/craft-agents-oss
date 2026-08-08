@@ -50,6 +50,8 @@ import { SecurityPanel } from '../panels/security'
 import { SettingsPanel } from '../panels/settings'
 import { isValidSettingsSubpage, type SettingsSubpage } from '../../shared/settings-registry'
 import { MediaLabPanel } from '../panels/media-lab'
+import { DashboardPanel } from '../panels/dashboard/DashboardPanel'
+import '../panels/dashboard/DashboardPanel.css'
 import { PromptStudioPanel } from '../panels/prompts'
 import { ProvidersPanel } from '../panels/ProvidersPanel'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from '@/components/ui/drawer'
@@ -74,6 +76,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@archstudio/ui'
 import './LayoutShell.css'
 
 export type ShellView =
+  | 'dashboard'
   | 'command'
   | 'sessions'
   | 'runs'
@@ -143,6 +146,7 @@ const RAIL_TABS: { id: RailTab; label: string }[] = [
 ]
 
 const navItems = [
+  { id: 'dashboard' as ShellView, label: 'Dashboard', icon: Activity },
   { id: 'command' as ShellView, label: 'Command', icon: Command },
   { id: 'sessions' as ShellView, label: 'Sessions', icon: MessagesSquare },
   // Label only — the `runs` id is a wire-level deep-link route
@@ -717,7 +721,7 @@ function TreeRow({
 }
 
 function LayoutShell({
-  initialView = 'command',
+  initialView = 'dashboard',
   initialRailTab,
   initialGitStatus,
   onNavigate,
@@ -2808,7 +2812,9 @@ const DEPTH_POPOVER_OPTIONS = [
         </header>
 
         <main className="layout-content" role="main">
-          {activeView === 'sessions' ? (
+          {activeView === 'dashboard' ? (
+            <DashboardPanel />
+          ) : activeView === 'sessions' ? (
             <div className="layout-sessions-view">
               {typeof sessionListSlot === 'function'
                 ? sessionListSlot(sessionsView, setSessionsView)
