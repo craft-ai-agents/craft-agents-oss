@@ -13,3 +13,11 @@ document.addEventListener('securitypolicyviolation', (e) => {
     line: e.lineNumber,
   })
 })
+
+// Spike diagnostic: prove whether scripts execute at all inside the sandbox,
+// in engines where we have no console/webRequest access. img-src 'self' is
+// permitted even under connect-src 'none'.
+window.__ws0beacon = function (stage) {
+  try { new Image().src = '/internal/beacon?stage=' + encodeURIComponent(stage) + '&t=' + Date.now() } catch (e) {}
+}
+window.__ws0beacon('csp-probe-executed')

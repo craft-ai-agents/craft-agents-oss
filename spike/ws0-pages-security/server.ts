@@ -187,6 +187,38 @@ export function createPagesServer(opts: { port?: number } = {}) {
       })
     }
 
+    // ── Beacon (spike only): img-src 'self' permits image requests even when
+    // connect-src is 'none', so this reports script progress from inside the
+    // sandbox in engines we cannot instrument any other way.
+    if (path === '/internal/beacon') {
+      const { appendFileSync } = await import('node:fs')
+      const stage = url.searchParams.get('stage') ?? '?'
+      const ua = (req.headers['user-agent'] ?? '').slice(0, 60)
+      appendFileSync(process.env.WS0_BEACON_LOG ?? '/tmp/ws0-beacon.log', `${stage}\t${ua}\n`)
+      console.log('[ws0] beacon:', stage)
+      return send(res, 200, Buffer.from('R0lGODlhAQABAAAAACw=', 'base64'), {
+        'Content-Type': 'image/gif', 'Cache-Control': 'no-store',
+      })
+    }
+
+    // ── Results sink (spike only): lets ANY browser report without WebDriver.
+    // Posted by the trusted wrapper, which has connect-src 'self'.
+    if (path === '/internal/results' && req.method === 'POST') {
+      const chunks: Buffer[] = []
+      let size = 0
+      for await (const c of req) {
+        size += (c as Buffer).length
+        if (size > 512 * 1024) { return send(res, 413, 'too large', { 'Content-Type': 'text/plain' }) }
+        chunks.push(c as Buffer)
+      }
+      const body = Buffer.concat(chunks).toString('utf-8')
+      const { appendFileSync } = await import('node:fs')
+      const label = url.searchParams.get('label') ?? 'unknown'
+      appendFileSync(process.env.WS0_RESULTS_LOG ?? '/tmp/ws0-results.log', `\n===== ${label} =====\n${body}\n`)
+      console.log(`[ws0] results received (label=${label}, ${body.length} bytes)`)
+      return send(res, 200, 'ok', { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' })
+    }
+
     // ── Bridge stub (WS7 shape only — proves the postMessage path, no grants) ──
     if (path === '/internal/query' && req.method === 'POST') {
       const origin = req.headers.origin

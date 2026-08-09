@@ -1,12 +1,38 @@
 # WS0 — Craft Pages security spike: measured findings
 
-Everything below was **run**, not reasoned about. Environment: Electron 39.2.7
-(Chromium), macOS arm64, node 26.5.0, spike server on `127.0.0.1:8899`.
+Everything below was **run**, not reasoned about. Environments: Electron 39.2.7
+(Chromium) and Safari 26 (WebKit), macOS arm64, node 26.5.0, spike server on
+`127.0.0.1:8899`.
 
-Two findings **contradict** the plan as written and change it. Two more were
-not anticipated at all.
+**Five** findings change the plan. The most operationally dangerous one — an
+iframe `sandbox` attribute combined with a CSP `sandbox` header silently kills
+all scripts in WebKit — was only visible because a second engine was tested.
 
 ---
+
+## 0. Do NOT combine the iframe `sandbox` attribute with the CSP `sandbox` header
+
+Plan r3 said the header is the control and "the iframe attribute stays as
+belt-and-braces". **That combination breaks the page in WebKit.**
+
+| Variant | Chromium | WebKit (Safari) |
+|---|---|---|
+| iframe `sandbox` attr **+** CSP `sandbox` header | scripts run | **NO scripts run at all** |
+| CSP `sandbox` header only | scripts run | scripts run |
+
+With both applied, Safari executed *nothing* — not even the first `<head>`
+script — and the wrapper timed out with no results. Removing the attribute and
+relying on the header alone fixed it, and containment was still enforced
+(framed self-navigation blocked, `origin` opaque, storage throws).
+
+**Decision: the CSP response header is the ONLY sandbox. Never set the iframe
+`sandbox` attribute as well.** "Defence in depth" here is a silent
+total-failure mode in a shipping browser, which is worse than either control
+alone.
+
+This also explains an earlier confusing run: the first Safari framed attempt
+reported `"no results from frame within 8s"` with no beacons. That was this bug,
+not a reporting failure.
 
 ## 1. `'self'` works in a header-delivered CSP — plan was wrong, now corrected
 
@@ -165,11 +191,52 @@ and it lands exactly on the Craft Agents credential store.
 7. **`frame-src 'self'` on the wrapper is a primary control**, not incidental —
    it is what blocks framed self-navigation, and it works in every browser.
 
+## 8. Cross-engine agreement (Chromium vs WebKit)
+
+With the header-only sandbox, WebKit matched Chromium on **every** measured
+behaviour:
+
+| Probe | Chromium | WebKit |
+|---|---|---|
+| `event.origin` seen by wrapper | `"null"` | `"null"` |
+| forged `postMessage` rejected | yes | yes |
+| `window.origin` | `null` | `null` |
+| `localStorage` | `SecurityError` | `SecurityError` |
+| `document.cookie` | `SecurityError` | `SecurityError` |
+| `window.open` | blocked | blocked |
+| `fetch` own `data.json` | blocked | blocked |
+| form submit | no navigation | no navigation |
+| `type="module"` | does not run | does not run |
+| `<style>` block | blocked | blocked |
+| `style=""` attribute | blocked | blocked |
+| CSSOM write | allowed | allowed |
+| **framed self-navigation** | **blocked** | **blocked** |
+| **top-level self-navigation** | **SUCCEEDED** | **SUCCEEDED** |
+
+The two engine-behaviour claims the plan depends on — `frame-src` blocking child
+self-navigation, and top-level self-navigation being unstoppable — hold in both.
+The capability split in §2.5 is confirmed across engines, not just Chromium.
+
+Observation method for WebKit: an HTTP listener on the exfil port, plus an
+`img-src 'self'` beacon endpoint for script-progress. Neither needs WebDriver or
+devtools, so the same instrumentation will work for Firefox and for Windows and
+Linux runs.
+
+## A methodology note (why one result was nearly recorded wrong)
+
+The first top-level runs reported "self-navigation blocked" in both engines. That
+was an artefact: the harness's own `top-nav` probe does
+`window.top.location.href = …`, and when the document **is** top-level,
+`window.top === window`, so the probe navigated the page away mid-run and killed
+every later measurement. Corrected by skipping that probe when top-level. The
+real result is the opposite — self-navigation succeeds. Recorded here because the
+failure mode (a probe that destroys its own experiment) is easy to reintroduce.
+
 ## Still open
 
-- **Firefox and Safari have not been run.** Every result above is Chromium
-  (Electron 39.2.7). The `frame-src`-blocks-child-navigation behaviour and the
-  module/CORS behaviour are both spec-derived and should hold, but "should" is
-  what this spike exists to eliminate. Run before WS2 lands.
+- **Firefox / Gecko not run** — not installed on the test machine. Deferred by
+  decision: Gecko is not a target platform for the desktop app, and the
+  instrumentation above will run there unchanged when wanted.
 - **Windows and Linux not run.** Path handling in the containment guard is the
-  risk area.
+  risk area (backslashes, drive-relative paths, ADS, `MAX_PATH`). Mitigate with
+  OS-independent unit tests over the guard's string handling before WS2 lands.

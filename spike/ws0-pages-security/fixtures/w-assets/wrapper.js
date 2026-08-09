@@ -10,13 +10,32 @@
  */
 ;(function () {
   const frame = document.getElementById('frame')
+  // Variant control: ?noattr=1 omits the iframe sandbox ATTRIBUTE so the CSP
+  // header is the only sandbox in play. WebKit appears to intersect the two
+  // differently from Chromium; this isolates which one is responsible.
+  if (location.search.indexOf('noattr=1') === -1) {
+    frame.setAttribute('sandbox', 'allow-scripts')
+    frame.src = frame.src  // re-trigger load with the attribute applied
+  }
   const logEl = document.getElementById('log')
   const collected = { wrapper: {}, page: null }
+
+  var LABEL = navigator.userAgent.indexOf('Safari') > -1 && navigator.userAgent.indexOf('Chrom') === -1
+    ? 'safari-webkit' : 'chromium'
 
   function emit() {
     // The Electron harness scrapes this line off the console.
     console.log('WS0_RESULTS:' + JSON.stringify(collected))
     logEl.textContent = JSON.stringify(collected, null, 2)
+    // The wrapper is NOT sandboxed and has connect-src 'self', so it can report
+    // to the server. That is what makes Safari measurable without WebDriver.
+    try {
+      fetch('/internal/results?label=' + encodeURIComponent(LABEL), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(collected),
+      })
+    } catch (e) {}
   }
 
   let forgeryRejected = null

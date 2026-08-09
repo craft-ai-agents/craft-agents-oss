@@ -18,13 +18,17 @@ a language switcher, and a contact form.
 > immutable revision directories. Catalog mutations serialized. Host/Origin/CORS hardening added.
 > Bundled-skill destination corrected. **WS7 scope narrowed: live-data pages are in-app only** —
 > see §2.5 for why this was unavoidable.
-> **r4** (WS0 spike executed) — §2.4/§2.5 are now MEASURED against Chromium, not argued. Four changes:
+> **r4** (WS0 spike executed) — §2.4/§2.5 are now MEASURED against Chromium **and WebKit**, not
+> argued. Headline: **never combine the iframe `sandbox` attribute with the CSP `sandbox` header** —
+> WebKit then executes no scripts at all, a silent total failure only a second engine could reveal.
+> Further changes:
 > (a) CSP `'self'` works — the r2/r3 explicit-origin workaround is dropped; (b) framed self-navigation
 > is blocked by the **wrapper's `frame-src`**, a browser-native control r3 missed, with `webRequest`
 > demoted to a second layer for top-level loads; (c) **ES modules do not execute** from an opaque
 > origin — classic scripts only; (d) `style-src 'self'` blocks `<style>`/`style=` but permits CSSOM.
 > Consequence: live-data pages must always be **framed**, never top-level, including in-app.
-> Evidence: `spike/ws0-pages-security/FINDINGS.md`.
+> Chromium and WebKit agreed on all 14 measured behaviours, so the §2.5 split is cross-engine, not a
+> Chromium artefact. Evidence: `spike/ws0-pages-security/FINDINGS.md`.
 
 ---
 
@@ -100,8 +104,12 @@ exposing the RPC server to thin clients, a different feature with a different th
 attribute only applies when content is loaded *through the wrapper*; `/p/{id}/index.html` opened
 directly in a tab would be unsandboxed. The CSP `sandbox` directive applies iframe-equivalent
 sandboxing to the resource itself and is header-only by specification
-([W3C CSP §sandbox](https://www.w3.org/TR/CSP/#directive-sandbox)). The iframe attribute stays as
-belt-and-braces, but the header is the control.
+([W3C CSP §sandbox](https://www.w3.org/TR/CSP/#directive-sandbox)).
+
+> **The header is the ONLY sandbox — never also set the iframe `sandbox` attribute.** WS0 measured
+> the combination: with both applied, **WebKit runs no scripts at all** (not even the first `<head>`
+> script) while Chromium is unaffected. Header-only works in both engines and still enforces
+> containment. "Defence in depth" here is a silent total-failure mode in a shipping browser.
 
 **`/w/*` and `/p/*` get different policies.** The wrapper is app-authored and trusted; it needs no
 sandbox and gets a tight allowlist of its own assets. Generated content gets the sandboxed,

