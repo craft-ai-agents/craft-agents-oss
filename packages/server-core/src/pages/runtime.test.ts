@@ -67,6 +67,18 @@ describe('lifecycle', () => {
     expect(b!.origin).toBe(c!.origin)
   })
 
+  it('refuses to start for a workspace path that does not exist', async () => {
+    // Binding a listener for a workspace that is not there wastes a port and
+    // yields a catalog that can never resolve anything. Fail closed instead.
+    // Nested under the fresh mkdtemp workspace so it cannot be left behind by
+    // an earlier run — PageCatalogService.write() mkdirs the workspace root, so
+    // a fixed tmp path gets created by the very failure this test detects.
+    const missing = join(ws, 'nested', 'absent-workspace')
+    const h = await runtime.ensureStarted(missing)
+    expect(h).toBeNull()
+    expect(runtime.isRunning(missing)).toBe(false)
+  })
+
   it('gives separate workspaces separate listeners and catalogs', async () => {
     const ws2 = mkdtempSync(join(tmpdir(), 'craft-runtime-2-'))
     const a = await runtime.ensureStarted(ws)

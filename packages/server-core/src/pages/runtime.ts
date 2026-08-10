@@ -10,6 +10,7 @@
  * where the prompt text is assembled would leave a live server behind.
  */
 
+import { existsSync } from 'node:fs'
 import { isCraftPagesEnabled } from '@craft-agent/shared/feature-flags'
 import { PageCatalogService } from './catalog.ts'
 import { startPagesServer, type RunningPagesServer } from './server.ts'
@@ -51,6 +52,15 @@ export class PagesRuntime {
    */
   async ensureStarted(workspaceRootPath: string): Promise<RunningPagesServer | null> {
     if (!isCraftPagesEnabled()) return null
+
+    // Fail closed for a workspace that is not on disk. Binding a listener for a
+    // path that does not exist wastes a port and produces a catalog that can
+    // never resolve anything — a page URL that 404s forever looks like a bug in
+    // the feature rather than a bad workspace.
+    if (!existsSync(workspaceRootPath)) {
+      this.logger?.warn(`[pages] not starting: workspace path does not exist (${workspaceRootPath})`)
+      return null
+    }
 
     const existing = this.entries.get(workspaceRootPath)
     if (existing) return existing.server

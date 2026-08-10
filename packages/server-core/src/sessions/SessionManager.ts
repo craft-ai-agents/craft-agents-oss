@@ -1,4 +1,6 @@
 import type { EventSink, RpcServer } from '@craft-agent/server-core/transport'
+import { PagesRuntime } from '../pages/runtime'
+import { resolvePageCatalogForSession } from '../pages/session-binding'
 import { CLIENT_BROWSER_INVOKE } from '@craft-agent/server-core/transport'
 import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput } from '@craft-agent/server-core/handlers'
 import { RemoteBrowserPaneManager } from './RemoteBrowserPaneManager'
@@ -1211,6 +1213,13 @@ export class SessionManager implements ISessionManager {
   private configWatchers: Map<string, ConfigWatcher> = new Map()
   // Automation systems for workspace event automations - one per workspace (includes scheduler, diffing, and handlers)
   private automationSystems: Map<string, AutomationSystem> = new Map()
+
+  /**
+   * Craft Pages runtime — one catalog + loopback listener per workspace.
+   * Started lazily on first session in a workspace; a no-op when the feature
+   * flag is off, in which case no listener is ever bound.
+   */
+  private pagesRuntime = new PagesRuntime()
   // Pending credential request resolvers (keyed by requestId)
   private pendingCredentialResolvers: Map<string, (response: import('@craft-agent/shared/protocol').CredentialResponse) => void> = new Map()
   // Permission request metadata tracking (keyed by requestId)
@@ -4277,6 +4286,18 @@ export class SessionManager implements ISessionManager {
           model: session.model,
         }
       }
+
+      // Craft Pages: give the session its workspace catalog so craft_page can
+      // register what it creates. Without this the tool still succeeds and
+      // writes files, but the page is never resolvable — an invisible page
+      // rather than an error, because the handler degrades gracefully.
+      // Resolves to undefined (and binds nothing) when the flag is off.
+      const pageCatalog = await resolvePageCatalogForSession(
+        this.pagesRuntime,
+        managed.workspace.rootPath,
+        { warn: (m: string) => sessionLog.warn(m) },
+      )
+      if (pageCatalog) mergeSessionScopedToolCallbacks(managed.id, { pageCatalog })
 
       // Wire up session self-management tools (set_session_labels, set_session_status, etc.)
       mergeSessionScopedToolCallbacks(managed.id, {
@@ -9007,6 +9028,13 @@ export class SessionManager implements ISessionManager {
       }
     }
     this.automationSystems.clear()
+
+    // Release Craft Pages loopback listeners. Fire-and-forget because cleanup()
+    // is synchronous by contract; leaving them bound would leak a port per
+    // workspace on every workspace switch and app restart.
+    this.pagesRuntime.disposeAll().catch((error) => {
+      sessionLog.error('Failed to dispose Craft Pages listeners:', error)
+    })
 
     // Clear all pending delta flush timers
     for (const [sessionId, timer] of this.deltaFlushTimers) {
