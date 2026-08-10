@@ -12,6 +12,7 @@ import { parseNoProxyRules, shouldBypassProxy, splitCommaSeparated, type NoProxy
 import { getNetworkProxySettings, setNetworkProxySettings } from '@craft-agent/shared/config/storage';
 import type { NetworkProxySettings } from '@craft-agent/shared/config/types';
 import { BROWSER_PANE_SESSION_PARTITION } from './browser-pane-manager';
+import { CRAFT_PAGES_SESSION_PARTITION } from './pages-egress';
 import log from './logger';
 
 // Track the current dispatcher so we can close it when reconfiguring
@@ -117,6 +118,10 @@ async function configureElectronProxy(settings: NetworkProxySettings | undefined
   const sessions = [
     session.defaultSession,
     session.fromPartition(BROWSER_PANE_SESSION_PARTITION),
+    // Craft Pages runs in its own partition. Omitting it here means every
+    // corporate-proxy user gets pages that load nothing, with no actionable
+    // error to explain why.
+    session.fromPartition(CRAFT_PAGES_SESSION_PARTITION),
   ];
 
   await Promise.all(sessions.map(ses => ses.setProxy(proxyConfig)));
