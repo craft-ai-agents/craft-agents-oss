@@ -232,6 +232,33 @@ every later measurement. Corrected by skipping that probe when top-level. The
 real result is the opposite — self-navigation succeeds. Recorded here because the
 failure mode (a probe that destroys its own experiment) is easy to reintroduce.
 
+## 9. Verification-tooling gotchas (cost real time; will recur in WS5)
+
+Both of these made a WORKING page look broken.
+
+**A screenshot of an out-of-process iframe can capture blank.** The production
+wrapper appeared to render nothing: dark, empty, repeatedly. The frame had
+loaded (`load` fired, `contentWindow` present, box measured 1200x1200) and the
+page rendered perfectly when opened standalone. Forcing a reflow made it appear
+immediately. A cross-origin iframe is composited out-of-process and the capture
+can beat the paint. **Wait, or force a reflow, before screenshotting a framed
+page** — otherwise "blank" is read as a bug that does not exist.
+
+**Devtools-style instrumentation does not cross the opaque-origin boundary.**
+For a sandboxed frame, the extension's network log shows the frame's document
+request but NOT its subresources, and its console log shows nothing from inside
+the frame. Reading "no subresource requests" as "subresources were blocked" is
+wrong — they are simply invisible. Confirmed by checking the WS0 spike, whose
+frame demonstrably ran (it POSTed results) while showing the same empty
+subresource list.
+
+The reliable instrument for anything inside the frame remains the one this spike
+already used: have the page report to the server via an `img-src 'self'` beacon.
+It works in every engine, needs no automation, and sees what devtools cannot.
+
+**Synthetic input (click/type) did not reach the framed document** in testing.
+Scripts, DOM generation, CSS and CSSOM were all verified visually instead.
+
 ## Still open
 
 - **Firefox / Gecko not run** — not installed on the test machine. Deferred by
