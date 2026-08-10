@@ -271,6 +271,13 @@ export const RPC_CHANNELS = {
     GET_DEFAULTS: 'permissions:getDefaults',
     DEFAULTS_CHANGED: 'permissions:defaultsChanged',
   },
+  pages: {
+    /** Resolve a pageId to its local wrapper URL. */
+    GET_URL: 'pages:getUrl',
+    /** List pages belonging to a session. */
+    LIST: 'pages:list',
+  },
+
   skills: {
     GET: 'skills:get',
     GET_FILES: 'skills:getFiles',

@@ -59,6 +59,22 @@ export function isEmbeddedServerEnabled(): boolean {
   return false;
 }
 
+/**
+ * Runtime-evaluated check for Craft Pages.
+ *
+ * Defaults to disabled. Override with CRAFT_FEATURE_CRAFT_PAGES=1|0.
+ *
+ * Gating must be END-TO-END, not just prompt text: the tool registration, the
+ * PagesServer start, the catalog, and the RPC channels each consult this. A
+ * flag that only hid the prompt section would leave a live HTTP listener and a
+ * callable tool.
+ */
+export function isCraftPagesEnabled(): boolean {
+  const override = parseBooleanEnv(getEnv('CRAFT_FEATURE_CRAFT_PAGES'));
+  if (override !== undefined) return override;
+  return false;
+}
+
 export const FEATURE_FLAGS = {
   /** Enable Opus 4.7 fast mode (speed:"fast" + beta header). 6x pricing. */
   fastMode: false,
@@ -86,5 +102,13 @@ export const FEATURE_FLAGS = {
    */
   get embeddedServer(): boolean {
     return isEmbeddedServerEnabled();
+  },
+  /**
+   * Enable Craft Pages (locally served, agent-authored web pages).
+   *
+   * Defaults to disabled. Override with CRAFT_FEATURE_CRAFT_PAGES=1|0.
+   */
+  get craftPages(): boolean {
+    return isCraftPagesEnabled();
   },
 } as const;

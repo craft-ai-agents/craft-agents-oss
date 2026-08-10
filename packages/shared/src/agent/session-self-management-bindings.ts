@@ -133,6 +133,17 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  // Resolved fresh on every access: the context is constructed before the
+  // backend registers callbacks, so a value captured at attach time would be
+  // permanently undefined.
+  Object.defineProperty(context, 'pageCatalog', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.pageCatalog;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'createTask', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.createTaskFn;

@@ -244,5 +244,7 @@ export type {
 
 // Craft Pages
 export type { PageCatalogInterface, PageCatalogEntry } from './context.ts';
+export { handleCraftPage, handleCraftPageDelete } from './handlers/craft-page.ts';
+export type { CraftPageArgs, CraftPageDeleteArgs } from './handlers/craft-page.ts';
 export * from './pages/naming.ts';
 export * from './pages/store.ts';
