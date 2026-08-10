@@ -85,8 +85,26 @@ const BASE_HEADERS: Record<string, string> = {
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',
   'Permissions-Policy': 'geolocation=(), camera=(), microphone=(), payment=(), usb=()',
-  'Cross-Origin-Resource-Policy': 'same-origin',
 }
+
+/**
+ * Cross-Origin-Resource-Policy.
+ *
+ * Page content MUST be 'cross-origin'. A sandboxed page has an OPAQUE origin,
+ * which is never same-origin (or same-site) with anything — so 'same-origin'
+ * makes the browser fetch every subresource and then DISCARD the response.
+ * Scripts never execute, styles never apply, and the server log looks perfectly
+ * healthy because the requests genuinely arrived. Verified in Chrome: with
+ * 'same-origin' the page is blank; without it every probe passes.
+ *
+ * This is not a weakening. These resources sit behind Host pinning on a
+ * loopback listener, carry no CORS headers (so a foreign origin can embed but
+ * never READ them), and are addressed by an unguessable pageId.
+ *
+ * The wrapper is a normal same-origin document and keeps the stricter value.
+ */
+const PAGE_CORP = 'cross-origin'
+const WRAPPER_CORP = 'same-origin'
 
 export interface PagesHandlerOptions {
   catalog: PageCatalogService
@@ -126,6 +144,7 @@ export function createPagesHandler(opts: PagesHandlerOptions) {
       return res(200, WRAPPER_CSS, {
         'Content-Type': 'text/css; charset=utf-8',
         'Content-Security-Policy': WRAPPER_CSP,
+        'Cross-Origin-Resource-Policy': WRAPPER_CORP,
         'Cache-Control': 'no-store',
       })
     }
@@ -133,6 +152,7 @@ export function createPagesHandler(opts: PagesHandlerOptions) {
       return res(200, WRAPPER_JS, {
         'Content-Type': 'application/javascript; charset=utf-8',
         'Content-Security-Policy': WRAPPER_CSP,
+        'Cross-Origin-Resource-Policy': WRAPPER_CORP,
         'Cache-Control': 'no-store',
       })
     }
@@ -151,6 +171,7 @@ export function createPagesHandler(opts: PagesHandlerOptions) {
       return res(200, renderWrapperHtml({ pageId, rev, title: entry.title }), {
         'Content-Type': 'text/html; charset=utf-8',
         'Content-Security-Policy': WRAPPER_CSP,
+        'Cross-Origin-Resource-Policy': WRAPPER_CORP,
         'Cache-Control': 'no-store',
       })
     }
@@ -185,6 +206,7 @@ export function createPagesHandler(opts: PagesHandlerOptions) {
       const headers: Record<string, string> = {
         'Content-Type': MIME[extname(resolved.absolutePath).toLowerCase()] ?? 'application/octet-stream',
         'Content-Security-Policy': PAGE_CSP,
+        'Cross-Origin-Resource-Policy': PAGE_CORP,
         // Revisions are immutable, so a revisioned URL could be cached forever.
         // It is not, because a stale asset after an edit is the single most
         // likely way this feature feels broken (plan.md WS5).

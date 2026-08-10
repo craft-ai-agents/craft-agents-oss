@@ -98,6 +98,27 @@ describe('CSP', () => {
     expect(csp).toContain("connect-src 'self'")
   })
 
+  it('does NOT send Cross-Origin-Resource-Policy: same-origin on page content', async () => {
+    // REGRESSION. A sandboxed page has an OPAQUE origin, which is never
+    // same-origin with anything — so CORP: same-origin makes the browser fetch
+    // every subresource and then discard the response. Scripts never execute,
+    // styles never apply, and the server log looks perfectly healthy because
+    // the requests DID arrive.
+    //
+    // Found only by loading the page in Chrome; bun's fetch() does not enforce
+    // CORP, so the whole suite passed while every real page was blank.
+    const corp = (await get(`/p/${pageId}/r/1/index.html`)).headers.get('cross-origin-resource-policy')
+    expect(corp).not.toBe('same-origin')
+    expect(corp).not.toBe('same-site') // opaque origin is not same-site either
+  })
+
+  it('still restricts the trusted wrapper to same-origin', async () => {
+    // The wrapper is a normal document on the pages origin, not opaque, so it
+    // keeps the stricter policy.
+    const corp = (await get(`/w/${pageId}`)).headers.get('cross-origin-resource-policy')
+    expect(corp).toBe('same-origin')
+  })
+
   it('sets nosniff, no-referrer and a restrictive permissions policy', async () => {
     const h = (await get(`/p/${pageId}/r/1/index.html`)).headers
     expect(h.get('x-content-type-options')).toBe('nosniff')
