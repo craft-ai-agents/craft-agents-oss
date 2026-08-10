@@ -239,6 +239,8 @@ export const CHANNEL_MAP = {
   onSourcesChanged: listener(RPC_CHANNELS.sources.CHANGED),
 
   // Skills
+  getPageUrl: invoke(RPC_CHANNELS.pages.GET_URL),
+  listPages: invoke(RPC_CHANNELS.pages.LIST),
   getSkills: invoke(RPC_CHANNELS.skills.GET),
   getSkillFiles: invoke(RPC_CHANNELS.skills.GET_FILES),
   deleteSkill: invoke(RPC_CHANNELS.skills.DELETE),

@@ -7,6 +7,7 @@ import { messagesComponents } from './messages'
 import { inputComponents } from './input'
 import { slashCommandComponents } from './slash-command'
 import { markdownComponents } from './markdown'
+import { craftPagesComponents } from './craft-pages'
 import { iconComponents } from './icons'
 import { oauthComponents } from './oauth'
 import { toastsComponents } from './toasts'
@@ -42,6 +43,7 @@ export const componentRegistry: ComponentEntry[] = [
   ...toastsComponents,
   ...slashCommandComponents,
   ...markdownComponents,
+  ...craftPagesComponents,
   ...iconComponents,
   ...oauthComponents,
   ...sessionListComponents,

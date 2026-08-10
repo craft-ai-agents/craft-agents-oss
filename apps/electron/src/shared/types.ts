@@ -498,6 +498,10 @@ export interface ElectronAPI {
   onDefaultPermissionsChanged(callback: () => void): () => void
 
   // Skills
+  /** Resolve a Craft Page id to its local wrapper URL. Null when disabled or unknown. */
+  getPageUrl(workspaceRootPath: string, pageId: string): Promise<string | null>
+  /** Pages belonging to a session, each with its wrapper URL. */
+  listPages(workspaceRootPath: string, sessionId: string): Promise<Array<{ pageId: string; slug: string; title: string; url: string }>>
   getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>
   getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
   deleteSkill(workspaceId: string, skillSlug: string): Promise<void>

@@ -61,6 +61,19 @@ export interface PlatformActions {
   onOpenMultiFileDiff?: (sessionId: string, turnId: string) => void
 
   /**
+   * Resolve a Craft Page id to its local wrapper URL.
+   *
+   * The renderer must never build this URL itself: the pages listener picks its
+   * port at runtime and can move if the preferred one is taken, so a URL
+   * constructed client-side goes stale silently. Returns null when Craft Pages
+   * is disabled or the page is unknown, and the caller renders nothing.
+   *
+   * Always resolves to the WRAPPER (/w/…), never page content directly — a page
+   * loaded top-level loses the frame-src protection against self-navigation.
+   */
+  onResolvePageUrl?: (pageId: string) => Promise<string | null>
+
+  /**
    * Copy text to clipboard
    * Works in both environments via navigator.clipboard
    */

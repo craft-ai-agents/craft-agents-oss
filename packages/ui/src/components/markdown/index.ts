@@ -19,3 +19,5 @@ export {
 } from './markdown-preview-helpers'
 export { ImageCardStack, type ImageCardStackProps, type ImageCardStackItem } from './ImageCardStack'
 export { TiptapMarkdownEditor, type TiptapMarkdownEditorProps, type MarkdownEngine } from './TiptapMarkdownEditor'
+export { CraftPageBlock } from './CraftPageBlock'
+export { parseCraftPageSpec, craftPageFrameKey, type CraftPageSpec } from './craft-page-spec'
