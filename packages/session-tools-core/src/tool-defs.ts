@@ -33,6 +33,7 @@ import { handleUpdatePreferences } from './handlers/update-preferences.ts';
 import { handleTransformData } from './handlers/transform-data.ts';
 import { handleScriptSandbox } from './handlers/script-sandbox.ts';
 import { handleRenderTemplate } from './handlers/render-template.ts';
+import { handleCraftPage, handleCraftPageDelete } from './handlers/craft-page.ts';
 import { handleSendDeveloperFeedback } from './handlers/send-developer-feedback.ts';
 import { handleSetSessionLabels } from './handlers/set-session-labels.ts';
 import { handleSetSessionStatus } from './handlers/set-session-status.ts';
@@ -149,6 +150,25 @@ export const RenderTemplateSchema = z.object({
   source: z.string().describe('Source slug (e.g., "linear", "gmail")'),
   template: z.string().describe('Template ID (e.g., "issue-detail", "issue-list")'),
   data: z.record(z.string(), z.unknown()).describe('JSON data to render into the template'),
+});
+
+export const CraftPageSchema = z.object({
+  command: z.enum(['create', 'update', 'read', 'list']).describe('Operation to perform'),
+  slug: z.string().optional().describe('Page identifier: lowercase a-z, 0-9 and hyphens, max 48 chars. Required for create/update/read'),
+  title: z.string().optional().describe('Human-readable page title. Required for create'),
+  files: z.array(z.object({
+    path: z.string().describe('Page-relative path, e.g. "index.html" or "assets/logo.png". No "..", no backslashes, no dotfiles'),
+    content: z.string().describe('File contents (UTF-8 text, or base64 when encoding is "base64")'),
+    encoding: z.enum(['utf8', 'base64']).optional().describe('Defaults to utf8. Use base64 for images and fonts'),
+  })).optional().describe('Files to write. create requires index.html at the root'),
+  replaceAll: z.boolean().optional().describe('update only: replace the whole file tree instead of patching the named files. Defaults to false (patch), so files you do not mention are preserved'),
+  expectedRev: z.number().optional().describe('update only: fail if the page is not currently at this revision. Use the revision returned by your last call to avoid clobbering a concurrent edit'),
+  filePath: z.string().optional().describe('read only: return the contents of this single file'),
+});
+
+export const CraftPageDeleteSchema = z.object({
+  slug: z.string().describe('Page to delete'),
+  confirm: z.boolean().describe('Must be true. Deletion removes the page and every revision, permanently'),
 });
 
 export const SendDeveloperFeedbackSchema = z.object({
@@ -388,6 +408,30 @@ Use this for short Python/Node/Bun snippets when strict Explore-mode Bash parsin
 - Timeout is capped (default 5000ms, max 15000ms)
 - Network/filesystem isolation is required in all permission modes; if unavailable, execution is blocked`,
 
+  craft_page: `Create and edit a local web page the user can view.
+
+A page is a FOLDER of real files served locally, not a single HTML string — so multi-page sites, relative asset paths, images and stylesheets all work.
+
+**Hard constraints — all of these fail SILENTLY if ignored:**
+- Scripts must be EXTERNAL files (\`<script src="app.js">\`). Inline \`<script>\` is blocked, and \`type="module"\` does NOT run.
+- Styles must be in an EXTERNAL stylesheet. Inline \`<style>\` blocks and \`style="..."\` attributes are blocked. For dynamic styling assign properties: \`el.style.color = '...'\`.
+- Page data must be delivered as JavaScript that assigns a global (e.g. \`window.DATA = {...}\` in \`data.js\`). \`fetch()\` is blocked entirely, including for the page's own JSON.
+- \`localStorage\` throws. Keep state in memory.
+- \`<form>\` submission is blocked. Use button click handlers.
+- No external network access: no CDNs, no web fonts, no remote images. Inline everything.
+
+**Commands:**
+- \`create\` — slug + title + files (must include index.html)
+- \`update\` — patches the files you name and preserves the rest; pass replaceAll to swap the whole tree. Pass expectedRev to avoid clobbering a concurrent edit.
+- \`read\` — list files, or pass filePath for one file's contents
+- \`list\` — all pages in this session
+
+After create/update, emit the \`craft-page\` block the tool returns so the user can see it.`,
+
+  craft_page_delete: `Permanently delete a page and every revision of it.
+
+Irreversible. Requires \`confirm: true\`. Blocked in Explore mode. Prefer \`craft_page update\` to change a page; only delete when the user explicitly asks.`,
+
   render_template: `Render a source's HTML template with data.
 
 Use this when a source provides HTML templates for rich rendering of its data (e.g., issue detail views, email threads, ticket summaries).
@@ -591,6 +635,11 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'transform_data', description: TOOL_DESCRIPTIONS.transform_data, inputSchema: TransformDataSchema, executionMode: 'registry', safeMode: 'allow', handler: handleTransformData },
   { name: 'script_sandbox', description: TOOL_DESCRIPTIONS.script_sandbox, inputSchema: ScriptSandboxSchema, executionMode: 'registry', safeMode: 'allow', handler: handleScriptSandbox },
   { name: 'render_template', description: TOOL_DESCRIPTIONS.render_template, inputSchema: RenderTemplateSchema, executionMode: 'registry', safeMode: 'allow', handler: handleRenderTemplate },
+  { name: 'craft_page', description: TOOL_DESCRIPTIONS.craft_page, inputSchema: CraftPageSchema, executionMode: 'registry', safeMode: 'allow', handler: handleCraftPage },
+  // Separate tool ONLY so it can carry safeMode: 'block' — safeMode is one value
+  // per tool, so folding delete into craft_page would expose destructive
+  // deletion in Explore (read-only) mode.
+  { name: 'craft_page_delete', description: TOOL_DESCRIPTIONS.craft_page_delete, inputSchema: CraftPageDeleteSchema, executionMode: 'registry', safeMode: 'block', handler: handleCraftPageDelete },
   { name: 'send_developer_feedback', description: TOOL_DESCRIPTIONS.send_developer_feedback, inputSchema: SendDeveloperFeedbackSchema, executionMode: 'registry', safeMode: 'allow', handler: handleSendDeveloperFeedback },
   { name: 'call_llm', description: TOOL_DESCRIPTIONS.call_llm, inputSchema: CallLlmSchema, executionMode: 'backend', safeMode: 'allow', readOnly: true, handler: null },
   { name: 'spawn_session', description: TOOL_DESCRIPTIONS.spawn_session, inputSchema: SpawnSessionSchema, executionMode: 'backend', safeMode: 'block', handler: null },
