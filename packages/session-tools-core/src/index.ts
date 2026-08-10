@@ -241,3 +241,8 @@ export type {
   SessionToolFilterOptions,
   SessionToolNameOptions,
 } from './tool-defs.ts';
+
+// Craft Pages
+export type { PageCatalogInterface, PageCatalogEntry } from './context.ts';
+export * from './pages/naming.ts';
+export * from './pages/store.ts';

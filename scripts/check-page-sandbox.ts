@@ -37,13 +37,21 @@ const EXTRA_FILES = [
 
 const EXT = /\.(?:ts|tsx|js|jsx|html)$/
 
+/**
+ * Test files are excluded: a test that ASSERTS the attribute is absent
+ * necessarily contains both `<iframe` and the word `sandbox`, and an unclosed
+ * `'<iframe'` string fragment makes the tag regex over-match. Excluding them
+ * loses nothing — tests do not ship a wrapper.
+ */
+const IS_TEST = /\.(?:test|spec)\.[jt]sx?$/
+
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out
   for (const name of readdirSync(dir)) {
     if (name === 'node_modules' || name === 'dist') continue
     const full = join(dir, name)
     if (statSync(full).isDirectory()) walk(full, out)
-    else if (EXT.test(name)) out.push(full)
+    else if (EXT.test(name) && !IS_TEST.test(name)) out.push(full)
   }
   return out
 }
