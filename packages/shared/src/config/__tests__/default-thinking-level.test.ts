@@ -104,6 +104,12 @@ describe('default thinking level storage', () => {
     expect(output).toBe('medium')
   })
 
+  // Explicit timeout: this spawns 2 subprocesses per level (12 total), each a
+  // full bun process importing storage.ts and its dependency graph. At ~600ms a
+  // spawn that is ~7s of genuine work, so bun's 5s default made it fail
+  // whenever the machine was even slightly loaded — it needed spawns to average
+  // under ~415ms to pass at all. The assertions are unchanged; only the budget
+  // is now matched to the work.
   it('supports every thinking level', () => {
     const { configDir } = setupWorkspaceConfigDir()
     for (const level of THINKING_LEVEL_IDS) {
@@ -111,7 +117,7 @@ describe('default thinking level storage', () => {
       const output = runEval(configDir, "console.log(String(getDefaultThinkingLevel()))")
       expect(output).toBe(level)
     }
-  })
+  }, 60_000)
 
   it('migrates legacy "think" value to "medium"', () => {
     const { configDir, configPath } = setupWorkspaceConfigDir()
