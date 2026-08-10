@@ -12,6 +12,7 @@ import { join } from 'node:path'
 import {
   CRAFT_PAGES_SESSION_PARTITION,
   isPagesEgressAllowed,
+  createPagesSession,
 } from '../pages-egress.ts'
 
 const ORIGIN = 'http://127.0.0.1:51234'
@@ -131,5 +132,72 @@ describe('renderer CSP', () => {
     )
     const csp = /content="([^"]*default-src[^"]*)"/i.exec(html)?.[1] ?? ''
     expect(csp).toMatch(/frame-src[^;]*127\.0\.0\.1/)
+  })
+})
+
+
+describe('createPagesSession', () => {
+  function fakeSession() {
+    const handlers: Array<(d: { url: string }, cb: (r: { cancel: boolean }) => void) => void> = []
+    return {
+      handlers,
+      webRequest: {
+        onBeforeRequest: (fn: (typeof handlers)[number]) => { handlers.push(fn) },
+      },
+    }
+  }
+
+  it('creates the session from the pages partition, never the default one', () => {
+    // Attaching a default-deny egress filter to defaultSession would cancel
+    // every request the ENTIRE APP makes — the RPC socket, model calls, OAuth.
+    // Making the session creation part of this function means a caller cannot
+    // pass the wrong one by mistake.
+    const asked: string[] = []
+    createPagesSession((partition) => { asked.push(partition); return fakeSession() }, () => null)
+    expect(asked).toEqual([CRAFT_PAGES_SESSION_PARTITION])
+  })
+
+  it('attaches the deny-list to the session it created', () => {
+    const ses = fakeSession()
+    createPagesSession(() => ses, () => 'http://127.0.0.1:51234')
+    expect(ses.handlers).toHaveLength(1)
+  })
+
+  it('cancels off-origin requests and permits on-origin ones', () => {
+    const ses = fakeSession()
+    createPagesSession(() => ses, () => 'http://127.0.0.1:51234')
+    const handler = ses.handlers[0]!
+
+    let verdict: { cancel: boolean } | null = null
+    handler({ url: 'https://evil.com/collect?d=SECRET' }, (r) => { verdict = r })
+    expect(verdict!.cancel).toBe(true)
+
+    handler({ url: 'http://127.0.0.1:51234/p/abc/r/1/app.js' }, (r) => { verdict = r })
+    expect(verdict!.cancel).toBe(false)
+  })
+
+  it('re-reads the origin on every request rather than capturing it', () => {
+    // The port is resolved at runtime and can move on conflict; a captured
+    // value would pin a stale origin and block the real one.
+    const ses = fakeSession()
+    let origin: string | null = null
+    createPagesSession(() => ses, () => origin)
+    const handler = ses.handlers[0]!
+
+    let verdict: { cancel: boolean } | null = null
+    handler({ url: 'http://127.0.0.1:51234/x.js' }, (r) => { verdict = r })
+    expect(verdict!.cancel).toBe(true) // origin unknown yet -> fail closed
+
+    origin = 'http://127.0.0.1:51234'
+    handler({ url: 'http://127.0.0.1:51234/x.js' }, (r) => { verdict = r })
+    expect(verdict!.cancel).toBe(false)
+  })
+
+  it('reports what it blocked so the failure is diagnosable', () => {
+    const ses = fakeSession()
+    const blocked: string[] = []
+    createPagesSession(() => ses, () => 'http://127.0.0.1:51234', (u) => blocked.push(u))
+    ses.handlers[0]!({ url: 'https://evil.com/x' }, () => {})
+    expect(blocked).toEqual(['https://evil.com/x'])
   })
 })

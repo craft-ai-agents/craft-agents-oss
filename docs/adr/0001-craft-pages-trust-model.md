@@ -104,6 +104,34 @@ Therefore:
 - The Electron `webRequest` egress deny on a dedicated pages partition remains as
   a second layer.
 
+### D6a — The Electron egress deny-list has a limited attachment point
+
+Verified while wiring WS3, and it narrows D6 rather than contradicting it.
+
+An `<iframe>` in the renderer runs in the **main window's session**. Electron
+has no per-iframe partition, and `webviewTag` is `false`
+(`window-manager.ts:261`), so the `persist:craft-pages` partition **cannot**
+cover the in-app iframe surface that WS5 plans. Attaching a default-deny filter
+to `defaultSession` instead is not an option — it would cancel every request the
+whole app makes.
+
+So the two controls divide cleanly:
+
+| Surface | Control |
+|---|---|
+| Page framed inside the wrapper (iframe in the renderer) | the wrapper's `frame-src 'self'` — browser-native, measured effective in Chromium and WebKit |
+| Page in a dedicated `WebContentsView` / `BrowserWindow` | the pages partition + `webRequest` deny-list |
+| Page top-level in a third-party browser | **nothing** — hence live-data pages are in-app only |
+
+`createPagesSession()` owns its `fromPartition` call so the deny-list cannot be
+attached to the wrong session by mistake.
+
+**Open for WS5:** whether the in-app surface is an iframe (simple, relies solely
+on `frame-src`) or a `WebContentsView` in the pages partition (isolated, egress
+enforced, heavier, and needs its own lifecycle and layout plumbing). D6's
+"live-data pages are always framed" holds either way; this decides which
+mechanism enforces it.
+
 ### D7 — Classic scripts only; page data ships as JS
 
 Measured, both engines: `<script type="module">` **does not execute** and emits

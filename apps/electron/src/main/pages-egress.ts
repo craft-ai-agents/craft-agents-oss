@@ -58,18 +58,43 @@ export function isPagesEgressAllowed(url: string, pagesOrigin: string | null): b
   return parsed.origin === allowed.origin
 }
 
+/** The slice of Electron's Session this module needs. Kept minimal so the
+ *  policy is testable without importing electron. */
+export interface EgressCapableSession {
+  webRequest: {
+    onBeforeRequest: (
+      fn: (details: { url: string }, callback: (response: { cancel: boolean }) => void) => void,
+    ) => void
+  }
+}
+
 /**
- * Attach the deny-list to a session.
+ * Create the pages session AND attach the deny-list, in one step.
+ *
+ * Creation is deliberately part of this function rather than taking a session
+ * as a parameter: attaching a default-deny egress filter to `defaultSession`
+ * would cancel every request the ENTIRE APP makes — the RPC socket, model
+ * calls, OAuth, updates. Owning the `fromPartition` call means a caller cannot
+ * hand in the wrong session by mistake.
  *
  * `getPagesOrigin` is a callback rather than a value because the port is
  * resolved at runtime and can change if the preferred one is taken — capturing
  * it once would pin a stale origin and block the real one.
+ *
+ * IMPORTANT — where this does and does not apply. An `<iframe>` in the renderer
+ * runs in the MAIN WINDOW's session (there is no per-iframe partition, and
+ * `webviewTag` is false), so this policy does NOT cover the planned in-app
+ * iframe surface. For that path the wrapper's `frame-src 'self'` is the
+ * control, which WS0 measured as effective in both Chromium and WebKit. This
+ * session is for surfaces we can actually place in a partition — a dedicated
+ * `WebContentsView`/`BrowserWindow` — which is the open WS5 decision.
  */
-export function applyPagesEgressPolicy(
-  ses: { webRequest: { onBeforeRequest: (fn: (d: { url: string }, cb: (r: { cancel: boolean }) => void) => void) => void } },
+export function createPagesSession<T extends EgressCapableSession>(
+  sessionFactory: (partition: string) => T,
   getPagesOrigin: () => string | null,
   onBlocked?: (url: string) => void,
-): void {
+): T {
+  const ses = sessionFactory(CRAFT_PAGES_SESSION_PARTITION)
   ses.webRequest.onBeforeRequest((details, callback) => {
     if (isPagesEgressAllowed(details.url, getPagesOrigin())) {
       callback({ cancel: false })
@@ -78,4 +103,5 @@ export function applyPagesEgressPolicy(
     onBlocked?.(details.url)
     callback({ cancel: true })
   })
+  return ses
 }
