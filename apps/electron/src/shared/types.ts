@@ -500,6 +500,8 @@ export interface ElectronAPI {
   // Skills
   /** Resolve a Craft Page id to its local wrapper URL. Null when disabled or unknown. */
   getPageUrl(workspaceRootPath: string, pageId: string): Promise<string | null>
+  /** How many pages a session owns. Used to phrase the delete confirmation. */
+  countPagesForSession(workspaceRootPath: string, sessionId: string): Promise<number>
   /** Pages belonging to a session, each with its wrapper URL. */
   listPages(workspaceRootPath: string, sessionId: string): Promise<Array<{ pageId: string; slug: string; title: string; url: string }>>
   getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>

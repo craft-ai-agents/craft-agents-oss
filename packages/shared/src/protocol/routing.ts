@@ -25,6 +25,7 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   // cleanly rather than silently.
   RPC_CHANNELS.pages.GET_URL,
   RPC_CHANNELS.pages.LIST,
+  RPC_CHANNELS.pages.COUNT_FOR_SESSION,
 
   // workspaces — local workspace CRUD (workspace list is local config)
   RPC_CHANNELS.workspaces.GET,

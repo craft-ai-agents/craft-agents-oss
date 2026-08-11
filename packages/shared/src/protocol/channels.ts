@@ -276,6 +276,8 @@ export const RPC_CHANNELS = {
     GET_URL: 'pages:getUrl',
     /** List pages belonging to a session. */
     LIST: 'pages:list',
+    /** How many pages a session owns — used to phrase the delete confirmation. */
+    COUNT_FOR_SESSION: 'pages:countForSession',
   },
 
   skills: {

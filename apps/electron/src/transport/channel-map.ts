@@ -241,6 +241,7 @@ export const CHANNEL_MAP = {
   // Skills
   getPageUrl: invoke(RPC_CHANNELS.pages.GET_URL),
   listPages: invoke(RPC_CHANNELS.pages.LIST),
+  countPagesForSession: invoke(RPC_CHANNELS.pages.COUNT_FOR_SESSION),
   getSkills: invoke(RPC_CHANNELS.skills.GET),
   getSkillFiles: invoke(RPC_CHANNELS.skills.GET_FILES),
   deleteSkill: invoke(RPC_CHANNELS.skills.DELETE),

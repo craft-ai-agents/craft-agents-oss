@@ -1,6 +1,7 @@
 import type { EventSink, RpcServer } from '@craft-agent/server-core/transport'
 import { PagesRuntime } from '../pages/runtime'
 import { resolvePageCatalogForSession } from '../pages/session-binding'
+import { countPagesInSession, purgeSessionPages } from '../pages/session-deletion'
 import { CLIENT_BROWSER_INVOKE } from '@craft-agent/server-core/transport'
 import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput } from '@craft-agent/server-core/handlers'
 import { RemoteBrowserPaneManager } from './RemoteBrowserPaneManager'
@@ -5700,6 +5701,16 @@ export class SessionManager implements ISessionManager {
 
     // Get workspace slug before deleting
     const workspaceRootPath = managed.workspace.rootPath
+
+    // Craft Pages: drop catalog entries before the session directory (and with
+    // it every page it owns) is removed. Never throws — a catalog problem must
+    // not leave the user unable to delete a session.
+    await purgeSessionPages(
+      this.pagesRuntime.catalogFor(workspaceRootPath),
+      workspaceRootPath,
+      sessionId,
+      { warn: (m: string) => sessionLog.warn(m) },
+    )
 
     // If processing is in progress, force-abort via Query.close() and wait for cleanup
     if (managed.isProcessing && managed.agent) {

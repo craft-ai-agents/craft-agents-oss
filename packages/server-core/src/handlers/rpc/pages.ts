@@ -1,10 +1,12 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import { countPagesInSession } from '../../pages/session-deletion'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.pages.GET_URL,
   RPC_CHANNELS.pages.LIST,
+  RPC_CHANNELS.pages.COUNT_FOR_SESSION,
 ] as const
 
 export interface PageListItem {
@@ -67,5 +69,20 @@ export function registerPagesHandlers(server: RpcServer, deps: HandlerDeps): voi
       title: e.title,
       url: running.urlForPage(e.pageId),
     }))
+  })
+
+  // Counted from disk, not the catalog: a page whose catalog entry was lost is
+  // still about to be deleted, and the user should be warned about it. Works
+  // even when the pages runtime is not started.
+  server.handle(RPC_CHANNELS.pages.COUNT_FOR_SESSION, async (
+    _ctx,
+    workspaceRootPath: string,
+    sessionId: string,
+  ): Promise<number> => {
+    try {
+      return countPagesInSession(workspaceRootPath, sessionId)
+    } catch {
+      return 0
+    }
   })
 }
