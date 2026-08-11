@@ -1,29 +1,83 @@
 /**
- * SettingsPanel — shell Settings view.
+ * SettingsPanel — ARCHstudio branded settings view.
  *
- * Layout only. The panel is a two-pane host (navigator + selected page); every
- * control inside it is rendered by the shared settings page components and
- * styled by those, not from here.
- *
- * This file previously carried ~470 lines styling a bespoke flat toggle list
- * that duplicated the settings pages. That list is gone, and so are its styles
- * — leaving them behind would have kept leaking global `.settings-row`,
- * `.settings-switch` and `.settings-button` rules into the rest of the app.
+ * Two-pane host (navigator + selected page). Brand color scheme:
+ * - Purple (#a855f7 / --brand-purple) for primary accent + active states
+ * - Lime (#22c55e / --brand-lime) for secondary accent + success
+ * - Dark elevated surfaces, subtle gradient glows
  */
+
+/* ── Panel layout ─────────────────────────────────────────────── */
 
 .settings-panel {
   display: flex;
   flex-direction: row;
   height: 100%;
   min-height: 0;
+  background: var(--background);
 }
 
+/* ── Navigator (left pane) ────────────────────────────────────── */
+
 .settings-panel__nav {
-  flex: 0 0 clamp(220px, 24%, 320px);
+  flex: 0 0 260px;
   min-width: 0;
   overflow-y: auto;
-  border-right: 1px solid color-mix(in oklch, var(--ds-shadow-color) 10%, transparent);
+  border-right: 1px solid color-mix(in oklch, var(--brand-purple) 12%, var(--border));
+  background: color-mix(in oklch, var(--brand-purple) 3%, var(--background));
+  position: relative;
 }
+
+.settings-panel__nav::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 80px;
+  background: linear-gradient(180deg, color-mix(in oklch, var(--brand-purple) 8%, transparent), transparent);
+  pointer-events: none;
+}
+
+/* Navigator item rows (rendered by SettingsNavigator) */
+.settings-item {
+  position: relative;
+  transition: background 100ms ease;
+}
+
+.settings-item[data-selected] {
+  background: color-mix(in oklch, var(--brand-purple) 10%, transparent);
+}
+
+.settings-item[data-selected]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--brand-lime), var(--brand-purple));
+}
+
+.settings-content {
+  border-radius: 10px !important;
+}
+
+.settings-content button:hover {
+  background: color-mix(in oklch, var(--brand-purple) 6%, transparent) !important;
+}
+
+.settings-separator {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.settings-separator > * {
+  background: color-mix(in oklch, var(--brand-purple) 8%, var(--border)) !important;
+}
+
+/* ── Detail pane (right) ──────────────────────────────────────── */
 
 .settings-panel__detail {
   flex: 1;
@@ -32,16 +86,135 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  background: var(--background);
+  position: relative;
 }
 
-/* The pages own their internal scrolling (each wraps content in a ScrollArea),
-   so the detail pane must not introduce a second scroll container. */
+.settings-panel__detail::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 240px;
+  height: 240px;
+  background: radial-gradient(circle at top right, color-mix(in oklch, var(--brand-purple) 6%, transparent), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
 .settings-panel__detail > * {
   flex: 1;
   min-height: 0;
+  position: relative;
+  z-index: 1;
 }
 
-/* Narrow shell: stack the navigator above the page rather than squeezing both. */
+/* ── Brand settings cards ────────────────────────────────────── */
+
+/* Override the Tailwind-based SettingsCard with brand styling */
+.settings-panel__detail [class*="rounded-xl"][class*="bg-background"] {
+  border: 1px solid color-mix(in oklch, var(--brand-purple) 10%, var(--border));
+  box-shadow: 0 1px 3px color-mix(in oklch, var(--brand-purple) 5%, transparent),
+              0 0 0 1px color-mix(in oklch, var(--brand-purple) 3%, transparent);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.settings-panel__detail [class*="rounded-xl"][class*="bg-background"]:hover {
+  border-color: color-mix(in oklch, var(--brand-purple) 20%, var(--border));
+  box-shadow: 0 2px 8px color-mix(in oklch, var(--brand-purple) 10%, transparent),
+              0 0 0 1px color-mix(in oklch, var(--brand-purple) 6%, transparent);
+}
+
+/* Section titles get brand purple */
+.settings-panel__detail h3,
+.settings-panel__detail h2 {
+  color: var(--foreground);
+}
+
+.settings-panel__detail h3::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 14px;
+  margin-right: 8px;
+  vertical-align: -2px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--brand-lime), var(--brand-purple));
+}
+
+.settings-panel__detail h2.text-xs {
+  background: none !important;
+  border-bottom-color: color-mix(in oklch, var(--brand-purple) 15%, var(--border)) !important;
+  color: color-mix(in oklch, var(--brand-purple) 70%, var(--foreground)) !important;
+}
+
+.settings-panel__detail h2.text-xs::before {
+  display: none;
+}
+
+/* ── Toggle switches — brand purple when on ──────────────────── */
+
+.settings-panel__detail [role="switch"][data-state="checked"],
+.settings-panel__detail button[class*="bg-primary"] {
+  background: var(--brand-purple) !important;
+}
+
+.settings-panel__detail [role="switch"] {
+  border-color: color-mix(in oklch, var(--brand-purple) 30%, var(--border)) !important;
+}
+
+/* ── Input focus — brand purple ring ─────────────────────────── */
+
+.settings-panel__detail input:focus,
+.settings-panel__detail textarea:focus,
+.settings-panel__detail select:focus {
+  border-color: var(--brand-purple) !important;
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--brand-purple) 25%, transparent) !important;
+  outline: none !important;
+}
+
+/* ── Buttons — brand gradient for primary ────────────────────── */
+
+.settings-panel__detail button[class*="bg-primary"],
+.settings-panel__detail button[class*="bg-destructive"]:not([class*="text-destructive"]) {
+  background: linear-gradient(135deg, var(--brand-purple), color-mix(in oklch, var(--brand-purple) 80%, var(--brand-lime))) !important;
+  border: none !important;
+  color: white !important;
+  font-weight: 600 !important;
+  transition: filter 150ms ease, box-shadow 150ms ease !important;
+}
+
+.settings-panel__detail button[class*="bg-primary"]:hover {
+  filter: brightness(1.1) !important;
+  box-shadow: 0 2px 12px color-mix(in oklch, var(--brand-purple) 35%, transparent) !important;
+}
+
+/* ── Scrollbar styling ────────────────────────────────────────── */
+
+.settings-panel__nav::-webkit-scrollbar,
+.settings-panel__detail ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.settings-panel__nav::-webkit-scrollbar-thumb,
+.settings-panel__detail ::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--brand-purple) 20%, var(--border));
+  border-radius: 4px;
+}
+
+.settings-panel__nav::-webkit-scrollbar-thumb:hover,
+.settings-panel__detail ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--brand-purple) 35%, var(--border));
+}
+
+.settings-panel__nav::-webkit-scrollbar-track,
+.settings-panel__detail ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── Responsive ──────────────────────────────────────────────── */
+
 @media (max-width: 720px) {
   .settings-panel {
     flex-direction: column;
@@ -51,6 +224,6 @@
     flex: 0 0 auto;
     max-height: 40%;
     border-right: none;
-    border-bottom: 1px solid color-mix(in oklch, var(--ds-shadow-color) 10%, transparent);
+    border-bottom: 1px solid color-mix(in oklch, var(--brand-purple) 12%, var(--border));
   }
 }

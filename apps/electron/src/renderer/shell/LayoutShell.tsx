@@ -48,16 +48,14 @@ import { IntegrationsPanel } from '../panels/integrations'
 import { SearchPanel } from '../panels/search'
 import { SecurityPanel } from '../panels/security'
 import { SettingsPanel } from '../panels/settings'
-import { isValidSettingsSubpage, type SettingsSubpage } from '../../shared/settings-registry'
+
 import { MediaLabPanel } from '../panels/media-lab'
 import { DashboardPanel } from '../panels/dashboard/DashboardPanel'
 import '../panels/dashboard/DashboardPanel.css'
 import { PromptStudioPanel } from '../panels/prompts'
 import { ProvidersPanel } from '../panels/ProvidersPanel'
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from '@/components/ui/drawer'
+
 import { ThumbnailHoverPreview } from '../components/right-sidebar/ThumbnailHoverPreview'
-import { ProfileMenu } from '@archstudio/ui/ProfileMenu'
-import '@archstudio/ui/ProfileMenu.css'
 import { ShikiDiffViewer } from '../components/shiki'
 import { HighlightedDiffViewer, type DiffViewMode } from '@archstudio/ui'
 import { HomeHero } from '../home'
@@ -762,8 +760,7 @@ function LayoutShell({
   const [previousView, setPreviousView] = useState<ShellView>('sessions')
   const [sessionsView, setSessionsView] = useState<'list' | 'board'>(getInitialSessionsView)
   const [sidebarCollapsedLocal, setSidebarCollapsed] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settingsSubpage, setSettingsSubpage] = useState<SettingsSubpage | undefined>(undefined)
+
   const [userName, setUserName] = useState<string | null>(null)
 
   // Fetch git user name for profile menu
@@ -2705,37 +2702,18 @@ const DEPTH_POPOVER_OPTIONS = [
               )
             })}
           </nav>
-
-          {!sidebarCollapsed && (
-            <div className="layout-sidebar__section">
-              <h3 className="layout-sidebar__section-title">Pinned</h3>
-              <ul className="layout-sidebar__list">
-                {/* Placeholder for pinned items */}
-                <li><button type="button" className="layout-sidebar__list-item"><FolderKanban size={16} /> Personal Dashboard</button></li>
-              </ul>
-            </div>
-          )}
-
-          {!sidebarCollapsed && (
-            <div className="layout-sidebar__section">
-              <h3 className="layout-sidebar__section-title">Recents</h3>
-              <ul className="layout-sidebar__list layout-sidebar__list--recents">
-                {/* Placeholder for recent items */}
-                <li><button type="button" className="layout-sidebar__list-item"><FileText size={16} /> Review and fixes needed</button></li>
-                <li><button type="button" className="layout-sidebar__list-item"><FileText size={16} /> Personal dashboard</button></li>
-              </ul>
-            </div>
-          )}
         </div>
 
         <div className="layout-sidebar__footer">
-          <ProfileMenu
-            userName={userName ?? 'Skobez'}
-            onOpenSettings={(subpage) => {
-              setSettingsSubpage(isValidSettingsSubpage(subpage ?? '') ? (subpage as SettingsSubpage) : undefined)
-              setSettingsOpen(true)
-            }}
-          />
+          <button
+            type="button"
+            className={`layout-nav-item ${activeView === 'settings' ? 'layout-nav-item--active' : ''}`}
+            onClick={() => handleNavigate('settings')}
+            title="Settings"
+          >
+            <Settings size={18} aria-hidden="true" />
+            {!sidebarCollapsed && <span className="layout-nav-item__label">{userName ?? 'Skobez'}</span>}
+          </button>
         </div>
       </aside>
 
@@ -2840,6 +2818,8 @@ const DEPTH_POPOVER_OPTIONS = [
             <IntegrationsPanel />
           ) : activeView === 'search' ? (
             <SearchPanel />
+          ) : activeView === 'settings' ? (
+            <SettingsPanel />
           ) : activeView === 'security' ? (
             <SecurityPanel />
           ) : activeView === 'media-lab' ? (
@@ -3197,25 +3177,7 @@ const DEPTH_POPOVER_OPTIONS = [
                                         </kbd>
                                       </button>
                                     ))}
-{/* Settings Drawer Modal */}
-      <Drawer
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        direction="left"
-      >
-        <DrawerContent className="arch-settings-drawer">
-          <DrawerHeader>
-            <DrawerTitle>Settings</DrawerTitle>
-            <DrawerClose asChild>
-              <button type="button" className="arch-drawer-close-btn" aria-label="Close settings">×</button>
-            </DrawerClose>
-          </DrawerHeader>
-          <div className="arch-settings-drawer__body">
-            <SettingsPanel key={settingsSubpage ?? 'default'} initialSubpage={settingsSubpage} />
-          </div>
-        </DrawerContent>
-      </Drawer>
-    </div>
+                                  </div>
                                 )}
                               </span>
                               {/*
@@ -3634,8 +3596,7 @@ const DEPTH_POPOVER_OPTIONS = [
           )}
         </main>
       </div>
-
-      </div>
+    </div>
   )
 }
 
