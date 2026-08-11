@@ -198,6 +198,17 @@ describe('errors stay opaque', () => {
     expect(lastReply().error).toBe('request_failed')
   })
 
+  it('does not treat a failed response as success just because the body says ok', async () => {
+    // The status is checked as well as the envelope. Trusting the body alone
+    // would let any upstream that can shape a response — a proxy, an error
+    // page, a future bridge bug — hand a page data it was refused.
+    h.respond = () => new Response(
+      JSON.stringify({ ok: true, data: { secret: 'leaked' } }), { status: 502 })
+    await h.fromPage(QUERY)
+    expect(JSON.stringify(lastReply())).not.toContain('leaked')
+    expect(lastReply().error).toBe('request_failed')
+  })
+
   it('always answers a query, so a page never hangs waiting', async () => {
     h.respond = () => new Response('{}', { status: 502 })
     await h.fromPage(QUERY)
