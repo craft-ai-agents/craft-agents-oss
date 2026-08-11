@@ -1,6 +1,6 @@
 # ADR 0001 — Craft Pages trust model
 
-**Status:** Accepted (WS0 complete)
+**Status:** Accepted — implemented through WS7
 **Date:** 2026-08-09
 **Supersedes:** the trust-model sections of `plan.md` r1–r3
 **Evidence:** `spike/ws0-pages-security/FINDINGS.md` — every decision below was
@@ -197,6 +197,25 @@ the request reader before JSON parsing.
   security regression.
 - WS5's preview must point at `/w/{pageId}`, never `/p/*` directly.
 - WS7 must gate "open externally" on whether the page holds grants.
+
+## Implementation notes added during WS7
+
+Three refinements the build surfaced, none of which change a decision above.
+
+**The merge order in `resolveArgs` is belt-and-braces, not the guarantee.**
+`fixedArgs` is spread last so a page cannot override it — but mutation testing
+showed reversing that spread fails no test, because `approve()` rejects any
+grant whose parameters collide with its fixed arguments. The collision check is
+the actual control; the ordering is kept in case that check is ever relaxed.
+
+**`canOpenExternally` fails closed.** If the grant store cannot be consulted,
+the answer is "no". Refusing to offer "open in browser" costs a convenience;
+wrongly offering it costs D6.
+
+**The workspace pool is narrower than a session pool.** Only sources exposing a
+tool on the trusted allowlist are connected at all, so a page never causes a
+subprocess spawn or an OAuth refresh for capability it could not reach. A source
+that is never connected cannot be called by mistake.
 
 ## Not yet verified
 

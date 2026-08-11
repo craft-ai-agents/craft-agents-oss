@@ -655,7 +655,23 @@ restart; MCP subprocess cleanup on quit; upgrade from a real v0.11.x install.
 | 4 | **WS4** cold-start + open-in-browser | Weeks-old page in an unloaded session opens after restart |
 | 5 | **WS5** compact card, fullscreen, revisioned refresh | Iteration is visibly instant incl. CSS/JS; N edits ≠ N live frames |
 | 6 | **WS6** deletion dialog, flag gating, i18n, packaging, platform E2E | Phase 1 ships behind `FEATURE_FLAGS.craftPages` |
-| 7 | **WS7** allowlist, grant store, bridge, pool, wrapper chrome | Grants test table passes; Phase 2 behind `FEATURE_FLAGS.craftPagesLiveData` |
+| 7 | **WS7** allowlist, grant store, bridge, pool, wrapper chrome | ✅ implemented — see docs/adr/0001 |
+
+### Status
+
+Steps 0–7 are implemented behind `FEATURE_FLAGS.craftPages`, with ~330 tests
+across five packages and `validate:ci` green. What remains is not code:
+
+- **Consent UI.** The RPC surface exists (`pages:listGrants` /
+  `approveGrants` / `revokeGrants`) and approval is a user action routed
+  through the app, but the dialog that calls it is not built. Until it is,
+  no page can hold grants — which means live data is inert and every page
+  is grantless, static, and openable anywhere.
+- **Windows and Linux verification.** The naming rules are pure-string and
+  tested from any OS, but the filesystem containment guard has never run on
+  Windows. This is the largest carried risk.
+- **Gecko.** Deferred by decision; the spike's instrumentation runs there
+  unchanged when wanted.
 
 The authoring skill and prompt guidance are written alongside WS5–WS6, once the real constraints are
 verified — no `localStorage`, no `<form>` submit, external `app.js` only, no inline scripts, data as

@@ -2,6 +2,7 @@ import type { EventSink, RpcServer } from '@craft-agent/server-core/transport'
 import { PagesRuntime } from '../pages/runtime'
 import { resolvePageCatalogForSession } from '../pages/session-binding'
 import { countPagesInSession, purgeSessionPages } from '../pages/session-deletion'
+import { createWorkspacePoolBuilder } from '../pages/grants/pool-builder'
 import { CLIENT_BROWSER_INVOKE } from '@craft-agent/server-core/transport'
 import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput } from '@craft-agent/server-core/handlers'
 import { RemoteBrowserPaneManager } from './RemoteBrowserPaneManager'
@@ -1220,7 +1221,22 @@ export class SessionManager implements ISessionManager {
    * Started lazily on first session in a workspace; a no-op when the feature
    * flag is off, in which case no listener is ever bound.
    */
-  private pagesRuntime = new PagesRuntime()
+  private pagesRuntime = new PagesRuntime(
+    { info: (m: string) => sessionLog.info(m), warn: (m: string) => sessionLog.warn(m) },
+    // Real connector pool for pages. Narrower than a session pool: only sources
+    // exposing a trusted read-only tool are connected, so a page never causes a
+    // subprocess or token refresh for capability it cannot reach.
+    createWorkspacePoolBuilder({
+      loadAllSources: (root) => loadAllSources(root),
+      isSourceUsable: (source) => isSourceUsable(source as never),
+      buildServers: (sources) => buildServersFromSources(sources as never),
+      createPool: (root) => new McpClientPool({
+        debug: (msg) => sessionLog.debug(msg),
+        workspaceRootPath: root,
+      }) as never,
+      logger: { info: (m: string) => sessionLog.info(m), warn: (m: string) => sessionLog.warn(m) },
+    }),
+  )
   // Pending credential request resolvers (keyed by requestId)
   private pendingCredentialResolvers: Map<string, (response: import('@craft-agent/shared/protocol').CredentialResponse) => void> = new Map()
   // Permission request metadata tracking (keyed by requestId)
