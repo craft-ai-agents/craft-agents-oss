@@ -217,6 +217,38 @@ tool on the trusted allowlist are connected at all, so a page never causes a
 subprocess spawn or an OAuth refresh for capability it could not reach. A source
 that is never connected cannot be called by mistake.
 
+**The wrapper is the page's only route to a connector, and it had no tests.**
+An integration test added after WS7 found the live-data path was never
+connected: the wrapper still answered every query with `live_data_unavailable`
+while the bridge, grant store and pool sat fully built behind it. The gap
+survived because every test entered at the bridge — the wrapper's entry point,
+not the page's. A page cannot call `/internal/query` itself (D3's
+`connect-src 'none'`, and D5's opaque origin fails the Origin pin), so the
+first hop is always a postMessage. When a component can only be reached
+through another, testing it at its own front door proves nothing about
+whether anything can get there.
+
+The wrapper forwards `grantId` and `params` and nothing else. This is
+redundant with the bridge, which reads the tool from the grant — verified by
+mutation, a wrapper that forwards every field breaks no end-to-end assertion.
+It is kept because the redundancy is the point: it takes a break in both
+layers for a page to choose its own tool.
+
+## Verified in a browser (post-WS7)
+
+The full path was driven in Chrome against a live listener, with a real grant
+and a faked connector. Measured, not assumed:
+
+| Property | Result |
+| --- | --- |
+| Live connector data reaches the framed page | rendered |
+| Page's own `fetch('/internal/query')` | blocked by CSP |
+| Query naming an unheld grant | `forbidden`, connector never called |
+| `window.origin` inside the frame | `null` |
+| `localStorage` / `document.cookie` | both blocked |
+| Top-level navigation to a grant-holding page | refused (D6) |
+| Connector calls made | exactly one, page param merged onto fixed args |
+
 ## Not yet verified
 
 - **Gecko/Firefox** — not run (not installed). Deferred: not a target platform.

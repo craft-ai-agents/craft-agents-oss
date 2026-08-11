@@ -668,14 +668,35 @@ restart; MCP subprocess cleanup on quit; upgrade from a real v0.11.x install.
 
 ### Status
 
-Steps 0–7 are implemented behind `FEATURE_FLAGS.craftPages`, with ~330 tests
-across five packages and `validate:ci` green. What remains is not code:
+Steps 0–7 are implemented behind `FEATURE_FLAGS.craftPages`, with ~350 tests
+across five packages and `validate:ci` green.
+
+A full-stack integration test (`pages/__tests__/integration.test.ts`) was
+added after WS7 and immediately found that live data was **not connected**:
+the grant store, bridge and pool were all built and tested, but the wrapper
+still answered every query with `live_data_unavailable`. Nothing caught it
+because every test entered at the bridge — which is where the *wrapper*
+enters, not where a *page* does. A page cannot reach `/internal/query`
+itself (CSP `connect-src 'none'`, and its opaque origin fails the Origin
+pin), so the real first hop is a postMessage into the wrapper, and that hop
+had no tests at all. It is now implemented and covered from both sides.
+
+The whole path was then verified in Chrome against a live listener: real
+connector data rendered in the sandboxed frame, an ungranted query returned
+`forbidden`, a direct `fetch('/internal/query')` from the page was blocked
+by CSP, the frame reported `origin=null` with `localStorage` and
+`document.cookie` both blocked, and a top-level navigation to a
+grant-holding page was refused. Exactly one connector call was made, with
+the page's parameter merged onto the user's fixed argument.
+
+What remains:
 
 - **Consent UI.** The RPC surface exists (`pages:listGrants` /
   `approveGrants` / `revokeGrants`) and approval is a user action routed
   through the app, but the dialog that calls it is not built. Until it is,
-  no page can hold grants — which means live data is inert and every page
-  is grantless, static, and openable anywhere.
+  no page can hold grants in the real app — every page is grantless,
+  static, and openable anywhere. The machinery behind the dialog is now
+  proven end to end; what is missing is the dialog.
 - **Windows and Linux verification.** The naming rules are pure-string and
   tested from any OS, but the filesystem containment guard has never run on
   Windows. This is the largest carried risk.
