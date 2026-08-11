@@ -29,7 +29,14 @@ export interface SkillMetadata {
 }
 
 /** Source of a loaded skill */
-export type SkillSource = 'global' | 'workspace' | 'project';
+/**
+ * Where a skill was loaded from, in ascending priority.
+ *
+ * 'builtin' ships inside the app bundle and updates with it. It is loaded
+ * first and overridden by every other tier, so a user who copies a shipped
+ * skill into their own skills directory keeps their version.
+ */
+export type SkillSource = 'builtin' | 'global' | 'workspace' | 'project';
 
 /**
  * Plugin name for project-level and global skills.
