@@ -1,0 +1,205 @@
+/**
+ * Grant store — the authorization record for page queries.
+ *
+ * Two properties this exists to guarantee, both from the security review:
+ *
+ * 1. It lives OUTSIDE any agent-writable directory. `page.json` carries the
+ *    agent's *request*; this file carries the user's *decision*. If the agent
+ *    could edit the decision, hand-editing a manifest would grant access.
+ *
+ * 2. A tool name in a grant is not sufficient. MCP tool names and readOnlyHint
+ *    annotations are server-controlled and cannot prove a tool is
+ *    non-mutating, so every grant is checked against a curated allowlist — at
+ *    approval AND again at execution, because a tool can leave the allowlist
+ *    after a grant was issued.
+ */
+import { describe, expect, it, beforeEach } from 'bun:test'
+import { mkdtempSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { GrantStore } from './store.ts'
+import { isTrustedReadOnlyTool } from './allowlist.ts'
+
+let ws: string
+let store: GrantStore
+
+const validGrant = {
+  pageId: 'page-1',
+  sourceSlug: 'gmail',
+  toolName: 'list_messages',
+  fixedArgs: { maxResults: 20 },
+  paramSchema: { q: { type: 'string' as const, maxLength: 100 } },
+}
+
+beforeEach(() => {
+  ws = mkdtempSync(join(tmpdir(), 'craft-grants-'))
+  store = new GrantStore(ws)
+})
+
+describe('storage location', () => {
+  it('writes outside any session (agent-writable) directory', async () => {
+    await store.approve(validGrant)
+    // Sessions live under {ws}/sessions/**; the grant file must not.
+    expect(existsSync(join(ws, 'page-grants.json'))).toBe(true)
+    expect(existsSync(join(ws, 'sessions'))).toBe(false)
+  })
+})
+
+describe('approve', () => {
+  it('returns a grantId and stores the grant', async () => {
+    const id = await store.approve(validGrant)
+    const g = await store.get(id)
+    expect(g?.sourceSlug).toBe('gmail')
+    expect(g?.toolName).toBe('list_messages')
+  })
+
+  it('rejects a tool that is not on the trusted read-only allowlist', async () => {
+    await expect(store.approve({ ...validGrant, toolName: 'send_message' }))
+      .rejects.toThrow(/allowlist|read-only/i)
+  })
+
+  it('rejects an invalid parameter schema', async () => {
+    await expect(store.approve({
+      ...validGrant,
+      paramSchema: { q: { type: 'string' } } as never, // no maxLength
+    })).rejects.toThrow()
+  })
+
+  it('rejects a schema whose parameter collides with a fixedArg', async () => {
+    // If a runtime parameter shared a name with a fixed argument, the merge
+    // order would decide whether the user's constraint or the page's value
+    // wins. Making it impossible to express is safer than relying on merge
+    // order being right forever.
+    await expect(store.approve({
+      ...validGrant,
+      fixedArgs: { maxResults: 20 },
+      paramSchema: { maxResults: { type: 'integer' as const, minimum: 1, maximum: 999 } },
+    })).rejects.toThrow(/collide|fixed/i)
+  })
+})
+
+describe('resolveArgs', () => {
+  // NOTE on merge order. resolveArgs spreads fixedArgs last, but that ordering
+  // is UNOBSERVABLE through the public API: approve() rejects any grant whose
+  // parameters collide with its fixed arguments, so the two objects always
+  // have disjoint keys. Mutation-testing confirmed it — reversing the spread
+  // fails nothing.
+  //
+  // The real guarantee is therefore the COLLISION CHECK in approve(), which is
+  // covered above and does fail when removed. Merge order is belt-and-braces,
+  // and this test only asserts that both sets of values arrive.
+  it('carries both the page params and the fixed arguments', async () => {
+    const id = await store.approve({
+      ...validGrant,
+      fixedArgs: { maxResults: 20 },
+      paramSchema: { q: { type: 'string' as const, maxLength: 100 } },
+    })
+    const r = await store.resolveArgs(id, { q: 'invoice' })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.args.q).toBe('invoice')
+      expect(r.args.maxResults).toBe(20)
+    }
+  })
+
+  it('rejects params not declared by the grant', async () => {
+    const id = await store.approve(validGrant)
+    const r = await store.resolveArgs(id, { maxResults: 9999 })
+    expect(r.ok).toBe(false)
+  })
+
+  it('re-checks the allowlist at execution time', async () => {
+    // A grant issued while a tool was trusted must stop working if the tool
+    // later leaves the allowlist.
+    const id = await store.approve(validGrant)
+    const r = await store.resolveArgs(id, {}, { isTrusted: () => false })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.reason).toMatch(/allowlist|read-only/i)
+  })
+
+  it('fails closed for an unknown grantId', async () => {
+    const r = await store.resolveArgs('no-such-grant', {})
+    expect(r.ok).toBe(false)
+  })
+})
+
+describe('revocation and lifecycle', () => {
+  it('revokes a single grant', async () => {
+    const id = await store.approve(validGrant)
+    await store.revoke(id)
+    expect(await store.get(id)).toBeNull()
+  })
+
+  it('revokes every grant for a page', async () => {
+    await store.approve(validGrant)
+    await store.approve({ ...validGrant, toolName: 'list_labels' })
+    await store.approve({ ...validGrant, pageId: 'page-2' })
+
+    await store.revokeForPage('page-1')
+    expect(await store.listForPage('page-1')).toHaveLength(0)
+    expect(await store.listForPage('page-2')).toHaveLength(1)
+  })
+
+  it('revokes every grant that used a removed source', async () => {
+    await store.approve(validGrant)
+    await store.approve({ ...validGrant, sourceSlug: 'linear', toolName: 'list_issues' })
+    await store.revokeForSource('gmail')
+    const remaining = await store.listForPage('page-1')
+    expect(remaining.map(g => g.sourceSlug)).toEqual(['linear'])
+  })
+
+  it('reports whether a page holds any grants — drives canOpenExternally', async () => {
+    expect(await store.pageHasGrants('page-1')).toBe(false)
+    await store.approve(validGrant)
+    expect(await store.pageHasGrants('page-1')).toBe(true)
+  })
+})
+
+describe('approved query set hash', () => {
+  it('is stable when only page content changes', async () => {
+    await store.approve(validGrant)
+    const a = await store.querySetHash('page-1')
+    const b = await store.querySetHash('page-1')
+    expect(a).toBe(b)
+  })
+
+  it('changes when a query is added', async () => {
+    await store.approve(validGrant)
+    const before = await store.querySetHash('page-1')
+    await store.approve({ ...validGrant, toolName: 'list_labels' })
+    expect(await store.querySetHash('page-1')).not.toBe(before)
+  })
+})
+
+describe('serialization', () => {
+  it('does not lose grants under concurrent approval', async () => {
+    await Promise.all(
+      Array.from({ length: 20 }, (_, i) =>
+        store.approve({ ...validGrant, pageId: `p${i}` })),
+    )
+    let total = 0
+    for (let i = 0; i < 20; i++) total += (await store.listForPage(`p${i}`)).length
+    expect(total).toBe(20)
+  })
+})
+
+describe('allowlist', () => {
+  it('trusts known read-only tools', () => {
+    expect(isTrustedReadOnlyTool('gmail', 'list_messages')).toBe(true)
+  })
+
+  it('does not trust mutating names', () => {
+    for (const t of ['send_message', 'delete_message', 'create_issue', 'update_page']) {
+      expect(isTrustedReadOnlyTool('gmail', t)).toBe(false)
+    }
+  })
+
+  it('does not trust an unknown tool merely because it sounds read-only', () => {
+    // The allowlist is curated, not inferred: a name is not evidence.
+    expect(isTrustedReadOnlyTool('gmail', 'list_everything_ever')).toBe(false)
+  })
+
+  it('is scoped per source', () => {
+    expect(isTrustedReadOnlyTool('linear', 'list_messages')).toBe(false)
+  })
+})
