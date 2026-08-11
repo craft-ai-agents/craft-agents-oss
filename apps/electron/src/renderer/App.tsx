@@ -327,6 +327,13 @@ export default function App() {
     return workspace?.slug ?? windowWorkspaceId
   }, [windowWorkspaceId, workspaces])
 
+  // Absolute workspace path — Craft Pages RPCs are keyed on it, because a page
+  // lives under {workspaceRoot}/sessions/{id}/data/pages.
+  const windowWorkspaceRootPath = useMemo(() => {
+    if (!windowWorkspaceId) return null
+    return workspaces.find(w => w.id === windowWorkspaceId)?.rootPath ?? null
+  }, [windowWorkspaceId, workspaces])
+
   // Get initial sessionId and focused mode from URL params (for "Open in New Window" feature)
   const { initialSessionId, isFocusedMode } = useMemo(() => {
     const params = new URLSearchParams(window.location.search)
@@ -1940,6 +1947,21 @@ export default function App() {
     // Bypass link interceptor — opens file directly in system editor.
     // Used by overlay header badges (when already viewing a file, "Open" should launch editor).
     onOpenFileExternal: linkInterceptor.openFileExternal,
+    // Resolve a Craft Page id to its local wrapper URL.
+    //
+    // The renderer must never build this URL: the pages listener picks its port
+    // at runtime and can move if the preferred one is taken, so anything built
+    // client-side goes stale silently. Returns null when Craft Pages is
+    // disabled, the page is unknown, or no workspace is bound — and the card
+    // then renders its "unavailable" state rather than erroring.
+    onResolvePageUrl: async (pageId: string) => {
+      if (!windowWorkspaceRootPath) return null
+      try {
+        return await window.electronAPI.getPageUrl(windowWorkspaceRootPath, pageId)
+      } catch {
+        return null
+      }
+    },
     // Read file contents as UTF-8 string (used by datatable/spreadsheet/html-preview src fields)
     onReadFile: (path: string) => window.electronAPI.readFile(path),
     // Read file as data URL (used by image-preview blocks)

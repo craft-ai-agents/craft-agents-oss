@@ -498,8 +498,14 @@ export interface ElectronAPI {
   onDefaultPermissionsChanged(callback: () => void): () => void
 
   // Skills
-  /** Resolve a Craft Page id to its local wrapper URL. Null when disabled or unknown. */
-  getPageUrl(workspaceRootPath: string, pageId: string): Promise<string | null>
+  /**
+   * Resolve a Craft Page id to its local wrapper URL. Null when disabled or unknown.
+   *
+   * `canOpenExternally` is false for a page holding connector grants: such a
+   * page must stay framed, because frame-src does not protect a top-level
+   * document (ADR 0001 D6).
+   */
+  getPageUrl(workspaceRootPath: string, pageId: string): Promise<{ url: string; canOpenExternally: boolean } | null>
   /** How many pages a session owns. Used to phrase the delete confirmation. */
   countPagesForSession(workspaceRootPath: string, sessionId: string): Promise<number>
   /** Pages belonging to a session, each with its wrapper URL. */
