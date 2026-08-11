@@ -17,7 +17,8 @@ function WithPages({ children }: { children: React.ReactNode }) {
     try {
       const r = await fetch('http://127.0.0.1:7777/demo-info')
       if (!r.ok) return null
-      return (await r.json()).url as string
+      const j = await r.json()
+      return { url: j.url as string, canOpenExternally: true }
     } catch {
       return null
     }

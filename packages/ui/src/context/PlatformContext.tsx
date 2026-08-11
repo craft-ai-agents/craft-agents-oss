@@ -71,7 +71,7 @@ export interface PlatformActions {
    * Always resolves to the WRAPPER (/w/…), never page content directly — a page
    * loaded top-level loses the frame-src protection against self-navigation.
    */
-  onResolvePageUrl?: (pageId: string) => Promise<string | null>
+  onResolvePageUrl?: (pageId: string) => Promise<{ url: string; canOpenExternally: boolean } | null>
 
   /**
    * Copy text to clipboard

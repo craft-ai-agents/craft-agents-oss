@@ -362,6 +362,7 @@
   "craftPage.deleteWithPages_other": "Csevegés és {{count}} oldal törlése",
   "craftPage.hide": "Elrejtés",
   "craftPage.open": "Megnyitás",
+  "craftPage.openInBrowser": "Megnyitás böngészőben",
   "craftPage.revision": "{{rev}}. változat",
   "craftPage.unavailable": "nem érhető el",
   "craftPage.untitled": "Névtelen oldal",

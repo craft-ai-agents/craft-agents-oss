@@ -362,6 +362,7 @@
   "craftPage.deleteWithPages_other": "删除对话和 {{count}} 个页面",
   "craftPage.hide": "隐藏",
   "craftPage.open": "打开",
+  "craftPage.openInBrowser": "在浏览器中打开",
   "craftPage.revision": "版本 {{rev}}",
   "craftPage.unavailable": "不可用",
   "craftPage.untitled": "未命名页面",

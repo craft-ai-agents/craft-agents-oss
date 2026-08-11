@@ -9,6 +9,24 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.pages.COUNT_FOR_SESSION,
 ] as const
 
+export interface PageUrlResult {
+  /** Always the WRAPPER (/w/…). */
+  url: string
+  /**
+   * Whether this page may be loaded as a TOP-LEVEL document — "open in your
+   * own browser", or the in-app browser pane.
+   *
+   * False for a page holding connector grants: frame-src, the control that
+   * blocks a page navigating itself off-origin, does not apply to a top-level
+   * document, and nothing replaces it in a third-party browser (ADR 0001 D6).
+   * A grantless page holds nothing worth exfiltrating.
+   *
+   * Grants land in WS7; until then every page is grantless and this is always
+   * true. The gate exists now so the live-data work cannot forget it.
+   */
+  canOpenExternally: boolean
+}
+
 export interface PageListItem {
   pageId: string
   slug: string
@@ -33,7 +51,7 @@ export function registerPagesHandlers(server: RpcServer, deps: HandlerDeps): voi
     _ctx,
     workspaceRootPath: string,
     pageId: string,
-  ): Promise<string | null> => {
+  ): Promise<PageUrlResult | null> => {
     const runtime = deps.pagesRuntime
     if (!runtime) return null
 
@@ -45,7 +63,11 @@ export function registerPagesHandlers(server: RpcServer, deps: HandlerDeps): voi
 
     // Always the wrapper. A page loaded top-level loses the frame-src
     // protection that blocks self-navigation exfiltration (ADR 0001 D6).
-    return running.urlForPage(pageId)
+    return {
+      url: running.urlForPage(pageId),
+      // WS7 replaces this with a grant-store lookup.
+      canOpenExternally: true,
+    }
   })
 
   server.handle(RPC_CHANNELS.pages.LIST, async (

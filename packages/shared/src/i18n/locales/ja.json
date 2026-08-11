@@ -362,6 +362,7 @@
   "craftPage.deleteWithPages_other": "チャットと {{count}} 件のページを削除",
   "craftPage.hide": "隠す",
   "craftPage.open": "開く",
+  "craftPage.openInBrowser": "ブラウザで開く",
   "craftPage.revision": "リビジョン {{rev}}",
   "craftPage.unavailable": "利用不可",
   "craftPage.untitled": "無題のページ",

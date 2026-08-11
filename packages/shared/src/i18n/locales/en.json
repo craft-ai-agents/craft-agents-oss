@@ -362,6 +362,7 @@
   "craftPage.deleteWithPages_other": "Delete chat and {{count}} pages",
   "craftPage.hide": "Hide",
   "craftPage.open": "Open",
+  "craftPage.openInBrowser": "Open in browser",
   "craftPage.revision": "Revision {{rev}}",
   "craftPage.unavailable": "unavailable",
   "craftPage.untitled": "Untitled page",

@@ -207,6 +207,26 @@ export async function buildElectronAppWindows(config: BuildConfig): Promise<void
   }
   cpSync(resourcesSrc, resourcesDst, { recursive: true });
 
+  // Verify bundled resources that are LOADED AT RUNTIME actually made it.
+  //
+  // electron-builder `files` globs silently no-op on a missing directory, and
+  // with asar:false there is no archive-integrity error either — so a missing
+  // bundled asset shows up only in a packaged build, as a feature that quietly
+  // does nothing. Two such dead globs (resources/session-mcp-server,
+  // resources/pi-agent-server) are already in electron-builder.yml.
+  const requiredResources = [
+    join('skills', 'craft-pages', 'SKILL.md'),
+  ];
+  for (const rel of requiredResources) {
+    if (!existsSync(join(resourcesDst, rel))) {
+      throw new Error(
+        `Bundled resource missing after copy: resources/${rel}. ` +
+        'It would be absent only in packaged builds, so this must fail the build.'
+      );
+    }
+  }
+  console.log('  Bundled resources verified ✓');
+
   // Copy doc assets (matches electron:build:assets step used by Mac/Linux builds)
   // Without this, loadBundledDocs() can't find the docs and falls back to placeholders
   console.log('  Copying doc assets...');

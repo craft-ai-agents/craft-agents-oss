@@ -362,6 +362,7 @@
   "craftPage.deleteWithPages_other": "Usuń czat i {{count}} stron",
   "craftPage.hide": "Ukryj",
   "craftPage.open": "Otwórz",
+  "craftPage.openInBrowser": "Otwórz w przeglądarce",
   "craftPage.revision": "Wersja {{rev}}",
   "craftPage.unavailable": "niedostępna",
   "craftPage.untitled": "Strona bez tytułu",

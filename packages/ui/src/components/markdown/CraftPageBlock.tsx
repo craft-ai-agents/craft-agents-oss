@@ -19,7 +19,7 @@
  */
 
 import * as React from 'react'
-import { FileCode2, Maximize2, AlertTriangle } from 'lucide-react'
+import { FileCode2, Maximize2, AlertTriangle, ExternalLink } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '../../lib/utils'
 import { CodeBlock } from './CodeBlock'
@@ -33,12 +33,13 @@ interface CraftPageBlockProps {
 
 export function CraftPageBlock({ code, className }: CraftPageBlockProps) {
   const { t } = useTranslation()
-  const { onResolvePageUrl } = usePlatform()
+  const { onResolvePageUrl, onOpenUrl } = usePlatform()
 
   const parsed = React.useMemo(() => parseCraftPageSpec(code), [code])
   const spec: CraftPageSpec | null = parsed.ok ? parsed.spec : null
 
   const [url, setUrl] = React.useState<string | null>(null)
+  const [canOpenExternally, setCanOpenExternally] = React.useState(false)
   const [state, setState] = React.useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle')
   const [expanded, setExpanded] = React.useState(false)
 
@@ -57,8 +58,11 @@ export function CraftPageBlock({ code, className }: CraftPageBlockProps) {
     onResolvePageUrl(spec.pageId)
       .then((resolved) => {
         if (cancelled) return
-        if (resolved) { setUrl(resolved); setState('ready') }
-        else setState('unavailable')
+        if (resolved) {
+          setUrl(resolved.url)
+          setCanOpenExternally(resolved.canOpenExternally)
+          setState('ready')
+        } else setState('unavailable')
       })
       .catch(() => { if (!cancelled) setState('unavailable') })
     return () => { cancelled = true }
@@ -92,6 +96,21 @@ export function CraftPageBlock({ code, className }: CraftPageBlockProps) {
               {state === 'unavailable' && ` · ${t('craftPage.unavailable')}`}
             </div>
           </div>
+          {/* Only offered when the server says this page may be loaded
+              top-level. A page holding connector grants must stay framed —
+              frame-src does not protect a top-level document, and nothing
+              replaces it in a third-party browser (ADR 0001 D6). */}
+          {state === 'ready' && canOpenExternally && url && onOpenUrl && (
+            <button
+              type="button"
+              onClick={() => onOpenUrl(url)}
+              title={t('craftPage.openInBrowser')}
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs"
+            >
+              <ExternalLink className="size-3.5" />
+              {t('craftPage.openInBrowser')}
+            </button>
+          )}
           <button
             type="button"
             disabled={state !== 'ready'}

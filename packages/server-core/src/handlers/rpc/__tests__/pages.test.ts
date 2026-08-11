@@ -76,11 +76,25 @@ describe('pages:getUrl', () => {
   it('returns the wrapper URL for a known page', async () => {
     const f = fakeServer()
     registerPagesHandlers(f.server, deps(runtime))
-    const url = await f.call('pages:getUrl', ws, pageId)
+    const r = await f.call('pages:getUrl', ws, pageId) as { url: string }
     // The wrapper, never /p/* directly: a page loaded top-level loses the
     // frame-src protection that blocks self-navigation exfiltration.
-    expect(url).toBe(`${runtime.serverFor(ws)!.origin}/w/${pageId}`)
-    expect(url).not.toContain('/p/')
+    expect(r.url).toBe(`${runtime.serverFor(ws)!.origin}/w/${pageId}`)
+    expect(r.url).not.toContain('/p/')
+  })
+
+  it('reports whether the page may be opened outside the app', async () => {
+    // ADR 0001 D6: a page holding connector grants must never be loaded as a
+    // top-level document, because frame-src — the control that blocks
+    // self-navigation exfiltration — does not apply there. A grantless page
+    // holds nothing worth exfiltrating and may be opened anywhere.
+    //
+    // Grants do not exist until WS7, so every page is currently grantless.
+    // The gate is wired now so the live-data work cannot forget it.
+    const f = fakeServer()
+    registerPagesHandlers(f.server, deps(runtime))
+    const r = await f.call('pages:getUrl', ws, pageId) as { canOpenExternally: boolean }
+    expect(r.canOpenExternally).toBe(true)
   })
 
   it('returns null for an unknown pageId', async () => {
