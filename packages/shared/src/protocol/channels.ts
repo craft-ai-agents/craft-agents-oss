@@ -278,6 +278,12 @@ export const RPC_CHANNELS = {
     LIST: 'pages:list',
     /** How many pages a session owns — used to phrase the delete confirmation. */
     COUNT_FOR_SESSION: 'pages:countForSession',
+    /** Grants a page currently holds, for the consent UI and revoke. */
+    LIST_GRANTS: 'pages:listGrants',
+    /** Approve a set of queries for a page. */
+    APPROVE_GRANTS: 'pages:approveGrants',
+    /** Revoke every grant a page holds. */
+    REVOKE_GRANTS: 'pages:revokeGrants',
   },
 
   skills: {

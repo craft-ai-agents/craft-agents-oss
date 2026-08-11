@@ -25,8 +25,11 @@ export function renderWrapperHtml(opts: {
   pageId: string
   rev: number
   title: string
+  /** Source slugs this page may read. Rendered as always-visible chrome. */
+  sources?: string[]
 }): string {
   const safeTitle = escapeHtml(opts.title)
+  const sources = (opts.sources ?? []).map(escapeHtml)
   const src = `/p/${encodeURIComponent(opts.pageId)}/r/${opts.rev}/`
   return `<!doctype html>
 <html lang="en">
@@ -38,7 +41,9 @@ export function renderWrapperHtml(opts: {
 <body>
 <div id="ca-chrome" role="status">
   <span id="ca-title"></span>
-  <span id="ca-sources" hidden></span>
+  ${sources.length > 0
+    ? `<span id="ca-sources" class="live">Live data: ${sources.join(', ')}</span>`
+    : '<span id="ca-sources" hidden></span>'}
 </div>
 <iframe id="ca-frame" title="${safeTitle}" src="${src}"></iframe>
 <script src="/w-assets/wrapper.js" data-page-id="${escapeHtml(opts.pageId)}" data-rev="${opts.rev}" data-title="${safeTitle}"></script>
@@ -55,7 +60,15 @@ body { display: flex; flex-direction: column; font: 13px system-ui, sans-serif; 
   flex: 0 0 auto; padding: 6px 12px; border-bottom: 1px solid rgba(128,128,128,.35);
   display: flex; gap: 10px; align-items: center;
 }
-#ca-sources:not([hidden]) { opacity: .75; }
+/* A live-data page must never be visually indistinguishable from a static
+   one — the user should be able to see, without asking, that this page can
+   read their connected accounts. */
+#ca-sources.live {
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
 #ca-frame { flex: 1 1 auto; width: 100%; border: 0; }
 `
 

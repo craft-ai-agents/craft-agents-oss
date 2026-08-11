@@ -7,6 +7,9 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.pages.GET_URL,
   RPC_CHANNELS.pages.LIST,
   RPC_CHANNELS.pages.COUNT_FOR_SESSION,
+  RPC_CHANNELS.pages.LIST_GRANTS,
+  RPC_CHANNELS.pages.APPROVE_GRANTS,
+  RPC_CHANNELS.pages.REVOKE_GRANTS,
 ] as const
 
 export interface PageUrlResult {
@@ -63,10 +66,21 @@ export function registerPagesHandlers(server: RpcServer, deps: HandlerDeps): voi
 
     // Always the wrapper. A page loaded top-level loses the frame-src
     // protection that blocks self-navigation exfiltration (ADR 0001 D6).
+    // Real lookup now. A page holding grants must stay framed — frame-src does
+    // not protect a top-level document and nothing replaces it in a
+    // third-party browser (ADR 0001 D6). Fail CLOSED if the grant store cannot
+    // be consulted: refusing to offer "open in browser" costs a convenience,
+    // wrongly offering it costs the guarantee.
+    let hasGrants = true
+    try {
+      hasGrants = (await runtime.grantsFor(workspaceRootPath)?.pageHasGrants(pageId)) ?? false
+    } catch {
+      hasGrants = true
+    }
+
     return {
       url: running.urlForPage(pageId),
-      // WS7 replaces this with a grant-store lookup.
-      canOpenExternally: true,
+      canOpenExternally: !hasGrants,
     }
   })
 
@@ -106,5 +120,68 @@ export function registerPagesHandlers(server: RpcServer, deps: HandlerDeps): voi
     } catch {
       return 0
     }
+  })
+
+  // ── Consent ──
+  //
+  // Approval is a USER action routed through the app, never something a page or
+  // an agent can perform. The agent's request lives in page.json; this is where
+  // the user's decision is recorded.
+
+  server.handle(RPC_CHANNELS.pages.LIST_GRANTS, async (
+    _ctx, workspaceRootPath: string, pageId: string,
+  ) => {
+    const grants = deps.pagesRuntime?.grantsFor(workspaceRootPath)
+    if (!grants) return []
+    return (await grants.listForPage(pageId)).map(g => ({
+      grantId: g.grantId,
+      sourceSlug: g.sourceSlug,
+      toolName: g.toolName,
+      approvedAt: g.approvedAt,
+    }))
+  })
+
+  server.handle(RPC_CHANNELS.pages.APPROVE_GRANTS, async (
+    _ctx,
+    workspaceRootPath: string,
+    pageId: string,
+    queries: Array<{
+      sourceSlug: string
+      toolName: string
+      fixedArgs: Record<string, unknown>
+      paramSchema: Record<string, unknown>
+    }>,
+  ): Promise<{ approved: number; rejected: Array<{ query: string; reason: string }> }> => {
+    const grants = deps.pagesRuntime?.grantsFor(workspaceRootPath)
+    if (!grants) return { approved: 0, rejected: [{ query: '*', reason: 'Craft Pages is not running' }] }
+
+    let approved = 0
+    const rejected: Array<{ query: string; reason: string }> = []
+    // Per-query, so one bad request does not silently drop the rest — and so
+    // the UI can say which was refused and why.
+    for (const q of queries) {
+      try {
+        await grants.approve({
+          pageId,
+          sourceSlug: q.sourceSlug,
+          toolName: q.toolName,
+          fixedArgs: q.fixedArgs ?? {},
+          paramSchema: q.paramSchema as never,
+        })
+        approved++
+      } catch (err) {
+        rejected.push({
+          query: `${q.sourceSlug}.${q.toolName}`,
+          reason: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+    return { approved, rejected }
+  })
+
+  server.handle(RPC_CHANNELS.pages.REVOKE_GRANTS, async (
+    _ctx, workspaceRootPath: string, pageId: string,
+  ): Promise<void> => {
+    await deps.pagesRuntime?.grantsFor(workspaceRootPath)?.revokeForPage(pageId)
   })
 }

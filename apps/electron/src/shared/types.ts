@@ -506,6 +506,12 @@ export interface ElectronAPI {
    * document (ADR 0001 D6).
    */
   getPageUrl(workspaceRootPath: string, pageId: string): Promise<{ url: string; canOpenExternally: boolean } | null>
+  /** Grants a page currently holds. */
+  listPageGrants(workspaceRootPath: string, pageId: string): Promise<Array<{ grantId: string; sourceSlug: string; toolName: string; approvedAt: number }>>
+  /** Record the user's approval of a page's requested queries. */
+  approvePageGrants(workspaceRootPath: string, pageId: string, queries: Array<{ sourceSlug: string; toolName: string; fixedArgs: Record<string, unknown>; paramSchema: Record<string, unknown> }>): Promise<{ approved: number; rejected: Array<{ query: string; reason: string }> }>
+  /** Revoke every grant a page holds. */
+  revokePageGrants(workspaceRootPath: string, pageId: string): Promise<void>
   /** How many pages a session owns. Used to phrase the delete confirmation. */
   countPagesForSession(workspaceRootPath: string, sessionId: string): Promise<number>
   /** Pages belonging to a session, each with its wrapper URL. */

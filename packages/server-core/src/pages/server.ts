@@ -30,6 +30,9 @@ export interface RunningPagesServer {
   close: () => Promise<void>
 }
 
+/** Hard cap on a buffered request body at the transport layer. */
+const MAX_ADAPTER_BODY_BYTES = 256 * 1024
+
 /** Bridge a web-standard handler onto node:http. */
 async function nodeAdapter(
   handler: (req: Request) => Promise<Response>,
@@ -37,10 +40,32 @@ async function nodeAdapter(
   nodeRes: ServerResponse,
 ): Promise<void> {
   const host = nodeReq.headers.host ?? '127.0.0.1'
+  // The bridge is a POST, so the body genuinely has to be forwarded. It is read
+  // with a hard cap here as well as in the bridge: this layer must not buffer an
+  // unbounded upload just to hand it on to something that will reject it.
+  let body: string | undefined
+  const method = (nodeReq.method ?? 'GET').toUpperCase()
+  if (method !== 'GET' && method !== 'HEAD') {
+    const chunks: Buffer[] = []
+    let size = 0
+    let tooLarge = false
+    for await (const chunk of nodeReq) {
+      size += (chunk as Buffer).length
+      if (size > MAX_ADAPTER_BODY_BYTES) { tooLarge = true; break }
+      chunks.push(chunk as Buffer)
+    }
+    if (tooLarge) {
+      nodeRes.writeHead(413, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+      nodeRes.end(JSON.stringify({ error: 'payload_too_large' }))
+      return
+    }
+    body = Buffer.concat(chunks).toString('utf-8')
+  }
+
   const request = new Request(`http://${host}${nodeReq.url ?? '/'}`, {
     method: nodeReq.method,
     headers: nodeReq.headers as Record<string, string>,
-    // GET/HEAD only reach here; a body would be rejected by method checks.
+    ...(body !== undefined && body.length > 0 ? { body } : {}),
   })
 
   let response: Response
@@ -76,6 +101,7 @@ function listenOn(server: Server, port: number): Promise<number> {
 export async function startPagesServer(opts: PagesServerOptions): Promise<RunningPagesServer> {
   let boundPort = 0
   const handler = createPagesHandler({ ...opts, getPort: () => boundPort })
+  // nodeAdapter forwards the body for POST /internal/query.
   const server = createServer((req, res) => { void nodeAdapter(handler, req, res) })
 
   const preferred = opts.port ?? 0

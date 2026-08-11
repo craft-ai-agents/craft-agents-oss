@@ -111,6 +111,16 @@ export interface PagesHandlerOptions {
   workspaceRootPath: string
   /** Bound port, used to pin the Host header. */
   getPort: () => number
+  /**
+   * Live-data bridge. Absent when the feature is off, in which case
+   * /internal/query reports live_data_unavailable rather than 404ing like an
+   * unknown route — the difference matters when diagnosing.
+   */
+  bridge?: (req: Request) => Promise<Response>
+  /** True when the page holds connector grants (drives Sec-Fetch-Dest gating). */
+  pageHasGrants?: (pageId: string) => Promise<boolean>
+  /** Source slugs a page may read, for the always-visible wrapper chrome. */
+  grantedSources?: (pageId: string) => Promise<string[]>
   logger?: { warn: (m: string) => void; info: (m: string) => void }
 }
 
@@ -168,7 +178,8 @@ export function createPagesHandler(opts: PagesHandlerOptions) {
       const rev = currentRev(pagesRoot, entry.slug)
       if (rev === 0) return text(404, 'Page has no revisions')
 
-      return res(200, renderWrapperHtml({ pageId, rev, title: entry.title }), {
+      const sources = opts.grantedSources ? await opts.grantedSources(pageId).catch(() => []) : []
+      return res(200, renderWrapperHtml({ pageId, rev, title: entry.title, sources }), {
         'Content-Type': 'text/html; charset=utf-8',
         'Content-Security-Policy': WRAPPER_CSP,
         'Cross-Origin-Resource-Policy': WRAPPER_CORP,
@@ -186,6 +197,18 @@ export function createPagesHandler(opts: PagesHandlerOptions) {
 
       const entry = await opts.catalog.resolve(pageId)
       if (!entry) return text(404, 'Page not found')
+
+      // A page holding connector grants must never load as a TOP-LEVEL
+      // document: frame-src — the control that blocks a page navigating itself
+      // off-origin — does not apply there, and nothing replaces it in a
+      // third-party browser (ADR 0001 D6). Sec-Fetch-Dest: document means a
+      // top-level navigation; iframes report "iframe".
+      if (req.headers.get('sec-fetch-dest') === 'document' && opts.pageHasGrants) {
+        if (await opts.pageHasGrants(pageId)) {
+          opts.logger?.warn(`[pages] refused top-level load of grant-holding page ${pageId}`)
+          return text(403, 'This page uses live data and can only be viewed inside Craft Agents.')
+        }
+      }
 
       const publicRoot = pagePublicDir(opts.workspaceRootPath, entry.sessionId, entry.slug, rev)
       const resolved = await resolveWithinPublicRoot(publicRoot, rest)
@@ -216,14 +239,17 @@ export function createPagesHandler(opts: PagesHandlerOptions) {
       return res(200, new Uint8Array(body), headers)
     }
 
-    // ── Bridge (WS7) ──
-    // Route exists so its absence is explicit rather than a generic 404 that
-    // could be mistaken for a routing bug.
+    // ── Live-data bridge ──
     if (path === '/internal/query') {
-      return res(404, JSON.stringify({ error: 'live_data_unavailable' }), {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-store',
-      })
+      if (!opts.bridge) {
+        // Explicit, not a generic 404: "the feature is off" and "your route is
+        // wrong" are different diagnoses.
+        return res(404, JSON.stringify({ error: 'live_data_unavailable' }), {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        })
+      }
+      return opts.bridge(req)
     }
 
     return text(404, 'Not Found')

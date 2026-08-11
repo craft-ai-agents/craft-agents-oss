@@ -149,6 +149,35 @@ describe('HTTP boundary', () => {
     expect(r.status).toBe(404)
     expect(await r.text()).toContain('live_data_unavailable')
   })
+
+  it('forwards a POST body to the bridge', async () => {
+    // The node adapter originally read no body at all, because only GET/HEAD
+    // reached it. The bridge is a POST, so a body-less forward would make every
+    // live-data query look like malformed JSON.
+    let seenBody = ''
+    const srv2 = await startPagesServer({
+      catalog: new PageCatalogService(ws),
+      workspaceRootPath: ws,
+      port: 0,
+      bridge: async (req) => {
+        seenBody = await req.text()
+        return new Response(JSON.stringify({ echoed: true }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        })
+      },
+    })
+    try {
+      const r = await fetch(`${srv2.origin}/internal/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grantId: 'g1', params: { q: 'hello' } }),
+      })
+      expect(r.status).toBe(200)
+      expect(seenBody).toContain('hello')
+    } finally {
+      await srv2.close()
+    }
+  })
 })
 
 describe('containment over the wire', () => {
@@ -177,5 +206,59 @@ describe('containment over the wire', () => {
     const pub = join(sessionPagesRoot(ws, 'sess-1'), 'demo', 'revisions', '1', 'public')
     writeFileSync(join(pub, '.env'), 'SECRET=1')
     expect((await get(`/p/${pageId}/r/1/.env`)).status).toBe(400)
+  })
+})
+
+describe('grant-holding pages are framed-only (ADR 0001 D6)', () => {
+  it('refuses a TOP-LEVEL load but still serves it framed', async () => {
+    const catalog2 = new PageCatalogService(ws)
+    const srv2 = await startPagesServer({
+      catalog: catalog2,
+      workspaceRootPath: ws,
+      port: 0,
+      // Stand in for the grant store: this page holds grants.
+      pageHasGrants: async () => true,
+      grantedSources: async () => ['gmail'],
+    })
+    try {
+      const base = `${srv2.origin}/p/${pageId}/r/1/index.html`
+
+      // Sec-Fetch-Dest: document is a top-level navigation — refused, because
+      // frame-src does not protect a top-level document.
+      const top = await fetch(base, { headers: { 'sec-fetch-dest': 'document' } })
+      expect(top.status).toBe(403)
+
+      // The same page inside an iframe is fine: that is the supported way to
+      // view it, and framing is what supplies the protection.
+      const framed = await fetch(base, { headers: { 'sec-fetch-dest': 'iframe' } })
+      expect(framed.status).toBe(200)
+    } finally {
+      await srv2.close()
+    }
+  })
+
+  it('names the live connectors in the wrapper chrome', async () => {
+    // A live-data page must not look identical to a static one.
+    const srv2 = await startPagesServer({
+      catalog: new PageCatalogService(ws),
+      workspaceRootPath: ws,
+      port: 0,
+      grantedSources: async () => ['gmail', 'linear'],
+    })
+    try {
+      const html = await (await fetch(`${srv2.origin}/w/${pageId}`)).text()
+      expect(html).toContain('gmail')
+      expect(html).toContain('linear')
+      expect(html).toMatch(/Live data/i)
+    } finally {
+      await srv2.close()
+    }
+  })
+
+  it('leaves a grantless page openable top-level', async () => {
+    const r = await get(`/p/${pageId}/r/1/index.html`, {
+      headers: { 'sec-fetch-dest': 'document' },
+    })
+    expect(r.status).toBe(200)
   })
 })

@@ -13,10 +13,15 @@
 import { existsSync } from 'node:fs'
 import { isCraftPagesEnabled } from '@craft-agent/shared/feature-flags'
 import { PageCatalogService } from './catalog.ts'
+import { GrantStore } from './grants/store.ts'
+import { WorkspaceSourcePool } from './grants/source-pool.ts'
+import { createBridgeHandler } from './grants/bridge.ts'
 import { startPagesServer, type RunningPagesServer } from './server.ts'
 
 interface WorkspaceEntry {
   catalog: PageCatalogService
+  grants: GrantStore
+  sourcePool: WorkspaceSourcePool
   server: RunningPagesServer
 }
 
@@ -31,6 +36,14 @@ export class PagesRuntime {
 
   constructor(
     private readonly logger?: { info: (m: string) => void; warn: (m: string) => void },
+    /**
+     * Builds the workspace connector pool. Injected so the runtime can be used
+     * without standing up real MCP subprocesses; the Electron host supplies the
+     * real implementation.
+     */
+    private readonly buildSourcePool: (workspaceRootPath: string) => Promise<
+      import('./grants/source-pool.ts').PoolLike
+    > = async () => { throw new Error('no connector pool configured for Craft Pages') },
   ) {}
 
   isRunning(workspaceRootPath: string): boolean {
@@ -44,6 +57,11 @@ export class PagesRuntime {
 
   serverFor(workspaceRootPath: string): RunningPagesServer | undefined {
     return this.entries.get(workspaceRootPath)?.server
+  }
+
+  /** Grant store for a started workspace. */
+  grantsFor(workspaceRootPath: string): GrantStore | undefined {
+    return this.entries.get(workspaceRootPath)?.grants
   }
 
   /**
@@ -85,13 +103,29 @@ export class PagesRuntime {
         this.logger?.warn(`[pages] catalog reconcile failed: ${String(err)}`)
       }
 
+      const grants = new GrantStore(workspaceRootPath)
+      const sourcePool = new WorkspaceSourcePool({
+        workspaceRootPath,
+        buildPool: this.buildSourcePool,
+        logger: this.logger,
+      })
+
       const server = await startPagesServer({
         catalog,
         workspaceRootPath,
         port: 0,
         logger: this.logger,
+        pageHasGrants: (pageId) => grants.pageHasGrants(pageId),
+        grantedSources: async (pageId) =>
+          [...new Set((await grants.listForPage(pageId)).map(g => g.sourceSlug))].sort(),
+        bridge: createBridgeHandler({
+          grantStore: grants,
+          pagesOrigin: () => this.entries.get(workspaceRootPath)?.server.origin ?? null,
+          execute: (slug, tool, args) => sourcePool.callTool(slug, tool, args),
+          logger: this.logger,
+        }),
       })
-      this.entries.set(workspaceRootPath, { catalog, server })
+      this.entries.set(workspaceRootPath, { catalog, grants, sourcePool, server })
       return server
     })()
 
@@ -107,6 +141,7 @@ export class PagesRuntime {
     const entry = this.entries.get(workspaceRootPath)
     if (!entry) return
     this.entries.delete(workspaceRootPath)
+    await entry.sourcePool.dispose().catch(() => undefined)
     await entry.server.close().catch(() => undefined)
   }
 
