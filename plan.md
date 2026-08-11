@@ -122,23 +122,32 @@ Updates never mutate a served directory in place:
 ```
 {workspaceRoot}/sessions/{sessionId}/data/pages/{slug}/
   ├── page.json            # agent-authored metadata — NEVER served
-  ├── current.json         # { rev: 2 } — small, atomically replaced pointer
   └── revisions/
       ├── 1/public/…
       └── 2/public/…
 ```
 
-A new revision is written completely, then the **pointer file** is swapped atomically. A directory
-cannot be atomically renamed over a non-empty directory on any platform — POSIX `rename` returns
-`ENOTEMPTY` and Windows fails outright. The repo already carries the scar of the workaround:
-`packages/shared/src/sessions/persistence-queue.ts:159` does `await unlink(filePath)` before renaming,
-with the comment *"On Windows, rename fails if target exists"* — a real non-atomic gap, acceptable for
-one file, unacceptable for a served tree.
+**Implemented without a `current.json` pointer** — this section originally
+proposed one, and the build showed it was unnecessary and slightly worse.
 
-URLs are revisioned: `/p/{pageId}/r/{rev}/index.html`. This makes subresource caching correct —
-remounting an iframe at the same URLs busts only the top-level document, leaving `styles.css` and
-`app.js` stale, which is precisely the "make the header blue does nothing" failure. Old revisions are
-pruned on a retention policy; the pointer is the only mutable state.
+The reasoning for a pointer was right as far as it went: a directory cannot be
+renamed over an existing non-empty directory. But replacing an existing *file*
+by rename is not reliably atomic on Windows either (`fs.rename` can `EPERM` when
+the target is open), which is exactly why
+`packages/shared/src/sessions/persistence-queue.ts:159` unlinks first and accepts
+a gap. A pointer just moves the same problem down one level.
+
+Renaming a directory onto a name that does **not yet exist** is atomic on every
+platform. So a revision is staged at `revisions/.staging-{n}` and renamed to
+`revisions/{n}` as the single commit step, and the current revision is the
+highest complete revision directory. A crash leaves either a complete revision
+or a `.staging-` directory that is ignored on read and swept on the next write.
+No pointer, no gap, one fewer failure mode. Three crash-safety tests cover it.
+
+URLs are revisioned: `/p/{pageId}/r/{rev}/index.html`. That makes subresource
+caching correct — remounting an iframe at the same URLs busts only the top-level
+document, leaving `styles.css` and `app.js` stale, which is precisely the "make
+the header blue does nothing" failure.
 
 ### 2.4 Opaque-origin consequences (corrected, then measured)
 
@@ -378,7 +387,7 @@ hint, not a permission gate.)
   `POST /internal/query` (bridge; 404 while the flag is off).
 - `packages/server-core/src/pages/containment.ts` — **dedicated guard**, not `validateFilePath`:
   canonicalize both the revision's `public/` root and the request; require containment; reject if
-  **any** path component is a symlink; reject dotfiles, `page.json`, `current.json`, encoded
+  **any** path component is a symlink; reject dotfiles, `page.json`, encoded
   separators (`%2f`, `%5c`), NUL, `:`; no directory listings; `GET`/`HEAD` only. Encoded-traversal and
   symlink-escape tests ship **with** this workstream.
 
@@ -579,7 +588,7 @@ integrity error either. Extend the `>50MB claude binary` check in `scripts/build
 |---|---|
 | Encoded traversal `%2e%2e%2f`, `..%5c` | 400 |
 | Symlink in `public/` → `~/.craft-agent/credentials.enc` | 403, not served |
-| `GET /p/{id}/r/{rev}/page.json`, `current.json` | 404 |
+| `GET /p/{id}/r/{rev}/page.json` | 404 (manifest lives above `public/`) |
 | Directory listing | 404 |
 | Windows ADS `index.html::$DATA` | 400 |
 | `POST`/`PUT`/`DELETE` on `/p/*` | 405 |
