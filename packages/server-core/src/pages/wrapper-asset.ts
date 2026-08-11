@@ -94,14 +94,52 @@ export const WRAPPER_JS = `(function () {
     if (!d || typeof d !== 'object' || d.craftPage !== true) return;
 
     if (d.kind === 'query') {
-      // WS7. Until grants exist there is nothing a page may ask for, and
-      // answering anything would be a capability we have not designed yet.
-      frame.contentWindow.postMessage({
-        craftPage: true, kind: 'query-result', id: d.id,
-        error: 'live_data_unavailable',
-      }, '*');
+      var id = d.id;
+
+      // Forward the grant id and params and NOTHING else. The page names a
+      // grant the user already approved; it does not name a URL, a source, a
+      // tool, or a fixed argument. Copying extra fields through here would hand
+      // the page exactly the choice the grant model exists to take away.
+      fetch('/internal/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grantId: d.grantId,
+          params: (d.params && typeof d.params === 'object') ? d.params : {}
+        })
+      }).then(function (res) {
+        return res.text().then(function (text) {
+          var parsed = null;
+          try { parsed = JSON.parse(text); } catch (ignored) { parsed = null; }
+
+          if (res.ok && parsed && parsed.ok === true) {
+            reply({ id: id, data: parsed.data });
+            return;
+          }
+
+          // Echo ONLY a code the bridge itself named. A status line, an HTML
+          // error page, or a proxy's body is detail the page has no business
+          // seeing — it collapses to one generic code.
+          var code = (parsed && typeof parsed.error === 'string')
+            ? parsed.error
+            : 'request_failed';
+          reply({ id: id, error: code });
+        });
+      }).catch(function () {
+        // Never leave a query unanswered: a page awaiting a reply that never
+        // arrives looks identical to one that is merely slow.
+        reply({ id: id, error: 'request_failed' });
+      });
     }
   });
+
+  function reply(msg) {
+    msg.craftPage = true;
+    msg.kind = 'query-result';
+    // '*' is the only targetOrigin an opaque origin can be addressed by. Safe
+    // here because the message goes to that one frame's window, not broadcast.
+    frame.contentWindow.postMessage(msg, '*');
+  }
 })();
 `
 
