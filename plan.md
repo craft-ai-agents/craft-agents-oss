@@ -691,8 +691,16 @@ the page's parameter merged onto the user's fixed argument.
 
 What remains:
 
-- **Windows and Linux verification.** Unchanged and still the largest
-  carried risk; see below.
+- **Linux — verified.** The full suite runs in a Linux container and gives
+  results identical to macOS (3990 pass, 10 fail, the same ten pre-existing
+  environmental failures). `bun run test:pages` is now in `validate:ci`, and CI
+  runs on `ubuntu-latest`, so it stays verified. Doing it found a real
+  cross-platform bug: `café.html` written as NFC and as NFD is one file on
+  APFS and two on ext4, so the same page differed per machine. Now rejected.
+
+- **Windows — still not run**, and now the only substantive item. Linux does
+  not reduce this risk: every Windows rule concerns a fold or rewrite that no
+  POSIX filesystem performs.
 
 ### The request path (built after the integration test found it missing)
 

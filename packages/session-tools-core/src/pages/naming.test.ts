@@ -184,3 +184,63 @@ describe('hasIndexHtml', () => {
     expect(hasIndexHtml(['home.html'])).toBe(false);
   });
 });
+
+/**
+ * Unicode normalisation collisions.
+ *
+ * MEASURED, both platforms: writing "café.html" as NFC and again as NFD gives
+ * ONE file on macOS/APFS and TWO on Linux/ext4. Same page, same tool call,
+ * different content per machine.
+ *
+ * This is the same class as the case-collision rule already enforced here — a
+ * filesystem folding two distinct names together — and it is worse in one way:
+ * the two names are visually IDENTICAL, so a reviewer reading the file list
+ * cannot see the collision at all.
+ */
+describe('unicode normalisation collisions', () => {
+  const NFC = 'café.html'          // é as a single code point
+  const NFD = 'café.html'         // e + combining acute
+
+  it('rejects two paths that differ only by normalisation form', () => {
+    const r = checkFileSet([
+      { path: 'index.html', bytes: 10 },
+      { path: NFC, bytes: 10 },
+      { path: NFD, bytes: 10 },
+    ])
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.reason).toMatch(/normali[sz]/i)
+  })
+
+  it('allows either form on its own', () => {
+    for (const p of [NFC, NFD]) {
+      expect(checkFileSet([{ path: 'index.html', bytes: 10 }, { path: p, bytes: 10 }]).ok).toBe(true)
+    }
+  })
+
+  it('catches a normalisation collision that is also a case collision', () => {
+    expect(checkFileSet([
+      { path: 'index.html', bytes: 10 },
+      { path: NFC, bytes: 10 },
+      { path: 'CAFÉ.html', bytes: 10 },
+    ]).ok).toBe(false)
+  })
+
+  it('catches the collision in a nested directory, not just at the root', () => {
+    expect(checkFileSet([
+      { path: 'index.html', bytes: 10 },
+      { path: `assets/${NFC}`, bytes: 10 },
+      { path: `assets/${NFD}`, bytes: 10 },
+    ]).ok).toBe(false)
+  })
+
+  it('does not fold genuinely different names together', () => {
+    // Over-rejection would make ordinary non-English filenames unusable.
+    expect(checkFileSet([
+      { path: 'index.html', bytes: 10 },
+      { path: 'café.html', bytes: 10 },
+      { path: 'cafe.html', bytes: 10 },
+      { path: 'résumé.html', bytes: 10 },
+      { path: '日本語.html', bytes: 10 },
+    ]).ok).toBe(true)
+  })
+})

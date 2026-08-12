@@ -287,7 +287,24 @@ Re-verified after the request path was built, with the page calling the real
 - **Gecko/Firefox** — not run (not installed). Deferred: not a target platform.
   The spike's instrumentation (exfil-port listener + `img-src` beacon) needs no
   WebDriver and will run there unchanged.
-- **Windows and Linux** — not run. The containment guard's path handling is the
-  risk (backslashes, drive-relative paths, ADS, `MAX_PATH`). Mitigation: unit-test
-  the guard's string handling OS-independently before WS2 lands, and treat
-  Windows path behaviour as an explicit carried risk.
+- **Linux — VERIFIED.** The full suite runs in a Linux container (bun 1.3.10,
+  aarch64) and produces results identical to macOS: 3990 pass, 10 fail, the
+  same ten pre-existing environmental failures on both. The containment guard's
+  symlink rejection — the D9 property — passes on a filesystem where `/tmp` is
+  a real directory rather than a symlink, which is the case macOS could not
+  exercise. `bun run test:pages` is now part of `validate:ci`, and CI already
+  runs on `ubuntu-latest`, so this stays verified rather than being a one-off.
+
+  Verifying it found a real cross-platform bug. Measured: writing `café.html`
+  as NFC and again as NFD yields **one** file on APFS and **two** on ext4, so
+  the same page produced different content per machine. `findCaseCollisions`
+  folded case but not normalisation; it now folds both. This is the worse half
+  of the pair, because the two colliding names are visually identical — a
+  reviewer reading the file list cannot see the collision at all.
+
+- **Windows** — still not run, and still the largest carried risk. The guard's
+  string handling (backslashes, drive-relative paths, ADS, reserved device
+  names, trailing dots/spaces, `MAX_PATH`) is unit-tested OS-independently in
+  `naming.ts`, but no filesystem behaviour has been observed there. Note that
+  Linux verification does NOT reduce this: every Windows-specific rule is about
+  a fold or a rewrite that POSIX filesystems do not perform.

@@ -138,7 +138,15 @@ export function findCaseCollisions(paths: string[]): string[] {
   const seen = new Map<string, string>();
   const collisions: string[] = [];
   for (const p of paths) {
-    const key = p.toLowerCase();
+    // Fold BOTH the ways a filesystem can merge two distinct names:
+    //
+    //   case         — "A.html" and "a.html" are one file on macOS/Windows
+    //   normalisation — "café" as NFC and as NFD are one file on macOS,
+    //                   two on Linux (measured on APFS and ext4)
+    //
+    // Normalisation is the worse of the two, because the colliding names are
+    // visually IDENTICAL: a reviewer reading the file list cannot see it.
+    const key = p.normalize('NFC').toLowerCase();
     const prev = seen.get(key);
     if (prev !== undefined && prev !== p) collisions.push(`${prev} vs ${p}`);
     else seen.set(key, p);
@@ -168,7 +176,10 @@ export function checkFileSet(files: Array<{ path: string; bytes: number }>): Che
 
   const collisions = findCaseCollisions(files.map(f => f.path));
   if (collisions.length > 0) {
-    return no(`paths differing only in case collide on macOS/Windows: ${collisions.join(', ')}`);
+    return no(
+      'paths that differ only in case or in unicode normalisation collide as one '
+      + `file on macOS/Windows: ${collisions.join(', ')}`,
+    );
   }
 
   return ok;
