@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from 'node
 import { join } from 'node:path'
 import { tmpdir, homedir } from 'node:os'
 import { realpathSync } from 'node:fs'
+import { realpath } from 'node:fs/promises'
 import { resolveWithinPublicRoot, isReadMethod } from './containment.ts'
 
 let root: string
@@ -109,14 +110,20 @@ describe('metadata, dotfiles, listings', () => {
   it('never escapes to the manifest one level above public/', async () => {
     writeFileSync(join(publicRoot, 'page.json'), '{}')
     const r = await resolveWithinPublicRoot(publicRoot, 'page.json')
-    // Compare against the CANONICAL root: on macOS /var/folders is a symlink to
-    // /private/var/folders, so comparing against the raw tmp path fails for
-    // reasons that have nothing to do with containment.
-    const realPublic = realpathSync(publicRoot)
+    // Canonicalise with the SAME api the guard uses (fs/promises realpath), not
+    // realpathSync. They disagree on Windows about 8.3 short names — the
+    // runner's tmpdir is C:\Users\RUNNER~1\… and one of the two expands it to
+    // \runneradmin\ while the other does not. Comparing across the two APIs
+    // tests which realpath Node happened to use, not containment.
+    const realPublic = await realpath(publicRoot)
     expect(r.ok).toBe(true)
     if (r.ok) {
-      expect(r.absolutePath.startsWith(realPublic)).toBe(true)
-      expect(r.absolutePath).not.toBe(realpathSync(outside))
+      if (!r.absolutePath.startsWith(realPublic)) {
+        throw new Error(
+          `resolved path escaped the root:\n  resolved: ${r.absolutePath}\n  root:     ${realPublic}`,
+        )
+      }
+      expect(r.absolutePath).not.toBe(await realpath(outside))
     }
   })
 

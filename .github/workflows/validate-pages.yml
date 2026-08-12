@@ -31,6 +31,8 @@ on:
       - 'packages/server-core/src/handlers/rpc/pages.ts'
       - 'packages/ui/src/components/markdown/**'
       - 'packages/shared/src/feature-flags.ts'
+      - '.github/workflows/validate-pages.yml'
+      - 'scripts/report-fs-behaviour.ts'
   workflow_dispatch:
 
 concurrency:
