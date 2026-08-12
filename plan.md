@@ -691,12 +691,32 @@ the page's parameter merged onto the user's fixed argument.
 
 What remains:
 
-- **Consent UI.** The RPC surface exists (`pages:listGrants` /
-  `approveGrants` / `revokeGrants`) and approval is a user action routed
-  through the app, but the dialog that calls it is not built. Until it is,
-  no page can hold grants in the real app — every page is grantless,
-  static, and openable anywhere. The machinery behind the dialog is now
-  proven end to end; what is missing is the dialog.
+- **The request path for live data — three pieces, not one.** Everything
+  *behind* an approved grant is built and now proven end to end. Nothing in
+  front of it is:
+
+  1. **`craft_page` cannot declare a query.** The tool takes `files`,
+     `slug`, `title`, `expectedRev` — there is no parameter by which an
+     agent says "this page needs `gmail.list_messages`". So no grant can
+     ever be *proposed*.
+  2. **The skill does not mention live data.** `SKILL.md` correctly teaches
+     that `fetch()` never works and data ships as static JS. That is the
+     whole story for static pages and the wrong story once grants exist.
+  3. **No consent dialog.** `pages:listGrants` / `approveGrants` /
+     `revokeGrants` are registered, routed, and exposed on the renderer API
+     as `listPageGrants` / `approvePageGrants` / `revokePageGrants` — and
+     no UI calls any of them.
+
+  Until (1) and (2) exist there is nothing for (3) to approve. In the real
+  app today every page is grantless, static, and openable anywhere.
+
+- **WS7 is not behind its own flag.** This plan says live data ships behind
+  `FEATURE_FLAGS.craftPagesLiveData`; that flag does not exist. Both static
+  pages and the whole grant/bridge path are gated by `craftPages` alone, so
+  enabling static pages also binds `/internal/query`. Low risk while nothing
+  can propose a grant — it refuses everything — but the staged rollout
+  described above is not what is implemented. Either add the flag or amend
+  the decision deliberately.
 - **Windows and Linux verification.** The naming rules are pure-string and
   tested from any OS, but the filesystem containment guard has never run on
   Windows. This is the largest carried risk.
