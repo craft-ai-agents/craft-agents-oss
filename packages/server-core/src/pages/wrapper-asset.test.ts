@@ -29,7 +29,7 @@ interface Harness {
 /** Drain the microtask queue; the wrapper chains fetch → text → postMessage. */
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve() }
 
-function mount(): Harness {
+function mount(grantMap: Record<string, string> = { unread: 'g_abc' }): Harness {
   const replies: Harness['replies'] = []
   const fetches: Harness['fetches'] = []
   const listeners: Array<(e: unknown) => void> = []
@@ -62,7 +62,14 @@ function mount(): Harness {
 
   const scriptEl = {
     getAttribute: (n: string) =>
-      ({ 'data-title': 'Dash', 'data-page-id': 'pg_1', 'data-rev': '1' })[n] ?? null,
+      ({
+        'data-title': 'Dash',
+        'data-page-id': 'pg_1',
+        'data-rev': '1',
+        // Inlined by the server: the page's handles, resolved to the grants the
+        // user approved. The page never sees a grant id.
+        'data-grants': JSON.stringify(grantMap),
+      })[n] ?? null,
   }
 
   const fakeWindow = {
@@ -92,7 +99,7 @@ function mount(): Harness {
 let h: Harness
 beforeEach(() => { h = mount() })
 
-const QUERY = { craftPage: true, kind: 'query', id: 'q1', grantId: 'g_abc', params: { q: 'hi' } }
+const QUERY = { craftPage: true, kind: 'query', id: 'q1', name: 'unread', params: { q: 'hi' } }
 const lastReply = () => h.replies.at(-1)?.data ?? {}
 
 describe('message authentication', () => {
@@ -164,8 +171,8 @@ describe('query → bridge', () => {
       return new Response(JSON.stringify({ ok: true, data: { tag: id } }), { status: 200 })
     }
 
-    await h.fromPage({ craftPage: true, kind: 'query', id: 'a', grantId: 'g', params: { tag: 'a' } })
-    await h.fromPage({ craftPage: true, kind: 'query', id: 'b', grantId: 'g', params: { tag: 'b' } })
+    await h.fromPage({ craftPage: true, kind: 'query', id: 'a', name: 'unread', params: { tag: 'a' } })
+    await h.fromPage({ craftPage: true, kind: 'query', id: 'b', name: 'unread', params: { tag: 'b' } })
 
     expect(seen).toEqual(['a', 'b'])
     expect(h.replies.map(r => [r.data.id, (r.data.data as { tag: string }).tag]))
@@ -229,5 +236,78 @@ describe('wrapper document', () => {
   it('names granted sources in always-visible chrome', () => {
     const html = renderWrapperHtml({ pageId: 'pg_1', rev: 1, title: 'D', sources: ['gmail'] })
     expect(html).toContain('Live data: gmail')
+  })
+})
+
+describe('names, not grant ids', () => {
+  it('resolves the page\'s handle to the grant the user approved', async () => {
+    await h.fromPage(QUERY)
+    expect(JSON.parse(String(h.fetches[0]!.init.body)).grantId).toBe('g_abc')
+  })
+
+  it('never lets the page name a grant id directly', async () => {
+    // A page that could pass a raw grantId could try ids it was never given.
+    // The only thing it may name is its own handle.
+    await h.fromPage({
+      craftPage: true, kind: 'query', id: 'q1', name: 'unread',
+      grantId: 'g_someone_elses', params: {},
+    })
+    expect(JSON.parse(String(h.fetches[0]!.init.body)).grantId).toBe('g_abc')
+  })
+
+  it('refuses a handle the user never approved, without asking the bridge', async () => {
+    await h.fromPage({ craftPage: true, kind: 'query', id: 'q1', name: 'invented', params: {} })
+    expect(h.fetches).toHaveLength(0)
+    expect(lastReply()).toEqual({
+      craftPage: true, kind: 'query-result', id: 'q1', error: 'forbidden',
+    })
+  })
+
+  it('refuses a query with no handle at all', async () => {
+    await h.fromPage({ craftPage: true, kind: 'query', id: 'q1', params: {} })
+    expect(h.fetches).toHaveLength(0)
+    expect(lastReply().error).toBe('forbidden')
+  })
+
+  it('does not resolve inherited property names as handles', async () => {
+    // 'constructor' and 'toString' exist on every object; a lookup that walked
+    // the prototype chain would turn them into truthy "grants".
+    for (const name of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      const w = mount({ unread: 'g_abc' })
+      await w.fromPage({ craftPage: true, kind: 'query', id: 'x', name, params: {} })
+      expect(w.fetches).toHaveLength(0)
+    }
+  })
+
+  it('treats a page with no approved grants as having no handles', async () => {
+    const w = mount({})
+    await w.fromPage(QUERY)
+    expect(w.fetches).toHaveLength(0)
+    expect(w.replies.at(-1)!.data.error).toBe('forbidden')
+  })
+})
+
+describe('the server inlines the handle map', () => {
+  it('carries approved handles into the document', () => {
+    const html = renderWrapperHtml({
+      pageId: 'pg_1', rev: 1, title: 'D', grants: { unread: 'g_abc' },
+    })
+    expect(html).toContain('data-grants=')
+    expect(html).toContain('g_abc')
+  })
+
+  it('emits an empty map for a page with no grants', () => {
+    const html = renderWrapperHtml({ pageId: 'pg_1', rev: 1, title: 'D' })
+    expect(html).toContain('data-grants="{}"')
+  })
+
+  it('escapes a handle so it cannot break out of the attribute', () => {
+    // Handles are validated on both sides, but this string reaches the DOM as
+    // an attribute value — escaping is the property that must hold regardless.
+    const html = renderWrapperHtml({
+      pageId: 'pg_1', rev: 1, title: 'D',
+      grants: { '"><script>alert(1)</script>': 'g_x' },
+    })
+    expect(html).not.toContain('<script>alert(1)')
   })
 })

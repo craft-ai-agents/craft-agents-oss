@@ -129,6 +129,7 @@ export class PagesRuntime {
           ? async (pageId) =>
             [...new Set((await grants.listForPage(pageId)).map(g => g.sourceSlug))].sort()
           : undefined,
+        grantsForPage: grants ? (pageId) => grants.nameMapForPage(pageId) : undefined,
         bridge: grants && sourcePool
           ? createBridgeHandler({
             grantStore: grants,

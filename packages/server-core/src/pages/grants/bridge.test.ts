@@ -52,6 +52,7 @@ beforeEach(async () => {
   store = new GrantStore(ws)
   grantId = await store.approve({
     pageId: 'page-1',
+    name: 'messages',
     sourceSlug: 'gmail',
     toolName: 'list_messages',
     fixedArgs: { maxResults: 20 },

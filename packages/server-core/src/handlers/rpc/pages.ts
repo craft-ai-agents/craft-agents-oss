@@ -2,11 +2,15 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { countPagesInSession } from '../../pages/session-deletion'
+import { readPage } from '@craft-agent/session-tools-core'
+import { sessionPagesRoot } from '../../pages/catalog'
+import { isTrustedReadOnlyTool } from '../../pages/grants/allowlist'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.pages.GET_URL,
   RPC_CHANNELS.pages.LIST,
   RPC_CHANNELS.pages.COUNT_FOR_SESSION,
+  RPC_CHANNELS.pages.LIST_QUERY_REQUESTS,
   RPC_CHANNELS.pages.LIST_GRANTS,
   RPC_CHANNELS.pages.APPROVE_GRANTS,
   RPC_CHANNELS.pages.REVOKE_GRANTS,
@@ -128,6 +132,49 @@ export function registerPagesHandlers(server: RpcServer, deps: HandlerDeps): voi
   // an agent can perform. The agent's request lives in page.json; this is where
   // the user's decision is recorded.
 
+  /**
+   * What the PAGE asked for, paired with what the user has already decided.
+   *
+   * The request lives in the agent-writable manifest, so it is re-validated
+   * here rather than trusted: a hand-edited page.json must not be able to put
+   * arbitrary text in front of the user inside a consent dialog.
+   */
+  server.handle(RPC_CHANNELS.pages.LIST_QUERY_REQUESTS, async (
+    _ctx, workspaceRootPath: string, pageId: string,
+  ) => {
+    const grants = deps.pagesRuntime?.grantsFor(workspaceRootPath)
+    // No grant store means live data is off: there is nothing to approve into,
+    // so the dialog must not offer to.
+    if (!grants) return []
+
+    const entry = await deps.pagesRuntime?.catalogFor(workspaceRootPath)?.resolve(pageId)
+    if (!entry) return []
+
+    let requested: Array<{
+      name: string; sourceSlug: string; toolName: string
+      fixedArgs: Record<string, unknown>; paramSchema: Record<string, unknown>
+    }> = []
+    try {
+      const page = readPage(sessionPagesRoot(workspaceRootPath, entry.sessionId), entry.slug)
+      requested = page.manifest.requestedQueries
+    } catch {
+      // A page whose manifest cannot be read requests nothing.
+      return []
+    }
+
+    const approved = await grants.nameMapForPage(pageId)
+    return requested.map(q => ({
+      name: q.name,
+      sourceSlug: q.sourceSlug,
+      toolName: q.toolName,
+      fixedArgs: q.fixedArgs,
+      paramSchema: q.paramSchema,
+      /** Whether this tool is even approvable — the dialog shows why not. */
+      allowed: isTrustedReadOnlyTool(q.sourceSlug, q.toolName),
+      approved: Object.prototype.hasOwnProperty.call(approved, q.name),
+    }))
+  })
+
   server.handle(RPC_CHANNELS.pages.LIST_GRANTS, async (
     _ctx, workspaceRootPath: string, pageId: string,
   ) => {
@@ -135,6 +182,7 @@ export function registerPagesHandlers(server: RpcServer, deps: HandlerDeps): voi
     if (!grants) return []
     return (await grants.listForPage(pageId)).map(g => ({
       grantId: g.grantId,
+      name: g.name,
       sourceSlug: g.sourceSlug,
       toolName: g.toolName,
       approvedAt: g.approvedAt,
@@ -146,6 +194,7 @@ export function registerPagesHandlers(server: RpcServer, deps: HandlerDeps): voi
     workspaceRootPath: string,
     pageId: string,
     queries: Array<{
+      name: string
       sourceSlug: string
       toolName: string
       fixedArgs: Record<string, unknown>
@@ -163,6 +212,9 @@ export function registerPagesHandlers(server: RpcServer, deps: HandlerDeps): voi
       try {
         await grants.approve({
           pageId,
+          // Without the name the page's craftQuery('unread') resolves to
+          // nothing, and the approval the user just gave does nothing at all.
+          name: q.name,
           sourceSlug: q.sourceSlug,
           toolName: q.toolName,
           fixedArgs: q.fixedArgs ?? {},
@@ -171,7 +223,7 @@ export function registerPagesHandlers(server: RpcServer, deps: HandlerDeps): voi
         approved++
       } catch (err) {
         rejected.push({
-          query: `${q.sourceSlug}.${q.toolName}`,
+          query: q.name ? `${q.name} (${q.sourceSlug}.${q.toolName})` : `${q.sourceSlug}.${q.toolName}`,
           reason: err instanceof Error ? err.message : String(err),
         })
       }

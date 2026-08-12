@@ -27,9 +27,17 @@ export function renderWrapperHtml(opts: {
   title: string
   /** Source slugs this page may read. Rendered as always-visible chrome. */
   sources?: string[]
+  /**
+   * The page's approved handles, resolved to grant ids. Inlined here because
+   * the wrapper is server-rendered and already knows the page — the alternative
+   * is an extra round trip on every load to learn what the user already
+   * decided. The PAGE never sees these; only the wrapper reads the attribute.
+   */
+  grants?: Record<string, string>
 }): string {
   const safeTitle = escapeHtml(opts.title)
   const sources = (opts.sources ?? []).map(escapeHtml)
+  const grantsJson = escapeHtml(JSON.stringify(opts.grants ?? {}))
   const src = `/p/${encodeURIComponent(opts.pageId)}/r/${opts.rev}/`
   return `<!doctype html>
 <html lang="en">
@@ -46,7 +54,7 @@ export function renderWrapperHtml(opts: {
     : '<span id="ca-sources" hidden></span>'}
 </div>
 <iframe id="ca-frame" title="${safeTitle}" src="${src}"></iframe>
-<script src="/w-assets/wrapper.js" data-page-id="${escapeHtml(opts.pageId)}" data-rev="${opts.rev}" data-title="${safeTitle}"></script>
+<script src="/w-assets/wrapper.js" data-page-id="${escapeHtml(opts.pageId)}" data-rev="${opts.rev}" data-title="${safeTitle}" data-grants="${grantsJson}"></script>
 </body>
 </html>
 `
@@ -87,6 +95,19 @@ export const WRAPPER_JS = `(function () {
   var titleEl = document.getElementById('ca-title');
   titleEl.textContent = script.getAttribute('data-title') || 'Page';
 
+  // Handles the user approved, resolved to grant ids by the server. Built with
+  // a null prototype so 'constructor', 'toString' and friends are not handles:
+  // a plain object literal would resolve every one of them to a function.
+  var grants = Object.create(null);
+  try {
+    var declared = JSON.parse(script.getAttribute('data-grants') || '{}');
+    for (var k in declared) {
+      if (Object.prototype.hasOwnProperty.call(declared, k) && typeof declared[k] === 'string') {
+        grants[k] = declared[k];
+      }
+    }
+  } catch (ignored) { /* no handles; every query is refused */ }
+
   window.addEventListener('message', function (e) {
     // Identity check is by SOURCE. e.origin is the string "null" here.
     if (e.source !== frame.contentWindow) return;
@@ -96,15 +117,25 @@ export const WRAPPER_JS = `(function () {
     if (d.kind === 'query') {
       var id = d.id;
 
-      // Forward the grant id and params and NOTHING else. The page names a
-      // grant the user already approved; it does not name a URL, a source, a
-      // tool, or a fixed argument. Copying extra fields through here would hand
-      // the page exactly the choice the grant model exists to take away.
+      // The page names its own HANDLE, never a grant id. An id it could choose
+      // is an id it could guess at; a handle only resolves to something the
+      // user approved FOR THIS PAGE, and to nothing at all otherwise.
+      var grantId = (typeof d.name === 'string')
+        ? grants[d.name]
+        : undefined;
+      if (typeof grantId !== 'string') {
+        reply({ id: id, error: 'forbidden' });
+        return;
+      }
+
+      // Forward the grant id and params and NOTHING else. Copying extra fields
+      // through here would hand the page exactly the choice the grant model
+      // exists to take away.
       fetch('/internal/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          grantId: d.grantId,
+          grantId: grantId,
           params: (d.params && typeof d.params === 'object') ? d.params : {}
         })
       }).then(function (res) {

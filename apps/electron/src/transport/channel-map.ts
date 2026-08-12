@@ -242,6 +242,7 @@ export const CHANNEL_MAP = {
   getPageUrl: invoke(RPC_CHANNELS.pages.GET_URL),
   listPages: invoke(RPC_CHANNELS.pages.LIST),
   countPagesForSession: invoke(RPC_CHANNELS.pages.COUNT_FOR_SESSION),
+  listPageQueryRequests: invoke(RPC_CHANNELS.pages.LIST_QUERY_REQUESTS),
   listPageGrants: invoke(RPC_CHANNELS.pages.LIST_GRANTS),
   approvePageGrants: invoke(RPC_CHANNELS.pages.APPROVE_GRANTS),
   revokePageGrants: invoke(RPC_CHANNELS.pages.REVOKE_GRANTS),

@@ -226,6 +226,7 @@ describe('live data — grant, query, revoke', () => {
 
     const grantId = await runtime.grantsFor(ws)!.approve({
       pageId,
+      name: 'unread',
       sourceSlug: 'gmail',
       toolName: 'list_messages',
       fixedArgs: { maxResults: 20 },
@@ -255,7 +256,7 @@ describe('live data — grant, query, revoke', () => {
     expect((await fetch(url, { headers: { 'sec-fetch-dest': 'document' } })).status).toBe(200)
 
     await runtime.grantsFor(ws)!.approve({
-      pageId, sourceSlug: 'gmail', toolName: 'list_messages',
+      pageId, name: 'unread', sourceSlug: 'gmail', toolName: 'list_messages',
       fixedArgs: {}, paramSchema: {},
     })
 
@@ -273,7 +274,7 @@ describe('live data — grant, query, revoke', () => {
     const { pageId, origin } = await makePage()
     const grants = runtime.grantsFor(ws)!
     const grantId = await grants.approve({
-      pageId, sourceSlug: 'gmail', toolName: 'list_messages',
+      pageId, name: 'unread', sourceSlug: 'gmail', toolName: 'list_messages',
       fixedArgs: {}, paramSchema: {},
     })
 
@@ -292,7 +293,7 @@ describe('live data — grant, query, revoke', () => {
   it('never leaks upstream error detail to the page', async () => {
     const { pageId, origin } = await makePage()
     const grantId = await runtime.grantsFor(ws)!.approve({
-      pageId, sourceSlug: 'gmail', toolName: 'list_messages',
+      pageId, name: 'unread', sourceSlug: 'gmail', toolName: 'list_messages',
       fixedArgs: {}, paramSchema: {},
     })
     connectorError = new Error('401 Unauthorized: bearer sk-live-abc123 at https://internal.example')
@@ -314,7 +315,7 @@ describe('live data — grant, query, revoke', () => {
   it('refuses a query from a foreign origin even with a valid grant', async () => {
     const { pageId, origin } = await makePage()
     const grantId = await runtime.grantsFor(ws)!.approve({
-      pageId, sourceSlug: 'gmail', toolName: 'list_messages',
+      pageId, name: 'unread', sourceSlug: 'gmail', toolName: 'list_messages',
       fixedArgs: {}, paramSchema: {},
     })
 
@@ -336,8 +337,21 @@ describe('live data — grant, query, revoke', () => {
  * against the live listener to cover it.
  */
 describe('a page asking for data, from the first hop', () => {
-  /** Mount the real WRAPPER_JS with fetch pointed at the running server. */
-  function mountWrapper(origin: string) {
+  /**
+   * Mount the real WRAPPER_JS with fetch pointed at the running server, taking
+   * its handle map from the server-rendered document rather than a fixture —
+   * so a server that inlines the wrong map fails here.
+   */
+  async function mountWrapper(origin: string, pageId: string) {
+    const html = await (await fetch(`${origin}/w/${pageId}`)).text()
+    const attr = /data-grants="([^"]*)"/.exec(html)?.[1] ?? '{}'
+    const grantsJson = attr
+      .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+    return mountWrapperWith(origin, grantsJson)
+  }
+
+  function mountWrapperWith(origin: string, grantsJson: string) {
     const replies: Array<Record<string, unknown>> = []
     const listeners: Array<(e: unknown) => void> = []
     const contentWindow = { postMessage: (d: Record<string, unknown>) => { replies.push(d) } }
@@ -352,7 +366,9 @@ describe('a page asking for data, from the first hop', () => {
         },
       },
       {
-        currentScript: { getAttribute: () => 'Dash' },
+        currentScript: {
+          getAttribute: (n: string) => (n === 'data-grants' ? grantsJson : 'Dash'),
+        },
         getElementById: (id: string) => els[id] ?? null,
       },
       // The browser would resolve the relative URL against the wrapper document
@@ -380,14 +396,14 @@ describe('a page asking for data, from the first hop', () => {
     const pageId = pageIdFromToolResult(created)
     const origin = runtime.serverFor(ws)!.origin
 
-    const grantId = await runtime.grantsFor(ws)!.approve({
-      pageId, sourceSlug: 'gmail', toolName: 'list_messages',
+    await runtime.grantsFor(ws)!.approve({
+      pageId, name: 'unread', sourceSlug: 'gmail', toolName: 'list_messages',
       fixedArgs: { maxResults: 20 }, paramSchema: { q: { type: 'string', maxLength: 50 } },
     })
 
-    const w = mountWrapper(origin)
+    const w = await mountWrapper(origin, pageId)
     const reply = await w.ask({
-      craftPage: true, kind: 'query', id: 'q1', grantId, params: { q: 'invoice' },
+      craftPage: true, kind: 'query', id: 'q1', name: 'unread', params: { q: 'invoice' },
     })
 
     expect(reply).toEqual({
@@ -401,12 +417,12 @@ describe('a page asking for data, from the first hop', () => {
     const created = await handleCraftPage(toolContext(), {
       command: 'create', slug: 'dash', title: 'Dashboard', files: PAGE_FILES,
     })
-    pageIdFromToolResult(created)
+    const pageId = pageIdFromToolResult(created)
     const origin = runtime.serverFor(ws)!.origin
 
-    const w = mountWrapper(origin)
+    const w = await mountWrapper(origin, pageId)
     const reply = await w.ask({
-      craftPage: true, kind: 'query', id: 'q1', grantId: 'g_invented', params: {},
+      craftPage: true, kind: 'query', id: 'q1', name: 'never-approved', params: {},
     })
 
     expect(reply).toEqual({
@@ -429,13 +445,13 @@ describe('a page asking for data, from the first hop', () => {
     const origin = runtime.serverFor(ws)!.origin
 
     const grantId = await runtime.grantsFor(ws)!.approve({
-      pageId, sourceSlug: 'gmail', toolName: 'list_messages',
+      pageId, name: 'unread', sourceSlug: 'gmail', toolName: 'list_messages',
       fixedArgs: { maxResults: 20 }, paramSchema: {},
     })
 
-    const w = mountWrapper(origin)
+    const w = await mountWrapper(origin, pageId)
     await w.ask({
-      craftPage: true, kind: 'query', id: 'q1', grantId, params: {},
+      craftPage: true, kind: 'query', id: 'q1', name: 'unread', params: {},
       // All of this is the page trying to choose for itself.
       toolName: 'send_message', sourceSlug: 'shell', maxResults: 9999,
       url: 'https://evil.example/exfil',

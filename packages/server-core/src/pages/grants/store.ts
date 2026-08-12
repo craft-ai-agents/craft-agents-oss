@@ -18,11 +18,21 @@ import { isTrustedReadOnlyTool } from './allowlist.ts'
 import { validateParamSchema, validateParams, type ParamSchema } from './param-schema.ts'
 
 const GRANTS_FILE = 'page-grants.json'
+/** Same shape the tool accepts, enforced again here — this side is trusted. */
+const GRANT_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/i
 const VERSION = 1
 
 export interface Grant {
   grantId: string
   pageId: string
+  /**
+   * The page's own handle for this query, e.g. `craftQuery('unread', ...)`.
+   *
+   * The indirection exists because an agent cannot know a grant id while it is
+   * authoring the page — the user has not approved anything yet. The page names
+   * what it wants; the wrapper resolves the name to a grant at runtime.
+   */
+  name: string
   sourceSlug: string
   toolName: string
   /** Baked at approval time. Never overridable by the page. */
@@ -33,6 +43,8 @@ export interface Grant {
 
 export interface ApproveInput {
   pageId: string
+  /** Handle the page uses. Unique among a page's live grants. */
+  name: string
   sourceSlug: string
   toolName: string
   fixedArgs: Record<string, unknown>
@@ -92,6 +104,11 @@ export class GrantStore {
    * fully validate — an invalid grant is worse than no grant.
    */
   async approve(input: ApproveInput): Promise<string> {
+    if (typeof input.name !== 'string' || !GRANT_NAME_RE.test(input.name)) {
+      throw new Error(
+        `grant name ${JSON.stringify(input.name)} must be 1-32 characters of letters, digits, "-" or "_"`,
+      )
+    }
     if (!isTrustedReadOnlyTool(input.sourceSlug, input.toolName)) {
       throw new Error(
         `"${input.sourceSlug}.${input.toolName}" is not on the trusted read-only allowlist`,
@@ -112,6 +129,16 @@ export class GrantStore {
 
     return this.serialize(async () => {
       const file = await this.read()
+
+      // One live grant per (page, name). Two would make lookup order decide
+      // which of the user's approvals a call actually used.
+      const taken = file.grants.some(
+        g => g.pageId === input.pageId && g.name.toLowerCase() === input.name.toLowerCase(),
+      )
+      if (taken) {
+        throw new Error(`page already has a grant named "${input.name}"; revoke it first`)
+      }
+
       const grant: Grant = { grantId: randomUUID(), approvedAt: Date.now(), ...input }
       await this.write({ version: VERSION, grants: [...file.grants, grant] })
       return grant.grantId
@@ -124,6 +151,26 @@ export class GrantStore {
 
   async listForPage(pageId: string): Promise<Grant[]> {
     return (await this.read()).grants.filter(g => g.pageId === pageId)
+  }
+
+  /**
+   * Resolve a page's handle to the grant the user approved for it.
+   *
+   * Page-scoped on purpose: two pages naming a query "unread" must reach their
+   * own grant or none, never each other's.
+   */
+  async grantIdForName(pageId: string, name: string): Promise<string | null> {
+    if (typeof name !== 'string') return null
+    const wanted = name.toLowerCase()
+    const grants = await this.listForPage(pageId)
+    return grants.find(g => g.name.toLowerCase() === wanted)?.grantId ?? null
+  }
+
+  /** Every handle this page can use, for the wrapper to inline. */
+  async nameMapForPage(pageId: string): Promise<Record<string, string>> {
+    const out: Record<string, string> = {}
+    for (const g of await this.listForPage(pageId)) out[g.name] = g.grantId
+    return out
   }
 
   async pageHasGrants(pageId: string): Promise<boolean> {

@@ -25,6 +25,7 @@ let store: GrantStore
 
 const validGrant = {
   pageId: 'page-1',
+  name: 'messages',
   sourceSlug: 'gmail',
   toolName: 'list_messages',
   fixedArgs: { maxResults: 20 },
@@ -132,7 +133,7 @@ describe('revocation and lifecycle', () => {
 
   it('revokes every grant for a page', async () => {
     await store.approve(validGrant)
-    await store.approve({ ...validGrant, toolName: 'list_labels' })
+    await store.approve({ ...validGrant, name: 'labels', toolName: 'list_labels' })
     await store.approve({ ...validGrant, pageId: 'page-2' })
 
     await store.revokeForPage('page-1')
@@ -142,7 +143,7 @@ describe('revocation and lifecycle', () => {
 
   it('revokes every grant that used a removed source', async () => {
     await store.approve(validGrant)
-    await store.approve({ ...validGrant, sourceSlug: 'linear', toolName: 'list_issues' })
+    await store.approve({ ...validGrant, name: 'issues', sourceSlug: 'linear', toolName: 'list_issues' })
     await store.revokeForSource('gmail')
     const remaining = await store.listForPage('page-1')
     expect(remaining.map(g => g.sourceSlug)).toEqual(['linear'])
@@ -166,7 +167,7 @@ describe('approved query set hash', () => {
   it('changes when a query is added', async () => {
     await store.approve(validGrant)
     const before = await store.querySetHash('page-1')
-    await store.approve({ ...validGrant, toolName: 'list_labels' })
+    await store.approve({ ...validGrant, name: 'labels', toolName: 'list_labels' })
     expect(await store.querySetHash('page-1')).not.toBe(before)
   })
 })
@@ -201,5 +202,73 @@ describe('allowlist', () => {
 
   it('is scoped per source', () => {
     expect(isTrustedReadOnlyTool('linear', 'list_messages')).toBe(false)
+  })
+})
+
+describe('named grants', () => {
+  const base = {
+    pageId: 'pg_1', name: 'unread', sourceSlug: 'gmail', toolName: 'list_messages',
+    fixedArgs: {}, paramSchema: {},
+  }
+
+  it('records the name the page will use to refer to the grant', async () => {
+    const store = new GrantStore(ws)
+    const id = await store.approve(base)
+    expect((await store.get(id))!.name).toBe('unread')
+  })
+
+  it('resolves a page-scoped name to its grant', async () => {
+    const store = new GrantStore(ws)
+    const id = await store.approve(base)
+    expect(await store.grantIdForName('pg_1', 'unread')).toBe(id)
+  })
+
+  it('does not resolve a name across pages', async () => {
+    // The name is the page's own handle. Two pages naming a query "unread"
+    // must reach their own grant or none — never each other's.
+    const store = new GrantStore(ws)
+    await store.approve(base)
+    expect(await store.grantIdForName('pg_2', 'unread')).toBeNull()
+  })
+
+  it('returns null for a name nobody approved', async () => {
+    const store = new GrantStore(ws)
+    await store.approve(base)
+    expect(await store.grantIdForName('pg_1', 'invented')).toBeNull()
+  })
+
+  it('refuses a second live grant with the same name on one page', async () => {
+    // Two would make lookup order decide which of the user's approvals a call
+    // actually used.
+    const store = new GrantStore(ws)
+    await store.approve(base)
+    await expect(store.approve({ ...base, toolName: 'list_labels' }))
+      .rejects.toThrow(/named/i)
+  })
+
+  it('allows the name again once the old grant is revoked', async () => {
+    const store = new GrantStore(ws)
+    await store.approve(base)
+    await store.revokeForPage('pg_1')
+    const id = await store.approve(base)
+    expect(await store.grantIdForName('pg_1', 'unread')).toBe(id)
+  })
+
+  it('rejects a name that is not a usable handle', async () => {
+    const store = new GrantStore(ws)
+    for (const name of ['', 'has space', '../escape', '__proto__', 'x'.repeat(33)]) {
+      await expect(store.approve({ ...base, name })).rejects.toThrow()
+    }
+  })
+
+  it('exposes the name map for a page in one call', async () => {
+    const store = new GrantStore(ws)
+    const a = await store.approve(base)
+    const b = await store.approve({ ...base, name: 'recent', toolName: 'list_threads' })
+    expect(await store.nameMapForPage('pg_1')).toEqual({ unread: a, recent: b })
+  })
+
+  it('returns an empty map for a page with no grants', async () => {
+    expect(await new GrantStore(ws).nameMapForPage('pg_none')).toEqual({})
   })
 })

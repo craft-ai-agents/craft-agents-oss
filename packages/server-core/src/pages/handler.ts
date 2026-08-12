@@ -121,6 +121,8 @@ export interface PagesHandlerOptions {
   pageHasGrants?: (pageId: string) => Promise<boolean>
   /** Source slugs a page may read, for the always-visible wrapper chrome. */
   grantedSources?: (pageId: string) => Promise<string[]>
+  /** The page's approved handles → grant ids, inlined into the wrapper. */
+  grantsForPage?: (pageId: string) => Promise<Record<string, string>>
   logger?: { warn: (m: string) => void; info: (m: string) => void }
 }
 
@@ -179,7 +181,13 @@ export function createPagesHandler(opts: PagesHandlerOptions) {
       if (rev === 0) return text(404, 'Page has no revisions')
 
       const sources = opts.grantedSources ? await opts.grantedSources(pageId).catch(() => []) : []
-      return res(200, renderWrapperHtml({ pageId, rev, title: entry.title, sources }), {
+      // Fail closed: if the handles cannot be read, the page gets none and
+      // every query it makes is refused, rather than the page loading with
+      // stale or partial access.
+      const grants = opts.grantsForPage
+        ? await opts.grantsForPage(pageId).catch(() => ({}))
+        : {}
+      return res(200, renderWrapperHtml({ pageId, rev, title: entry.title, sources, grants }), {
         'Content-Type': 'text/html; charset=utf-8',
         'Content-Security-Policy': WRAPPER_CSP,
         'Cross-Origin-Resource-Policy': WRAPPER_CORP,

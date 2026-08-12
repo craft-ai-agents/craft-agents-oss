@@ -145,3 +145,114 @@ describe('pages:list', () => {
     await off.disposeAll()
   })
 })
+
+describe('what the consent dialog reads and writes', () => {
+  const LIVE = 'CRAFT_FEATURE_CRAFT_PAGES_LIVE_DATA'
+  const originalLive = process.env[LIVE]
+
+  /** A page whose manifest carries a request, plus a live-data runtime. */
+  async function withRequest() {
+    process.env[LIVE] = '1'
+    const w = mkdtempSync(join(tmpdir(), 'craft-rpc-req-'))
+    const pagesRoot = sessionPagesRoot(w, 'sess-1')
+    mkdirSync(pagesRoot, { recursive: true })
+    const created = createPage(pagesRoot, {
+      slug: 'dash', title: 'Dash',
+      files: [{ path: 'index.html', content: '<h1>x</h1>' }],
+      queries: [
+        {
+          name: 'unread', sourceSlug: 'gmail', toolName: 'list_messages',
+          fixedArgs: { maxResults: 20 }, paramSchema: { q: { type: 'string', maxLength: 50 } },
+        },
+        { name: 'labels', sourceSlug: 'gmail', toolName: 'list_labels' },
+      ],
+    })
+    const rt = new PagesRuntime(undefined, async () => ({
+      callTool: async () => ({}), disconnectAll: async () => {},
+    }))
+    await rt.ensureStarted(w)
+    await rt.catalogFor(w)!.register({
+      pageId: created.pageId, sessionId: 'sess-1', slug: 'dash', title: 'Dash',
+    })
+    const f = fakeServer()
+    registerPagesHandlers(f.server, deps(rt))
+    return { w, rt, f, pageId: created.pageId }
+  }
+
+  afterEach(() => {
+    if (originalLive === undefined) delete process.env[LIVE]
+    else process.env[LIVE] = originalLive
+  })
+
+  it('lists what the page asked for, so a dialog has something to show', async () => {
+    const { rt, f, pageId: id, w } = await withRequest()
+    try {
+      const reqs = await f.call('pages:listQueryRequests', w, id) as any[]
+      expect(reqs.map(r => r.name).sort()).toEqual(['labels', 'unread'])
+      const unread = reqs.find(r => r.name === 'unread')
+      expect(unread.sourceSlug).toBe('gmail')
+      expect(unread.toolName).toBe('list_messages')
+      expect(unread.fixedArgs).toEqual({ maxResults: 20 })
+      expect(unread.approved).toBe(false)
+    } finally { await rt.disposeAll() }
+  })
+
+  it('marks a request as approved once the user approves it', async () => {
+    const { rt, f, pageId: id, w } = await withRequest()
+    try {
+      await f.call('pages:approveGrants', w, id, [
+        { name: 'unread', sourceSlug: 'gmail', toolName: 'list_messages', fixedArgs: {}, paramSchema: {} },
+      ])
+      const reqs = await f.call('pages:listQueryRequests', w, id) as any[]
+      expect(reqs.find(r => r.name === 'unread').approved).toBe(true)
+      expect(reqs.find(r => r.name === 'labels').approved).toBe(false)
+    } finally { await rt.disposeAll() }
+  })
+
+  it('approves under the name the page will use', async () => {
+    const { rt, f, pageId: id, w } = await withRequest()
+    try {
+      const res = await f.call('pages:approveGrants', w, id, [
+        { name: 'unread', sourceSlug: 'gmail', toolName: 'list_messages', fixedArgs: {}, paramSchema: {} },
+      ]) as any
+      expect(res.approved).toBe(1)
+      // Without the name the page's craftQuery('unread') resolves to nothing
+      // and the approval the user just gave does nothing at all.
+      expect(await rt.grantsFor(w)!.grantIdForName(id, 'unread')).toBeTruthy()
+    } finally { await rt.disposeAll() }
+  })
+
+  it('reports which query was refused and why, without dropping the rest', async () => {
+    const { rt, f, pageId: id, w } = await withRequest()
+    try {
+      const res = await f.call('pages:approveGrants', w, id, [
+        { name: 'unread', sourceSlug: 'gmail', toolName: 'list_messages', fixedArgs: {}, paramSchema: {} },
+        { name: 'evil', sourceSlug: 'gmail', toolName: 'send_message', fixedArgs: {}, paramSchema: {} },
+      ]) as any
+      expect(res.approved).toBe(1)
+      expect(res.rejected).toHaveLength(1)
+      expect(res.rejected[0].reason).toMatch(/allowlist/i)
+    } finally { await rt.disposeAll() }
+  })
+
+  it('returns nothing when live data is off, so no dialog can appear', async () => {
+    // The page may still carry a request in its manifest; with the feature off
+    // there is no store to approve into, so the dialog must not offer to.
+    const { rt, f, pageId: id, w } = await withRequest()
+    await rt.disposeAll()
+    delete process.env[LIVE]
+    const off = new PagesRuntime()
+    await off.ensureStarted(w)
+    const f2 = fakeServer()
+    registerPagesHandlers(f2.server, deps(off))
+    try {
+      expect(await f2.call('pages:listQueryRequests', w, id)).toEqual([])
+    } finally { await off.disposeAll() }
+  })
+
+  it('returns an empty list for a page that asked for nothing', async () => {
+    const f = fakeServer()
+    registerPagesHandlers(f.server, deps(runtime))
+    expect(await f.call('pages:listQueryRequests', ws, pageId)).toEqual([])
+  })
+})
