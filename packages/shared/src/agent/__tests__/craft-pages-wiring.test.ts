@@ -21,7 +21,7 @@ import {
   registerSessionScopedToolCallbacks,
   unregisterSessionScopedToolCallbacks,
 } from '../session-scoped-tool-callback-registry.ts'
-import { FEATURE_FLAGS, isCraftPagesEnabled } from '../../feature-flags.ts'
+import { FEATURE_FLAGS, isCraftPagesEnabled, isCraftPagesLiveDataEnabled } from '../../feature-flags.ts'
 
 const SESSION_ID = 'wiring-test-session'
 
@@ -87,6 +87,52 @@ describe('feature flag', () => {
     expect(FEATURE_FLAGS.craftPages).toBe(false)
     process.env[KEY] = 'true'
     expect(FEATURE_FLAGS.craftPages).toBe(true)
+  })
+})
+
+describe('live-data flag', () => {
+  const PAGES = 'CRAFT_FEATURE_CRAFT_PAGES'
+  const LIVE = 'CRAFT_FEATURE_CRAFT_PAGES_LIVE_DATA'
+  const originalPages = process.env[PAGES]
+  const originalLive = process.env[LIVE]
+
+  afterEach(() => {
+    for (const [k, v] of [[PAGES, originalPages], [LIVE, originalLive]] as const) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+  })
+
+  it('defaults to disabled even when Craft Pages itself is on', () => {
+    // Static pages are a complete release on their own. Live data reaches a
+    // user's connected accounts, so it ships dark until deliberately enabled.
+    process.env[PAGES] = '1'
+    delete process.env[LIVE]
+    expect(isCraftPagesLiveDataEnabled()).toBe(false)
+    expect(FEATURE_FLAGS.craftPagesLiveData).toBe(false)
+  })
+
+  it('stays disabled when Craft Pages is off, whatever its own value says', () => {
+    // It is a sub-flag, not an independent one: there is no page to hold a
+    // grant, no listener to serve it, and no wrapper to broker it.
+    process.env[PAGES] = '0'
+    process.env[LIVE] = '1'
+    expect(isCraftPagesLiveDataEnabled()).toBe(false)
+  })
+
+  it('is enabled only when both flags are on', () => {
+    process.env[PAGES] = '1'
+    process.env[LIVE] = '1'
+    expect(isCraftPagesLiveDataEnabled()).toBe(true)
+    expect(FEATURE_FLAGS.craftPagesLiveData).toBe(true)
+  })
+
+  it('re-evaluates at access time', () => {
+    process.env[PAGES] = '1'
+    delete process.env[LIVE]
+    expect(FEATURE_FLAGS.craftPagesLiveData).toBe(false)
+    process.env[LIVE] = 'true'
+    expect(FEATURE_FLAGS.craftPagesLiveData).toBe(true)
   })
 })
 

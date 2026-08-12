@@ -22,7 +22,9 @@ import { sessionPagesRoot } from '../catalog.ts'
 import type { PoolLike } from '../grants/source-pool.ts'
 
 const FLAG = 'CRAFT_FEATURE_CRAFT_PAGES'
+const LIVE_FLAG = 'CRAFT_FEATURE_CRAFT_PAGES_LIVE_DATA'
 const originalFlag = process.env[FLAG]
+const originalLiveFlag = process.env[LIVE_FLAG]
 
 let ws: string
 let sessionDataPath: string
@@ -79,6 +81,7 @@ const PAGE_FILES = [
 
 beforeEach(async () => {
   process.env[FLAG] = '1'
+  process.env[LIVE_FLAG] = '1'
   ws = mkdtempSync(join(tmpdir(), 'craft-integration-'))
   sessionDataPath = join(sessionPagesRoot(ws, SESSION_ID), '..')
   mkdirSync(sessionDataPath, { recursive: true })
@@ -95,6 +98,8 @@ afterEach(async () => {
   await runtime.disposeAll()
   if (originalFlag === undefined) delete process.env[FLAG]
   else process.env[FLAG] = originalFlag
+  if (originalLiveFlag === undefined) delete process.env[LIVE_FLAG]
+  else process.env[LIVE_FLAG] = originalLiveFlag
 })
 
 describe('agent creates a page → user can view it', () => {

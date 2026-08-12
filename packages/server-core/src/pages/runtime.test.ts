@@ -29,6 +29,68 @@ afterEach(async () => {
   else process.env[KEY] = original
 })
 
+describe('live-data gating', () => {
+  const LIVE = 'CRAFT_FEATURE_CRAFT_PAGES_LIVE_DATA'
+  const originalLive = process.env[LIVE]
+  afterEach(() => {
+    if (originalLive === undefined) delete process.env[LIVE]
+    else process.env[LIVE] = originalLive
+  })
+
+  it('serves static pages but mounts no bridge when live data is off', async () => {
+    delete process.env[LIVE]
+    const r = new PagesRuntime()
+    const server = await r.ensureStarted(ws)
+    try {
+      expect(server).not.toBeNull()
+
+      // The endpoint is not merely unauthorised — it is not there. A page that
+      // asks gets the same answer it got before grants existed.
+      const res = await fetch(`${server!.origin}/internal/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: server!.origin },
+        body: JSON.stringify({ grantId: 'anything', params: {} }),
+      })
+      expect(res.status).toBe(404)
+      expect(await res.text()).toContain('live_data_unavailable')
+
+      // And nothing can hold a grant, so no page becomes framed-only.
+      expect(r.grantsFor(ws)).toBeUndefined()
+    } finally {
+      await r.disposeAll()
+    }
+  })
+
+  it('mounts the bridge and grant store when live data is on', async () => {
+    process.env[LIVE] = '1'
+    const r = new PagesRuntime(undefined, async () => ({
+      callTool: async () => ({ ok: true }),
+      disconnectAll: async () => {},
+    }))
+    const server = await r.ensureStarted(ws)
+    try {
+      expect(r.grantsFor(ws)).toBeDefined()
+      // Present but unauthorised — 403, not 404.
+      const res = await fetch(`${server!.origin}/internal/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: server!.origin },
+        body: JSON.stringify({ grantId: 'anything', params: {} }),
+      })
+      expect(res.status).toBe(403)
+    } finally {
+      await r.disposeAll()
+    }
+  })
+
+  it('never enables live data when Craft Pages itself is off', async () => {
+    process.env[KEY] = '0'
+    process.env[LIVE] = '1'
+    const r = new PagesRuntime()
+    expect(await r.ensureStarted(ws)).toBeNull()
+    await r.disposeAll()
+  })
+})
+
 describe('feature gating', () => {
   it('does nothing at all when the flag is off', async () => {
     process.env[KEY] = '0'

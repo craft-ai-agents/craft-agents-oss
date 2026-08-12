@@ -11,7 +11,7 @@
  */
 
 import { existsSync } from 'node:fs'
-import { isCraftPagesEnabled } from '@craft-agent/shared/feature-flags'
+import { isCraftPagesEnabled, isCraftPagesLiveDataEnabled } from '@craft-agent/shared/feature-flags'
 import { PageCatalogService } from './catalog.ts'
 import { GrantStore } from './grants/store.ts'
 import { WorkspaceSourcePool } from './grants/source-pool.ts'
@@ -20,8 +20,9 @@ import { startPagesServer, type RunningPagesServer } from './server.ts'
 
 interface WorkspaceEntry {
   catalog: PageCatalogService
-  grants: GrantStore
-  sourcePool: WorkspaceSourcePool
+  /** Absent when live data is disabled — nothing can then hold a grant. */
+  grants?: GrantStore
+  sourcePool?: WorkspaceSourcePool
   server: RunningPagesServer
 }
 
@@ -103,27 +104,39 @@ export class PagesRuntime {
         this.logger?.warn(`[pages] catalog reconcile failed: ${String(err)}`)
       }
 
-      const grants = new GrantStore(workspaceRootPath)
-      const sourcePool = new WorkspaceSourcePool({
-        workspaceRootPath,
-        buildPool: this.buildSourcePool,
-        logger: this.logger,
-      })
+      // Live data is a separate decision from serving pages at all. With it
+      // off there is no grant store, no connector pool and no bridge — the
+      // endpoint is absent rather than merely unauthorised, and every page is
+      // grantless, so none becomes framed-only.
+      const live = isCraftPagesLiveDataEnabled()
+
+      const grants = live ? new GrantStore(workspaceRootPath) : undefined
+      const sourcePool = live
+        ? new WorkspaceSourcePool({
+          workspaceRootPath,
+          buildPool: this.buildSourcePool,
+          logger: this.logger,
+        })
+        : undefined
 
       const server = await startPagesServer({
         catalog,
         workspaceRootPath,
         port: 0,
         logger: this.logger,
-        pageHasGrants: (pageId) => grants.pageHasGrants(pageId),
-        grantedSources: async (pageId) =>
-          [...new Set((await grants.listForPage(pageId)).map(g => g.sourceSlug))].sort(),
-        bridge: createBridgeHandler({
-          grantStore: grants,
-          pagesOrigin: () => this.entries.get(workspaceRootPath)?.server.origin ?? null,
-          execute: (slug, tool, args) => sourcePool.callTool(slug, tool, args),
-          logger: this.logger,
-        }),
+        pageHasGrants: grants ? (pageId) => grants.pageHasGrants(pageId) : undefined,
+        grantedSources: grants
+          ? async (pageId) =>
+            [...new Set((await grants.listForPage(pageId)).map(g => g.sourceSlug))].sort()
+          : undefined,
+        bridge: grants && sourcePool
+          ? createBridgeHandler({
+            grantStore: grants,
+            pagesOrigin: () => this.entries.get(workspaceRootPath)?.server.origin ?? null,
+            execute: (slug, tool, args) => sourcePool.callTool(slug, tool, args),
+            logger: this.logger,
+          })
+          : undefined,
       })
       this.entries.set(workspaceRootPath, { catalog, grants, sourcePool, server })
       return server
@@ -141,7 +154,7 @@ export class PagesRuntime {
     const entry = this.entries.get(workspaceRootPath)
     if (!entry) return
     this.entries.delete(workspaceRootPath)
-    await entry.sourcePool.dispose().catch(() => undefined)
+    await entry.sourcePool?.dispose().catch(() => undefined)
     await entry.server.close().catch(() => undefined)
   }
 
