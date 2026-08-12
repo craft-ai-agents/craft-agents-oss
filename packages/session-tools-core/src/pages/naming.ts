@@ -108,8 +108,13 @@ export function checkRelPath(p: string): Check {
     if (seg.length > MAX_SEGMENT_LENGTH) {
       return no(`path segment "${seg.slice(0, 20)}…" is ${seg.length} chars; max is ${MAX_SEGMENT_LENGTH}`);
     }
-    // Windows silently strips trailing dots and spaces, so "a " and "a" become
-    // the same file — a collision that is invisible on POSIX.
+    // Long-standing Win32 path normalisation strips trailing dots and spaces,
+    // so "a " and "a" can become the same file. MEASURED on a windows-latest
+    // runner via Node: the trailing space was PRESERVED there, so this is not
+    // universal on modern Windows. The rule stays regardless — it has to hold
+    // on the union of platforms and toolchains (cmd, PowerShell, older APIs,
+    // archive extraction), and a name whose identity depends on which of those
+    // touched it last is not one to allow.
     if (/[ .]$/.test(seg)) return no(`path segment "${seg}" ends with a space or dot (Windows strips these)`);
     const base = (seg.split('.')[0] ?? '').toLowerCase();
     if (WINDOWS_RESERVED.has(base)) return no(`"${seg}" uses a reserved device name on Windows`);

@@ -302,9 +302,35 @@ Re-verified after the request path was built, with the page calling the real
   of the pair, because the two colliding names are visually identical — a
   reviewer reading the file list cannot see the collision at all.
 
-- **Windows** — still not run, and still the largest carried risk. The guard's
-  string handling (backslashes, drive-relative paths, ADS, reserved device
-  names, trailing dots/spaces, `MAX_PATH`) is unit-tested OS-independently in
-  `naming.ts`, but no filesystem behaviour has been observed there. Note that
-  Linux verification does NOT reduce this: every Windows-specific rule is about
-  a fold or a rewrite that POSIX filesystems do not perform.
+- **Windows — VERIFIED.** `.github/workflows/validate-pages.yml` runs the pages
+  suite on `windows-latest` alongside macOS and Linux: **490 pass, 0 fail**.
+  All three symlink-escape tests pass there, so D9 is enforced on Windows and
+  not merely argued — the runner can create symlinks, which the workflow's
+  filesystem probe reports explicitly so a silent skip can never be mistaken
+  for a pass.
+
+  What the runner actually reported, some of it against expectation:
+
+  | Property | Windows | macOS | Linux |
+  | --- | --- | --- | --- |
+  | Case folding | insensitive | insensitive | sensitive |
+  | Unicode normalisation | **preserved** | folded | preserved |
+  | Trailing space in a name | **preserved** | preserved | preserved |
+  | Symlink creation | yes | yes | yes |
+
+  Two of those contradict the folklore this ADR was partly written from.
+  Windows preserves unicode normalisation (it is macOS that folds), and modern
+  Windows via Node preserved a trailing space rather than stripping it. The
+  naming rules reject both cases anyway, which is the right call for a rule
+  that has to hold on the *union* of platforms — but the rationale comments
+  now match measurement rather than reputation.
+
+  Verifying it found one defect, in a TEST rather than the guard: the test
+  canonicalised with `realpathSync` while the guard uses `fs/promises`
+  `realpath`, and the two disagree on Windows about 8.3 short names
+  (`C:\Users\RUNNER~1\…`). The assertion was measuring which realpath Node
+  happened to use, not whether the path was contained.
+
+  `MAX_PATH` remains unexercised: CI paths are short, and a 48-character slug
+  nested under `revisions/{n}/public/` could still exceed 260 characters on a
+  deep user directory.

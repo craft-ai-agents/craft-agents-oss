@@ -698,9 +698,17 @@ What remains:
   cross-platform bug: `café.html` written as NFC and as NFD is one file on
   APFS and two on ext4, so the same page differed per machine. Now rejected.
 
-- **Windows — still not run**, and now the only substantive item. Linux does
-  not reduce this risk: every Windows rule concerns a fold or rewrite that no
-  POSIX filesystem performs.
+- **Windows — verified.** The pages suite runs on `windows-latest` in CI:
+  490 pass, 0 fail, including all three symlink-escape tests, so the
+  containment guard is enforced there rather than assumed. The run corrected
+  two assumptions: Windows *preserves* unicode normalisation (macOS is the one
+  that folds) and preserved a trailing space rather than stripping it. The
+  rules reject both regardless, which is correct for a rule that must hold on
+  the union of platforms.
+
+  Remaining gap: `MAX_PATH`. CI paths are short, and a 48-character slug under
+  `revisions/{n}/public/` could still exceed 260 characters in a deep user
+  directory.
 
 ### The request path (built after the integration test found it missing)
 
