@@ -1962,6 +1962,35 @@ export default function App() {
         return null
       }
     },
+    // What a page has REQUESTED to read, paired with what the user already
+    // decided. Empty when live data is off — the RPC returns nothing, so no
+    // consent UI renders and no page can hold access.
+    onListPageQueryRequests: async (pageId: string) => {
+      if (!windowWorkspaceRootPath) return []
+      try {
+        return await window.electronAPI.listPageQueryRequests(windowWorkspaceRootPath, pageId)
+      } catch {
+        // Fail closed: with no readable request list there is nothing to
+        // consent to, which is the safe direction.
+        return []
+      }
+    },
+    // The user's approval. Reached only from an explicit press in the consent
+    // panel — this is the one action that lets a page read someone's accounts.
+    onApprovePageQueries: async (pageId: string, queries: Array<{
+      name: string
+      sourceSlug: string
+      toolName: string
+      fixedArgs: Record<string, unknown>
+      paramSchema: Record<string, unknown>
+    }>) => {
+      if (!windowWorkspaceRootPath) return
+      await window.electronAPI.approvePageGrants(windowWorkspaceRootPath, pageId, queries)
+    },
+    onRevokePageQueries: async (pageId: string) => {
+      if (!windowWorkspaceRootPath) return
+      await window.electronAPI.revokePageGrants(windowWorkspaceRootPath, pageId)
+    },
     // Read file contents as UTF-8 string (used by datatable/spreadsheet/html-preview src fields)
     onReadFile: (path: string) => window.electronAPI.readFile(path),
     // Read file as data URL (used by image-preview blocks)

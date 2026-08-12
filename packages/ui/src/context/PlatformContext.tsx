@@ -74,6 +74,36 @@ export interface PlatformActions {
   onResolvePageUrl?: (pageId: string) => Promise<{ url: string; canOpenExternally: boolean } | null>
 
   /**
+   * What a page has REQUESTED to read, paired with what the user already
+   * decided. Absent when live data is disabled, in which case no consent UI
+   * renders and no page can hold access.
+   */
+  onListPageQueryRequests?: (pageId: string) => Promise<Array<{
+    name: string
+    sourceSlug: string
+    toolName: string
+    fixedArgs: Record<string, unknown>
+    paramSchema: Record<string, unknown>
+    allowed: boolean
+    approved: boolean
+  }>>
+
+  /**
+   * Record the user's approval. Only ever called from an explicit press — this
+   * is the one action that gives a page access to someone's accounts.
+   */
+  onApprovePageQueries?: (pageId: string, queries: Array<{
+    name: string
+    sourceSlug: string
+    toolName: string
+    fixedArgs: Record<string, unknown>
+    paramSchema: Record<string, unknown>
+  }>) => Promise<void>
+
+  /** Withdraw every grant this page holds. */
+  onRevokePageQueries?: (pageId: string) => Promise<void>
+
+  /**
    * Copy text to clipboard
    * Works in both environments via navigator.clipboard
    */

@@ -25,6 +25,8 @@ import { cn } from '../../lib/utils'
 import { CodeBlock } from './CodeBlock'
 import { usePlatform } from '../../context/PlatformContext'
 import { parseCraftPageSpec, craftPageFrameKey, type CraftPageSpec } from './craft-page-spec'
+import { CraftPageConsent } from './CraftPageConsent'
+import type { QueryRequest } from './craft-page-consent'
 
 interface CraftPageBlockProps {
   code: string
@@ -33,7 +35,10 @@ interface CraftPageBlockProps {
 
 export function CraftPageBlock({ code, className }: CraftPageBlockProps) {
   const { t } = useTranslation()
-  const { onResolvePageUrl, onOpenUrl } = usePlatform()
+  const {
+    onResolvePageUrl, onOpenUrl,
+    onListPageQueryRequests, onApprovePageQueries, onRevokePageQueries,
+  } = usePlatform()
 
   const parsed = React.useMemo(() => parseCraftPageSpec(code), [code])
   const spec: CraftPageSpec | null = parsed.ok ? parsed.spec : null
@@ -42,6 +47,7 @@ export function CraftPageBlock({ code, className }: CraftPageBlockProps) {
   const [canOpenExternally, setCanOpenExternally] = React.useState(false)
   const [state, setState] = React.useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle')
   const [expanded, setExpanded] = React.useState(false)
+  const [requests, setRequests] = React.useState<QueryRequest[]>([])
 
   // Re-resolve whenever the REVISION changes, not just the page. The wrapper URL
   // is stable across revisions, but tying the effect to the frame key keeps the
@@ -67,6 +73,19 @@ export function CraftPageBlock({ code, className }: CraftPageBlockProps) {
       .catch(() => { if (!cancelled) setState('unavailable') })
     return () => { cancelled = true }
   }, [frameKey, onResolvePageUrl, spec])
+
+  // What the page asked for. Re-read on every revision: an edit can add or
+  // withdraw a request, and a stale list would show the user a decision about
+  // the previous version of the page.
+  const reloadRequests = React.useCallback(() => {
+    if (!spec || !onListPageQueryRequests) return
+    onListPageQueryRequests(spec.pageId)
+      // Fail closed and silent: with no readable request list there is nothing
+      // to consent to, which is the safe direction.
+      .then(setRequests, () => setRequests([]))
+  }, [spec?.pageId, onListPageQueryRequests])
+
+  React.useEffect(() => { reloadRequests() }, [frameKey, reloadRequests])
 
   // Malformed fence: show the raw block rather than swallowing it, so the model
   // (and the user) can see what was actually emitted.
@@ -121,6 +140,28 @@ export function CraftPageBlock({ code, className }: CraftPageBlockProps) {
             {expanded ? t('craftPage.hide') : t('craftPage.open')}
           </button>
         </div>
+
+        {/* Consent sits ABOVE the preview: the decision belongs in front of
+            the thing it is about, and a user who scrolls past a rendered page
+            has already stopped reading. */}
+        {requests.length > 0 && spec && onApprovePageQueries && onRevokePageQueries && (
+          <CraftPageConsent
+            className="mx-3 mb-3"
+            requests={requests}
+            onApprove={async (queries) => {
+              await onApprovePageQueries(spec.pageId, queries)
+              reloadRequests()
+              // The page must be reloaded to pick up its new handles — they are
+              // inlined into the wrapper document at render time.
+              setExpanded(false)
+            }}
+            onRevoke={async () => {
+              await onRevokePageQueries(spec.pageId)
+              reloadRequests()
+              setExpanded(false)
+            }}
+          />
+        )}
 
         {expanded && state === 'ready' && url && (
           <iframe
