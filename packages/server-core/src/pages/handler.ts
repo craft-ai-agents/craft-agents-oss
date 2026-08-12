@@ -15,7 +15,7 @@ import { readFile } from 'node:fs/promises'
 import { currentRev } from '@craft-agent/session-tools-core'
 import { resolveWithinPublicRoot, isReadMethod } from './containment.ts'
 import { pagePublicDir, sessionPagesRoot, type PageCatalogService } from './catalog.ts'
-import { renderWrapperHtml, WRAPPER_CSS, WRAPPER_JS } from './wrapper-asset.ts'
+import { renderWrapperHtml, WRAPPER_CSS, WRAPPER_JS, PAGE_QUERY_JS } from './wrapper-asset.ts'
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -165,6 +165,19 @@ export function createPagesHandler(opts: PagesHandlerOptions) {
         'Content-Type': 'application/javascript; charset=utf-8',
         'Content-Security-Policy': WRAPPER_CSP,
         'Cross-Origin-Resource-Policy': WRAPPER_CORP,
+        'Cache-Control': 'no-store',
+      })
+    }
+
+    // Loaded BY THE SANDBOXED PAGE, so it needs the page's CORP, not the
+    // wrapper's. An opaque origin is cross-origin to this server: with
+    // same-origin CORP the browser fetches this and discards it, leaving the
+    // page with no craftQuery and no error anywhere to explain why.
+    if (path === '/w-assets/craft-query.js') {
+      return res(200, PAGE_QUERY_JS, {
+        'Content-Type': 'application/javascript; charset=utf-8',
+        'Content-Security-Policy': PAGE_CSP,
+        'Cross-Origin-Resource-Policy': PAGE_CORP,
         'Cache-Control': 'no-store',
       })
     }

@@ -66,3 +66,50 @@ describe('Craft Pages prompt section', () => {
     expect(section(true)).toContain('craft-page')
   })
 })
+
+describe('live data', () => {
+  const PAGES = 'CRAFT_FEATURE_CRAFT_PAGES'
+  const LIVE = 'CRAFT_FEATURE_CRAFT_PAGES_LIVE_DATA'
+  const origPages = process.env[PAGES]
+  const origLive = process.env[LIVE]
+
+  afterEach(() => {
+    for (const [k, v] of [[PAGES, origPages], [LIVE, origLive]] as const) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+  })
+
+  it('says nothing about live data when the sub-flag is off', () => {
+    // Teaching a capability that is not wired produces pages that request
+    // queries no dialog will ever show.
+    process.env[PAGES] = '1'
+    delete process.env[LIVE]
+    const s = getCraftPagesPromptSection()
+    expect(s).not.toMatch(/queries/i)
+    expect(s).not.toMatch(/craftQuery/i)
+  })
+
+  it('teaches the request when live data is on', () => {
+    process.env[PAGES] = '1'
+    process.env[LIVE] = '1'
+    const s = getCraftPagesPromptSection()
+    expect(s).toMatch(/queries/i)
+    expect(s).toMatch(/craftQuery/)
+  })
+
+  it('states that requesting is not having', () => {
+    // The failure this prevents: the model announces a live dashboard the
+    // moment the tool succeeds, and the user opens an empty page.
+    process.env[PAGES] = '1'
+    process.env[LIVE] = '1'
+    expect(getCraftPagesPromptSection()).toMatch(/approv/i)
+  })
+
+  it('still contradicts nothing about fetch being unavailable', () => {
+    // craftQuery is not fetch: the page still cannot make requests of its own.
+    process.env[PAGES] = '1'
+    process.env[LIVE] = '1'
+    expect(getCraftPagesPromptSection()).toMatch(/fetch\(\)`? is unavailable/i)
+  })
+})

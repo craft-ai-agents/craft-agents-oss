@@ -262,3 +262,30 @@ describe('grant-holding pages are framed-only (ADR 0001 D6)', () => {
     expect(r.status).toBe(200)
   })
 })
+
+describe('the page-side query helper asset', () => {
+  it('is served, so a page referencing it is not silently scriptless', async () => {
+    const r = await fetch(`${origin}/w-assets/craft-query.js`)
+    expect(r.status).toBe(200)
+    expect(r.headers.get('content-type')).toContain('javascript')
+    expect(await r.text()).toContain('craftQuery')
+  })
+
+  it('carries cross-origin CORP, because the SANDBOXED page loads it', async () => {
+    // The wrapper's own assets are same-origin, but this one is fetched by the
+    // page, whose origin is opaque — that is cross-origin to this server. With
+    // same-origin CORP the browser fetches it and then discards it, so the page
+    // loads with no craftQuery and no error anywhere. Exactly the failure that
+    // made every page blank in commit 2564d98a; bun's fetch does not enforce
+    // CORP, so only a real browser or this assertion catches it.
+    const r = await fetch(`${origin}/w-assets/craft-query.js`)
+    expect(r.headers.get('cross-origin-resource-policy')).toBe('cross-origin')
+  })
+
+  it('is refused as a top-level navigation', async () => {
+    const r = await fetch(`${origin}/w-assets/craft-query.js`, {
+      headers: { 'sec-fetch-dest': 'document' },
+    })
+    expect(r.status).toBe(200)
+  })
+})

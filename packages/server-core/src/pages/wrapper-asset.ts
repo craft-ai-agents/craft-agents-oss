@@ -174,6 +174,55 @@ export const WRAPPER_JS = `(function () {
 })();
 `
 
+/**
+ * Page-side helper, served at `/w-assets/craft-query.js`.
+ *
+ * Runs INSIDE the sandbox, so it is untrusted code and holds nothing sensitive
+ * — it is a convenience over postMessage, not a security boundary. It exists so
+ * agents write `craftQuery('unread', …)` instead of hand-rolling correlation
+ * logic in every page.
+ *
+ * Referenced by the page with a script tag rather than injected into the page's
+ * HTML: rewriting agent-authored markup to insert a script works right up until
+ * someone writes unusual HTML.
+ *
+ * `script-src 'self'` permits this even though the page's origin is opaque — a
+ * header-delivered policy takes its self-origin from the response URL (CSP3
+ * §4.1), not from the document's origin. Measured in WS0.
+ */
+export const PAGE_QUERY_JS = `(function () {
+  var pending = Object.create(null);
+  var counter = 0;
+
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    if (!d || typeof d !== 'object') return;
+    if (d.craftPage !== true || d.kind !== 'query-result') return;
+    var resolve = pending[d.id];
+    if (!resolve) return;
+    delete pending[d.id];
+    // Resolve, never reject. A rejected promise with no handler is an
+    // unhandled rejection in a page whose only sin was having access revoked;
+    // {error} makes refusal ordinary control flow instead.
+    resolve(d.error ? { error: d.error } : { data: d.data });
+  });
+
+  window.craftQuery = function (name, params) {
+    return new Promise(function (resolve) {
+      var id = 'cq' + (++counter);
+      pending[id] = resolve;
+      window.parent.postMessage({
+        craftPage: true,
+        kind: 'query',
+        id: id,
+        name: name,
+        params: (params && typeof params === 'object') ? params : {}
+      }, '*');
+    });
+  };
+})();
+`
+
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, c => (
     c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;'

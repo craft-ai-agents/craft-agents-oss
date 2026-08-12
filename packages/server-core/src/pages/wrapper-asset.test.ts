@@ -12,7 +12,7 @@
  * full DOM library for one file this small buys nothing.
  */
 import { describe, expect, it, beforeEach } from 'bun:test'
-import { WRAPPER_JS, renderWrapperHtml } from './wrapper-asset.ts'
+import { WRAPPER_JS, PAGE_QUERY_JS, renderWrapperHtml } from './wrapper-asset.ts'
 
 interface Harness {
   /** Deliver a message as if it came from the framed page. */
@@ -309,5 +309,100 @@ describe('the server inlines the handle map', () => {
       grants: { '"><script>alert(1)</script>': 'g_x' },
     })
     expect(html).not.toContain('<script>alert(1)')
+  })
+})
+
+/**
+ * The page-side helper.
+ *
+ * The skill tells agents to call `craftQuery(...)`, so it has to exist. It is
+ * served from /w-assets and referenced with a script tag rather than injected
+ * into agent-authored HTML — rewriting a page's markup to insert a script is
+ * the kind of thing that works until someone writes unusual HTML.
+ */
+function mountPage() {
+  const sent: Array<Record<string, unknown>> = []
+  const listeners: Array<(e: unknown) => void> = []
+  const win: Record<string, unknown> = {
+    parent: { postMessage: (d: Record<string, unknown>) => { sent.push(d) } },
+    addEventListener: (t: string, fn: (e: unknown) => void) => {
+      if (t === 'message') listeners.push(fn)
+    },
+  }
+  new Function('window', PAGE_QUERY_JS)(win)
+  return {
+    sent,
+    craftQuery: win.craftQuery as (n: string, p?: unknown) => Promise<unknown>,
+    /** Deliver the wrapper's reply. */
+    reply: (msg: unknown) => { for (const l of listeners) l({ data: msg }) },
+  }
+}
+
+describe('craftQuery, the page-side helper', () => {
+  it('asks the wrapper by handle and resolves with the data', async () => {
+    const p = mountPage()
+    const promise = p.craftQuery('unread', { q: 'is:unread' })
+
+    expect(p.sent).toHaveLength(1)
+    expect(p.sent[0]).toMatchObject({
+      craftPage: true, kind: 'query', name: 'unread', params: { q: 'is:unread' },
+    })
+
+    p.reply({ craftPage: true, kind: 'query-result', id: p.sent[0]!.id, data: { rows: [1] } })
+    expect(await promise).toEqual({ data: { rows: [1] } })
+  })
+
+  it('resolves rather than rejects on an error, so a page cannot crash on refusal', async () => {
+    // A rejected promise with no handler is an unhandled rejection in a page
+    // whose only sin was being revoked. Resolving with {error} makes the
+    // refusal ordinary control flow.
+    const p = mountPage()
+    const promise = p.craftQuery('unread')
+    p.reply({ craftPage: true, kind: 'query-result', id: p.sent[0]!.id, error: 'forbidden' })
+    expect(await promise).toEqual({ error: 'forbidden' })
+  })
+
+  it('defaults params to an empty object', async () => {
+    const p = mountPage()
+    void p.craftQuery('unread')
+    expect(p.sent[0]!.params).toEqual({})
+  })
+
+  it('keeps concurrent calls apart', async () => {
+    const p = mountPage()
+    const a = p.craftQuery('unread')
+    const b = p.craftQuery('labels')
+    expect(p.sent[0]!.id).not.toBe(p.sent[1]!.id)
+
+    p.reply({ craftPage: true, kind: 'query-result', id: p.sent[1]!.id, data: 'B' })
+    p.reply({ craftPage: true, kind: 'query-result', id: p.sent[0]!.id, data: 'A' })
+    expect(await a).toEqual({ data: 'A' })
+    expect(await b).toEqual({ data: 'B' })
+  })
+
+  it('ignores replies that are not query results', async () => {
+    const p = mountPage()
+    const promise = p.craftQuery('unread')
+    let settled = false
+    void promise.then(() => { settled = true })
+
+    p.reply({ craftPage: true, kind: 'something-else', id: p.sent[0]!.id, data: 'x' })
+    p.reply('junk')
+    p.reply(null)
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    p.reply({ craftPage: true, kind: 'query-result', id: p.sent[0]!.id, data: 'ok' })
+    expect(await promise).toEqual({ data: 'ok' })
+  })
+
+  it('ignores a reply for an id it did not send', async () => {
+    const p = mountPage()
+    const promise = p.craftQuery('unread')
+    let settled = false
+    void promise.then(() => { settled = true })
+    p.reply({ craftPage: true, kind: 'query-result', id: 'not-mine', data: 'x' })
+    await Promise.resolve()
+    expect(settled).toBe(false)
   })
 })

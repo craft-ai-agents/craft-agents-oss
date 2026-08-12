@@ -63,6 +63,69 @@ preferences; each one was measured against Chrome and Safari.
   third-party APIs. Inline or bundle everything into the page's own files.
 - System fonts work well: `font-family: ui-sans-serif, system-ui, sans-serif`.
 
+### Live data (only when the user has connected sources)
+
+A page can read the user's connected accounts, but only what they explicitly
+approve. This does **not** relax anything above: the page still has no `fetch`,
+and it never talks to a source directly. It asks the trusted wrapper, which runs
+the query the user approved.
+
+**1. Request the queries** as part of `craft_page`:
+
+```
+queries=[{
+  name: "unread",
+  sourceSlug: "gmail",
+  toolName: "list_messages",
+  fixedArgs: {maxResults: 25},
+  paramSchema: {q: {type: "string", maxLength: 64}}
+}]
+```
+
+- `name` is the handle your page code uses. Yours to choose; keep it short.
+- `fixedArgs` are baked in at approval time — the page can never change them.
+  Put anything that bounds the request here.
+- `paramSchema` is what the page may vary at runtime. Every parameter is
+  something the page controls, so declare the fewest you need.
+- `toolName` must be a read-only tool on the trusted allowlist, or the user is
+  not offered the choice at all.
+
+**2. Load the helper** in `index.html`, before your own scripts:
+
+```html
+<script src="/w-assets/craft-query.js"></script>
+<script src="app.js"></script>
+```
+
+That path is served by the app, not by your page — do not create a file there.
+
+**3. Call it from the page:**
+
+```js
+// app.js
+craftQuery('unread', { q: 'is:unread' })
+  .then(function (res) {
+    if (res.error) { showEmptyState(); return; }
+    render(res.data);
+  });
+```
+
+`craftQuery` returns a promise resolving to `{data}` or `{error}`. The error is
+a short code, never a reason — design for it arriving. A page whose data was
+revoked yesterday should look deliberate, not broken.
+
+**Requesting is not having.** The user has to approve each query before any of
+it works. Until then every call returns `{error: 'forbidden'}`. Tell the user
+the page is waiting on their approval; do not describe it as showing live data.
+
+**Ask for less.** Every query is a separate decision the user has to make, and a
+long list is one they cannot meaningfully read. One or two well-chosen queries
+beat six narrow ones.
+
+A page holding approved queries can only be viewed inside Craft Agents — it
+loses "open in browser", because a page that can read someone's mail should not
+be openable by anything else on the machine.
+
 ## Using the tool
 
 ```
