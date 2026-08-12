@@ -671,7 +671,21 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
 export interface SessionToolFilterOptions {
   /** Include the experimental send_developer_feedback tool. */
   includeDeveloperFeedback?: boolean;
+  /**
+   * Include the Craft Pages tools.
+   *
+   * Defaults to FALSE so a backend that has not been updated ships the feature
+   * hidden rather than exposed. Gating the runtime alone is not enough: with
+   * the flag off the listener never binds, but `craft_page` would still
+   * succeed, write files and return a fence, while catalog registration is
+   * silently skipped (the handler degrades gracefully by design). The model
+   * then reports a finished page whose preview resolves to nothing.
+   */
+  includeCraftPages?: boolean;
 }
+
+/** Tools that exist only when Craft Pages is enabled. */
+const CRAFT_PAGE_TOOL_NAMES = new Set(['craft_page', 'craft_page_delete']);
 
 /**
  * Return session tools with optional feature filtering.
@@ -681,9 +695,13 @@ export interface SessionToolFilterOptions {
  */
 export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionToolDef[] {
   const includeDeveloperFeedback = options?.includeDeveloperFeedback ?? true;
+  const includeCraftPages = options?.includeCraftPages ?? false;
 
   return SESSION_TOOL_DEFS.filter(def => {
     if (!includeDeveloperFeedback && def.name === 'send_developer_feedback') {
+      return false;
+    }
+    if (!includeCraftPages && CRAFT_PAGE_TOOL_NAMES.has(def.name)) {
       return false;
     }
     return true;

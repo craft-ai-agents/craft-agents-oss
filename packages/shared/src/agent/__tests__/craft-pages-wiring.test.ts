@@ -206,3 +206,38 @@ describe('end-to-end: creating a page registers it so the server can resolve it'
     expect(reported).toContain(catalog.entries[0]!.pageId)
   })
 })
+
+describe('the flag hides the TOOLS, not just the runtime', () => {
+  const KEY = 'CRAFT_FEATURE_CRAFT_PAGES'
+  const original = process.env[KEY]
+  afterEach(() => {
+    if (original === undefined) delete process.env[KEY]
+    else process.env[KEY] = original
+  })
+
+  it('does not offer craft_page to the model when the feature is off', async () => {
+    // Gating the runtime alone leaves the worst state of the three: the tool
+    // succeeds and writes files, catalog registration is skipped because the
+    // handler degrades gracefully, and the model reports a finished page whose
+    // preview resolves to nothing.
+    process.env[KEY] = '0'
+    const { getSessionToolDefs } = await import('@craft-agent/session-tools-core')
+    const names = getSessionToolDefs({
+      includeCraftPages: isCraftPagesEnabled(),
+    }).map(d => d.name)
+
+    expect(names).not.toContain('craft_page')
+    expect(names).not.toContain('craft_page_delete')
+  })
+
+  it('offers them when the feature is on', async () => {
+    process.env[KEY] = '1'
+    const { getSessionToolDefs } = await import('@craft-agent/session-tools-core')
+    const names = getSessionToolDefs({
+      includeCraftPages: isCraftPagesEnabled(),
+    }).map(d => d.name)
+
+    expect(names).toContain('craft_page')
+    expect(names).toContain('craft_page_delete')
+  })
+})

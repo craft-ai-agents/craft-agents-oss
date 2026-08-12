@@ -1,11 +1,17 @@
 /**
  * CraftPageBlock — renders ```craft-page fences.
  *
- * Deliberately a COMPACT CARD in the transcript, not a live inline iframe.
- * Every authoring turn emits a new fence in a new message, so after five edits
- * an inline-iframe design leaves five live pages stacked in the chat, each an
- * independent renderer process. The card is cheap; the real page opens in a
- * fullscreen overlay.
+ * A COMPACT CARD in the transcript that expands, on demand, into an inline
+ * iframe. Every authoring turn emits a new fence in a new message, so a design
+ * that framed each one eagerly would leave five live pages stacked in the chat
+ * after five edits, each an independent renderer process. Collapsed-by-default
+ * is what avoids that; only what the user opens is ever live.
+ *
+ * NOT YET a fullscreen overlay, a resizable side panel, a source view, or a
+ * revision picker — an earlier version of this comment claimed the overlay
+ * existed. It does not: `expanded` renders a fixed-height iframe below the
+ * card. Recorded here rather than quietly dropped, because the gap is the
+ * difference between this and an Artifacts-style surface.
  *
  * Security notes that are easy to undo by accident:
  *
