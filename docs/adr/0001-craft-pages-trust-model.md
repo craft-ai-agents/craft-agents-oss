@@ -234,6 +234,28 @@ mutation, a wrapper that forwards every field breaks no end-to-end assertion.
 It is kept because the redundancy is the point: it takes a break in both
 layers for a page to choose its own tool.
 
+**A handle, not a grant id, is what a page names.** An agent cannot know a
+grant id while authoring — the user has not approved anything yet — so the page
+refers to its data by a name it chose, and the wrapper resolves that name
+against what the user approved FOR THAT PAGE. This is stronger than passing ids
+around, not merely more convenient: a page that could pass a raw grantId could
+try ids it was never given, whereas a handle resolves to an approval or to
+nothing. The map is built with `Object.create(null)` — a plain object literal
+would resolve `constructor`, `toString` and every other inherited name to a
+truthy value.
+
+**Requesting is separated from having, in the tool result as well as the code.**
+`page.json` carries the request and the app-controlled store carries the
+decision (D6), but the model also has to say so: without an explicit note in the
+tool result it announces a working dashboard the moment `craft_page` succeeds,
+and the user opens an empty page.
+
+**Consent is a set, and non-approvable requests are shown.** Per-query prompting
+is consent fatigue, so the panel approves a set in one press, defaulting to
+every pending row with each one visible and uncheckable. Requests that cannot be
+honoured are displayed rather than dropped — a hidden row leaves the user
+wondering why the page is broken and the agent's claim about it unexplained.
+
 ## Verified in a browser (post-WS7)
 
 The full path was driven in Chrome against a live listener, with a real grant
@@ -248,6 +270,17 @@ and a faked connector. Measured, not assumed:
 | `localStorage` / `document.cookie` | both blocked |
 | Top-level navigation to a grant-holding page | refused (D6) |
 | Connector calls made | exactly one, page param merged onto fixed args |
+
+Re-verified after the request path was built, with the page calling the real
+`craftQuery` helper loaded from `/w-assets/craft-query.js`:
+
+| Property | Result |
+| --- | --- |
+| `craftQuery('unread', …)` from the served helper | live data rendered |
+| A handle the user never approved | `forbidden`, connector never called |
+| Page's own `fetch('/internal/query')` | still blocked by CSP |
+| `window.origin` / `localStorage` / `document.cookie` | `null` / blocked / blocked |
+| Connector calls made | exactly one, merged arguments |
 
 ## Not yet verified
 

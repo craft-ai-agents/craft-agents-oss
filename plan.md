@@ -691,32 +691,33 @@ the page's parameter merged onto the user's fixed argument.
 
 What remains:
 
-- **The request path for live data — three pieces, not one.** Everything
-  *behind* an approved grant is built and now proven end to end. Nothing in
-  front of it is:
+- **Windows and Linux verification.** Unchanged and still the largest
+  carried risk; see below.
 
-  1. **`craft_page` cannot declare a query.** The tool takes `files`,
-     `slug`, `title`, `expectedRev` — there is no parameter by which an
-     agent says "this page needs `gmail.list_messages`". So no grant can
-     ever be *proposed*.
-  2. **The skill does not mention live data.** `SKILL.md` correctly teaches
-     that `fetch()` never works and data ships as static JS. That is the
-     whole story for static pages and the wrong story once grants exist.
-  3. **No consent dialog.** `pages:listGrants` / `approveGrants` /
-     `revokeGrants` are registered, routed, and exposed on the renderer API
-     as `listPageGrants` / `approvePageGrants` / `revokePageGrants` — and
-     no UI calls any of them.
+### The request path (built after the integration test found it missing)
 
-  Until (1) and (2) exist there is nothing for (3) to approve. In the real
-  app today every page is grantless, static, and openable anywhere.
+An audit against the code found that everything *behind* an approved grant
+existed and nothing in front of it did. All three pieces are now built,
+test-first, and the whole path is verified in Chrome:
 
-- **WS7 is not behind its own flag.** This plan says live data ships behind
-  `FEATURE_FLAGS.craftPagesLiveData`; that flag does not exist. Both static
-  pages and the whole grant/bridge path are gated by `craftPages` alone, so
-  enabling static pages also binds `/internal/query`. Low risk while nothing
-  can propose a grant — it refuses everything — but the staged rollout
-  described above is not what is implemented. Either add the flag or amend
-  the decision deliberately.
+1. **`craft_page` takes `queries`** — the agent REQUESTS live data, and the
+   request lands on the manifest for the user to decide. Validation runs
+   before any write, so a rejected request leaves no page behind.
+2. **`craftQuery`** — served at `/w-assets/craft-query.js`, with the *page's*
+   CORP rather than the wrapper's, because the sandboxed page is cross-origin
+   to the server. The skill and the flag-gated prompt section both teach it.
+3. **The consent panel** — `CraftPageConsent`, with every rule in a pure,
+   mutation-tested module. It cannot approve a row it did not display, and
+   it shows requests it cannot honour rather than dropping them.
+
+Grants resolve by the page's own **handle**, not by id: an agent cannot know
+a grant id while authoring, and a page that could pass a raw id could try
+ids it was never given. Handles are page-scoped.
+
+`FEATURE_FLAGS.craftPagesLiveData` now exists as this plan always specified,
+as a sub-flag of `craftPages`. With it off the runtime builds no grant store,
+no pool and no bridge, so `/internal/query` is absent rather than merely
+unauthorised, and no page becomes framed-only.
 - **Windows and Linux verification.** The naming rules are pure-string and
   tested from any OS, but the filesystem containment guard has never run on
   Windows. This is the largest carried risk.
