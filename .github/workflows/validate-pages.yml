@@ -71,6 +71,11 @@ jobs:
         run: bun install --frozen-lockfile
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # These tests never launch Electron — they exercise filesystem rules,
+          # a loopback HTTP listener and pure logic. Downloading the ~100MB
+          # Electron binary only adds a network dependency to a job that has no
+          # use for it, and it is what failed the first Windows run here.
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
 
       # Reported per-platform so a CI log answers "can this runner even make a
       # symlink?" without a re-run. Windows needs privilege for symlinkSync, and
