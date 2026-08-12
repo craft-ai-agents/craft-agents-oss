@@ -36,6 +36,9 @@ import {
   rmSync, statSync, writeFileSync,
 } from 'node:fs';
 import { checkFileSet, checkRelPath, checkSlug, hasIndexHtml } from './naming.ts';
+import {
+  validateRequestedQueries, readRequestedQueries, type RequestedQuery,
+} from './requested-queries.ts';
 
 export interface PageManifest {
   id: string;
@@ -48,7 +51,7 @@ export interface PageManifest {
    * UI reads — never an authorization record. Grants live in an app-controlled
    * store outside any agent-writable directory (ADR 0001 D6 / WS7).
    */
-  requestedQueries: string[];
+  requestedQueries: RequestedQuery[];
 }
 
 export interface PageFileInput {
@@ -183,10 +186,20 @@ function assertValidFiles(files: PageFileInput[]): Array<{ path: string; data: B
 
 export function createPage(
   pagesRoot: string,
-  input: { slug: string; title: string; files: PageFileInput[] },
-): { pageId: string; rev: number; files: string[] } {
+  input: {
+    slug: string; title: string; files: PageFileInput[];
+    /** Live-data queries to REQUEST. Approval is a separate, user-side act. */
+    queries?: unknown;
+  },
+): { pageId: string; rev: number; files: string[]; requestedQueries: RequestedQuery[] } {
   const slugCheck = checkSlug(input.slug);
   if (!slugCheck.ok) throw new PageStoreError(slugCheck.reason);
+
+  // Validate BEFORE anything is written. A page that exists with queries the
+  // agent did not get to declare is worse than no page: the agent believes the
+  // request was made and tells the user so.
+  const queryCheck = validateRequestedQueries(input.queries);
+  if (!queryCheck.ok) throw new PageStoreError(queryCheck.reason);
   if (existsSync(pageDir(pagesRoot, input.slug))) {
     throw new PageStoreError(`page "${input.slug}" already exists; use command "update"`);
   }
@@ -207,11 +220,16 @@ export function createPage(
     title: input.title,
     createdAt: now,
     updatedAt: now,
-    requestedQueries: [],
+    requestedQueries: queryCheck.queries,
   };
   writeManifest(pagesRoot, input.slug, manifest);
 
-  return { pageId: manifest.id, rev: 1, files: decoded.map(f => f.path).sort() };
+  return {
+    pageId: manifest.id,
+    rev: 1,
+    files: decoded.map(f => f.path).sort(),
+    requestedQueries: queryCheck.queries,
+  };
 }
 
 export function updatePage(
@@ -224,10 +242,22 @@ export function updatePage(
     /** Optimistic concurrency: fail if the current revision is not this. */
     expectedRev?: number;
     title?: string;
+    /**
+     * Replace the page's requested queries. OMIT to leave them untouched —
+     * editing a stylesheet must not silently drop the page's data access — and
+     * pass `[]` to withdraw every request.
+     */
+    queries?: unknown;
   },
-): { pageId: string; rev: number; files: string[] } {
+): { pageId: string; rev: number; files: string[]; requestedQueries: RequestedQuery[] } {
   const manifest = readManifest(pagesRoot, input.slug);
   if (!manifest) throw new PageStoreError(`page "${input.slug}" not found`);
+
+  // Validated before the revision is committed, for the same reason as create.
+  const queryCheck = input.queries === undefined
+    ? { ok: true as const, queries: readRequestedQueries(manifest.requestedQueries) }
+    : validateRequestedQueries(input.queries);
+  if (!queryCheck.ok) throw new PageStoreError(queryCheck.reason);
 
   const cur = currentRev(pagesRoot, input.slug);
   if (input.expectedRev !== undefined && input.expectedRev !== cur) {
@@ -263,9 +293,15 @@ export function updatePage(
 
   manifest.updatedAt = Date.now();
   if (input.title) manifest.title = input.title;
+  manifest.requestedQueries = queryCheck.queries;
   writeManifest(pagesRoot, input.slug, manifest);
 
-  return { pageId: manifest.id, rev: next, files: finalFiles.map(f => f.path).sort() };
+  return {
+    pageId: manifest.id,
+    rev: next,
+    files: finalFiles.map(f => f.path).sort(),
+    requestedQueries: queryCheck.queries,
+  };
 }
 
 export function readPage(
@@ -275,6 +311,9 @@ export function readPage(
 ): { manifest: PageManifest; rev: number; files: string[]; content?: string } {
   const manifest = readManifest(pagesRoot, slug);
   if (!manifest) throw new PageStoreError(`page "${slug}" not found`);
+  // Normalise on read: a manifest written by an older version, or by hand, must
+  // not make the page unreadable — but nothing invalid reaches a caller.
+  manifest.requestedQueries = readRequestedQueries(manifest.requestedQueries);
   const rev = currentRev(pagesRoot, slug);
   const pub = revisionPublicDir(pagesRoot, slug, rev);
   const files = listFilesRecursive(pub);

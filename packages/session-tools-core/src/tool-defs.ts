@@ -164,6 +164,13 @@ export const CraftPageSchema = z.object({
   replaceAll: z.boolean().optional().describe('update only: replace the whole file tree instead of patching the named files. Defaults to false (patch), so files you do not mention are preserved'),
   expectedRev: z.number().optional().describe('update only: fail if the page is not currently at this revision. Use the revision returned by your last call to avoid clobbering a concurrent edit'),
   filePath: z.string().optional().describe('read only: return the contents of this single file'),
+  queries: z.array(z.object({
+    name: z.string().describe('Handle the page\'s JS uses: craftQuery("unread", {...}). Letters, digits, "-" and "_", max 32 chars'),
+    sourceSlug: z.string().describe('Connected source to read from, e.g. "gmail"'),
+    toolName: z.string().describe('Read-only tool on that source, e.g. "list_messages". Must be on the trusted allowlist or the user cannot approve it'),
+    fixedArgs: z.record(z.unknown()).optional().describe('Constants baked in at approval time. The page can never change these'),
+    paramSchema: z.record(z.unknown()).optional().describe('Arguments the page may vary at runtime, e.g. {"q": {"type": "string", "maxLength": 64}}. Keep it minimal — every parameter is something the page controls'),
+  })).optional().describe('REQUEST live data for this page. The user must approve each query before the page can run it; requesting is not having. On update this REPLACES the whole set — omit it to leave the existing requests untouched'),
 });
 
 export const CraftPageDeleteSchema = z.object({

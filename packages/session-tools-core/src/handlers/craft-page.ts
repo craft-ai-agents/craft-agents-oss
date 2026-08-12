@@ -29,6 +29,28 @@ export interface CraftPageArgs {
   replaceAll?: boolean;
   expectedRev?: number;
   filePath?: string;
+  /**
+   * Live-data queries to REQUEST for this page. A request, not access: each one
+   * has to be approved by the user before the page can run it.
+   */
+  queries?: unknown;
+}
+
+/**
+ * Tell the model, unmissably, that requesting is not having.
+ *
+ * Without this the model reports "your dashboard is showing unread mail" the
+ * moment the tool succeeds, and the user opens an empty page.
+ */
+function pendingApprovalNote(queries: Array<{ name: string; sourceSlug: string; toolName: string }>): string[] {
+  if (queries.length === 0) return [];
+  return [
+    '',
+    `Requested ${queries.length} ${queries.length === 1 ? 'query' : 'queries'}, pending the user's approval:`,
+    ...queries.map(q => `  - ${q.name}: ${q.sourceSlug}.${q.toolName}`),
+    'The page CANNOT read any of this until the user approves it. Tell them it is',
+    'waiting on them, and do not describe the page as showing live data yet.',
+  ];
 }
 
 export interface CraftPageDeleteArgs {
@@ -70,7 +92,9 @@ export async function handleCraftPage(
         if (!args.title) return errorResponse('create requires "title".');
         if (!args.files?.length) return errorResponse('create requires "files" (must include index.html).');
 
-        const r = createPage(root, { slug: args.slug, title: args.title, files: args.files });
+        const r = createPage(root, {
+          slug: args.slug, title: args.title, files: args.files, queries: args.queries,
+        });
         await ctx.pageCatalog?.register({
           pageId: r.pageId, sessionId: ctx.sessionId, slug: args.slug, title: args.title,
         });
@@ -78,6 +102,7 @@ export async function handleCraftPage(
           `Created page "${args.slug}" (revision ${r.rev}).`,
           `pageId: ${r.pageId}`,
           `Files: ${r.files.join(', ')}`,
+          ...pendingApprovalNote(r.requestedQueries),
           '',
           fenceHint(r.pageId, r.rev),
         ].join('\n'));
@@ -93,10 +118,12 @@ export async function handleCraftPage(
           replaceAll: args.replaceAll,
           expectedRev: args.expectedRev,
           title: args.title,
+          queries: args.queries,
         });
         return successResponse([
           `Updated page "${args.slug}" to revision ${r.rev}.`,
           `Files: ${r.files.join(', ')}`,
+          ...(args.queries === undefined ? [] : pendingApprovalNote(r.requestedQueries)),
           '',
           fenceHint(r.pageId, r.rev),
         ].join('\n'));
@@ -110,10 +137,17 @@ export async function handleCraftPage(
             `${args.slug}/${args.filePath} (revision ${r.rev}):\n\n${r.content}`,
           );
         }
+        const requested = r.manifest.requestedQueries;
         return successResponse([
           `Page "${args.slug}" — "${r.manifest.title}", revision ${r.rev}`,
           `pageId: ${r.manifest.id}`,
           `Files: ${r.files.join(', ')}`,
+          ...(requested.length > 0
+            ? [
+              'Requested queries (approval is the user\'s to give):',
+              ...requested.map(q => `  - ${q.name}: ${q.sourceSlug}.${q.toolName}`),
+            ]
+            : []),
           '',
           'Pass "filePath" to read one file.',
         ].join('\n'));

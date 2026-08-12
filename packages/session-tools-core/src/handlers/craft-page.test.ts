@@ -153,3 +153,90 @@ describe('craft_page_delete', () => {
     expect(r.isError).toBe(true);
   });
 });
+
+describe('requesting live data', () => {
+  const FILES = [{ path: 'index.html', content: '<h1>x</h1>' }];
+  const QUERY = {
+    name: 'unread', sourceSlug: 'gmail', toolName: 'list_messages',
+    fixedArgs: { maxResults: 25 }, paramSchema: { q: { type: 'string', maxLength: 64 } },
+  };
+
+  it('records the request on the manifest without granting anything', async () => {
+    const r = await handleCraftPage(ctx(), {
+      command: 'create', slug: 'dash', title: 'Dash', files: FILES, queries: [QUERY],
+    });
+    expect(r.isError).toBeFalsy();
+
+    const read = await handleCraftPage(ctx(), { command: 'read', slug: 'dash' });
+    expect(text(read)).toContain('unread');
+
+    // The tool must be explicit that this is a request awaiting the user, not
+    // access the page already has — otherwise the model tells the user the
+    // dashboard is live when it is inert.
+    expect(text(r)).toMatch(/approv/i);
+  });
+
+  it('tells the agent which queries are pending so it can say so', async () => {
+    const r = await handleCraftPage(ctx(), {
+      command: 'create', slug: 'dash', title: 'Dash', files: FILES, queries: [QUERY],
+    });
+    expect(text(r)).toContain('gmail.list_messages');
+  });
+
+  it('creates no page at all when a query is malformed', async () => {
+    const r = await handleCraftPage(ctx(), {
+      command: 'create', slug: 'dash', title: 'Dash', files: FILES,
+      queries: [{ name: 'bad name', sourceSlug: 'gmail', toolName: 'list_messages' }],
+    });
+    expect(r.isError).toBe(true);
+
+    // Partial creation would leave a page whose requested queries silently
+    // differ from what the agent wrote.
+    const list = await handleCraftPage(ctx(), { command: 'list' });
+    expect(text(list)).not.toContain('dash');
+    expect(registered).toHaveLength(0);
+  });
+
+  it('replaces the whole set on update, so a removed query loses its request', async () => {
+    await handleCraftPage(ctx(), {
+      command: 'create', slug: 'dash', title: 'Dash', files: FILES, queries: [QUERY],
+    });
+    const r = await handleCraftPage(ctx(), {
+      command: 'update', slug: 'dash', files: FILES,
+      queries: [{ name: 'recent', sourceSlug: 'linear', toolName: 'list_issues' }],
+    });
+    expect(r.isError).toBeFalsy();
+
+    const read = await handleCraftPage(ctx(), { command: 'read', slug: 'dash' });
+    expect(text(read)).toContain('recent');
+    expect(text(read)).not.toContain('unread');
+  });
+
+  it('leaves the existing set alone when update omits queries', async () => {
+    // Editing CSS must not silently drop the page's data access.
+    await handleCraftPage(ctx(), {
+      command: 'create', slug: 'dash', title: 'Dash', files: FILES, queries: [QUERY],
+    });
+    await handleCraftPage(ctx(), {
+      command: 'update', slug: 'dash', files: [{ path: 'a.css', content: 'h1{}' }],
+    });
+    const read = await handleCraftPage(ctx(), { command: 'read', slug: 'dash' });
+    expect(text(read)).toContain('unread');
+  });
+
+  it('drops every request when update passes an empty array', async () => {
+    await handleCraftPage(ctx(), {
+      command: 'create', slug: 'dash', title: 'Dash', files: FILES, queries: [QUERY],
+    });
+    await handleCraftPage(ctx(), { command: 'update', slug: 'dash', files: FILES, queries: [] });
+    const read = await handleCraftPage(ctx(), { command: 'read', slug: 'dash' });
+    expect(text(read)).not.toContain('unread');
+  });
+
+  it('says nothing about approval for a page that requests nothing', async () => {
+    const r = await handleCraftPage(ctx(), {
+      command: 'create', slug: 'plain', title: 'Plain', files: FILES,
+    });
+    expect(text(r)).not.toMatch(/approv/i);
+  });
+});
