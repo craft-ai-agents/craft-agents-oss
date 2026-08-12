@@ -812,12 +812,14 @@ export interface JsonSchemaToolDef {
  * @param opts.includeDeveloperFeedback - Include experimental feedback tool in output
  * @returns Array of tool definitions with JSON Schema inputSchema
  */
-export function getToolDefsAsJsonSchema(opts?: {
-  prefix?: string;
-  includeDeveloperFeedback?: boolean;
-}): JsonSchemaToolDef[] {
+export function getToolDefsAsJsonSchema(opts?: SessionToolNameOptions): JsonSchemaToolDef[] {
   const prefix = opts?.prefix || '';
-  const defs = getSessionToolDefs({ includeDeveloperFeedback: opts?.includeDeveloperFeedback });
+  // Pass the options through WHOLESALE rather than naming fields. This
+  // function previously declared its own inline copy of the option shape and
+  // forwarded one field, so every new filter silently failed to apply here
+  // while applying everywhere else — a backend built from this schema would
+  // then advertise a tool the registry does not implement.
+  const defs = getSessionToolDefs(opts);
 
   return defs.map(def => {
     // Explicit `as any` avoids TS2589 ("type instantiation is excessively deep")
