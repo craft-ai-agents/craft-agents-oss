@@ -505,3 +505,95 @@ describe('deleting the page', () => {
     expect(r.isError).toBe(true)
   })
 })
+
+/**
+ * The complete request path, which is what a real session does: the agent asks,
+ * the user decides, the page reads. Every earlier test starts after approval,
+ * so none of them would notice if requesting were impossible.
+ */
+describe('agent requests → user approves → page reads', () => {
+  const APP = `
+    window.__result = null;
+    craftQuery('unread', { q: 'is:unread' }).then(function (r) { window.__result = r; });
+  `
+
+  async function createRequestingPage() {
+    const created = await handleCraftPage(toolContext(), {
+      command: 'create', slug: 'dash', title: 'Dashboard',
+      files: [
+        {
+          path: 'index.html',
+          content: '<!doctype html><html><body><script src="/w-assets/craft-query.js"></script>'
+            + '<script src="app.js"></script></body></html>',
+        },
+        { path: 'app.js', content: APP },
+      ],
+      queries: [{
+        name: 'unread', sourceSlug: 'gmail', toolName: 'list_messages',
+        fixedArgs: { maxResults: 25 }, paramSchema: { q: { type: 'string', maxLength: 64 } },
+      }],
+    })
+    return { result: created, pageId: pageIdFromToolResult(created) }
+  }
+
+  it('tells the agent the request is pending rather than granted', async () => {
+    const { result } = await createRequestingPage()
+    const out = text(result as never)
+    expect(out).toMatch(/approv/i)
+    expect(out).toContain('gmail.list_messages')
+  })
+
+  it('serves the page no data until the user approves', async () => {
+    const { pageId } = await createRequestingPage()
+    const origin = runtime.serverFor(ws)!.origin
+
+    // The wrapper carries an EMPTY handle map, so the page's craftQuery
+    // resolves to nothing and never reaches the bridge.
+    const html = await (await fetch(`${origin}/w/${pageId}`)).text()
+    expect(html).toContain('data-grants="{}"')
+    expect(connectorCalls).toHaveLength(0)
+  })
+
+  it('is still openable in a browser while it holds nothing', async () => {
+    // A page that merely ASKED has no access, so nothing is lost by opening it
+    // anywhere. Treating a request like a grant would penalise asking.
+    const { pageId } = await createRequestingPage()
+    const origin = runtime.serverFor(ws)!.origin
+    const r = await fetch(`${origin}/p/${pageId}/r/1/index.html`, {
+      headers: { 'sec-fetch-dest': 'document' },
+    })
+    expect(r.status).toBe(200)
+  })
+
+  it('carries the handle into the wrapper once approved, and data follows', async () => {
+    const { pageId } = await createRequestingPage()
+    const origin = runtime.serverFor(ws)!.origin
+
+    await runtime.grantsFor(ws)!.approve({
+      pageId, name: 'unread', sourceSlug: 'gmail', toolName: 'list_messages',
+      fixedArgs: { maxResults: 25 }, paramSchema: { q: { type: 'string', maxLength: 64 } },
+    })
+
+    const html = await (await fetch(`${origin}/w/${pageId}`)).text()
+    expect(html).toContain('&quot;unread&quot;')
+    expect(html).toMatch(/Live data/i)
+
+    // And the page's own helper is served, so craftQuery exists at all.
+    const helper = await fetch(`${origin}/w-assets/craft-query.js`)
+    expect(helper.status).toBe(200)
+    expect(helper.headers.get('cross-origin-resource-policy')).toBe('cross-origin')
+  })
+
+  it('becomes framed-only the moment it actually holds access', async () => {
+    const { pageId } = await createRequestingPage()
+    const origin = runtime.serverFor(ws)!.origin
+    await runtime.grantsFor(ws)!.approve({
+      pageId, name: 'unread', sourceSlug: 'gmail', toolName: 'list_messages',
+      fixedArgs: {}, paramSchema: {},
+    })
+    const r = await fetch(`${origin}/p/${pageId}/r/1/index.html`, {
+      headers: { 'sec-fetch-dest': 'document' },
+    })
+    expect(r.status).toBe(403)
+  })
+})
