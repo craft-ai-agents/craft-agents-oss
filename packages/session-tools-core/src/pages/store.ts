@@ -30,9 +30,9 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import {
-  existsSync, mkdirSync, readdirSync, readFileSync, renameSync,
+  copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync,
   rmSync, statSync, writeFileSync,
 } from 'node:fs';
 import { checkFileSet, checkRelPath, checkSlug, hasIndexHtml } from './naming.ts';
@@ -302,6 +302,94 @@ export function updatePage(
     files: finalFiles.map(f => f.path).sort(),
     requestedQueries: queryCheck.queries,
   };
+}
+
+/**
+ * Offline stand-in for the app-served `craftQuery`.
+ *
+ * An exported page has no wrapper and no bridge, so the real helper does not
+ * exist. Without this, the first `craftQuery(...)` is a ReferenceError and the
+ * entire page dies — including everything that never needed live data.
+ *
+ * It RESOLVES with `{error}` rather than rejecting, matching the online
+ * contract exactly, so a page written against the real helper takes its
+ * already-written empty-state branch instead of throwing.
+ */
+const OFFLINE_CRAFT_QUERY_JS = `(function () {
+  // Exported copy: this page is not running inside Craft Agents, so there is no
+  // approved query to run. Same shape as the real helper, always the same answer.
+  window.craftQuery = function () {
+    return Promise.resolve({ error: 'live_data_unavailable_offline' });
+  };
+})();
+`;
+
+export interface ExportResult {
+  outputDir: string;
+  rev: number;
+  files: string[];
+  /** Query handles that cannot work outside the app; empty for a static page. */
+  disabledQueries: string[];
+}
+
+/**
+ * Copy a page's current revision into a plain folder that opens on its own.
+ *
+ * The slug is validated before it is used as a directory name, because the
+ * destination root comes from the caller and the slug would otherwise choose a
+ * path inside it.
+ */
+export function exportPage(
+  pagesRoot: string,
+  slug: string,
+  destinationRoot: string,
+): ExportResult {
+  const slugCheck = checkSlug(slug);
+  if (!slugCheck.ok) throw new PageStoreError(slugCheck.reason);
+
+  const manifest = readManifest(pagesRoot, slug);
+  if (!manifest) throw new PageStoreError(`page "${slug}" not found`);
+
+  const rev = currentRev(pagesRoot, slug);
+  if (rev === 0) throw new PageStoreError(`page "${slug}" has no revisions to export`);
+
+  const source = revisionPublicDir(pagesRoot, slug, rev);
+  const outputDir = join(destinationRoot, slug);
+
+  // Replace rather than merge. A file left over from an earlier export is worse
+  // than a missing one: the page would load it and behave like a version nobody
+  // chose.
+  rmSync(outputDir, { recursive: true, force: true });
+  mkdirSync(outputDir, { recursive: true });
+
+  const files = listFilesRecursive(source);
+  for (const rel of files) {
+    const target = join(outputDir, rel);
+    mkdirSync(dirname(target), { recursive: true });
+    copyFileSync(join(source, rel), target);
+  }
+
+  const disabledQueries = readRequestedQueries(manifest.requestedQueries).map(q => q.name);
+
+  if (disabledQueries.length > 0) {
+    mkdirSync(join(outputDir, 'w-assets'), { recursive: true });
+    writeFileSync(join(outputDir, 'w-assets', 'craft-query.js'), OFFLINE_CRAFT_QUERY_JS, 'utf-8');
+
+    // The page references the helper by ABSOLUTE path, which resolves against
+    // the filesystem root once the folder is opened directly. Rewrite it to a
+    // relative path so the page can load its own scripts.
+    for (const rel of files.filter(f => f.endsWith('.html'))) {
+      const p = join(outputDir, rel);
+      const depth = rel.split('/').length - 1;
+      const prefix = depth === 0 ? '' : '../'.repeat(depth);
+      const html = readFileSync(p, 'utf-8')
+        .split('"/w-assets/craft-query.js"').join(`"${prefix}w-assets/craft-query.js"`)
+        .split("'/w-assets/craft-query.js'").join(`'${prefix}w-assets/craft-query.js'`);
+      writeFileSync(p, html, 'utf-8');
+    }
+  }
+
+  return { outputDir, rev, files: files.sort(), disabledQueries };
 }
 
 export function readPage(

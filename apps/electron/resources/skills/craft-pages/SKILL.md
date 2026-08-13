@@ -153,6 +153,16 @@ edited page actually re-render:
 ```
 ````
 
+**Exporting:** `command=export` copies the current revision into
+`<workspace>/exports/<slug>/`, as plain files that open with no Craft Agents
+running. Use it when the user wants the page outside the app — to keep, to send,
+or to host somewhere themselves. You do not choose the destination.
+
+A page with approved queries exports as a **static** page: the copy has no
+connection to the user's accounts, so `craftQuery` resolves to an error and the
+page shows its empty state. Tell the user that; do not describe the export as a
+working dashboard.
+
 **Deleting** is a separate tool, `craft_page_delete`, and requires
 `confirm: true`. Only use it when the user explicitly asks. Prefer `update`.
 

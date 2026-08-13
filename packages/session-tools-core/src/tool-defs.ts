@@ -153,7 +153,7 @@ export const RenderTemplateSchema = z.object({
 });
 
 export const CraftPageSchema = z.object({
-  command: z.enum(['create', 'update', 'read', 'list']).describe('Operation to perform'),
+  command: z.enum(['create', 'update', 'read', 'list', 'export']).describe('Operation to perform. "export" copies the current revision into a plain folder that opens without Craft Agents running'),
   slug: z.string().optional().describe('Page identifier: lowercase a-z, 0-9 and hyphens, max 48 chars. Required for create/update/read'),
   title: z.string().optional().describe('Human-readable page title. Required for create'),
   files: z.array(z.object({
@@ -415,7 +415,7 @@ Use this for short Python/Node/Bun snippets when strict Explore-mode Bash parsin
 - Timeout is capped (default 5000ms, max 15000ms)
 - Network/filesystem isolation is required in all permission modes; if unavailable, execution is blocked`,
 
-  craft_page: `Create and edit a local web page the user can view.
+  craft_page: `Create, edit and export a local web page the user can view.
 
 A page is a FOLDER of real files served locally, not a single HTML string — so multi-page sites, relative asset paths, images and stylesheets all work.
 

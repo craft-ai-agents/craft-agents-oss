@@ -17,12 +17,12 @@ import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
 import {
-  createPage, updatePage, readPage, listPages, deletePage,
+  createPage, updatePage, readPage, listPages, deletePage, exportPage,
   PageStoreError, type PageFileInput,
 } from '../pages/store.ts';
 
 export interface CraftPageArgs {
-  command: 'create' | 'update' | 'read' | 'list';
+  command: 'create' | 'update' | 'read' | 'list' | 'export';
   slug?: string;
   title?: string;
   files?: PageFileInput[];
@@ -150,6 +150,33 @@ export async function handleCraftPage(
             : []),
           '',
           'Pass "filePath" to read one file.',
+        ].join('\n'));
+      }
+
+      case 'export': {
+        if (!args.slug) return errorResponse('export requires "slug".');
+        if (!ctx.workspacePath) {
+          return errorResponse('craft_page export requires a workspace.');
+        }
+
+        // The destination is DERIVED, never supplied. A caller-chosen path is
+        // a write anywhere on disk wearing an "export" label, and the agent is
+        // the caller here.
+        const r = exportPage(root, args.slug, join(ctx.workspacePath, 'exports'));
+
+        return successResponse([
+          `Exported "${args.slug}" (revision ${r.rev}) to:`,
+          `  ${r.outputDir}`,
+          `${r.files.length} file(s). Open index.html directly — it needs no server.`,
+          ...(r.disabledQueries.length > 0
+            ? [
+              '',
+              `Live data will NOT work in this copy: ${r.disabledQueries.join(', ')}.`,
+              'The exported page has no connection to the user\'s accounts, so those',
+              'queries return an error and the page shows its empty state. Say so —',
+              'do not describe the export as a working dashboard.',
+            ]
+            : []),
         ].join('\n'));
       }
 

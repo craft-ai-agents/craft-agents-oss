@@ -1,18 +1,19 @@
 import { describe, expect, it, beforeEach } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { handleCraftPage, handleCraftPageDelete } from './craft-page.ts';
 import type { SessionToolContext, PageCatalogEntry } from '../context.ts';
 
 let dataPath: string;
+let workspacePath: string;
 let registered: PageCatalogEntry[];
 let unregistered: string[];
 
 function ctx(withCatalog = true): SessionToolContext {
   const base = {
     sessionId: 'sess-1',
-    workspacePath: '/ws',
+    workspacePath,
     dataPath,
   } as unknown as SessionToolContext;
   if (withCatalog) {
@@ -30,6 +31,7 @@ const text = (r: { content: Array<{ text: string }> }) => r.content.map(c => c.t
 
 beforeEach(() => {
   dataPath = mkdtempSync(join(tmpdir(), 'craft-page-h-'));
+  workspacePath = mkdtempSync(join(tmpdir(), 'craft-page-ws-'));
   registered = [];
   unregistered = [];
 });
@@ -238,5 +240,65 @@ describe('requesting live data', () => {
       command: 'create', slug: 'plain', title: 'Plain', files: FILES,
     });
     expect(text(r)).not.toMatch(/approv/i);
+  });
+});
+
+describe('craft_page export', () => {
+  const FILES = [{ path: 'index.html', content: '<h1>x</h1>' }];
+
+  it('exports to a folder under the workspace and reports where', async () => {
+    await handleCraftPage(ctx(), { command: 'create', slug: 'site', title: 'Site', files: FILES });
+    const r = await handleCraftPage(ctx(), { command: 'export', slug: 'site' });
+
+    expect(r.isError).toBeFalsy();
+    expect(text(r)).toContain('site');
+    expect(existsSync(join(workspacePath, 'exports', 'site', 'index.html'))).toBe(true);
+  });
+
+  it('does not let the agent choose where the files land', async () => {
+    // The destination is derived, never supplied. An agent-chosen path is a
+    // write anywhere on disk wearing an "export" label.
+    await handleCraftPage(ctx(), { command: 'create', slug: 'site', title: 'Site', files: FILES });
+    const r = await handleCraftPage(ctx(), {
+      command: 'export', slug: 'site',
+      destination: '/tmp/anywhere', outputDir: '../../etc',
+    } as never);
+
+    expect(r.isError).toBeFalsy();
+    expect(existsSync(join(workspacePath, 'exports', 'site', 'index.html'))).toBe(true);
+    expect(existsSync('/tmp/anywhere')).toBe(false);
+  });
+
+  it('warns that live queries stop working once exported', async () => {
+    // Silence here means the user opens the export, sees an empty dashboard,
+    // and concludes the export is broken.
+    await handleCraftPage(ctx(), {
+      command: 'create', slug: 'dash', title: 'Dash', files: FILES,
+      queries: [{ name: 'unread', sourceSlug: 'gmail', toolName: 'list_messages' }],
+    });
+    const r = await handleCraftPage(ctx(), { command: 'export', slug: 'dash' });
+
+    expect(text(r)).toContain('unread');
+    expect(text(r)).toMatch(/live data|will not|no longer|offline/i);
+  });
+
+  it('says nothing about live data for a static page', async () => {
+    await handleCraftPage(ctx(), { command: 'create', slug: 'site', title: 'Site', files: FILES });
+    expect(text(await handleCraftPage(ctx(), { command: 'export', slug: 'site' })))
+      .not.toMatch(/live data/i);
+  });
+
+  it('requires a slug', async () => {
+    expect((await handleCraftPage(ctx(), { command: 'export' })).isError).toBe(true);
+  });
+
+  it('reports a missing page as an error rather than an empty export', async () => {
+    expect((await handleCraftPage(ctx(), { command: 'export', slug: 'nope' })).isError).toBe(true);
+  });
+
+  it('needs a workspace path, and says so', async () => {
+    const noWorkspace = { sessionId: 's', dataPath } as unknown as SessionToolContext;
+    const r = await handleCraftPage(noWorkspace, { command: 'export', slug: 'site' });
+    expect(r.isError).toBe(true);
   });
 });
