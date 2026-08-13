@@ -7,6 +7,7 @@ import { DOC_REFS, APP_ROOT } from '../docs/index.ts';
 import { PERMISSION_MODE_CONFIG } from '../agent/mode-types.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
 import { getCraftPagesPromptSection } from './craft-pages-section.ts';
+import { loadSkillBySlug } from '../skills/storage.ts';
 import { APP_VERSION } from '../version/index.ts';
 import { readPluginName } from '../utils/workspace.ts';
 import { formatBytes } from '../utils/binary-detection.ts';
@@ -382,7 +383,19 @@ export function getSystemPrompt(
   const basePrompt = getCraftAssistantPrompt(workspaceRootPath, backendName, resolvedIncludeCoAuthoredBy);
   // Flag-gated; returns '' when Craft Pages is off, so the model is never told
   // about a tool that is not registered.
-  const craftPages = getCraftPagesPromptSection();
+  // Resolve the bundled skill so the prompt can name the exact file. Skill
+  // prerequisites only load for skills the user mentions, so without this an
+  // ordinary "build me a page" never reads it — and its constraints fail
+  // silently. Fail-soft: an unresolvable path degrades to asking by name.
+  let craftPagesSkillPath: string | undefined;
+  if (FEATURE_FLAGS.craftPages && workspaceRootPath) {
+    try {
+      craftPagesSkillPath = loadSkillBySlug(workspaceRootPath, 'craft-pages', workingDirectory)?.path;
+    } catch {
+      craftPagesSkillPath = undefined;
+    }
+  }
+  const craftPages = getCraftPagesPromptSection(craftPagesSkillPath);
   const fullPrompt = `${basePrompt}${craftPages}${preferences}${projectBlock}${debugContext}${projectContextFiles}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);

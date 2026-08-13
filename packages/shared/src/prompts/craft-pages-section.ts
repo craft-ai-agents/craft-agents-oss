@@ -12,8 +12,16 @@ import { FEATURE_FLAGS } from '../feature-flags.ts';
  * Returns '' when the feature is off, so the model is never told about a tool
  * that is not registered.
  */
-export function getCraftPagesPromptSection(): string {
+export function getCraftPagesPromptSection(skillPath?: string): string {
   if (!FEATURE_FLAGS.craftPages) return '';
+
+  // Name the exact file when we can resolve it. Skill prerequisites are
+  // registered only for skills the USER mentions, so an ordinary "build me a
+  // page" never loads this one — and the constraints it documents fail
+  // SILENTLY, which is the worst kind to leave to a search.
+  const readLine = skillPath
+    ? `Read \`${skillPath}/SKILL.md\` before building one; it covers the tool contract,`
+    : 'Read the \`craft-pages\` skill before building one; it covers the tool contract,';
 
   return `
 ## Craft Pages
@@ -32,7 +40,7 @@ that renders wrong:
 - No external resources: no CDNs, web fonts or remote images.
 
 ${FEATURE_FLAGS.craftPagesLiveData ? LIVE_DATA_SECTION : ''}
-Read the \`craft-pages\` skill before building one; it covers the tool contract,
+${readLine}
 editing with \`expectedRev\`, and layout defaults.
 
 After \`create\`/\`update\`, emit the \`craft-page\` block the tool returns — that

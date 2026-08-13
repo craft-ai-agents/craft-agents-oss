@@ -113,3 +113,49 @@ describe('live data', () => {
     expect(getCraftPagesPromptSection()).toMatch(/fetch\(\)`? is unavailable/i)
   })
 })
+
+/**
+ * Naming the skill's path.
+ *
+ * Skill prerequisites are registered only for skills the USER mentions
+ * (base-agent's parseMentions), so "build me a page" never loads craft-pages.
+ * The prompt then says "read the craft-pages skill" without saying where it is,
+ * and the model has to go looking — or not bother.
+ *
+ * That matters more here than for most skills, because the constraints it
+ * documents fail SILENTLY: a page using inline styles or `fetch` renders wrong
+ * with no error anywhere.
+ */
+describe('pointing at the skill', () => {
+  const PAGES = 'CRAFT_FEATURE_CRAFT_PAGES'
+  const orig = process.env[PAGES]
+  afterEach(() => {
+    if (orig === undefined) delete process.env[PAGES]
+    else process.env[PAGES] = orig
+  })
+
+  it('names the exact file to read when the path is known', () => {
+    process.env[PAGES] = '1'
+    const s = getCraftPagesPromptSection('/opt/app/resources/skills/craft-pages')
+    expect(s).toContain('/opt/app/resources/skills/craft-pages/SKILL.md')
+  })
+
+  it('still asks for the skill by name when the path cannot be resolved', () => {
+    // A packaged build with a moved bundle must degrade to the old wording,
+    // not to silence.
+    process.env[PAGES] = '1'
+    const s = getCraftPagesPromptSection()
+    expect(s).toMatch(/craft-pages/)
+  })
+
+  it('tells the model to read it BEFORE building, not after', () => {
+    process.env[PAGES] = '1'
+    const s = getCraftPagesPromptSection('/skills/craft-pages')
+    expect(s).toMatch(/before/i)
+  })
+
+  it('says nothing at all when the feature is off', () => {
+    process.env[PAGES] = '0'
+    expect(getCraftPagesPromptSection('/skills/craft-pages')).toBe('')
+  })
+})
