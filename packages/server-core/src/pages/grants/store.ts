@@ -70,7 +70,18 @@ export class GrantStore {
   private readonly path: string
   private queue: Promise<unknown> = Promise.resolve()
 
-  constructor(private readonly workspaceRootPath: string) {
+  constructor(
+    private readonly workspaceRootPath: string,
+    /**
+     * The allowlist BOTH paths consult. Injected rather than imported so a
+     * workspace can extend it (page-tool-allowlist.ts) and so tests can narrow
+     * it. Approval and execution must share it: if approval consulted the
+     * curated module directly, an extended workspace could execute a tool it
+     * could never approve, and a narrowed one would enforce at execution while
+     * ignoring the narrowing at approval.
+     */
+    private readonly allowlist: AllowlistCheck = DEFAULT_ALLOWLIST,
+  ) {
     this.path = join(workspaceRootPath, GRANTS_FILE)
   }
 
@@ -109,7 +120,7 @@ export class GrantStore {
         `grant name ${JSON.stringify(input.name)} must be 1-32 characters of letters, digits, "-" or "_"`,
       )
     }
-    if (!isTrustedReadOnlyTool(input.sourceSlug, input.toolName)) {
+    if (!this.allowlist.isTrusted(input.sourceSlug, input.toolName)) {
       throw new Error(
         `"${input.sourceSlug}.${input.toolName}" is not on the trusted read-only allowlist`,
       )
@@ -186,7 +197,7 @@ export class GrantStore {
   async resolveArgs(
     grantId: string,
     params: Record<string, unknown>,
-    allowlist: AllowlistCheck = DEFAULT_ALLOWLIST,
+    allowlist: AllowlistCheck = this.allowlist,
   ): Promise<ResolveResult> {
     const grant = await this.get(grantId)
     if (!grant) return { ok: false, reason: 'unknown grant' }

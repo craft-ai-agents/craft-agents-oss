@@ -9,6 +9,7 @@
  */
 
 import { sourcesWithTrustedTools } from './allowlist.ts'
+import { loadPageToolAllowlist } from './page-tool-allowlist.ts'
 import type { PoolLike } from './source-pool.ts'
 
 /** Minimal shape needed for eligibility. Keeps this testable without real sources. */
@@ -25,8 +26,17 @@ export interface SourceLike {
 export function eligibleSourcesForPages<T extends SourceLike>(
   sources: T[],
   isUsable: (source: T) => boolean,
+  /**
+   * Slugs the EFFECTIVE allowlist permits, including anything the user
+   * declared. Omit to fall back to the curated built-ins.
+   *
+   * Passing this matters: narrowing to built-ins alone would leave a
+   * user-declared source approvable but never connected, so the grant would
+   * exist and every query against it would fail to find a connector.
+   */
+  allowedSlugs?: string[],
 ): T[] {
-  const allowed = new Set(sourcesWithTrustedTools())
+  const allowed = new Set(allowedSlugs ?? sourcesWithTrustedTools())
   return sources.filter(s => allowed.has(s.config.slug) && isUsable(s))
 }
 
@@ -52,7 +62,11 @@ export function createWorkspacePoolBuilder(deps: {
 }) {
   return async function buildPool(workspaceRootPath: string): Promise<PoolLike> {
     const all = deps.loadAllSources(workspaceRootPath) as SourceLike[]
-    const eligible = eligibleSourcesForPages(all, s => deps.isSourceUsable(s))
+    const eligible = eligibleSourcesForPages(
+      all,
+      s => deps.isSourceUsable(s),
+      loadPageToolAllowlist(workspaceRootPath, deps.logger).sources(),
+    )
 
     if (eligible.length === 0) {
       deps.logger?.info('[pages] no page-eligible sources in this workspace')

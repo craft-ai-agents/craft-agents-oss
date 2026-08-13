@@ -272,3 +272,56 @@ describe('named grants', () => {
     expect(await new GrantStore(ws).nameMapForPage('pg_none')).toEqual({})
   })
 })
+
+/**
+ * Approval and execution must consult the SAME allowlist.
+ *
+ * They did not. `approve()` called the curated module directly while
+ * `resolveArgs()` used the injectable one, so a workspace that extended the
+ * allowlist could execute a tool it could never approve — the grant simply
+ * could not be created. The asymmetry was invisible while the only allowlist
+ * was the built-in one.
+ */
+describe('the allowlist is injected, not imported, on BOTH paths', () => {
+  const localOnly = {
+    isTrusted: (slug: string, tool: string) => slug === 'mavir' && tool === 'get_load',
+  }
+
+  it('approves a tool the injected allowlist trusts but the built-ins do not', () => {
+    const s = new GrantStore(ws, localOnly)
+    return expect(s.approve({
+      pageId: 'p1', name: 'load', sourceSlug: 'mavir', toolName: 'get_load',
+      fixedArgs: {}, paramSchema: {},
+    })).resolves.toBeTruthy()
+  })
+
+  it('refuses a built-in tool when the injected allowlist does not trust it', () => {
+    // Otherwise the injection is decorative: a narrower allowlist would be
+    // enforced at execution and ignored at approval.
+    const s = new GrantStore(ws, localOnly)
+    return expect(s.approve({
+      pageId: 'p1', name: 'mail', sourceSlug: 'gmail', toolName: 'list_messages',
+      fixedArgs: {}, paramSchema: {},
+    })).rejects.toThrow(/allowlist/i)
+  })
+
+  it('still refuses at execution when the tool leaves the allowlist afterwards', () => {
+    const s = new GrantStore(ws, localOnly)
+    return s.approve({
+      pageId: 'p1', name: 'load', sourceSlug: 'mavir', toolName: 'get_load',
+      fixedArgs: {}, paramSchema: {},
+    }).then(async id => {
+      const narrowed = { isTrusted: () => false }
+      const r = await s.resolveArgs(id, {}, narrowed)
+      expect(r.ok).toBe(false)
+    })
+  })
+
+  it('defaults to the curated built-ins when nothing is injected', () => {
+    const s = new GrantStore(ws)
+    return expect(s.approve({
+      pageId: 'p1', name: 'mail', sourceSlug: 'gmail', toolName: 'list_messages',
+      fixedArgs: {}, paramSchema: {},
+    })).resolves.toBeTruthy()
+  })
+})

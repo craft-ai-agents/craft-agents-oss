@@ -20,7 +20,14 @@
  * triggers a side effect on the remote service does not belong here, no matter
  * how convenient it would be for a dashboard.
  */
-const TRUSTED_READ_ONLY: Record<string, ReadonlySet<string>> = {
+/**
+ * A Map, not an object literal. `TRUSTED_READ_ONLY['__proto__']` on a literal
+ * returns Object.prototype — truthy, with no `.has` — so the lookup below threw
+ * a TypeError instead of answering "no" for that one input. A security
+ * predicate that throws on a value an attacker chooses is not a predicate.
+ * A Map has no inherited keys, so every miss is simply a miss.
+ */
+const TRUSTED_READ_ONLY: ReadonlyMap<string, ReadonlySet<string>> = new Map(Object.entries({
   gmail: new Set([
     'list_messages',
     'get_message',
@@ -51,19 +58,19 @@ const TRUSTED_READ_ONLY: Record<string, ReadonlySet<string>> = {
     'get_channel_history',
     'list_users',
   ]),
-}
+}))
 
 /** Is this (source, tool) pair on the curated read-only allowlist? */
 export function isTrustedReadOnlyTool(sourceSlug: string, toolName: string): boolean {
-  return TRUSTED_READ_ONLY[sourceSlug]?.has(toolName) ?? false
+  return TRUSTED_READ_ONLY.get(sourceSlug)?.has(toolName) ?? false
 }
 
 /** Tools a given source may expose to pages. Used by the approval UI. */
 export function trustedToolsForSource(sourceSlug: string): string[] {
-  return [...(TRUSTED_READ_ONLY[sourceSlug] ?? [])].sort()
+  return [...(TRUSTED_READ_ONLY.get(sourceSlug) ?? [])].sort()
 }
 
 /** Sources that can back a page query at all. */
 export function sourcesWithTrustedTools(): string[] {
-  return Object.keys(TRUSTED_READ_ONLY).sort()
+  return [...TRUSTED_READ_ONLY.keys()].sort()
 }

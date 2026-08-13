@@ -47,3 +47,31 @@ describe('eligibleSourcesForPages', () => {
     expect(eligibleSourcesForPages([src('nope')], () => true)).toEqual([])
   })
 })
+
+describe('eligibility follows the EFFECTIVE allowlist, not just the built-ins', () => {
+  it('connects a source the user vouched for', () => {
+    // Otherwise the grant is approvable and the query still fails: the pool
+    // never connects the source, so execution finds no connector. Same
+    // asymmetry as approval-vs-execution, one layer out.
+    const kept = eligibleSourcesForPages(
+      [src('mavir'), src('gmail')],
+      s => s.usable,
+      ['gmail', 'linear', 'mavir'],
+    )
+    expect(kept.map(s => s.config.slug).sort()).toEqual(['gmail', 'mavir'])
+  })
+
+  it('still drops a source on no list at all', () => {
+    const kept = eligibleSourcesForPages(
+      [src('mavir'), src('random')],
+      s => s.usable,
+      ['mavir'],
+    )
+    expect(kept.map(s => s.config.slug)).toEqual(['mavir'])
+  })
+
+  it('falls back to the built-ins when no list is supplied', () => {
+    const kept = eligibleSourcesForPages([src('gmail'), src('mavir')], s => s.usable)
+    expect(kept.map(s => s.config.slug)).toEqual(['gmail'])
+  })
+})

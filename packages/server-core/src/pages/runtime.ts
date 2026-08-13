@@ -14,6 +14,7 @@ import { existsSync } from 'node:fs'
 import { isCraftPagesEnabled, isCraftPagesLiveDataEnabled } from '@craft-agent/shared/feature-flags'
 import { PageCatalogService } from './catalog.ts'
 import { GrantStore } from './grants/store.ts'
+import { loadPageToolAllowlist } from './grants/page-tool-allowlist.ts'
 import { WorkspaceSourcePool } from './grants/source-pool.ts'
 import { createBridgeHandler } from './grants/bridge.ts'
 import { startPagesServer, type RunningPagesServer } from './server.ts'
@@ -110,7 +111,19 @@ export class PagesRuntime {
       // grantless, so none becomes framed-only.
       const live = isCraftPagesLiveDataEnabled()
 
-      const grants = live ? new GrantStore(workspaceRootPath) : undefined
+      // Loaded once per workspace start, so authorisation cannot change midway
+      // through a request. Editing the file takes effect on the next start,
+      // which is also when the user would expect it to.
+      const allowlist = live ? loadPageToolAllowlist(workspaceRootPath, this.logger) : undefined
+      if (allowlist && allowlist.userToolCount > 0) {
+        this.logger?.info(
+          `[pages] allowlist extended by ${allowlist.userToolCount} user-declared tool(s)`,
+        )
+      }
+
+      const grants = live && allowlist
+        ? new GrantStore(workspaceRootPath, allowlist)
+        : undefined
       const sourcePool = live
         ? new WorkspaceSourcePool({
           workspaceRootPath,

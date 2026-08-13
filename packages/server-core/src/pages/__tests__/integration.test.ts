@@ -597,3 +597,86 @@ describe('agent requests → user approves → page reads', () => {
     expect(r.status).toBe(403)
   })
 })
+
+/**
+ * A local connector the curated allowlist has never heard of.
+ *
+ * This is the whole point of the extensible allowlist: MAVIR, weather, water
+ * levels — sources we cannot curate because we do not know they exist. Every
+ * layer has to agree, and each one refused independently before this worked:
+ * the pool would not connect the source, the store would not approve the grant,
+ * and the bridge would not execute it.
+ */
+describe('a user-declared connector, end to end', () => {
+  // NOT named `declare`: that is a TypeScript contextual keyword, and
+  // `const declare = () => …` is mis-parsed as an ambient declaration, so the
+  // call silently does nothing and the file is never written. Cost an hour.
+  const declareSource = () => writeFileSync(
+    join(ws, 'page-tool-allowlist.json'),
+    JSON.stringify({ version: 1, sources: { mavir: ['get_load'] } }),
+  )
+
+  async function runtimeWithDeclaredSource() {
+    declareSource()
+    await runtime.disposeAll()
+    const r = new PagesRuntime(undefined, async () => fakePool())
+    await r.ensureStarted(ws)
+    return r
+  }
+
+  it('serves live data from a source we never curated', async () => {
+    const rt = await runtimeWithDeclaredSource()
+    try {
+      const created = await handleCraftPage({
+        sessionId: SESSION_ID, workspacePath: ws, dataPath: sessionDataPath,
+        pageCatalog: rt.catalogFor(ws),
+      } as never, {
+        command: 'create', slug: 'grid', title: 'Grid', files: PAGE_FILES,
+        queries: [{ name: 'load', sourceSlug: 'mavir', toolName: 'get_load' }],
+      })
+      const pageId = pageIdFromToolResult(created)
+      const origin = rt.serverFor(ws)!.origin
+
+      const grantId = await rt.grantsFor(ws)!.approve({
+        pageId, name: 'load', sourceSlug: 'mavir', toolName: 'get_load',
+        fixedArgs: { region: 'HU' }, paramSchema: {},
+      })
+
+      const r = await fetch(`${origin}/internal/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: origin },
+        body: JSON.stringify({ grantId, params: {} }),
+      })
+      expect(r.status).toBe(200)
+      expect(connectorCalls[0]!.name).toContain('mavir')
+      expect(connectorCalls[0]!.args).toEqual({ region: 'HU' })
+    } finally { await rt.disposeAll() }
+  })
+
+  it('still refuses a tool on that source the user did not declare', async () => {
+    const rt = await runtimeWithDeclaredSource()
+    try {
+      await expect(rt.grantsFor(ws)!.approve({
+        pageId: 'pg', name: 'boom', sourceSlug: 'mavir', toolName: 'shutdown_grid',
+        fixedArgs: {}, paramSchema: {},
+      })).rejects.toThrow(/allowlist/i)
+    } finally { await rt.disposeAll() }
+  })
+
+  it('cannot promote a mutating tool on a source we DO curate', async () => {
+    declareSource()
+    writeFileSync(
+      join(ws, 'page-tool-allowlist.json'),
+      JSON.stringify({ version: 1, sources: { gmail: ['send_message'] } }),
+    )
+    await runtime.disposeAll()
+    const rt = new PagesRuntime(undefined, async () => fakePool())
+    await rt.ensureStarted(ws)
+    try {
+      await expect(rt.grantsFor(ws)!.approve({
+        pageId: 'pg', name: 'send', sourceSlug: 'gmail', toolName: 'send_message',
+        fixedArgs: {}, paramSchema: {},
+      })).rejects.toThrow(/allowlist/i)
+    } finally { await rt.disposeAll() }
+  })
+})
