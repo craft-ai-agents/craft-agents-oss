@@ -1,0 +1,17 @@
+/* Loaded via <link>. If style-src 'self' works, #externalStyleProbe turns green. */
+#externalStyleProbe { color: rgb(0, 128, 0); }
+
+/* CSS url() — exercises img-src for a stylesheet-initiated fetch. */
+#bgProbe {
+  background-image: url("assets/dot.png");
+  width: 10px;
+  height: 10px;
+}
+
+/* font-src probe. The file is a stub with a valid wOF2 signature: we are
+   measuring whether CSP ALLOWS the request, not whether the font parses. */
+@font-face {
+  font-family: "WS0Probe";
+  src: url("assets/probe.woff2") format("woff2");
+}
+#fontProbe { font-family: "WS0Probe", monospace; }

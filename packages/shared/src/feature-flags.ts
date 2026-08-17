@@ -59,6 +59,43 @@ export function isEmbeddedServerEnabled(): boolean {
   return false;
 }
 
+/**
+ * Runtime-evaluated check for Craft Pages.
+ *
+ * Defaults to disabled. Override with CRAFT_FEATURE_CRAFT_PAGES=1|0.
+ *
+ * Gating must be END-TO-END, not just prompt text: the tool registration, the
+ * PagesServer start, the catalog, and the RPC channels each consult this. A
+ * flag that only hid the prompt section would leave a live HTTP listener and a
+ * callable tool.
+ */
+export function isCraftPagesEnabled(): boolean {
+  const override = parseBooleanEnv(getEnv('CRAFT_FEATURE_CRAFT_PAGES'));
+  if (override !== undefined) return override;
+  return false;
+}
+
+/**
+ * Runtime-evaluated check for Craft Pages LIVE DATA (grants, bridge, pool).
+ *
+ * A SUB-flag, deliberately: it is only ever on when Craft Pages itself is on,
+ * because live data has no meaning without a page to hold the grant, a listener
+ * to serve it, and a wrapper to broker it. Checking one flag at each gate would
+ * make "pages off, live data on" a reachable state that no code path expects.
+ *
+ * Defaults to disabled even when Craft Pages is enabled. Static pages are a
+ * complete release on their own (plan.md); live data reaches a user's connected
+ * accounts, so it ships dark until deliberately turned on.
+ *
+ * Override with CRAFT_FEATURE_CRAFT_PAGES_LIVE_DATA=1|0.
+ */
+export function isCraftPagesLiveDataEnabled(): boolean {
+  if (!isCraftPagesEnabled()) return false;
+  const override = parseBooleanEnv(getEnv('CRAFT_FEATURE_CRAFT_PAGES_LIVE_DATA'));
+  if (override !== undefined) return override;
+  return false;
+}
+
 export const FEATURE_FLAGS = {
   /** Enable Opus 4.7 fast mode (speed:"fast" + beta header). 6x pricing. */
   fastMode: false,
@@ -86,5 +123,22 @@ export const FEATURE_FLAGS = {
    */
   get embeddedServer(): boolean {
     return isEmbeddedServerEnabled();
+  },
+  /**
+   * Enable Craft Pages (locally served, agent-authored web pages).
+   *
+   * Defaults to disabled. Override with CRAFT_FEATURE_CRAFT_PAGES=1|0.
+   */
+  get craftPages(): boolean {
+    return isCraftPagesEnabled();
+  },
+  /**
+   * Enable live connector data in Craft Pages (grants, bridge, connector pool).
+   *
+   * Sub-flag of `craftPages`; disabled by default even when that is on.
+   * Override with CRAFT_FEATURE_CRAFT_PAGES_LIVE_DATA=1|0.
+   */
+  get craftPagesLiveData(): boolean {
+    return isCraftPagesLiveDataEnabled();
   },
 } as const;

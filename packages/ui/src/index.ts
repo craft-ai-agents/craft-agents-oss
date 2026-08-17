@@ -287,3 +287,5 @@ export {
   Icon_Inbox,
   type IconProps,
 } from './components/icons'
+export { CraftPageBlock } from './components/markdown/CraftPageBlock'
+export { parseCraftPageSpec, craftPageFrameKey, type CraftPageSpec } from './components/markdown/craft-page-spec'

@@ -18,6 +18,19 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   // remote — local connectivity management (reaches out to remote server from local app)
   RPC_CHANNELS.remote.TEST_CONNECTION,
 
+  // pages — served by a loopback listener on the machine that owns the
+  // workspace. On a thin client the remote's 127.0.0.1 URL is unreachable, so
+  // proxying these would hand back a dead address. Craft Pages is explicitly
+  // unsupported for remote workspaces (ADR 0001 §9); LOCAL_ONLY makes that fail
+  // cleanly rather than silently.
+  RPC_CHANNELS.pages.GET_URL,
+  RPC_CHANNELS.pages.LIST,
+  RPC_CHANNELS.pages.COUNT_FOR_SESSION,
+  RPC_CHANNELS.pages.LIST_QUERY_REQUESTS,
+  RPC_CHANNELS.pages.LIST_GRANTS,
+  RPC_CHANNELS.pages.APPROVE_GRANTS,
+  RPC_CHANNELS.pages.REVOKE_GRANTS,
+
   // workspaces — local workspace CRUD (workspace list is local config)
   RPC_CHANNELS.workspaces.GET,
   RPC_CHANNELS.workspaces.CREATE,

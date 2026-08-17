@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WS0 trusted wrapper</title>
+<style>
+  body { font: 13px ui-monospace, monospace; margin: 0; padding: 12px; }
+  #chrome { background: #fdf6e3; border: 1px solid #d9c98a; padding: 6px 10px; margin-bottom: 10px; }
+  iframe { width: 100%; height: 260px; border: 1px solid #ccc; }
+  pre { white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <!-- Trusted chrome lives OUTSIDE the sandboxed frame. In the real feature
+       this is where active connectors + revoke are surfaced, so a live-data
+       page can never be visually indistinguishable from a static one. -->
+  <div id="chrome">WS0 wrapper — untrusted page below runs sandboxed</div>
+
+  <iframe id="frame" src="/p/__PAGE_ID__/r/1/index.html"></iframe>
+
+  <pre id="log">waiting for frame…</pre>
+
+<script src="/w-assets/wrapper.js"></script>
+</body>
+</html>

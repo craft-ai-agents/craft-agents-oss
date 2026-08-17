@@ -84,6 +84,15 @@ export interface SessionScopedToolCallbacks {
   /** Unbind messaging channels from a session. Returns count of removed bindings. */
   unbindMessagingChannelFn?: (sessionId: string, platform?: string) => number;
   /** Create a Craft Agents Task (board card + task.yaml + orchestrator session) without running it. */
+  /**
+   * Workspace page catalog for craft_page / craft_page_delete.
+   *
+   * Owned by SessionManager, one instance per workspace, so every mutation is
+   * serialized through a single service — concurrent sessions writing the
+   * catalog file independently lose entries (see PageCatalogService).
+   */
+  pageCatalog?: import('@craft-agent/session-tools-core').PageCatalogInterface;
+
   createTaskFn?: (
     input: import('@craft-agent/session-tools-core').CreateTaskInput
   ) => Promise<import('@craft-agent/session-tools-core').CreateTaskResult>;

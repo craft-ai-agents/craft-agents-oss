@@ -13,6 +13,7 @@ import {
   statSync,
 } from 'fs';
 import { homedir } from 'os';
+import { getBundledAssetsDir } from '../utils/paths.ts';
 import { join } from 'path';
 import matter from 'gray-matter';
 import type { LoadedSkill, SkillMetadata, SkillSource } from './types.ts';
@@ -223,7 +224,21 @@ export function loadAllSkills(workspaceRoot: string, projectRoot?: string): Load
 
   const skillsBySlug = new Map<string, LoadedSkill>();
 
-  // 1. Global skills (lowest priority): ~/.agents/skills/
+  // 0. Built-in skills (lowest priority): shipped in the app bundle.
+  //
+  // These cannot live in any of the tiers below — all three are user-owned
+  // directories the app must not write to. Copying into ~/.agents/skills
+  // instead would force a choice between clobbering user edits on every update
+  // and going permanently stale; loading from the bundle avoids both, and
+  // being lowest priority means a user copy always wins.
+  const builtinDir = getBundledAssetsDir('skills');
+  if (builtinDir) {
+    for (const skill of loadSkillsFromDir(builtinDir, 'builtin')) {
+      skillsBySlug.set(skill.slug, skill);
+    }
+  }
+
+  // 1. Global skills: ~/.agents/skills/
   for (const skill of loadSkillsFromDir(GLOBAL_AGENT_SKILLS_DIR, 'global')) {
     skillsBySlug.set(skill.slug, skill);
   }

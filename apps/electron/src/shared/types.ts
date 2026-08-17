@@ -498,6 +498,26 @@ export interface ElectronAPI {
   onDefaultPermissionsChanged(callback: () => void): () => void
 
   // Skills
+  /**
+   * Resolve a Craft Page id to its local wrapper URL. Null when disabled or unknown.
+   *
+   * `canOpenExternally` is false for a page holding connector grants: such a
+   * page must stay framed, because frame-src does not protect a top-level
+   * document (ADR 0001 D6).
+   */
+  getPageUrl(workspaceRootPath: string, pageId: string): Promise<{ url: string; canOpenExternally: boolean } | null>
+  /** Grants a page currently holds. */
+  /** What the page REQUESTED, paired with what the user has already decided. */
+  listPageQueryRequests(workspaceRootPath: string, pageId: string): Promise<Array<{ name: string; sourceSlug: string; toolName: string; fixedArgs: Record<string, unknown>; paramSchema: Record<string, unknown>; allowed: boolean; approved: boolean }>>
+  listPageGrants(workspaceRootPath: string, pageId: string): Promise<Array<{ grantId: string; name: string; sourceSlug: string; toolName: string; approvedAt: number }>>
+  /** Record the user's approval of a page's requested queries. */
+  approvePageGrants(workspaceRootPath: string, pageId: string, queries: Array<{ name: string; sourceSlug: string; toolName: string; fixedArgs: Record<string, unknown>; paramSchema: Record<string, unknown> }>): Promise<{ approved: number; rejected: Array<{ query: string; reason: string }> }>
+  /** Revoke every grant a page holds. */
+  revokePageGrants(workspaceRootPath: string, pageId: string): Promise<void>
+  /** How many pages a session owns. Used to phrase the delete confirmation. */
+  countPagesForSession(workspaceRootPath: string, sessionId: string): Promise<number>
+  /** Pages belonging to a session, each with its wrapper URL. */
+  listPages(workspaceRootPath: string, sessionId: string): Promise<Array<{ pageId: string; slug: string; title: string; url: string }>>
   getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>
   getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
   deleteSkill(workspaceId: string, skillSlug: string): Promise<void>

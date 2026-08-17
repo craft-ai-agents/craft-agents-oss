@@ -19,18 +19,20 @@
     "./handlers/rpc/*": "./src/handlers/rpc/*.ts",
     "./sessions": "./src/sessions/index.ts",
     "./tasks": "./src/tasks/index.ts",
-    "./webui": "./src/webui/index.ts"
+    "./webui": "./src/webui/index.ts",
+    "./pages": "./src/pages/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",
+    "@craft-agent/session-tools-core": "workspace:*",
     "@craft-agent/shared": "workspace:*",
+    "@earendil-works/pi-ai": "0.80.6",
     "jose": "^6.0.0",
-    "ws": "^8.19.0",
     "sharp": "0.34.5",
-    "@earendil-works/pi-ai": "0.80.6"
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "typescript": "^5.8.2",

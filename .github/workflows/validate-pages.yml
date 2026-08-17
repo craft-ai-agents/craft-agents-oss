@@ -1,0 +1,91 @@
+name: Validate Pages (cross-platform)
+
+# Craft Pages is the one feature whose correctness is FILESYSTEM behaviour, and
+# the three platforms genuinely disagree:
+#
+#   case            "A.html" and "a.html" are one file on macOS/Windows, two on Linux
+#   normalisation   "café" as NFC and NFD are one file on macOS, two on Linux
+#   separators      "\" is a separator on Windows and a legal filename character elsewhere
+#   reserved names  CON, PRN, AUX, NUL and trailing dots/spaces are rewritten by Windows only
+#
+# naming.ts encodes all of that as pure string logic so it can be unit-tested
+# from any machine — but until this workflow existed, the Windows rules had
+# never actually run on Windows. Rules written for a platform and never executed
+# there are a hypothesis, not a guard.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/session-tools-core/src/pages/**'
+      - 'packages/server-core/src/pages/**'
+      - 'packages/server-core/src/handlers/rpc/pages.ts'
+      - 'packages/ui/src/components/markdown/**'
+      - 'packages/shared/src/feature-flags.ts'
+      - '.github/workflows/validate-pages.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/session-tools-core/src/pages/**'
+      - 'packages/server-core/src/pages/**'
+      - 'packages/server-core/src/handlers/rpc/pages.ts'
+      - 'packages/ui/src/components/markdown/**'
+      - 'packages/shared/src/feature-flags.ts'
+      - '.github/workflows/validate-pages.yml'
+      - 'scripts/report-fs-behaviour.ts'
+  workflow_dispatch:
+
+concurrency:
+  group: validate-pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-pages:
+    strategy:
+      # NOT fail-fast: a Windows-only failure is the entire point of this
+      # workflow, and cancelling the other two would hide whether the failure is
+      # platform-specific or universal.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    name: pages (${{ matrix.os }})
+    timeout-minutes: 10
+
+    steps:
+      # Before checkout, so it applies to the working tree. Windows runners
+      # default to autocrlf=true, which rewrites line endings on checkout —
+      # tests that compare file bytes would then fail for a reason that has
+      # nothing to do with the code.
+      - name: Keep line endings verbatim
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.10"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # These tests never launch Electron — they exercise filesystem rules,
+          # a loopback HTTP listener and pure logic. Downloading the ~100MB
+          # Electron binary only adds a network dependency to a job that has no
+          # use for it, and it is what failed the first Windows run here.
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+      # Reported per-platform so a CI log answers "can this runner even make a
+      # symlink?" without a re-run. Windows needs privilege for symlinkSync, and
+      # three containment tests depend on it — a silent skip there would retire
+      # the guard that D9 exists to enforce.
+      - name: Report filesystem behaviour
+        shell: bash
+        run: bun run scripts/report-fs-behaviour.ts
+
+      - name: Run pages tests
+        run: bun run test:pages

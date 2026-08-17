@@ -412,6 +412,41 @@ export interface SessionToolContext {
    * Used by transform_data and render_template for output files.
    */
   dataPath?: string;
+
+  // ============================================================
+  // Craft Pages (for craft_page / craft_page_delete)
+  // ============================================================
+
+  /**
+   * Workspace-level page catalog, so a pageId still resolves in a cold session
+   * after a restart (page CONTENT is session-scoped; the catalog is not).
+   *
+   * Injected by the backend and owned by a single main-process service that
+   * SERIALIZES mutations: concurrent sessions doing independent
+   * read-modify-write on one catalog file lose entries even inside a single
+   * event loop, and the headless server is a genuinely separate process.
+   *
+   * Optional — backends that do not run alongside it leave it undefined and the
+   * handlers degrade gracefully (the page is still written; it just is not
+   * resolvable outside this session until the catalog is rebuilt from
+   * manifests).
+   */
+  pageCatalog?: PageCatalogInterface;
+}
+
+/** Workspace-level pageId → location index. Mutations must be serialized. */
+export interface PageCatalogInterface {
+  register(entry: PageCatalogEntry): Promise<void>;
+  unregister(pageId: string): Promise<void>;
+  resolve(pageId: string): Promise<PageCatalogEntry | null>;
+  listForSession(sessionId: string): Promise<PageCatalogEntry[]>;
+}
+
+export interface PageCatalogEntry {
+  pageId: string;
+  sessionId: string;
+  slug: string;
+  title: string;
 }
 
 // ============================================================

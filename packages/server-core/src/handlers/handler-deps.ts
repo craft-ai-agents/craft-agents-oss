@@ -27,4 +27,9 @@ export interface HandlerDeps<
   browserPaneManager?: TBrowserPaneManager
   oauthFlowStore: TOAuthFlowStore
   messagingRegistry?: IMessagingGatewayRegistry
+  /**
+   * Craft Pages runtime. Optional: hosts that do not serve pages (headless,
+   * thin client) leave it undefined and the handlers degrade to null / [].
+   */
+  pagesRuntime?: import('../pages/runtime').PagesRuntime
 }

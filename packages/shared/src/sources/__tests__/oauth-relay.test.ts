@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test';
 
 import { OAUTH_RELAY_CALLBACK_URL, decodeOAuthRelayState, isOAuthRelayState } from '../../auth/oauth-relay.ts';
 import { SourceCredentialManager } from '../credential-manager.ts';
@@ -52,6 +52,12 @@ function createMcpSource(overrides: Partial<FolderSourceConfig> = {}): LoadedSou
 
 describe('SourceCredentialManager.prepareOAuth relay wrapping', () => {
   const credManager = new SourceCredentialManager();
+
+  // Bun runs every test file in one process, so a global left stubbed here is
+  // stubbed for every file that runs after this one — which silently breaks any
+  // later suite that makes a real request (the pages and webui servers both do).
+  const realFetch = globalThis.fetch;
+  afterAll(() => { globalThis.fetch = realFetch; });
 
   beforeEach(() => {
     globalThis.fetch = mock((input: string | URL | Request) => {

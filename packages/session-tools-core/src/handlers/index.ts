@@ -57,6 +57,8 @@ export type { ScriptSandboxArgs } from './script-sandbox.ts';
 
 // Render Template
 export { handleRenderTemplate } from './render-template.ts';
+export { handleCraftPage, handleCraftPageDelete } from './craft-page.ts';
+export type { CraftPageArgs, CraftPageDeleteArgs } from './craft-page.ts';
 export type { RenderTemplateArgs } from './render-template.ts';
 
 // Send Developer Feedback

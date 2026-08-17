@@ -33,6 +33,7 @@ import { handleUpdatePreferences } from './handlers/update-preferences.ts';
 import { handleTransformData } from './handlers/transform-data.ts';
 import { handleScriptSandbox } from './handlers/script-sandbox.ts';
 import { handleRenderTemplate } from './handlers/render-template.ts';
+import { handleCraftPage, handleCraftPageDelete } from './handlers/craft-page.ts';
 import { handleSendDeveloperFeedback } from './handlers/send-developer-feedback.ts';
 import { handleSetSessionLabels } from './handlers/set-session-labels.ts';
 import { handleSetSessionStatus } from './handlers/set-session-status.ts';
@@ -149,6 +150,32 @@ export const RenderTemplateSchema = z.object({
   source: z.string().describe('Source slug (e.g., "linear", "gmail")'),
   template: z.string().describe('Template ID (e.g., "issue-detail", "issue-list")'),
   data: z.record(z.string(), z.unknown()).describe('JSON data to render into the template'),
+});
+
+export const CraftPageSchema = z.object({
+  command: z.enum(['create', 'update', 'read', 'list', 'export']).describe('Operation to perform. "export" copies the current revision into a plain folder that opens without Craft Agents running'),
+  slug: z.string().optional().describe('Page identifier: lowercase a-z, 0-9 and hyphens, max 48 chars. Required for create/update/read'),
+  title: z.string().optional().describe('Human-readable page title. Required for create'),
+  files: z.array(z.object({
+    path: z.string().describe('Page-relative path, e.g. "index.html" or "assets/logo.png". No "..", no backslashes, no dotfiles'),
+    content: z.string().describe('File contents (UTF-8 text, or base64 when encoding is "base64")'),
+    encoding: z.enum(['utf8', 'base64']).optional().describe('Defaults to utf8. Use base64 for images and fonts'),
+  })).optional().describe('Files to write. create requires index.html at the root'),
+  replaceAll: z.boolean().optional().describe('update only: replace the whole file tree instead of patching the named files. Defaults to false (patch), so files you do not mention are preserved'),
+  expectedRev: z.number().optional().describe('update only: fail if the page is not currently at this revision. Use the revision returned by your last call to avoid clobbering a concurrent edit'),
+  filePath: z.string().optional().describe('read only: return the contents of this single file'),
+  queries: z.array(z.object({
+    name: z.string().describe('Handle the page\'s JS uses: craftQuery("unread", {...}). Letters, digits, "-" and "_", max 32 chars'),
+    sourceSlug: z.string().describe('Connected source to read from, e.g. "gmail"'),
+    toolName: z.string().describe('Read-only tool on that source, e.g. "list_messages". Must be on the trusted allowlist or the user cannot approve it'),
+    fixedArgs: z.record(z.unknown()).optional().describe('Constants baked in at approval time. The page can never change these'),
+    paramSchema: z.record(z.unknown()).optional().describe('Arguments the page may vary at runtime, e.g. {"q": {"type": "string", "maxLength": 64}}. Keep it minimal — every parameter is something the page controls'),
+  })).optional().describe('REQUEST live data for this page. The user must approve each query before the page can run it; requesting is not having. On update this REPLACES the whole set — omit it to leave the existing requests untouched'),
+});
+
+export const CraftPageDeleteSchema = z.object({
+  slug: z.string().describe('Page to delete'),
+  confirm: z.boolean().describe('Must be true. Deletion removes the page and every revision, permanently'),
 });
 
 export const SendDeveloperFeedbackSchema = z.object({
@@ -388,6 +415,30 @@ Use this for short Python/Node/Bun snippets when strict Explore-mode Bash parsin
 - Timeout is capped (default 5000ms, max 15000ms)
 - Network/filesystem isolation is required in all permission modes; if unavailable, execution is blocked`,
 
+  craft_page: `Create, edit and export a local web page the user can view.
+
+A page is a FOLDER of real files served locally, not a single HTML string — so multi-page sites, relative asset paths, images and stylesheets all work.
+
+**Hard constraints — all of these fail SILENTLY if ignored:**
+- Scripts must be EXTERNAL files (\`<script src="app.js">\`). Inline \`<script>\` is blocked, and \`type="module"\` does NOT run.
+- Styles must be in an EXTERNAL stylesheet. Inline \`<style>\` blocks and \`style="..."\` attributes are blocked. For dynamic styling assign properties: \`el.style.color = '...'\`.
+- Page data must be delivered as JavaScript that assigns a global (e.g. \`window.DATA = {...}\` in \`data.js\`). \`fetch()\` is blocked entirely, including for the page's own JSON.
+- \`localStorage\` throws. Keep state in memory.
+- \`<form>\` submission is blocked. Use button click handlers.
+- No external network access: no CDNs, no web fonts, no remote images. Inline everything.
+
+**Commands:**
+- \`create\` — slug + title + files (must include index.html)
+- \`update\` — patches the files you name and preserves the rest; pass replaceAll to swap the whole tree. Pass expectedRev to avoid clobbering a concurrent edit.
+- \`read\` — list files, or pass filePath for one file's contents
+- \`list\` — all pages in this session
+
+After create/update, emit the \`craft-page\` block the tool returns so the user can see it.`,
+
+  craft_page_delete: `Permanently delete a page and every revision of it.
+
+Irreversible. Requires \`confirm: true\`. Blocked in Explore mode. Prefer \`craft_page update\` to change a page; only delete when the user explicitly asks.`,
+
   render_template: `Render a source's HTML template with data.
 
 Use this when a source provides HTML templates for rich rendering of its data (e.g., issue detail views, email threads, ticket summaries).
@@ -591,6 +642,11 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'transform_data', description: TOOL_DESCRIPTIONS.transform_data, inputSchema: TransformDataSchema, executionMode: 'registry', safeMode: 'allow', handler: handleTransformData },
   { name: 'script_sandbox', description: TOOL_DESCRIPTIONS.script_sandbox, inputSchema: ScriptSandboxSchema, executionMode: 'registry', safeMode: 'allow', handler: handleScriptSandbox },
   { name: 'render_template', description: TOOL_DESCRIPTIONS.render_template, inputSchema: RenderTemplateSchema, executionMode: 'registry', safeMode: 'allow', handler: handleRenderTemplate },
+  { name: 'craft_page', description: TOOL_DESCRIPTIONS.craft_page, inputSchema: CraftPageSchema, executionMode: 'registry', safeMode: 'allow', handler: handleCraftPage },
+  // Separate tool ONLY so it can carry safeMode: 'block' — safeMode is one value
+  // per tool, so folding delete into craft_page would expose destructive
+  // deletion in Explore (read-only) mode.
+  { name: 'craft_page_delete', description: TOOL_DESCRIPTIONS.craft_page_delete, inputSchema: CraftPageDeleteSchema, executionMode: 'registry', safeMode: 'block', handler: handleCraftPageDelete },
   { name: 'send_developer_feedback', description: TOOL_DESCRIPTIONS.send_developer_feedback, inputSchema: SendDeveloperFeedbackSchema, executionMode: 'registry', safeMode: 'allow', handler: handleSendDeveloperFeedback },
   { name: 'call_llm', description: TOOL_DESCRIPTIONS.call_llm, inputSchema: CallLlmSchema, executionMode: 'backend', safeMode: 'allow', readOnly: true, handler: null },
   { name: 'spawn_session', description: TOOL_DESCRIPTIONS.spawn_session, inputSchema: SpawnSessionSchema, executionMode: 'backend', safeMode: 'block', handler: null },
@@ -615,7 +671,21 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
 export interface SessionToolFilterOptions {
   /** Include the experimental send_developer_feedback tool. */
   includeDeveloperFeedback?: boolean;
+  /**
+   * Include the Craft Pages tools.
+   *
+   * Defaults to FALSE so a backend that has not been updated ships the feature
+   * hidden rather than exposed. Gating the runtime alone is not enough: with
+   * the flag off the listener never binds, but `craft_page` would still
+   * succeed, write files and return a fence, while catalog registration is
+   * silently skipped (the handler degrades gracefully by design). The model
+   * then reports a finished page whose preview resolves to nothing.
+   */
+  includeCraftPages?: boolean;
 }
+
+/** Tools that exist only when Craft Pages is enabled. */
+const CRAFT_PAGE_TOOL_NAMES = new Set(['craft_page', 'craft_page_delete']);
 
 /**
  * Return session tools with optional feature filtering.
@@ -625,9 +695,13 @@ export interface SessionToolFilterOptions {
  */
 export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionToolDef[] {
   const includeDeveloperFeedback = options?.includeDeveloperFeedback ?? true;
+  const includeCraftPages = options?.includeCraftPages ?? false;
 
   return SESSION_TOOL_DEFS.filter(def => {
     if (!includeDeveloperFeedback && def.name === 'send_developer_feedback') {
+      return false;
+    }
+    if (!includeCraftPages && CRAFT_PAGE_TOOL_NAMES.has(def.name)) {
       return false;
     }
     return true;
@@ -738,12 +812,14 @@ export interface JsonSchemaToolDef {
  * @param opts.includeDeveloperFeedback - Include experimental feedback tool in output
  * @returns Array of tool definitions with JSON Schema inputSchema
  */
-export function getToolDefsAsJsonSchema(opts?: {
-  prefix?: string;
-  includeDeveloperFeedback?: boolean;
-}): JsonSchemaToolDef[] {
+export function getToolDefsAsJsonSchema(opts?: SessionToolNameOptions): JsonSchemaToolDef[] {
   const prefix = opts?.prefix || '';
-  const defs = getSessionToolDefs({ includeDeveloperFeedback: opts?.includeDeveloperFeedback });
+  // Pass the options through WHOLESALE rather than naming fields. This
+  // function previously declared its own inline copy of the option shape and
+  // forwarded one field, so every new filter silently failed to apply here
+  // while applying everywhere else — a backend built from this schema would
+  // then advertise a tool the registry does not implement.
+  const defs = getSessionToolDefs(opts);
 
   return defs.map(def => {
     // Explicit `as any` avoids TS2589 ("type instantiation is excessively deep")

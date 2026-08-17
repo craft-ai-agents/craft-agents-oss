@@ -12,6 +12,7 @@ import { MarkdownJsonBlock } from './MarkdownJsonBlock'
 import { MarkdownMermaidBlock } from './MarkdownMermaidBlock'
 import { MarkdownDatatableBlock } from './MarkdownDatatableBlock'
 import { MarkdownSpreadsheetBlock } from './MarkdownSpreadsheetBlock'
+import { CraftPageBlock } from './CraftPageBlock'
 import { MarkdownHtmlBlock } from './MarkdownHtmlBlock'
 import { MarkdownImageBlock } from './MarkdownImageBlock'
 import { MarkdownLatexBlock } from './MarkdownLatexBlock'
@@ -34,6 +35,7 @@ import { markdownUrlTransform } from './url-transform'
  */
 export type DisablablePreviewBlock =
   | 'markdown-preview'
+  | 'craft-page'
   | 'html-preview'
   | 'pdf-preview'
   | 'image-preview'
@@ -290,6 +292,10 @@ function createComponents(
           if (match?.[1] === 'spreadsheet') {
             return wrapBlock('spreadsheet', code, <MarkdownSpreadsheetBlock code={code} className="my-2" />, props.node?.position)
           }
+          // Craft Pages → compact card, page opens in a framed wrapper
+          if (match?.[1] === 'craft-page') {
+            return wrapBlock('craft-page', code, <CraftPageBlock code={code} className="my-2" />, props.node?.position)
+          }
           // HTML preview blocks → sandboxed iframe
           if (match?.[1] === 'html-preview' && isPreviewEnabled('html-preview')) {
             return wrapBlock('html-preview', code, <MarkdownHtmlBlock code={code} className="my-2" />, props.node?.position)
@@ -429,6 +435,9 @@ function createComponents(
           return wrapBlock('spreadsheet', code, <MarkdownSpreadsheetBlock code={code} className="my-2" />, props.node?.position)
         }
         // HTML preview blocks → sandboxed iframe
+        if (match?.[1] === 'craft-page') {
+          return wrapBlock('craft-page', code, <CraftPageBlock code={code} className="my-2" />, props.node?.position)
+        }
         if (match?.[1] === 'html-preview' && isPreviewEnabled('html-preview')) {
           return wrapBlock('html-preview', code, <MarkdownHtmlBlock code={code} className="my-2" />, props.node?.position)
         }

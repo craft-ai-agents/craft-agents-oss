@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test'
+import { describe, it, expect, mock, beforeEach, afterAll } from 'bun:test'
 
 /**
  * Tests that all OAuth prepare functions correctly support callbackUrl
@@ -7,6 +7,11 @@ import { describe, it, expect, mock, beforeEach } from 'bun:test'
 
 // Mock fetch globally to prevent real HTTP requests during metadata discovery
 const mockFetch = mock(() => Promise.resolve(new Response('Not Found', { status: 404 })))
+// Bun runs every test file in one process, so a global left stubbed here is
+// stubbed for every file that runs after this one — which silently breaks any
+// later suite that makes a real request (the pages and webui servers both do).
+const realFetch = globalThis.fetch
+afterAll(() => { globalThis.fetch = realFetch })
 globalThis.fetch = mockFetch as any
 
 import { prepareGoogleOAuth } from '../google-oauth'
