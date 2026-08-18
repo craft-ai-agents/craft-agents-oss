@@ -21,11 +21,16 @@
  *   bun scripts/cross-platform-smoke.mjs --json <file>      also write machine-readable report
  *   bun scripts/cross-platform-smoke.mjs --diff <files...>  compare reports across OSes,
  *                                                            exit 1 on divergence
+ *   ... --diff --expected-os <os1,os2,...> <files...>       also exit 1 when an OS named
+ *                                                            in the list has no report file
+ *                                                            (matched by smoke-report-<os>.json)
  *
  * CI wiring: the test-suite matrix job runs `--json smoke-report-<os>.json`,
- * uploads it as an artifact; a follow-up job runs `--diff` over the three
- * reports. A probe that passes on linux but fails on windows shows up there as
- * named workflow noise instead of a postmortem.
+ * uploads it as an artifact; a follow-up job runs `--diff --expected-os <list>`
+ * over the reports. A probe that passes on linux but fails on windows shows up
+ * there as named workflow noise instead of a postmortem, and a report that is
+ * absent entirely (a leg that died before uploading) is named by --expected-os
+ * rather than silently dropping out of the comparison.
  */
 
 import { spawnSync } from 'node:child_process'
@@ -381,8 +386,19 @@ function loadReport(file) {
   }
 }
 
-function mainDiff(files) {
-  if (files.length < 2) {
+// Extract the OS name from a report's filename (smoke-report-<os>.json) —
+// the join key the CI artifact upload preserves. Returns null for files that
+// don't follow the convention, so an ad-hoc local --diff (no --expected-os)
+// never fabricates OS names.
+function osFromFilename(file) {
+  const base = path.basename(file)
+  const prefix = 'smoke-report-'
+  if (!base.startsWith(prefix) || !base.endsWith('.json')) return null
+  return base.slice(prefix.length, -'.json'.length)
+}
+
+function mainDiff(files, expectedOses) {
+  if (!expectedOses && files.length < 2) {
     console.error(`${TOOL}: --diff requires at least two report files`)
     process.exit(2)
   }
@@ -404,6 +420,18 @@ function mainDiff(files) {
   }
 
   const divergences = []
+
+  // Missing-report detection: when the caller names the expected OS set
+  // (matrix values, joined on the smoke-report-<os>.json filename), a leg
+  // that died before uploading is named here instead of silently vanishing
+  // from the diff. This keeps fail-closed in the script, not the workflow.
+  if (expectedOses) {
+    const provided = new Set(reports.map(r => osFromFilename(r.file)).filter(Boolean))
+    for (const os of expectedOses) {
+      if (!provided.has(os)) divergences.push(`  ! report for ${os} is missing`)
+    }
+  }
+
   for (const report of reports) {
     if (report.parseError) divergences.push(`  ! report ${report.file}: ${report.parseError}`)
   }
@@ -443,6 +471,9 @@ function usage() {
   ${TOOL}                     run probes; exit 1 if any fail on this OS
   ${TOOL} --json <file>       also write a machine-readable report JSON
   ${TOOL} --diff <files...>   compare 2+ report JSONs; exit 1 on divergence
+  ${TOOL} --diff --expected-os <os1,os2,...> <files...>
+                              also exit 1 when an expected OS has no report
+                              file (matched by the smoke-report-<os>.json name)
   ${TOOL} --help              show this help
 `)
 }
@@ -455,7 +486,22 @@ async function main() {
   }
   const diffIdx = args.indexOf('--diff')
   if (diffIdx !== -1) {
-    mainDiff(args.slice(diffIdx + 1).filter(a => !a.startsWith('--')))
+    const rest = args.slice(diffIdx + 1)
+    const files = []
+    let expectedOses = null
+    for (let i = 0; i < rest.length; i++) {
+      const a = rest[i]
+      if (a === '--expected-os') {
+        const val = rest[i + 1]
+        if (val && !val.startsWith('--')) {
+          expectedOses = val.split(',').map(s => s.trim()).filter(Boolean)
+          i++
+        }
+      } else if (!a.startsWith('--')) {
+        files.push(a)
+      }
+    }
+    mainDiff(files, expectedOses && expectedOses.length ? expectedOses : null)
     return
   }
   const jsonIdx = args.indexOf('--json')

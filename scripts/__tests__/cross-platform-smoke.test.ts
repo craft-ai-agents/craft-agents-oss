@@ -108,4 +108,32 @@ describe('scripts/cross-platform-smoke.mjs', () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  it('names a missing OS report when --expected-os lists an OS with no file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cpsmoke-'))
+    try {
+      const src = join(dir, 'src.json')
+      const { status } = runScript(['--json', src])
+      expect(status).toBe(0)
+      const report = JSON.parse(readFileSync(src, 'utf8'))
+
+      // Two report files follow the artifact naming convention; a third
+      // expected OS (macos-latest) has no file.
+      const ubuntu = join(dir, 'smoke-report-ubuntu-latest.json')
+      const windows = join(dir, 'smoke-report-windows-latest.json')
+      writeFileSync(ubuntu, JSON.stringify(report))
+      writeFileSync(windows, JSON.stringify(report))
+
+      // Every expected OS has a report -> no divergence.
+      const complete = runScript(['--diff', '--expected-os', 'ubuntu-latest,windows-latest', ubuntu, windows])
+      expect(complete.status).toBe(0)
+
+      // macos-latest is expected but absent -> the script names it and fails.
+      const missing = runScript(['--diff', '--expected-os', 'ubuntu-latest,windows-latest,macos-latest', ubuntu, windows])
+      expect(missing.status).toBe(1)
+      expect(missing.stdout).toContain('report for macos-latest is missing')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })

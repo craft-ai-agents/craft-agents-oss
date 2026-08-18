@@ -9,6 +9,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Single source of truth for the smoke OS list: the test-suite matrix
+  # fans out from this output and the smoke script's --diff derives its
+  # expected report set from the same output, so adding or removing an OS
+  # here is the only edit needed — no keep-in-sync drift between them.
+  os-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      os_list: ${{ steps.set.outputs.os_list }}
+    steps:
+      - id: set
+        run: echo 'os_list=["ubuntu-latest","windows-latest","macos-latest"]' >> "$GITHUB_OUTPUT"
+
   # Heavy static validation (typecheck:all, i18n lints, icon/anim checks).
   # Deliberately PR-only (see commit 90710df5) — the full test suite is the
   # every-push gate, enforced by the test-suite job below.
@@ -54,10 +66,11 @@ jobs:
   test-suite:
     name: test-suite (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    needs: [os-matrix]
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: ${{ fromJSON(needs.os-matrix.outputs.os_list) }}
     timeout-minutes: 30
 
     steps:
@@ -78,7 +91,7 @@ jobs:
         run: bun run test
 
       # Cross-platform smoke (aj-geddes Quick Start fixture + repo path/env
-      # bug classes) on the same 3-OS matrix. Each OS writes a machine-
+      # bug classes) on the same matrix as the suite above. Each OS writes a
       # readable report that cross-platform-divergence diffs below. Runs even
       # when the suite above fails: the script writes its report before
       # exiting non-zero, so a red leg still uploads an artifact the
@@ -95,7 +108,7 @@ jobs:
           path: smoke-report-${{ matrix.os }}.json
           if-no-files-found: error
 
-  # Diffs the three per-OS smoke reports. A probe that passes on linux but
+  # Diffs the per-OS smoke reports. A probe that passes on linux but
   # fails on windows (or is missing from one OS) is named in the workflow log
   # — the divergence contract that turns future Windows bug-class regressions
   # into workflow noise instead of postmortems. Runs even when a matrix leg
@@ -104,7 +117,7 @@ jobs:
   cross-platform-divergence:
     name: cross-platform smoke divergence check
     runs-on: ubuntu-latest
-    needs: [test-suite]
+    needs: [test-suite, os-matrix]
     if: always()
     steps:
       - name: Checkout
@@ -122,41 +135,15 @@ jobs:
           pattern: smoke-report-*
           merge-multiple: true
 
-      # The diff below only compares the reports it receives, so a leg that
-      # died before uploading would otherwise be silently absent — the job
-      # would compare 2 reports and report "no divergence", missing the OS
-      # whose regression it exists to name. This gate fails loudly when any
-      # expected report is missing, so the divergence contract holds even
-      # when a matrix leg itself is red.
-      #
-      # NOTE: the OS list below must stay in sync with the test-suite
-      # matrix.os values above — the divergence job isn't a matrix job, so
-      # it can't reference ${{ matrix.os }} directly.
-      - name: Verify all three OS reports present
-        if: always()
-        run: |
-          MISSING=""
-          for os in ubuntu-latest windows-latest macos-latest; do
-            if [ ! -f "smoke-reports/smoke-report-$os.json" ]; then
-              MISSING="${MISSING:+$MISSING }$os"
-            fi
-          done
-          if [ -n "$MISSING" ]; then
-            echo "::error::Missing smoke report(s) for: $MISSING — the diff below is incomplete"
-            exit 1
-          fi
-          echo "All 3 OS smoke reports present."
-
+      # The script owns missing-report detection: --expected-os names the
+      # full matrix set (from the os-matrix single source), and a leg that
+      # died before uploading leaves a gap the script names and fails on.
+      # A green "no divergence" line is therefore trustworthy, with no
+      # separate workflow gate to drift out of sync.
       - name: Diff smoke reports across OSes
-        # Runs even when the presence gate above failed, so the partial
-        # picture is still printed alongside the named missing-OS error.
-        # Note: a green "no divergence" line here does NOT mean the job
-        # passed when the gate above errored — the job fails on any red step.
         if: always()
+        env:
+          EXPECTED_OS: "${{ join(fromJSON(needs.os-matrix.outputs.os_list), ',') }}"
         run: |
-          COUNT=$(ls smoke-reports/*.json 2>/dev/null | wc -l)
-          if [ "$COUNT" -lt 2 ]; then
-            echo "::error::Only $COUNT smoke report(s) available — cannot diff. Check the matrix legs."
-            exit 1
-          fi
-          bun scripts/cross-platform-smoke.mjs --diff smoke-reports/*.json
+          shopt -s nullglob
+          bun scripts/cross-platform-smoke.mjs --diff --expected-os "$EXPECTED_OS" smoke-reports/*.json
