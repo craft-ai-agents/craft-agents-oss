@@ -65,6 +65,7 @@ import {
   type CustomEndpointModelEntry,
   type CustomEndpointModelOverrides,
 } from './custom-endpoint-models.ts';
+import { registerKimiCodingModels } from './kimi-coding-models.ts';
 
 // Direct source imports from shared (bundled by bun build)
 import { handleLargeResponse, estimateTokens, tokenLimitFor } from '../../shared/src/utils/large-response.ts';
@@ -495,6 +496,15 @@ function createAuthenticatedRegistry(): {
   }
 
   const modelRegistry = PiModelRegistry.inMemory(authStorage);
+
+  // Craft's pinned Pi catalog predates Kimi K3. Register current Kimi models
+  // under the existing provider while retaining legacy IDs for saved sessions.
+  if (
+    initConfig?.piAuth?.provider === 'kimi-coding'
+    && initConfig.piAuth.credential.type === 'api_key'
+  ) {
+    registerKimiCodingModels(modelRegistry, initConfig.piAuth.credential.key);
+  }
 
   // Register custom endpoint models dynamically via Pi SDK's registerProvider API.
   // This makes arbitrary OpenAI/Anthropic-compatible endpoints work through the Pi SDK
