@@ -1,4 +1,4 @@
-export { WorkspaceCreationScreen } from './WorkspaceCreationScreen'
+export { WorkspaceCreationScreen, type WorkspaceCreationSuccess } from './WorkspaceCreationScreen'
 export { WorkspacePicker } from './WorkspacePicker'
 export { AddWorkspaceStep_Choice } from './AddWorkspaceStep_Choice'
 export { AddWorkspaceStep_CreateNew } from './AddWorkspaceStep_CreateNew'

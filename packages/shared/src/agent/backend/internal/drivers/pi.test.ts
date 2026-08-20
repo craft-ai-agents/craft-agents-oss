@@ -1,5 +1,28 @@
 import { describe, expect, it } from 'bun:test';
-import { piDriver } from './pi.ts';
+import { filterSelectableCopilotModels, piDriver, type RawCopilotModel } from './pi.ts';
+
+describe('filterSelectableCopilotModels', () => {
+  const model = (overrides: Partial<RawCopilotModel> = {}): RawCopilotModel => ({
+    id: 'gpt-5.6-sol',
+    name: 'GPT-5.6 Sol',
+    modelPickerEnabled: true,
+    supportsToolCalls: true,
+    ...overrides,
+  });
+
+  it('keeps picker-enabled models without an explicit policy state', () => {
+    expect(filterSelectableCopilotModels([model()])).toEqual([model()]);
+  });
+
+  it('excludes models that are not picker-enabled, policy-disabled, or lack tool calls', () => {
+    expect(filterSelectableCopilotModels([
+      model({ id: 'missing-picker', modelPickerEnabled: undefined }),
+      model({ id: 'picker-disabled', modelPickerEnabled: false }),
+      model({ id: 'policy-disabled', policy: { state: 'disabled' } }),
+      model({ id: 'no-tools', supportsToolCalls: false }),
+    ])).toEqual([]);
+  });
+});
 
 describe('piDriver.buildRuntime custom endpoint models', () => {
   it('preserves explicit per-model supportsImages values', () => {

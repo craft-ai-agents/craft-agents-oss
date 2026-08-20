@@ -1,0 +1,92 @@
+version: 2.1
+
+# Toolchain Download Manager — smoke первого запуска (спек:
+# docs/superpowers/specs/2026-08-06-toolchain-download-manager-design.md).
+# Fresh-profile ensureAll: скачать+проверить sha256 все 11 инструментов,
+# установить, запустить omp-лончер и python из toolchain.
+#
+# Почему CircleCI: GitHub-hosted runners орг. заблокированы биллингом
+# (эквивалент на GitHub: .github/workflows/toolchain-smoke.yml — там
+# работает только self-hosted linux нога).
+
+commands:
+  smoke-steps:
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: bun install --frozen-lockfile
+      - run:
+          name: Toolchain unit tests
+          command: bun test packages/shared/src/toolchain
+      - run:
+          name: Fresh-profile ensureAll + launcher check
+          command: |
+            SMOKE_DIR="$(mktemp -d /tmp/tc-ci.XXXXXX)"
+            CRAFT_CONFIG_DIR="$SMOKE_DIR" bun scripts/toolchain-smoke.ts
+      - run:
+          name: Fresh-profile runtime-context smoke (no network)
+          command: |
+            SMOKE_DIR="$(mktemp -d /tmp/rc-smoke.XXXXXX)"
+            CRAFT_CONFIG_DIR="$SMOKE_DIR" bun scripts/runtime-context-smoke.ts
+      - run:
+          name: Fresh-profile marketplace smoke (no network)
+          command: |
+            SMOKE_DIR="$(mktemp -d /tmp/mp-smoke.XXXXXX)"
+            CRAFT_CONFIG_DIR="$SMOKE_DIR" bun scripts/marketplace-smoke.ts
+
+jobs:
+  toolchain-smoke-linux:
+    docker:
+      - image: oven/bun:1.3.14-debian
+    steps:
+      - run:
+          name: "Install unzip + xz (zip/tar.xz archives; GNU tar needs xz for -J)"
+          command: apt-get update && apt-get install -y --no-install-recommends unzip xz-utils
+      - smoke-steps
+
+  # F21 production path: container image built on a REAL amd64 Linux host
+  # (no developer-Mac QEMU: bun x64 SIGILLs under qemu-user, and OrbStack
+  # VMs keep running out of disk). Deploys craft-cloud-gateway with the
+  # omp runner baked in. Requires CCI project env (user-managed):
+  #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, CLOUD_RUNS_TOKEN
+  craft-gateway-deploy:
+    docker:
+      - image: oven/bun:1.3.14-debian
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Install node + npm (wrangler CLI runtime)
+          command: apt-get update && apt-get install -y --no-install-recommends nodejs npm
+      - run:
+          name: Deploy craft-cloud-gateway (cf api token scoped)
+          command: |
+            cd apps/cloud-gateway
+            # F21: real amd64 Linux — bake bun+omp into this deployment via
+            # the CI-only Dockerfile variant (amd64, no Mac-QEMU SIGILL).
+            cp Dockerfile Dockerfile.slim.bak && cp Dockerfile.omp Dockerfile
+            npx wrangler deploy
+            mv Dockerfile.slim.bak Dockerfile
+
+  # macOS leg: в плане CCI (rox org) нет macos-экзекуторов
+  # ("Resource class macos.m1.medium.gen2 is not available for your project").
+  # Вернуть job когда тариф разрешит macos.
+  # toolchain-smoke-macos:
+  #   macos:
+  #     xcode: "16.2.0"
+  #   resource_class: macos.m1.medium.gen2
+
+workflows:
+  toolchain-smoke:
+    jobs:
+      - toolchain-smoke-linux
+  gateway-deploy:
+    triggers:
+      - schedule:
+          cron: "0 6 * * *"
+          filters:
+            branches:
+              only: main
+    jobs:
+      - craft-gateway-deploy

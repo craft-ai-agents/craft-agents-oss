@@ -19,4 +19,4 @@ export const PROJECT_COLOR_PALETTE: readonly string[] = [
 
 export type ProjectColorTreatment = 'stripe' | 'stripe-tint'
 
-export const DEFAULT_PROJECT_COLOR_TREATMENT: ProjectColorTreatment = 'stripe'
+export const DEFAULT_PROJECT_COLOR_TREATMENT: ProjectColorTreatment = 'stripe-tint'

@@ -2,24 +2,27 @@
  * View-models for the Kanban board.
  *
  * `column` (where a tile physically sits) is intentionally separate from
- * `statusId` (what the badge shows). The board has 3 columns but a workspace
- * can have more statuses, so a tile may sit in "In Progress" while showing a
- * "Needs Review" badge. `statusToColumn` (see ./status-column) provides only the
- * default placement; tiles may override it.
+ * `statusId` (what the badge shows). The board has 5 built-in columns but a
+ * workspace can have more statuses, so a tile may sit in "In Progress" while
+ * showing a different badge. `statusToColumn` (see ./status-column) provides
+ * only the default placement; tiles may override it.
  *
  * These are presentational view-models. The wiring phase maps real
  * `SessionConfig` / `ProjectConfig` / status data onto these shapes.
  */
 
 /**
- * Board column id. Widened from the original 3-literal union to `string` so a
- * project can define its own columns (see `KanbanColumnDef` in shared). The
- * built-in set still uses these three ids; `BuiltInKanbanColumnId` names them
- * where the default placement / color maps need exhaustiveness.
+ * Board column id. Widened from the original built-in union to `string` so a
+ * workspace/project can introduce custom columns without widening every call site.
  */
 export type KanbanColumnId = string
 
-export type BuiltInKanbanColumnId = 'todo' | 'in-progress' | 'done'
+export type BuiltInKanbanColumnId =
+  | 'backlog'
+  | 'todo'
+  | 'in-progress'
+  | 'needs-review'
+  | 'done'
 
 export type SubtaskRunState = 'done' | 'running' | 'pending' | 'failed'
 
@@ -83,6 +86,8 @@ export interface KanbanTask {
   messageCount?: number
   /** Accrued cost in USD, shown in the footer when available. */
   costUsd?: number
+  /** B6 collection priority (`__priority_x` pseudo-grouping on the board). */
+  priority?: import('@craft-agent/shared/protocol/dto').SessionPriority
 }
 
 export interface KanbanProject {
@@ -90,6 +95,11 @@ export interface KanbanProject {
   name: string
   /** Hex accent color (e.g. "#6366f1"). */
   color: string
+  /** Project folder slug for icon asset path */
+  slug?: string
+  /** Icon filename under projects/{slug}/assets/ */
+  icon?: string
+  workspaceId?: string
 }
 
 export interface KanbanColumnMeta {
@@ -106,6 +116,16 @@ export interface KanbanColumnMeta {
   color?: string
   /** Status auto-applied when a card is dropped here (per-project columns). */
   dropStatusId?: string
+  /** When true, column starts collapsed (narrow rail). Built-in backlog defaults true. */
+  defaultCollapsed?: boolean
+  /** Runtime collapsed state (board UI / config override). */
+  collapsed?: boolean
+  /** Column auto-prompt enabled — drop enqueues agent turn with `prompt`. */
+  promptEnabled?: boolean
+  /** Prompt text enqueued on drop when `promptEnabled` is true. */
+  prompt?: string
+  /** Built-in columns cannot be removed; custom columns can. */
+  isBuiltIn?: boolean
 }
 
 /** One selectable model in the subtask composer's provider→model picker. */

@@ -9,7 +9,8 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useAtomValue } from 'jotai'
-import { FolderKanban, FolderOpen, Plus, Trash2, Upload } from 'lucide-react'
+import { FolderKanban, FolderOpen, Plus, Trash2, Upload, ImagePlus } from 'lucide-react'
+import { ProjectIcon, invalidateProjectIconCache } from '@/components/projects/ProjectIcon'
 import { toast } from 'sonner'
 import { useActiveWorkspace, useAppShellContext } from '@/context/AppShellContext'
 import { navigate, routes } from '@/lib/navigate'
@@ -205,6 +206,63 @@ export default function ProjectInfoPage({ projectSlug }: ProjectInfoPageProps) {
     }
   }, [workspaceId, project, refreshAssets, t])
 
+  const handleUploadIcon = useCallback(async (file: File) => {
+    if (!workspaceId || !project) return
+    const allowed = /\.(png|jpe?g|webp|gif|svg|ico)$/i
+    if (!allowed.test(file.name)) {
+      toast.error(t('projectInfo.iconInvalidType'))
+      return
+    }
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const bytes = new Uint8Array(arrayBuffer)
+      let binary = ''
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!)
+      const base64 = btoa(binary)
+      const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '.png'
+      const filename = `project-icon${ext.toLowerCase()}`
+      if (project.config.icon && project.config.icon !== filename) {
+        try {
+          await window.electronAPI.deleteProjectAsset(workspaceId, project.config.slug, project.config.icon)
+        } catch {
+          // ignore missing old icon
+        }
+      }
+      try {
+        await window.electronAPI.deleteProjectAsset(workspaceId, project.config.slug, filename)
+      } catch {
+        // ignore
+      }
+      const asset = await window.electronAPI.uploadProjectAsset(workspaceId, project.config.slug, {
+        filename,
+        base64,
+      })
+      await window.electronAPI.updateProject(workspaceId, project.config.slug, {
+        icon: asset.filename,
+      })
+      invalidateProjectIconCache(workspaceId, project.config.slug)
+      await loadProject()
+      toast.success(t('projectInfo.iconUploaded'))
+    } catch (err) {
+      console.error('[ProjectInfoPage] Icon upload failed:', err)
+      toast.error(t('projectInfo.iconUploadFailed'))
+    }
+  }, [workspaceId, project, loadProject, t])
+
+  const handleClearIcon = useCallback(async () => {
+    if (!workspaceId || !project?.config.icon) return
+    try {
+      await window.electronAPI.deleteProjectAsset(workspaceId, project.config.slug, project.config.icon)
+      await window.electronAPI.updateProject(workspaceId, project.config.slug, { icon: '' })
+      invalidateProjectIconCache(workspaceId, project.config.slug)
+      await loadProject()
+      toast.success(t('projectInfo.iconCleared'))
+    } catch (err) {
+      console.error('[ProjectInfoPage] Clear icon failed:', err)
+      toast.error(t('projectInfo.iconUploadFailed'))
+    }
+  }, [workspaceId, project, loadProject, t])
+
   return (
     <Info_Page
       loading={loading}
@@ -215,7 +273,16 @@ export default function ProjectInfoPage({ projectSlug }: ProjectInfoPageProps) {
       {project && (
         <Info_Page.Content>
           <Info_Page.Hero
-            avatar={<FolderKanban className="h-6 w-6 text-foreground/60" />}
+            avatar={
+              <ProjectIcon
+                workspaceId={workspaceId}
+                projectSlug={project.config.slug}
+                iconFilename={project.config.icon}
+                color={project.config.color}
+                className="h-6 w-6"
+                iconClassName="h-6 w-6 text-foreground/60"
+              />
+            }
             title={project.config.name}
             tagline={project.config.description ?? t('projectInfo.taglineFallback')}
           />
@@ -348,6 +415,42 @@ export default function ProjectInfoPage({ projectSlug }: ProjectInfoPageProps) {
                       <FolderOpen className="h-3.5 w-3.5 mr-1" />
                       {t('projectInfo.workingDirectoryPicker')}
                     </Button>
+                  </div>
+                </Field>
+                <Field
+                  label={t('projectInfo.icon')}
+                  hint={t('projectInfo.iconHint')}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-foreground/5 ring-1 ring-border/50">
+                      <ProjectIcon
+                        workspaceId={workspaceId}
+                        projectSlug={project.config.slug}
+                        iconFilename={project.config.icon}
+                        color={editColor || project.config.color}
+                        className="h-5 w-5"
+                        iconClassName="h-5 w-5 text-foreground/60"
+                      />
+                    </div>
+                    <label className="inline-flex items-center gap-1 h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors cursor-pointer">
+                      <ImagePlus className="h-3.5 w-3.5" />
+                      {t('projectInfo.iconUpload')}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/x-icon,.ico"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0]
+                          if (file) await handleUploadIcon(file)
+                          e.target.value = ''
+                        }}
+                      />
+                    </label>
+                    {project.config.icon && (
+                      <Button size="sm" variant="ghost" onClick={() => void handleClearIcon()}>
+                        {t('projectInfo.iconClear')}
+                      </Button>
+                    )}
                   </div>
                 </Field>
                 <Field

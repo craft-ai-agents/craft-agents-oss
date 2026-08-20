@@ -32,6 +32,7 @@ import { ModelChip } from './ModelChip'
 import { SubtaskRow } from './SubtaskRow'
 import { SubtaskProgress } from './SubtaskProgress'
 import type { KanbanModelProviderGroup, KanbanProject, KanbanTask } from './types'
+import { ProjectIcon } from '@/components/projects/ProjectIcon'
 
 /**
  * Brand icon for a provider key. Providers with a bundled SVG (anthropic,
@@ -73,6 +74,11 @@ interface TaskTileProps {
   subtaskModelGroups?: KanbanModelProviderGroup[]
   /** Model id pre-selected in the composer (defaults to the first catalog model). */
   defaultSubtaskModel?: string
+  /** Column accent from boardConfig (preferred over localStorage atom). */
+  columnAccent?: string
+  selected?: boolean
+  multiSelectActive?: boolean
+  onSelect?: (shiftKey: boolean) => void
 }
 
 /**
@@ -99,11 +105,15 @@ export function TaskTile({
   onRunSubtasks,
   subtaskModelGroups,
   defaultSubtaskModel,
+  columnAccent,
+  selected = false,
+  multiSelectActive = false,
+  onSelect,
 }: TaskTileProps) {
   const { t } = useTranslation()
   const livePulseEnabled = useAtomValue(kanbanLivePulseAtom)
   const columnColors = useKanbanColumnColors()
-  const accent = columnColors.get(task.column)?.solid ?? 'var(--primary)'
+  const accent = columnAccent ?? columnColors.get(task.column)?.solid ?? 'var(--primary)'
 
   const color = project?.color ?? null
   const showStripe = !!color
@@ -134,17 +144,35 @@ export function TaskTile({
     <div
       role="button"
       tabIndex={0}
-      onClick={onClick}
-      onKeyDown={e => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onClick?.()
+      aria-pressed={onSelect ? selected : undefined}
+      onClick={event => {
+        if (
+          onSelect &&
+          (multiSelectActive || event.metaKey || event.ctrlKey || event.shiftKey)
+        ) {
+          event.preventDefault()
+          onSelect(event.shiftKey)
+          return
+        }
+        onClick?.()
+      }}
+      onKeyDown={event => {
+        if (event.key === ' ' && onSelect) {
+          event.preventDefault()
+          onSelect(event.shiftKey)
+          return
+        }
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          if (multiSelectActive && onSelect) onSelect(event.shiftKey)
+          else onClick?.()
         }
       }}
       className={cn(
         'group relative overflow-hidden rounded-lg border border-border/60 bg-card shadow-minimal',
         'cursor-pointer transition-colors hover:border-border focus-visible:outline-none',
-        'focus-visible:ring-2 focus-visible:ring-ring/50'
+        'focus-visible:ring-2 focus-visible:ring-ring/50',
+        selected && 'border-foreground/60 bg-foreground/[0.045]',
       )}
       style={
         isLive
@@ -169,6 +197,30 @@ export function TaskTile({
         />
       )}
 
+      {onSelect && (
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={selected}
+          aria-label={t('collection.table.select', { title: task.title })}
+          data-no-dnd="true"
+          onPointerDown={event => event.stopPropagation()}
+          onClick={event => {
+            event.stopPropagation()
+            onSelect(event.shiftKey)
+          }}
+          onKeyDown={event => event.stopPropagation()}
+          className={cn(
+            'absolute left-2 top-2 z-10 grid h-5 w-5 place-items-center rounded border border-border bg-card text-foreground shadow-minimal transition-opacity',
+            selected || multiSelectActive
+              ? 'opacity-100'
+              : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+          )}
+        >
+          {selected && <Check className="h-3.5 w-3.5" strokeWidth={2.5} />}
+        </button>
+      )}
+
       {onEdit && (
         <button
           type="button"
@@ -186,17 +238,28 @@ export function TaskTile({
         </button>
       )}
 
-      <div className="relative p-3 pl-3.5">
+      <div className={cn('relative p-2 pl-2.5', onSelect && 'pl-9')}>
         {(project || task.isFlagged) && (
           // Right padding keeps the flag clear of the hover-revealed corner pencil.
           <div className={cn('mb-1.5 flex items-center justify-between gap-2', onEdit && task.isFlagged && 'pr-7')}>
             {project ? (
               <span className="inline-flex min-w-0 items-center gap-1 text-[11px] font-medium text-foreground/55">
-                <span
-                  className="h-1.5 w-1.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: project.color }}
-                  aria-hidden
-                />
+                {project.icon ? (
+                  <ProjectIcon
+                    workspaceId={project.workspaceId}
+                    projectSlug={project.slug}
+                    iconFilename={project.icon}
+                    color={project.color}
+                    className="h-3 w-3"
+                    iconClassName="h-3 w-3 text-foreground/50"
+                  />
+                ) : (
+                  <span
+                    className="h-1.5 w-1.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: project.color }}
+                    aria-hidden
+                  />
+                )}
                 <span className="truncate">{project.name}</span>
               </span>
             ) : (
@@ -301,10 +364,9 @@ export function TaskTile({
           </div>
         )}
 
-        <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-border/40 pt-2">
-          <ModelChip model={task.model} />
+        <div className="mt-2 flex items-center gap-2 border-t border-border/40 pt-1.5">
           {(relativeTime || hasMessages) && (
-            <div className="flex shrink-0 items-center gap-2 text-[11px] text-foreground/45">
+            <div className="flex min-w-0 flex-1 items-center gap-2 text-[11px] text-foreground/45">
               {relativeTime && (
                 <span className="inline-flex items-center gap-0.5 tabular-nums">
                   <Clock className="h-3 w-3" strokeWidth={2} />
@@ -319,6 +381,8 @@ export function TaskTile({
               )}
             </div>
           )}
+          {/* Model chip stays far right of the footer. */}
+          <ModelChip model={task.model} className="ml-auto shrink-0" />
         </div>
       </div>
     </div>

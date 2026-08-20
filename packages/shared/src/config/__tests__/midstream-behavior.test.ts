@@ -18,11 +18,15 @@ describe('defaultMidStreamBehavior', () => {
     expect(defaultMidStreamBehavior('anthropic')).toBe('queue')
   })
 
+  it("returns 'queue' for anthropic_compat", () => {
+    expect(defaultMidStreamBehavior('anthropic_compat')).toBe('queue')
+  })
+
   it("returns 'steer' for pi (Pi's native steer is non-destructive)", () => {
     expect(defaultMidStreamBehavior('pi')).toBe('steer')
   })
 
-  it("returns 'steer' for pi_compat (same backend as pi)", () => {
+  it("returns 'steer' for generic pi_compat endpoints", () => {
     expect(defaultMidStreamBehavior('pi_compat')).toBe('steer')
   })
 })
@@ -42,6 +46,20 @@ describe('resolveMidStreamBehavior', () => {
   it('falls back to default when midStreamBehavior is undefined (legacy connection)', () => {
     expect(resolveMidStreamBehavior(baseAnthropic)).toBe('queue')
     expect(resolveMidStreamBehavior(basePi)).toBe('steer')
+  })
+
+  it("returns 'queue' for anthropic_compat endpoints", () => {
+    expect(resolveMidStreamBehavior({
+      providerType: 'anthropic_compat',
+      customEndpoint: { api: 'anthropic-messages' },
+    })).toBe('queue')
+  })
+
+  it("keeps openai-compatible compat endpoints on 'steer'", () => {
+    expect(resolveMidStreamBehavior({
+      providerType: 'pi_compat',
+      customEndpoint: { api: 'openai-completions' },
+    })).toBe('steer')
   })
 
   it('falls back to default when midStreamBehavior has an unknown value (corrupt config.json)', () => {

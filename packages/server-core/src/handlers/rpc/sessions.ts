@@ -1,7 +1,14 @@
 import { readFile, writeFile, stat } from 'fs/promises'
 import { join } from 'path'
-import { RPC_CHANNELS, type FileAttachment, type SendMessageOptions, type SessionEvent } from '@craft-agent/shared/protocol'
-import type { StoredAttachment } from '@craft-agent/core/types'
+import {
+  RPC_CHANNELS,
+  type BulkUpdateSessionsInput,
+  type BulkUpdateSessionsResult,
+  type FileAttachment,
+  type SendMessageOptions,
+  type SessionEvent,
+} from '@craft-agent/shared/protocol'
+import type { StoredAttachment, SessionMemoryMode } from '@craft-agent/core/types'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { perf } from '@craft-agent/shared/utils'
 import { isValidThinkingLevel, THINKING_LEVEL_IDS } from '@craft-agent/shared/agent/thinking-levels'
@@ -10,6 +17,7 @@ const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { setTransferableHandler } from './transfer'
+import { assertValidBulkUpdateInput, assertValidBulkUpdatePatch } from '../../sessions/bulk-labels'
 
 interface ClientSessionWatchState {
   watcher: import('fs').FSWatcher
@@ -115,8 +123,11 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sessions.RESPOND_TO_PERMISSION,
   RPC_CHANNELS.sessions.RESPOND_TO_CREDENTIAL,
   RPC_CHANNELS.sessions.COMMAND,
+  RPC_CHANNELS.sessions.BULK_UPDATE,
   RPC_CHANNELS.sessions.GET_PENDING_PLAN_EXECUTION,
   RPC_CHANNELS.sessions.GET_PERMISSION_MODE_STATE,
+  RPC_CHANNELS.sessions.SET_MEMORY_MODE,
+  RPC_CHANNELS.sessions.GET_PROVENANCE,
   RPC_CHANNELS.sessions.SEARCH_CONTENT,
   RPC_CHANNELS.sessions.GET_FILES,
   RPC_CHANNELS.sessions.GET_NOTES,
@@ -339,6 +350,14 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
         return sessionManager.setSessionProjectId(sessionId, command.projectId)
       case 'setKanbanColumn':
         return sessionManager.setKanbanColumn(sessionId, command.column)
+      case 'setPriority':
+        return sessionManager.setPriority(sessionId, command.priority)
+      case 'setDueDate':
+        return sessionManager.setDueDate(sessionId, command.dueDate)
+      case 'setRank':
+        return sessionManager.setRank(sessionId, command.rank)
+      case 'reorderRank':
+        return sessionManager.reorderRank(sessionId, command.prevId, command.nextId)
       case 'showInFinder': {
         const sessionPath = sessionManager.getSessionPath(sessionId)
         if (sessionPath) {
@@ -379,11 +398,54 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
         return sessionManager.removeMessageAnnotation(sessionId, command.messageId, command.annotationId)
       case 'updateAnnotation':
         return sessionManager.updateMessageAnnotation(sessionId, command.messageId, command.annotationId, command.patch)
+      case 'undo':
+        return sessionManager.undoLastUserMessage(sessionId)
       default: {
         const _exhaustive: never = command
         throw new Error(`Unknown session command: ${JSON.stringify(command)}`)
       }
     }
+  })
+
+  // B4: one caller-authorized, per-target atomic collection update.
+  server.handle(RPC_CHANNELS.sessions.BULK_UPDATE, async (
+    ctx,
+    input: BulkUpdateSessionsInput,
+  ): Promise<BulkUpdateSessionsResult> => {
+    const callerWorkspaceId = ctx.workspaceId ?? (
+      ctx.webContentsId === null
+        ? undefined
+        : deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId)
+    )
+    if (!callerWorkspaceId) {
+      throw new Error('bulk_workspace_context_required')
+    }
+
+    assertValidBulkUpdateInput(input)
+    if (input.workspaceId !== callerWorkspaceId) {
+      throw new Error('bulk_workspace_mismatch')
+    }
+    assertValidBulkUpdatePatch(input.patch)
+    if (input.ids.length === 0) {
+      return { ok: [], failed: [] }
+    }
+
+    await sessionManager.waitForInit()
+    const result = await sessionManager.bulkUpdateSessions(
+      callerWorkspaceId,
+      { ids: input.ids, patch: input.patch },
+    )
+
+    if (result.ok.length > 0) {
+      pushTyped(
+        server,
+        RPC_CHANNELS.sessions.BULK_CHANGED,
+        { to: 'workspace', workspaceId: callerWorkspaceId },
+        { workspaceId: callerWorkspaceId, ids: result.ok, patch: input.patch },
+      )
+    }
+
+    return result
   })
 
   // Get pending plan execution state (for reload recovery)
@@ -400,6 +462,25 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
     sessionId: string
   ) => {
     return sessionManager.getSessionPermissionModeState(sessionId)
+  })
+
+  // Set the self-learning memory mode for a session (spec F3).
+  // Persists to the session header and broadcasts session_metadata_changed.
+  server.handle(RPC_CHANNELS.sessions.SET_MEMORY_MODE, async (
+    _ctx,
+    sessionId: string,
+    mode: SessionMemoryMode
+  ) => {
+    return sessionManager.setSessionMemoryMode(sessionId, mode)
+  })
+
+  // Memory provenance (spec F4): lessons/skills injected into the session's
+  // prompts. Null for unknown sessions or sessions with no provenance record.
+  server.handle(RPC_CHANNELS.sessions.GET_PROVENANCE, async (
+    _ctx,
+    sessionId: string
+  ) => {
+    return sessionManager.getSessionProvenance(sessionId)
   })
 
   // ============================================================

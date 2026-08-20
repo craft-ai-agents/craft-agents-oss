@@ -1,0 +1,124 @@
+{
+  "$comment": "Pinned snapshots of bundled skill packs. Regenerate with git clone --depth 1 <origin> + record rev-parse HEAD. Installed into ~/.agents/skills/<skill> by shared/skills/bundled.ts (ensureBundledSkills).",
+  "version": 1,
+  "packs": [
+    {
+      "slug": "superpowers",
+      "origin": "https://github.com/obra/superpowers",
+      "commit": "44c9b2d6e889982ac18c27d05a19fefe335194e1",
+      "license": "MIT",
+      "licenseFile": "LICENSE",
+      "skills": [
+        "brainstorming",
+        "dispatching-parallel-agents",
+        "executing-plans",
+        "finishing-a-development-branch",
+        "receiving-code-review",
+        "requesting-code-review",
+        "subagent-driven-development",
+        "systematic-debugging",
+        "test-driven-development",
+        "using-git-worktrees",
+        "using-superpowers",
+        "verification-before-completion",
+        "writing-plans",
+        "writing-skills"
+      ]
+    },
+    {
+      "slug": "vercel-agent-skills",
+      "origin": "https://github.com/vercel-labs/agent-skills",
+      "commit": "7c180d9044c9ae2b442b567aad4e42a28dd5ed62",
+      "license": "MIT",
+      "licenseFile": null,
+      "licenseNote": "Upstream repo has no LICENSE file; MIT stated in README License section.",
+      "skills": [
+        "composition-patterns",
+        "deploy-to-vercel",
+        "react-best-practices",
+        "react-native-skills",
+        "react-view-transitions",
+        "vercel-cli-with-tokens",
+        "vercel-optimize",
+        "web-design-guidelines",
+        "writing-guidelines"
+      ]
+    },
+    {
+      "slug": "vercel-next-skills",
+      "origin": "https://github.com/vercel-labs/next-skills",
+      "commit": "0fd0b3e33be082735f5e791ea5c9cd6b80376871",
+      "license": "MIT",
+      "licenseFile": "LICENSE",
+      "upstream": {
+        "origin": "https://github.com/vercel/next.js",
+        "path": "skills",
+        "commit": "0fd0b3e33be082735f5e791ea5c9cd6b80376871",
+        "note": "vercel-labs/next-skills is a deprecated stub repo (README pointer only); real skills live in vercel/next.js skills/ on canary. Vendored from upstream sparse checkout."
+      },
+      "skills": [
+        "next-cache-components-adoption",
+        "next-cache-components-optimizer",
+        "next-dev-loop",
+        "next-partial-prefetching-adoption"
+      ]
+    },
+    {
+      "slug": "mattpocock-skills",
+      "origin": "https://github.com/mattpocock/skills",
+      "commit": "84fdeffd12f2ee307994d1eb6feb48173b6e0502",
+      "license": "MIT",
+      "licenseFile": "LICENSE",
+      "note": "Upstream groups skills under category dirs (engineering/, productivity/, misc/, in-progress/); vendored flat by leaf skill dir.",
+      "skills": [
+        "ask-matt",
+        "claude-handoff",
+        "code-review",
+        "codebase-design",
+        "diagnosing-bugs",
+        "domain-modeling",
+        "git-guardrails-claude-code",
+        "grill-me",
+        "grill-with-docs",
+        "grilling",
+        "handoff",
+        "implement",
+        "improve-codebase-architecture",
+        "loop-me",
+        "migrate-to-shoehorn",
+        "prototype",
+        "research",
+        "resolving-merge-conflicts",
+        "scaffold-exercises",
+        "setup-matt-pocock-skills",
+        "setup-pre-commit",
+        "setup-ts-deep-modules",
+        "tdd",
+        "teach",
+        "to-questionnaire",
+        "to-spec",
+        "to-tickets",
+        "triage",
+        "wait-what",
+        "wayfinder",
+        "wizard",
+        "writing-beats",
+        "writing-for-agents",
+        "writing-fragments",
+        "writing-shape"
+      ]
+    },
+    {
+      "slug": "craft-knowledge",
+      "origin": "bundled",
+      "commit": "local",
+      "license": "MIT",
+      "licenseFile": null,
+      "note": "First-party Craft knowledge skills (P4 publication + P6 research-and-publish). Not cloned from an external origin; shipped under resources/skills/craft-knowledge.",
+      "skills": [
+        "knowledge-distill",
+        "research-and-publish"
+      ]
+    }
+  ]
+}

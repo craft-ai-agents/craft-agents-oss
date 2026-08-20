@@ -8,6 +8,7 @@ import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import type { StructuredInputState, StructuredResponse, InputMode } from './structured/types'
 import { getStructuredInputMaxHeight } from './structured-height'
 import { BackgroundFinishedChip } from '../BackgroundFinishedChip'
+import { CloudRunsChip } from '@/components/cloud-runs/CloudRunsChip'
 
 interface InputContainerProps extends Omit<FreeFormInputProps, 'inputRef'> {
   /** Structured input state - when present, shows structured UI instead of freeform */
@@ -18,6 +19,11 @@ interface InputContainerProps extends Omit<FreeFormInputProps, 'inputRef'> {
   textareaRef?: React.RefObject<RichTextInputHandle>
   /** Per-frame callback during height animation (for scroll sync) */
   onAnimatedHeightChange?: (delta: number) => void
+  /**
+   * Show the cloud-runs chip in freeform mode. Defaults to true.
+   * Forced off when compactMode is true (EditPopover / inline chats).
+   */
+  showCloudRunsChip?: boolean
 }
 
 // Animation timing - synced across height and opacity
@@ -49,6 +55,7 @@ export function InputContainer({
   compactMode,
   isProcessing,
   onAnimatedHeightChange,
+  showCloudRunsChip = true,
   ...freeFormProps
 }: InputContainerProps) {
   const appShellContext = useOptionalAppShellContext()
@@ -293,6 +300,12 @@ export function InputContainer({
        * so the chip's soft shadow isn't clipped. */}
       {mode === 'freeform' && freeFormProps.sessionId && (
         <BackgroundFinishedChip sessionId={freeFormProps.sessionId} />
+      )}
+      {/* Cloud runs entry point — same float position pattern;
+       * self-contained, renders nothing when the feature is disabled.
+       * Hidden in compactMode (EditPopover) even if showCloudRunsChip is true. */}
+      {showCloudRunsChip && !compactMode && mode === 'freeform' && freeFormProps.sessionId && (
+        <CloudRunsChip sessionId={freeFormProps.sessionId} />
       )}
     </div>
   )

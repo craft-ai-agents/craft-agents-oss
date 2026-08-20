@@ -12,11 +12,14 @@ import type {
   ContentBadge,
   ToolDisplayMeta,
   AnnotationV1,
+  SessionMemoryMode,
   PermissionRequest as BasePermissionRequest,
 } from '@craft-agent/core/types'
+import type { KnowledgeRef } from '@craft-agent/core/knowledge'
 import type { PermissionMode } from '../agent/mode-types'
 import type { ThinkingLevel } from '../agent/thinking-levels'
-import type { CustomEndpointConfig } from '../config/llm-connections'
+import type { CustomEndpointConfig, LlmProviderType } from '../config/llm-connections'
+import type { ModelDefinition } from '../config/models'
 import type {
   AuthRequest as SharedAuthRequest,
   CredentialInputMode as SharedCredentialInputMode,
@@ -40,6 +43,12 @@ export type SessionStatus = string
 export type BuiltInStatusId = 'todo' | 'in-progress' | 'needs-review' | 'done' | 'cancelled'
 
 /**
+ * Collection-view priority for linear session lists/tables.
+ * Default coerce to 'none' on read when absent.
+ */
+export type SessionPriority = 'none' | 'urgent' | 'high' | 'medium' | 'low'
+
+/**
  * Electron-specific Session type (includes runtime state).
  * Extends core Session with messages array and processing state.
  */
@@ -56,6 +65,8 @@ export interface Session {
   isFlagged?: boolean
   /** Permission mode for this session ('safe', 'ask', 'allow-all') */
   permissionMode?: PermissionMode
+  /** Self-learning memory mode for this session (default 'persistent' when absent) */
+  memoryMode?: SessionMemoryMode
   sessionStatus?: SessionStatus
   /** Labels (additive tags, many-per-session — bare IDs or "id::value" entries) */
   labels?: string[]
@@ -101,12 +112,22 @@ export interface Session {
   isArchived?: boolean
   archivedAt?: number
   supportsBranching?: boolean
+  /** Message id this session was branched from (persisted); present on branch sessions */
+  branchFromMessageId?: string
+  /** Parent session id this session was branched from — UI lineage for family grouping in the sidebar */
+  branchFromSessionId?: string
   /** Workspace-scoped project id this session is bound to (undefined = unbound) */
   projectId?: string
   /** Parent session id — when set, this session is a subtask of the parent (undefined = top-level task) */
   parentSessionId?: string
   /** Kanban board column id ('todo' | 'in-progress' | 'done'); independent of sessionStatus */
   kanbanColumn?: string
+  /** LexoRank string for stable manual ordering within a collection view */
+  rank?: string
+  /** Collection priority; default coerce to 'none' on read when absent */
+  priority?: SessionPriority
+  /** Due date as epoch ms (UTC noon when set from date pickers); null clears */
+  dueDate?: number | null
   /** Tasks Conductor: slug of the task spec this session belongs to. */
   taskSlug?: string
   /** Tasks Conductor: id of the run that spawned this child session (child nodes only). */
@@ -374,11 +395,13 @@ export interface PermissionModeState {
 export type SessionEvent =
   | { type: 'text_delta'; sessionId: string; delta: string; turnId?: string }
   | { type: 'text_complete'; sessionId: string; text: string; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string; timestamp?: number; messageId?: string }
+  | { type: 'thinking_delta'; sessionId: string; text: string; turnId?: string }
+  | { type: 'thinking_complete'; sessionId: string; text: string; turnId?: string }
   | { type: 'tool_start'; sessionId: string; toolName: string; toolUseId: string; toolInput: Record<string, unknown>; toolIntent?: string; toolDisplayName?: string; toolDisplayMeta?: ToolDisplayMeta; turnId?: string; parentToolUseId?: string; timestamp?: number }
   | { type: 'tool_result'; sessionId: string; toolUseId: string; toolName: string; result: string; turnId?: string; parentToolUseId?: string; isError?: boolean; timestamp?: number }
   | { type: 'error'; sessionId: string; error: string; timestamp?: number }
   | { type: 'typed_error'; sessionId: string; error: TypedError; timestamp?: number }
-  | { type: 'complete'; sessionId: string; tokenUsage?: Session['tokenUsage']; hasUnread?: boolean; backgroundTasksAlive?: boolean }
+  | { type: 'complete'; sessionId: string; tokenUsage?: Session['tokenUsage']; hasUnread?: boolean; backgroundTasksAlive?: boolean; reason?: 'complete' | 'interrupted' | 'error' | 'timeout'; didReceiveNewFinalMessage?: boolean }
   | { type: 'interrupted'; sessionId: string; message?: Message; queuedMessages?: string[] }
   | { type: 'status'; sessionId: string; message: string; statusType?: 'compacting' }
   | { type: 'info'; sessionId: string; message: string; statusType?: 'compaction_complete'; level?: 'info' | 'warning' | 'error' | 'success'; timestamp?: number }
@@ -408,7 +431,7 @@ export type SessionEvent =
   | { type: 'name_changed'; sessionId: string; name?: string }
   | { type: 'session_model_changed'; sessionId: string; model: string | null }
   | { type: 'session_status_changed'; sessionId: string; sessionStatus: SessionStatus }
-  | { type: 'session_metadata_changed'; sessionId: string; changes: Partial<Pick<Session, 'taskNodeCount' | 'kanbanColumn' | 'taskDraft' | 'taskSlug' | 'projectId'>> }
+  | { type: 'session_metadata_changed'; sessionId: string; changes: Partial<Pick<Session, 'taskNodeCount' | 'kanbanColumn' | 'taskDraft' | 'taskSlug' | 'projectId' | 'memoryMode' | 'rank' | 'priority' | 'dueDate'>> }
   | { type: 'session_deleted'; sessionId: string }
   | { type: 'session_created'; sessionId: string }
   | { type: 'session_shared'; sessionId: string; sharedUrl: string }
@@ -419,6 +442,7 @@ export type SessionEvent =
   | { type: 'usage_update'; sessionId: string; tokenUsage: { inputTokens: number; contextWindow?: number } }
   | { type: 'message_annotations_updated'; sessionId: string; messageId: string; annotations: AnnotationV1[] }
   | { type: 'working_directory_error'; sessionId: string; error: string }
+  | { type: 'messages_replaced'; sessionId: string; messages: Message[] }
 
 export interface SendMessageOptions {
   skillSlugs?: string[]
@@ -431,6 +455,47 @@ export interface SendMessageOptions {
    * surfacing) that should wake the agent without looking user-authored.
    */
   hidden?: boolean
+}
+
+// ---------------------------------------------------------------------------
+// Bulk session updates (B4) — sessions:bulkUpdate RPC.
+// ---------------------------------------------------------------------------
+
+/** Limit enforced on sessions:bulkUpdate; beyond it the call fails with bulk_limit. */
+export const BULK_UPDATE_MAX_IDS = 200
+
+export interface BulkUpdateSessionsPatch {
+  sessionStatus?: SessionStatus
+  priority?: SessionPriority
+  /** null clears dueDate. */
+  dueDate?: number | null
+  projectId?: string | null
+  /** Replaces every target's labels. Cannot be combined with label delta operations. */
+  labels?: string[]
+  /** Adds labels without removing target-specific labels. */
+  addLabels?: string[]
+  /** Removes labels without removing other target-specific labels. */
+  removeLabels?: string[]
+  isFlagged?: boolean
+  isArchived?: boolean
+  kanbanColumn?: string | null
+}
+
+export interface BulkUpdateSessionsInput {
+  workspaceId: string
+  ids: string[]
+  patch: BulkUpdateSessionsPatch
+}
+
+export interface BulkUpdateSessionsResult {
+  ok: string[]
+  failed: Array<{ id: string; error: string }>
+}
+
+export interface SessionsBulkChangedEvent {
+  workspaceId: string
+  ids: string[]
+  patch: BulkUpdateSessionsPatch
 }
 
 // ---------------------------------------------------------------------------
@@ -454,6 +519,10 @@ export type SessionCommand =
   | { type: 'setLabels'; labels: string[] }
   | { type: 'setProjectId'; projectId: string | null }
   | { type: 'setKanbanColumn'; column: string | null }
+  | { type: 'setPriority'; priority: SessionPriority }
+  | { type: 'setDueDate'; dueDate: number | null }
+  | { type: 'setRank'; rank: string }
+  | { type: 'reorderRank'; prevId?: string; nextId?: string }
   | { type: 'showInFinder' }
   | { type: 'copyPath' }
   | { type: 'shareToViewer' }
@@ -468,6 +537,12 @@ export type SessionCommand =
   | { type: 'addAnnotation'; messageId: string; annotation: AnnotationV1 }
   | { type: 'removeAnnotation'; messageId: string; annotationId: string }
   | { type: 'updateAnnotation'; messageId: string; annotationId: string; patch: Partial<AnnotationV1> }
+  | { type: 'undo' }
+
+export interface UndoResult {
+  success: boolean
+  userMessage?: string
+}
 
 export interface NewChatActionParams {
   input?: string
@@ -558,6 +633,196 @@ export interface FileSearchResult {
 }
 
 // ---------------------------------------------------------------------------
+// Notes types
+// ---------------------------------------------------------------------------
+
+export interface NoteLink {
+  target: string
+  alias?: string
+  line: number
+}
+
+export interface NoteBacklink {
+  noteId: string
+  title: string
+  path: string
+  line: number
+  preview: string
+}
+
+export interface NoteAsset {
+  name: string
+  path: string
+  relativePath: string
+  size: number
+  mimeType: string
+  referencedBy?: Array<{ noteId: string; title: string }>
+}
+
+export interface NoteSummary {
+  id: string
+  title: string
+  path: string
+  relativePath: string
+  tags: string[]
+  properties: Record<string, unknown>
+  links: NoteLink[]
+  assetRefs: string[]
+  updatedAt: number
+  createdAt: number
+  size: number
+}
+
+export interface NoteDocument extends NoteSummary {
+  content: string
+  backlinks: NoteBacklink[]
+}
+
+export interface NoteRenameImpact {
+  noteId: string
+  nextNoteId: string
+  nextTitle: string
+  updatedNotes: Array<{ noteId: string; title: string; path: string; replacements: number }>
+  totalReplacements: number
+}
+
+export interface NoteRenameResult {
+  note: NoteDocument
+  updatedNotes: Array<{ noteId: string; path: string; replacements: number }>
+}
+
+export interface NoteAssetImportResult {
+  asset: NoteAsset
+  markdown: string
+}
+
+export interface NoteAssetRenameResult {
+  asset: NoteAsset
+  updatedNotes: Array<{ noteId: string; path: string; replacements: number }>
+}
+
+export interface NoteChangedPayload {
+  workspaceId: string
+  reason?: 'external' | 'save' | 'create' | 'rename' | 'delete' | 'asset' | 'properties'
+  noteId?: string
+}
+
+// ---------------------------------------------------------------------------
+// Knowledge provider types (P1 read-only, spec 03)
+// ---------------------------------------------------------------------------
+
+/** Payload of knowledge:changed — pushed when a KnowledgeRef is created/updated/removed. */
+export interface KnowledgeChangedPayload {
+  ref: KnowledgeRef
+  change: 'created' | 'updated' | 'removed'
+}
+
+/** Result of knowledge:engineStatus (spec 03 §3.5.1 + local bootstrap extras). */
+export interface KnowledgeEngineStatus {
+  /** Connection mode — P1 supports external-local only (managed lands with P7). */
+  mode: 'external-local' | 'managed'
+  /** Whether the kernel answered a version probe. */
+  running: boolean
+  /** Kernel pid — managed mode only (P7). */
+  pid?: number
+  /** Kernel version reported by the probe, when running. */
+  version?: string
+  /** True when a local SiYuan binary/app was detected on this host. */
+  binaryFound?: boolean
+  /** Absolute path of the detected binary, when binaryFound. */
+  binaryPath?: string
+  /** Official install URL for empty-state CTA when binary is missing. */
+  installUrl?: string
+  /** True while a start attempt is in flight. */
+  starting?: boolean
+}
+
+/** Result of knowledge:engineStart (local bootstrap). */
+export interface KnowledgeEngineStartResult {
+  ok: boolean
+  started: boolean
+  alreadyRunning: boolean
+  method: 'kernel-serve' | 'open-app' | 'none'
+  binaryPath: string | null
+  baseUrl: string
+  connectionId: string
+  version?: string
+  error?: string
+  installUrl?: string
+}
+
+/** Result of knowledge:metricsGet (P7-prep G1). */
+export interface KnowledgeMetricsSnapshot {
+  version: 1
+  updatedAt: string
+  counters: {
+    connectionsActive: number
+    publicationsTotal: number
+    publicationsLast7d: number
+    automationProposalsTotal: number
+    automationRunsTriggered: number
+    knowledgeSurfaceOpens: number
+    viewRunsTotal: number
+    watchTicksTotal: number
+  }
+  daily?: Record<string, { publications?: number; automationProposals?: number; viewRuns?: number }>
+}
+
+/** Result of knowledge:detectEngine (P7-prep external-local assist). */
+export interface KnowledgeDetectEngineResult {
+  installed: boolean
+  runningOnDefaultPort: boolean
+  suggestedBaseUrl: string
+  installPathsFound: string[]
+  platform: string
+  canOpenApp: boolean
+  /** Official SiYuan install docs — Craft never downloads the binary. */
+  installDocsUrl: string
+}
+
+
+
+// ---------------------------------------------------------------------------
+// Knowledge mutation safety — P3 write-back wire types (spec 05 K-05 §3.1/§3.2,
+// persistence shape in K-04 §3.3.4). CANONICAL HOME: packages/core/src/knowledge/mutations.ts
+// (type convergence — the wire contract is the canonical shape; this module is a thin
+// re-export so every shared/protocol consumer keeps its import site unchanged).
+// ---------------------------------------------------------------------------
+
+export type {
+  MutationProposalStatus,
+  MutationActor,
+  StatusHistoryEntry,
+  MutationOp,
+  SelectionProof,
+  MutationInput,
+  ConflictInfo,
+  ApplyResult,
+  MutationProposalRecord,
+  MutationProposal,
+} from '@craft-agent/core/knowledge'
+
+// ---------------------------------------------------------------------------
+// Knowledge publication pipeline — P4 wire types (spec 06). CANONICAL HOME:
+// packages/core/src/knowledge/publications.ts (thin re-export, same pattern as
+// mutation types above).
+// ---------------------------------------------------------------------------
+
+export type {
+  PublicationStatus,
+  CraftRef,
+  KnowledgeLinkRelation,
+  KnowledgeLinkRecord,
+  ExcludeReason,
+  ExcludedFragment,
+  PublishDraft,
+  PublicationProvenance,
+  PublicationRecord,
+  PublishPrepareResult,
+  PublishApplyResult,
+} from '@craft-agent/core/knowledge'
+
+// ---------------------------------------------------------------------------
 // LLM connection types
 // ---------------------------------------------------------------------------
 
@@ -575,9 +840,13 @@ export interface ClaudeOAuthIdentityDto {
 export interface LlmConnectionSetup {
   slug: string
   credential?: string
+  /** Explicit display name (used for backend-driven providers like 'omp'). */
+  name?: string
+  /** Explicit provider type override — bypasses slug/baseUrl-based inference. */
+  providerType?: LlmProviderType
   baseUrl?: string | null
   defaultModel?: string | null
-  models?: string[] | null
+  models?: Array<string | ModelDefinition> | null
   piAuthProvider?: string
   modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
   /** When true, reject setup if the connection doesn't already exist (reauth guard). */
@@ -740,6 +1009,7 @@ export interface WorkspaceSettings {
   cyclablePermissionModes?: PermissionMode[]
   thinkingLevel?: ThinkingLevel
   workingDirectory?: string
+  notesPath?: string
   localMcpEnabled?: boolean
   defaultLlmConnection?: string
   enabledSourceSlugs?: string[]
@@ -824,6 +1094,13 @@ export interface BrowserInstanceInfo {
    * and main processes that pre-date the field working unchanged.
    */
   workspaceId?: string | null
+  /**
+   * True for embedded instances composited onto the main window as an in-app
+   * panel (no separate OS window). Defaults to false for legacy windowed
+   * instances. Renderers must exclude embedded entries from the window tab
+   * strip — they live in session panels.
+   */
+  embedded?: boolean
 }
 
 export interface DeepLinkNavigation {
@@ -833,3 +1110,46 @@ export interface DeepLinkNavigation {
   action?: string
   actionParams?: Record<string, string>
 }
+
+// ---------------------------------------------------------------------------
+// SiYuan engine surface types (data shapes used by BroadcastEventMap)
+// ---------------------------------------------------------------------------
+
+/**
+ * State of one SiYuan desktop surface hosted in an embedded browser pane (P2
+ * native knowledge mode). The surface registry in the main process is the
+ * source of truth; renderers mirror this via STATE_CHANGED/REMOVED pushes and
+ * restore survivors across restarts via siyuan:list.
+ */
+export interface SiyuanSurfaceState {
+  /** Browser-pane manager instance id that hosts the surface. */
+  instanceId: string
+  /** Stable per-document handle (`siyuan:{kind}:{id}`) — dedup + restore key. */
+  durableKey: string
+  /** SiYuan web desktop URL the surface points at. */
+  url: string
+  /**
+   * Workspace that owns this surface, or `null` for unbound surfaces.
+   * Renderers filter by workspace like browserPane instances do; null always
+   * passes the filter.
+   */
+  workspaceId: string | null
+}
+
+/**
+ * State of one sandboxed extension UI surface hosted in an embedded browser
+ * pane. Durable key is `ext:${ws||'_default'}:${extensionId}:${viewId}`; session
+ * partition is `persist:ext-${ws||'default'}-${extensionId}` (isolated per
+ * workspace and from browser-pane / other extensions).
+ */
+export interface ExtensionSurfaceState {
+  instanceId: string
+  durableKey: string
+  extensionId: string
+  viewId: string
+  url: string
+  workspaceId: string | null
+}
+
+// Toolchain wire types (re-export for RPC payloads; source of truth: toolchain module)
+export type { ToolName, ToolPhase, ToolStatus } from '../toolchain/types'

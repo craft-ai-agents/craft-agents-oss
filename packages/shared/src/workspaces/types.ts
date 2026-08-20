@@ -13,6 +13,11 @@
 
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
+import type { Workspace } from '@craft-agent/core/types';
+
+/** Kept aligned with the core workspace DTO without duplicating its union. */
+export type WorkspaceKind = NonNullable<Workspace['kind']>;
+
 
 /**
  * Local MCP server configuration
@@ -34,6 +39,15 @@ export interface WorkspaceConfig {
   id: string;
   name: string;
   slug: string; // Folder name (URL-safe)
+  /**
+   * Canonical workspace authority metadata. Persisted records are normalized
+   * to an explicit value; optionality preserves compatibility with folders
+   * created before TeamSpace existed.
+   */
+  kind?: WorkspaceKind;
+  /** Required for `kind: 'team'`; omitted for personal workspaces. */
+  orgId?: string;
+
 
   /**
    * Default settings for new sessions in this workspace
@@ -51,11 +65,27 @@ export interface WorkspaceConfig {
   };
 
   /**
+   * Custom notes storage path. When set, notes are stored here instead of the
+   * default ~/.craft-agent/workspaces/{id}/notes/. Points at an Obsidian vault
+   * or any existing markdown directory.
+   */
+  notesPath?: string;
+
+  /**
    * Local MCP server configuration.
    * Controls whether stdio-based MCP servers can be spawned in this workspace.
    * Resolution order: ENV (CRAFT_LOCAL_MCP_ENABLED) > workspace config > default (true)
    */
   localMcpServers?: LocalMcpConfig;
+
+  /**
+   * Self-learning memory override (spec P2). `enabled:false` fully disables the
+   * workspace MemoryService — no prompt memory blocks, no distill triggers, no
+   * writes — regardless of the global memory.enabled setting. Absent → global.
+   */
+  memory?: {
+    enabled?: boolean;
+  };
 
   createdAt: number;
   updatedAt: number;
@@ -66,6 +96,8 @@ export interface WorkspaceConfig {
  */
 export interface CreateWorkspaceInput {
   name: string;
+  kind?: WorkspaceKind;
+  orgId?: string;
   defaults?: WorkspaceConfig['defaults'];
 }
 

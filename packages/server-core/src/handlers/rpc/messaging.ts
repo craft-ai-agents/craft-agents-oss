@@ -12,6 +12,40 @@ import type {
   MessagingPlatformOwnerInfo,
 } from '../messaging-registry-interface'
 
+export const HANDLED_CHANNELS = [
+  RPC_CHANNELS.messaging.GET_CONFIG,
+  RPC_CHANNELS.messaging.UPDATE_CONFIG,
+  RPC_CHANNELS.messaging.TEST_TELEGRAM,
+  RPC_CHANNELS.messaging.SAVE_TELEGRAM,
+  RPC_CHANNELS.messaging.TEST_LARK,
+  RPC_CHANNELS.messaging.SAVE_LARK,
+  RPC_CHANNELS.messaging.TEST_DISCORD,
+  RPC_CHANNELS.messaging.SAVE_DISCORD,
+  RPC_CHANNELS.messaging.DISCONNECT,
+  RPC_CHANNELS.messaging.FORGET,
+  RPC_CHANNELS.messaging.GET_BINDINGS,
+  RPC_CHANNELS.messaging.GENERATE_CODE,
+  RPC_CHANNELS.messaging.UNBIND,
+  RPC_CHANNELS.messaging.UNBIND_BINDING,
+  RPC_CHANNELS.messaging.GENERATE_SUPERGROUP_CODE,
+  RPC_CHANNELS.messaging.GET_SUPERGROUP,
+  RPC_CHANNELS.messaging.UNBIND_SUPERGROUP,
+  RPC_CHANNELS.messaging.WA_START_CONNECT,
+  RPC_CHANNELS.messaging.WA_SUBMIT_PHONE,
+  RPC_CHANNELS.messaging.WECHAT_START_CONNECT,
+  RPC_CHANNELS.messaging.WECHAT_SUBMIT_CODE,
+  RPC_CHANNELS.messaging.GET_PLATFORM_OWNERS,
+  RPC_CHANNELS.messaging.SET_PLATFORM_OWNERS,
+  RPC_CHANNELS.messaging.GET_PLATFORM_ACCESS_MODE,
+  RPC_CHANNELS.messaging.SET_PLATFORM_ACCESS_MODE,
+  RPC_CHANNELS.messaging.GET_PENDING_SENDERS,
+  RPC_CHANNELS.messaging.DISMISS_PENDING_SENDER,
+  RPC_CHANNELS.messaging.ALLOW_PENDING_SENDER,
+  RPC_CHANNELS.messaging.SET_BINDING_ACCESS,
+  RPC_CHANNELS.messaging.WC_START_CONNECT,
+  RPC_CHANNELS.messaging.WC_CANCEL_CONNECT,
+] as const
+
 export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps): void {
   const registry = deps.messagingRegistry
   if (!registry) return
@@ -50,6 +84,22 @@ export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps):
   ) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
     await registry.saveLarkCredentials(ctx.workspaceId, creds)
+    return { success: true }
+  })
+
+  server.handle(RPC_CHANNELS.messaging.TEST_DISCORD, async (
+    _ctx,
+    creds: { token: string },
+  ) => {
+    return registry.testDiscordCredentials(creds)
+  })
+
+  server.handle(RPC_CHANNELS.messaging.SAVE_DISCORD, async (
+    ctx,
+    creds: { token: string },
+  ) => {
+    if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await registry.saveDiscordCredentials(ctx.workspaceId, creds)
     return { success: true }
   })
 
@@ -112,6 +162,18 @@ export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps):
   server.handle(RPC_CHANNELS.messaging.WA_SUBMIT_PHONE, async (ctx, phoneNumber: string) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
     await registry.submitWhatsAppPhone(ctx.workspaceId, phoneNumber)
+    return { success: true }
+  })
+
+  server.handle(RPC_CHANNELS.messaging.WECHAT_START_CONNECT, async (ctx) => {
+    if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await registry.startWeChatConnect(ctx.workspaceId)
+    return { success: true }
+  })
+
+  server.handle(RPC_CHANNELS.messaging.WECHAT_SUBMIT_CODE, async (ctx, code: string) => {
+    if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    registry.submitWeChatVerifyCode(ctx.workspaceId, code)
     return { success: true }
   })
 
@@ -193,4 +255,15 @@ export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps):
       return { success: true }
     },
   )
+  server.handle(RPC_CHANNELS.messaging.WC_START_CONNECT, async (ctx) => {
+    if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await registry.startWeChatConnect(ctx.workspaceId)
+    return { success: true }
+  })
+
+  server.handle(RPC_CHANNELS.messaging.WC_CANCEL_CONNECT, async (ctx) => {
+    if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await registry.cancelWeChatConnect(ctx.workspaceId)
+    return { success: true }
+  })
 }

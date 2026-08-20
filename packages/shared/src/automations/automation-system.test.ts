@@ -567,4 +567,86 @@ describe('AutomationSystem', () => {
       expect(system.isDisposed()).toBe(true);
     });
   });
+
+  describe('knowledgeExecutor wiring', () => {
+    it('registers KnowledgeHandler when knowledgeExecutor is provided and disposes it', async () => {
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          KnowledgeAttributeChanged: [
+            {
+              id: 'k1',
+              name: 'set review',
+              actions: [
+                {
+                  type: 'knowledge',
+                  op: 'set_attribute',
+                  name: 'workflow_status',
+                  value: 'review',
+                  targetRef: { scheme: 'siyuan', kind: 'block', id: 'b1' },
+                },
+              ],
+            },
+          ],
+        },
+      }));
+
+      let executeCalls = 0;
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+        knowledgeExecutor: {
+          execute: async () => {
+            executeCalls += 1;
+            return { ok: true, proposalId: 'p1' };
+          },
+        },
+      });
+
+      await system.eventBus.emit('KnowledgeAttributeChanged', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        newValue: 'needs-research',
+      });
+
+      expect(executeCalls).toBe(1);
+
+      await system.dispose();
+      expect(system.isDisposed()).toBe(true);
+
+      // After dispose, further emits must not call the executor
+      await system.eventBus.emit('KnowledgeAttributeChanged', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        newValue: 'needs-research',
+      });
+      expect(executeCalls).toBe(1);
+    });
+
+    it('does not register KnowledgeHandler without knowledgeExecutor', async () => {
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          KnowledgeAttributeChanged: [
+            {
+              actions: [
+                { type: 'knowledge', op: 'set_attribute', name: 'x', value: 'y' },
+              ],
+            },
+          ],
+        },
+      }));
+
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+
+      // Should not throw even though knowledge actions exist but no executor
+      await system.eventBus.emit('KnowledgeAttributeChanged', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+      });
+
+      await system.dispose();
+    });
+  });
 });

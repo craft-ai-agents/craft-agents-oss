@@ -255,6 +255,9 @@ export class Renderer {
       }
 
       case 'tool_start': {
+        // WeChat accepts only one reply per turn — never post an intermediate
+        // bubble (see ensureProgressBubble for the progress-mode equivalent).
+        if (binding.platform === 'wechat') break
         if (binding.config.showToolActivity) {
           const toolName = typeof event.toolName === 'string' ? event.toolName : 'tool'
           const displayName =
@@ -417,6 +420,15 @@ export class Renderer {
     adapter: PlatformAdapter,
     status: string,
   ): Promise<void> {
+    if (binding.platform === 'wechat') {
+      // WeChat/iLink has a hard per-turn reply deadline; staying silent until
+      // the final answer blows it (the server then shows "请稍后再试。"). The
+      // turn is kept alive by the adapter's heartbeat typing (sendTyping every
+      // ~5s, the official iLink mechanism — no progress bubbles), not from
+      // here — the renderer stays silent until the final answer on `complete`.
+      void status
+      return
+    }
     if (!state.progressMessageId) {
       try {
         const sent = await adapter.sendText(binding.channelId, status, bindingOpts(binding))

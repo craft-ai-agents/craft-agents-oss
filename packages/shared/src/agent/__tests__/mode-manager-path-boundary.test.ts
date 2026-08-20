@@ -3,6 +3,11 @@ import { mkdtempSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { shouldAllowToolInMode, extractBashWriteTarget } from '../../agent/mode-manager.ts';
+import { setPowerShellValidatorRoot } from '../../agent/powershell-validator.ts';
+
+// Global parser bootstrap (см. read-patterns.test.ts) — тест сам ставит root,
+// не полагается на порядок исполнения в сьютe.
+setPowerShellValidatorRoot(join(import.meta.dir, '..'));
 
 describe('mode-manager path containment for plans/data exceptions', () => {
   let base: string;

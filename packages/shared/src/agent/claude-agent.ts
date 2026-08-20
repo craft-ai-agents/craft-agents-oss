@@ -21,9 +21,9 @@ import {
   resolveAuthEnvVars,
 } from '../config/llm-connections.ts';
 import type { McpClientPool } from '../mcp/mcp-pool.ts';
-import { proxyToolName } from '../mcp/proxy-tool-name.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
 import { loadProjectById, getProjectAssetsPath, listProjectAssets, getProjectMemoryPath, loadProjectMemory } from '../projects/storage.ts';
+import type { MemoryPromptBlocks } from '../memory/types.ts';
 import { DEFAULT_MODEL, isClaudeModel, isAdaptiveThinkingAlwaysOnModel, getDefaultSummarizationModel, getModelContextWindow } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { loadPreferences, formatPreferencesForPrompt, getCoAuthorPreference } from '../config/preferences.ts';
@@ -232,6 +232,8 @@ export interface ClaudeAgentConfig {
   connectionSlug?: string;
   /** Enable 1M context window for current Opus models. Default: true. Set false to use 200K and conserve usage limits. */
   enable1MContext?: boolean;
+  /** Pre-formatted self-learning memory blocks (lessons + workspace memory), injected into the system prompt after the project memory block. */
+  memoryBlocks?: MemoryPromptBlocks;
 }
 
 // Permission request tracking
@@ -440,12 +442,12 @@ function createSourceProxyServers(pool: McpClientPool): Record<string, ReturnTyp
     const mcpTools = pool.getTools(slug);
     if (mcpTools.length === 0) continue;
 
-    const proxyTools = mcpTools.map(mcpTool => {
-      // Must match the pool's dispatch-map key (mcp-pool.ts sanitizes dotted
-      // names), or pool.callTool(proxyName) would miss for dotted tools (#864).
-      const proxyName = proxyToolName(slug, mcpTool.name);
+    const proxyTools = mcpTools.flatMap(mcpTool => {
+      const proxyName = pool.getProxyToolName(slug, mcpTool.name);
+      const proxyLocalName = pool.getProxyToolLocalName(slug, mcpTool.name);
+      if (!proxyName || !proxyLocalName) return [];
       return tool(
-        mcpTool.name,
+        proxyLocalName,
         mcpTool.description || `Tool from ${slug}`,
         {
           ...jsonSchemaToZodShape((mcpTool.inputSchema as Record<string, unknown>) || {}),
@@ -503,6 +505,7 @@ export class ClaudeAgent extends BaseAgent {
   private pinnedPreferencesPrompt: string | null = null;
   private pinnedIncludeCoAuthoredBy: boolean | null = null;
   private pinnedProjectContext: import('../projects/types.ts').ProjectPromptContext | null = null;
+  private pinnedMemoryBlocks: MemoryPromptBlocks | null = null;
   // Track if preference drift notification has been shown this session
   private preferencesDriftNotified: boolean = false;
   // Captured stderr from SDK subprocess (for error diagnostics when process exits with code 1)
@@ -797,6 +800,7 @@ export class ClaudeAgent extends BaseAgent {
       mcpPool: config.mcpPool,
       connectionSlug: config.connectionSlug,
       automationSystem: config.automationSystem,
+      memoryBlocks: config.memoryBlocks,
     };
 
     // Call BaseAgent constructor - initializes model, thinkingLevel, permissionManager, sourceManager, etc.
@@ -1028,6 +1032,7 @@ export class ClaudeAgent extends BaseAgent {
         this.pinnedPreferencesPrompt = currentPreferencesPrompt;
         this.pinnedIncludeCoAuthoredBy = currentCoAuthorPref;
         this.pinnedProjectContext = this.resolveProjectContext();
+        this.pinnedMemoryBlocks = this.config.memoryBlocks ?? null;
         debug('[chat] Pinned system prompt components for session consistency');
       } else {
         // Detect drift: warn user if context has changed since session started
@@ -1229,6 +1234,7 @@ export class ClaudeAgent extends BaseAgent {
                 undefined, // backendName
                 this.pinnedIncludeCoAuthoredBy ?? undefined,
                 this.pinnedProjectContext ?? undefined,
+                this.pinnedMemoryBlocks ?? undefined,
               ),
             },
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
@@ -1933,6 +1939,7 @@ This is a branched conversation. All prior messages in this conversation are par
           this.pinnedPreferencesPrompt = null;
           this.pinnedIncludeCoAuthoredBy = null;
           this.pinnedProjectContext = null;
+          this.pinnedMemoryBlocks = null;
           this.preferencesDriftNotified = false;
 
           let retryMessage = userMessage;
@@ -2136,6 +2143,7 @@ This is a branched conversation. All prior messages in this conversation are par
           this.pinnedPreferencesPrompt = null;
           this.pinnedIncludeCoAuthoredBy = null;
           this.pinnedProjectContext = null;
+          this.pinnedMemoryBlocks = null;
           this.preferencesDriftNotified = false;
 
           let retryMessage = userMessage;
@@ -2340,6 +2348,7 @@ This is a branched conversation. All prior messages in this conversation are par
           this.pinnedPreferencesPrompt = null;
           this.pinnedIncludeCoAuthoredBy = null;
           this.pinnedProjectContext = null;
+          this.pinnedMemoryBlocks = null;
           this.preferencesDriftNotified = false;
 
           let retryMessage = userMessage;
@@ -2743,6 +2752,7 @@ This is a branched conversation. All prior messages in this conversation are par
     this.pinnedPreferencesPrompt = null;
     this.pinnedIncludeCoAuthoredBy = null;
     this.pinnedProjectContext = null;
+    this.pinnedMemoryBlocks = null;
     this.preferencesDriftNotified = false;
   }
 
@@ -2918,6 +2928,7 @@ This is a branched conversation. All prior messages in this conversation are par
     this.pinnedPreferencesPrompt = null;
     this.pinnedIncludeCoAuthoredBy = null;
     this.pinnedProjectContext = null;
+    this.pinnedMemoryBlocks = null;
     this.preferencesDriftNotified = false;
 
     // Clear Claude-specific callbacks (not handled by BaseAgent)
@@ -3093,6 +3104,7 @@ This is a branched conversation. All prior messages in this conversation are par
     this.pinnedPreferencesPrompt = null;
     this.pinnedIncludeCoAuthoredBy = null;
     this.pinnedProjectContext = null;
+    this.pinnedMemoryBlocks = null;
     this.preferencesDriftNotified = false;
     // Atomic on-disk persistence: clears all four fork fields at once. This
     // supersedes onSdkSessionIdCleared, which only persists sdkSessionId and

@@ -534,11 +534,14 @@ export function copyPiAgentServer(config: BuildConfig): void {
   // 1. Copy index.js
   copyFileSync(join(piSourceDir, 'index.js'), join(piDestDir, 'index.js'));
 
-  // 2. Copy koffi npm package (external import, resolved via node_modules at runtime)
+  // 2. Copy koffi npm package when present (external import, resolved via
+  // node_modules at runtime). Modern @earendil-works/pi-* (≥0.80.x) vendors
+  // its own native Windows VT helper and does not require koffi, so a missing
+  // package is fine — only ship it when it is actually installed.
   const koffiSource = join(rootDir, 'node_modules', 'koffi');
 
   if (!existsSync(koffiSource)) {
-    console.warn('  Warning: koffi not found in node_modules. Pi SDK sessions may not work.');
+    console.log('  Copied index.js (koffi not installed — not required by current Pi SDK)');
     return;
   }
 
@@ -571,6 +574,21 @@ export function copyPiAgentServer(config: BuildConfig): void {
 }
 
 /**
+ * Copy the cloud-runner stub runner into packaged app resources.
+ */
+export function copyCloudRunner(config: BuildConfig): void {
+  const { rootDir, electronDir } = config;
+  const source = join(rootDir, 'packages', 'cloud-runner', 'dist', 'stub-runner.js');
+  if (!existsSync(source)) {
+    console.warn('Warning: Cloud-runner stub not found at packages/cloud-runner/dist/stub-runner.js. Cloud Runs (local provider) will fail to start its runner.');
+    return;
+  }
+  const destDir = join(electronDir, 'resources', 'cloud-runner');
+  mkdirSync(destDir, { recursive: true });
+  copyFileSync(source, join(destDir, 'stub-runner.js'));
+}
+
+/**
  * Build MCP servers (session) and Pi agent server.
  * Shared across all platforms to avoid drift.
  */
@@ -595,7 +613,20 @@ export function buildMcpServers(config: BuildConfig): void {
     throw new Error(`Session MCP server output not found at ${sessionOut}`);
   }
 
-  // Pi agent server uses --target=bun --format=esm because its Pi SDK deps are ESM-only.
+    // Cloud-runner stub runner (Cloud Runs local provider). ESM — spawned by bundled bun.
+  const cloudRunnerDir = join(rootDir, 'packages', 'cloud-runner');
+  const cloudRunnerOut = join(cloudRunnerDir, 'dist', 'stub-runner.js');
+  if (existsSync(join(cloudRunnerDir, 'src'))) {
+    mkdirSync(join(cloudRunnerDir, 'dist'), { recursive: true });
+    execSync(
+      `bun build ${join(cloudRunnerDir, 'src', 'runners', 'stub-runner.ts')} --outfile ${cloudRunnerOut} --target bun --format esm`,
+      { cwd: rootDir, stdio: 'inherit', shell: true }
+    );
+    if (!existsSync(cloudRunnerOut)) {
+      throw new Error(`Cloud-runner stub output not found at ${cloudRunnerOut}`);
+    }
+  }
+// Pi agent server uses --target=bun --format=esm because its Pi SDK deps are ESM-only.
   // --target=node --format=cjs leaves ESM deps as external require() calls that fail at runtime.
   // koffi is marked external because it's a native N-API module — bun can't inline .node binaries
   // and inlining its JS breaks the native binary resolution paths.
@@ -629,6 +660,19 @@ export function buildWhatsAppWorker(config: BuildConfig): void {
 
   if (!existsSync(workerOut)) {
     throw new Error(`WhatsApp worker output not found at ${workerOut}`);
+  }
+}
+
+export function buildDiscordWorker(config: BuildConfig): void {
+  const { rootDir } = config;
+  const workerOut = join(rootDir, 'packages', 'messaging-discord-worker', 'dist', 'worker.cjs');
+
+  console.log('Building Discord worker...');
+
+  execSync('bun run build:discord-worker', { cwd: rootDir, stdio: 'inherit', shell: true });
+
+  if (!existsSync(workerOut)) {
+    throw new Error(`Discord worker output not found at ${workerOut}`);
   }
 }
 

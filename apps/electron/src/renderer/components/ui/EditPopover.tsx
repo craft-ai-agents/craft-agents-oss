@@ -85,6 +85,7 @@ export type EditContextKey =
   | 'edit-auto-rules'
   | 'add-label'
   | 'edit-views'
+  | 'edit-knowledge-views'
   | 'edit-tool-icons'
   | 'automation-config'
 
@@ -512,6 +513,30 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     model: 'fast',               // Use fast model for quick config edits
     systemPromptPreset: 'mini',   // Use focused mini prompt
     inlineExecution: true,        // Execute inline in popover
+  }),
+
+  // Knowledge views configuration (P5) — same views.json, domain knowledge only
+  'edit-knowledge-views': (location) => ({
+    context: {
+      label: 'Knowledge Views Configuration',
+      filePath: `${location}/views.json`,
+      context:
+        'The user wants to edit knowledge saved views (domain: "knowledge"). ' +
+        'Views are stored in views.json at the workspace root under a "views" array (version 2). ' +
+        'Each knowledge view has: id, name, description?, color?, expression (Filtrex, often "true"), ' +
+        'domain: "knowledge", knowledgeFilter?: { notebook?, notebookId?, pathPrefix?, attributes?, kinds?, query? }, ' +
+        'groupBy?: "topic"|"notebook"|"status", sort?: [{ field, direction }], ' +
+        'presetActions?: [{ type:"set_attribute", name, value } | { type:"open" } | { type:"run_skill", skill }]. ' +
+        'Session views use domain "sessions" (or omit domain) — do not modify those unless asked. ' +
+        'Default research-needs-review filters pathPrefix "/Research" and attributes.workflow_status=needs-review. ' +
+        'Confirm clearly when done.',
+    },
+    example: 'Add a knowledge view for docs with workflow_status=draft',
+    displayLabelKey: 'editPopover.label.knowledgeViewsConfiguration',
+    exampleKey: 'editPopover.example.editKnowledgeViews',
+    model: 'fast',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   // Tool icons configuration context

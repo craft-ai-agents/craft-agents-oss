@@ -1,14 +1,18 @@
+import { join } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { loadWorkspaceSources } from '@craft-agent/shared/sources'
+import { ensureLocalNotesSource, loadSourceConfig, loadWorkspaceSources, saveSourceConfig, saveSourceGuide, type FolderSourceConfig } from '@craft-agent/shared/sources'
 import { safeJsonParse } from '@craft-agent/shared/utils/files'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import { getDefaultWorkspacesDir, loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
+import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import { KnowledgeConnectionsStore, credentialIdFromRef } from '../../knowledge'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sources.GET,
   RPC_CHANNELS.sources.CREATE,
+  RPC_CHANNELS.sources.UPDATE,
   RPC_CHANNELS.sources.DELETE,
   RPC_CHANNELS.sources.START_OAUTH,
   RPC_CHANNELS.sources.SAVE_CREDENTIALS,
@@ -16,7 +20,15 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workspace.GET_PERMISSIONS,
   RPC_CHANNELS.permissions.GET_DEFAULTS,
   RPC_CHANNELS.sources.GET_MCP_TOOLS,
+  RPC_CHANNELS.sources.REINDEX,
+  RPC_CHANNELS.sources.SEARCH,
 ] as const
+
+function ensureNotesSource(workspaceRoot: string, workspaceId: string): void {
+  const wsConfig = loadWorkspaceConfig(workspaceRoot)
+  const notesPath = wsConfig?.notesPath ?? join(getDefaultWorkspacesDir(), workspaceId, 'notes')
+  ensureLocalNotesSource(workspaceRoot, notesPath)
+}
 
 export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): void {
   const log = deps.platform.logger
@@ -28,6 +40,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       log.error(`SOURCES_GET: Workspace not found: ${workspaceId}`)
       return []
     }
+    ensureNotesSource(workspace.rootPath, workspace.id)
     return loadWorkspaceSources(workspace.rootPath)
   })
 
@@ -45,6 +58,77 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       api: config.api,
       local: config.local,
     })
+  })
+
+  // Update an existing source's editable fields (name, enabled, url/path, tagline, guide)
+  server.handle(RPC_CHANNELS.sources.UPDATE, async (
+    _ctx,
+    workspaceId: string,
+    sourceSlug: string,
+    updates: {
+      name?: string
+      enabled?: boolean
+      tagline?: string
+      /** URL or path depending on source type (mcp.url / api.baseUrl / local.path) */
+      url?: string
+      /** guide.md raw markdown */
+      guide?: string
+    },
+  ) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(sourceSlug)) {
+      throw new Error(`Invalid source slug: ${sourceSlug}`)
+    }
+
+    const existing = loadSourceConfig(workspace.rootPath, sourceSlug)
+    if (!existing) throw new Error(`Source not found: ${sourceSlug}`)
+
+    const next: FolderSourceConfig = {
+      ...existing,
+      updatedAt: Date.now(),
+    }
+
+    if (typeof updates.name === 'string' && updates.name.trim()) {
+      next.name = updates.name.trim()
+    }
+    if (typeof updates.enabled === 'boolean') {
+      next.enabled = updates.enabled
+    }
+    if (typeof updates.tagline === 'string') {
+      next.tagline = updates.tagline
+    }
+
+    if (typeof updates.url === 'string') {
+      const url = updates.url.trim()
+      if (next.type === 'mcp') {
+        next.mcp = { ...(next.mcp ?? {}), url: url || undefined }
+      } else if (next.type === 'api') {
+        if (!url) throw new Error('API base URL is required')
+        next.api = { ...(next.api ?? { authType: 'none' }), baseUrl: url }
+      } else if (next.type === 'local') {
+        if (!url) throw new Error('Local path is required')
+        next.local = { ...(next.local ?? {}), path: url }
+      }
+    }
+
+    saveSourceConfig(workspace.rootPath, next)
+
+    if (typeof updates.guide === 'string') {
+      saveSourceGuide(workspace.rootPath, sourceSlug, { raw: updates.guide })
+    }
+
+    // Return fully loaded source for the UI
+    const { loadSource } = await import('@craft-agent/shared/sources')
+    const loaded = loadSource(workspace.rootPath, sourceSlug)
+    if (!loaded) throw new Error(`Source not found after update: ${sourceSlug}`)
+
+    // Notify subscribers (same shape as watcher broadcasts)
+    const sources = loadWorkspaceSources(workspace.rootPath)
+    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, sources)
+
+    return loaded
   })
 
   // Delete a source
@@ -80,6 +164,25 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
 
     const source = loadSource(workspace.rootPath, sourceSlug)
     if (!source) {
+      // Knowledge bridge (P1): knowledge connections are not sources, but their
+      // bearer token is stored under the same key contract
+      // source_bearer::{workspaceId}::{connectionId} (spec 04 §3.3.1). Only
+      // accept the fallback when a knowledge connection with this id exists,
+      // so mistyped source slugs still fail loudly.
+      const record = new KnowledgeConnectionsStore().get(sourceSlug)
+      if (record) {
+        // The read side resolves the record's credentialRef verbatim — the
+        // workspace segment of THAT key, not the active workspace from this
+        // call. On multi-workspace installs the two differ and a key written
+        // under the active workspace can never be read back (P2-12).
+        const id = credentialIdFromRef(record.credentialRef)
+        await getCredentialManager().set(
+          { type: 'source_bearer', workspaceId: id?.workspaceId ?? workspaceId, sourceId: sourceSlug },
+          { value: credential },
+        )
+        log.info(`Saved bearer credential for knowledge connection: ${sourceSlug}`)
+        return
+      }
       throw new Error(`Source not found: ${sourceSlug}`)
     }
 
@@ -200,10 +303,14 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
         }
 
         log.info(`Fetching MCP tools from ${source.config.mcp.url}`)
+        const headers: Record<string, string> = {
+          ...(source.config.mcp.headers || {}),
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        }
         client = new CraftMcpClient({
           transport: 'http',
           url: source.config.mcp.url,
-          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+          headers: Object.keys(headers).length > 0 ? headers : undefined,
         })
       }
 
@@ -240,4 +347,40 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       return { success: false, error: errorMessage }
     }
   })
+
+  // Rebuild local FTS/keyword index under {workspace}/.craft/source-index.sqlite
+  server.handle(RPC_CHANNELS.sources.REINDEX, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+
+    const sources = loadWorkspaceSources(workspace.rootPath)
+    const roots: Array<{ slug: string; path: string }> = []
+    for (const src of sources) {
+      if (src.config.type !== 'local') continue
+      const p = src.config.local?.path
+      if (!p) continue
+      roots.push({ slug: src.config.slug, path: p })
+    }
+
+    const { reindexWorkspaceSources, countIndexedFiles } = await import('../../sources/source-index')
+    const result = reindexWorkspaceSources(workspace.rootPath, roots)
+    return {
+      ...result,
+      fileCount: countIndexedFiles(workspace.rootPath),
+      rootCount: roots.length,
+    }
+  })
+
+  // Keyword search over the local source index (FTS5 or LIKE)
+  server.handle(
+    RPC_CHANNELS.sources.SEARCH,
+    async (_ctx, workspaceId: string, query: string, limit?: number) => {
+      const workspace = getWorkspaceByNameOrId(workspaceId)
+      if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+      const { searchSourceIndex } = await import('../../sources/source-index')
+      return searchSourceIndex(workspace.rootPath, typeof query === 'string' ? query : '', {
+        limit: typeof limit === 'number' ? limit : 20,
+      })
+    },
+  )
 }

@@ -331,16 +331,32 @@ function KanbanViewPreview({
 
   // Demo of the per-column "status on move" mapping the live board reads from
   // settings: dropping into a column also folds the status to that column.
-  const COLUMN_STATUS: Record<KanbanColumnId, string> = {
+  const COLUMN_STATUS: Record<string, string> = {
+    backlog: 'backlog',
     todo: 'todo',
     'in-progress': 'in-progress',
+    'needs-review': 'needs-review',
     done: 'done',
   }
-  const moveTask = (taskId: string, toColumn: KanbanColumnId) => {
+  const moveTask = (taskId: string, to: string | { columnId: string; projectId?: string | null }) => {
+    const toColumn = typeof to === 'string' ? to : to.columnId
+    const projectId = typeof to === 'string' ? undefined : to.projectId
     setTasks(prev =>
-      prev.map(t => (t.id === taskId ? { ...t, column: toColumn, statusId: COLUMN_STATUS[toColumn] } : t))
+      prev.map(t =>
+        t.id === taskId
+          ? {
+              ...t,
+              column: toColumn,
+              statusId: COLUMN_STATUS[toColumn] ?? t.statusId,
+              ...(projectId !== undefined
+                ? { projectId: projectId === null ? undefined : projectId }
+                : {}),
+            }
+          : t,
+      ),
     )
   }
+
 
   // Derive overlay props from the *current* tasks so a freshly added subtask
   // shows up live in an already-open parent window.

@@ -8,13 +8,17 @@ import App from './App'
 import { ThemeProvider } from './context/ThemeContext'
 import { windowWorkspaceIdAtom } from './atoms/sessions'
 import { Toaster } from '@/components/ui/sonner'
-import { setupI18n, i18n } from '@craft-agent/shared/i18n'
+import { setupI18n } from '@craft-agent/shared/i18n'
 import { initReactI18next } from 'react-i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import './index.css'
 
 // Initialize i18n before any React rendering
-setupI18n([LanguageDetector, initReactI18next])
+const i18n = setupI18n([LanguageDetector, initReactI18next])
+const initialLanguageSync = window.electronAPI?.changeLanguage?.(i18n.resolvedLanguage ?? i18n.language)
+void initialLanguageSync?.catch((error) => {
+  console.error('Failed to sync initial language to main process:', error)
+})
 
 // One-shot bootstrap: ensure the main process's i18n + preferences.json learn
 // the language we just restored from localStorage. The main-process IPC handler
@@ -22,7 +26,7 @@ setupI18n([LanguageDetector, initReactI18next])
 // renderer startup. Without this push, a freshly-installed (or freshly-upgraded)
 // app would still generate titles in English until the user manually re-picks
 // the language in Appearance.
-const resolvedLanguage = i18n.resolvedLanguage
+const resolvedLanguage = i18n.resolvedLanguage || i18n.language
 // Diagnostic: console-log the bootstrap push so it shows up in DevTools and
 // (via captureConsoleIntegration) in Sentry, alongside the main-process
 // [i18n] startup hydration log. If these two diverge, the renderer's
@@ -34,6 +38,11 @@ console.info('[i18n] renderer bootstrap push', {
 if (resolvedLanguage) {
   void window.electronAPI?.changeLanguage?.(resolvedLanguage)
 }
+
+// Keep the main process i18n in sync on subsequent language changes.
+i18n.on('languageChanged', (lng: string) => {
+  void window.electronAPI?.changeLanguage?.(lng)
+})
 
 // Known-harmless console messages that should NOT be sent to Sentry.
 // These are dev-mode noise or expected warnings that aren't actionable.

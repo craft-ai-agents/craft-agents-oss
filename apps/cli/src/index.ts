@@ -1087,7 +1087,7 @@ export function getValidateSteps(): ValidateStep[] {
           await client.invoke('LLM_Connection:save', {
             slug,
             name: `${getProviderDisplayName(provider)} (Custom Endpoint)`,
-            providerType: 'pi_compat',
+            providerType: isAnthropicApi ? 'anthropic_compat' : 'pi_compat',
             authType: 'api_key_with_endpoint',
             createdAt: Date.now(),
           })

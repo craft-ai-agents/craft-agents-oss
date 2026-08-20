@@ -22,6 +22,7 @@ import type { McpClientPool } from '../../mcp/mcp-pool.ts';
 import type { Workspace } from '../../config/storage.ts';
 import type { SessionConfig as Session } from '../../sessions/storage.ts';
 import type { SourceManager } from '../core/source-manager.ts';
+import type { MemoryPromptBlocks } from '../../memory/types.ts';
 
 // Import AbortReason and RecoveryMessage from core module (single source of truth)
 import { AbortReason, type RecoveryMessage } from '../core/index.ts';
@@ -51,7 +52,7 @@ import type { AutomationSystem } from '../../automations/index.ts';
  * Provider identifier for AI backends.
  * @deprecated Use ModelProvider from config/models.ts instead
  */
-export type AgentProvider = ModelProvider;
+export type AgentProvider = ModelProvider | 'omp';
 
 
 // ============================================================
@@ -276,6 +277,12 @@ export interface CoreBackendConfig {
   enable1MContext?: boolean;
 
   /**
+   * Self-learning memory prompt blocks (lessons + workspace memory), resolved
+   * by the server (MemoryService) at session start. See BackendConfig.memoryBlocks.
+   */
+  memoryBlocks?: MemoryPromptBlocks;
+
+  /**
    * Pre-computed source configurations for initial setup.
    * Passed at construction so backends can set up sources in postInit().
    */
@@ -409,6 +416,12 @@ export interface AgentBackend {
    * Used for connection testing, title generation, and summarization.
    */
   runMiniCompletion(prompt: string): Promise<string | null>;
+
+  /**
+   * Clear conversation history so the next chat() starts fresh.
+   * Resets provider-side session state without destroying the agent.
+   */
+  clearHistory(): void;
 
   /**
    * Clean up resources (MCP connections, watchers, etc.)
@@ -679,6 +692,14 @@ export interface BackendConfig extends CoreBackendConfig {
 
   /** Workspace-level automation system for user-defined SDK hooks (automations.json) */
   automationSystem?: AutomationSystem;
+
+  /**
+   * Pre-formatted self-learning memory blocks (lessons + workspace memory),
+   * resolved by the server core MemoryService and injected into the system
+   * prompt after the project memory block. Backends never read the memory
+   * store themselves.
+   */
+  memoryBlocks?: MemoryPromptBlocks;
 
   /**
    * Opaque runtime payload resolved by backend drivers.

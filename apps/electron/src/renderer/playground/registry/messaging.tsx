@@ -19,16 +19,16 @@ export const messagingComponents: ComponentEntry[] = [
       {
         name: 'accessMode',
         description:
-          'Workspace-level access policy. "open" shows the migration banner; "owner-only" enforces the allow-list.',
+          'Workspace-level access policy. Public inbox shows the non-executing banner; owner-control enforces the allow-list.',
         control: {
           type: 'select',
           options: [
-            { label: 'Open (legacy / migration banner)', value: 'open' },
-            { label: 'Owner-only · empty list', value: 'owner-only-empty' },
-            { label: 'Owner-only · with owner', value: 'owner-only-with-owner' },
+            { label: 'Public inbox', value: 'public-inbox' },
+            { label: 'Owner control · empty list', value: 'owner-control-empty' },
+            { label: 'Owner control · with owner', value: 'owner-control-with-owner' },
           ],
         },
-        defaultValue: 'owner-only-with-owner',
+        defaultValue: 'owner-control-with-owner',
       },
       {
         name: 'pending',
@@ -49,12 +49,12 @@ export const messagingComponents: ComponentEntry[] = [
         control: {
           type: 'select',
           options: [
-            { label: 'Inherit workspace', value: 'inherit' },
-            { label: 'Custom allow-list', value: 'allow-list' },
-            { label: 'Open to anyone', value: 'open' },
+            { label: 'Public inbox', value: 'public-inbox' },
+            { label: 'Owner control', value: 'owner-control' },
+            { label: 'Disabled', value: 'disabled' },
           ],
         },
-        defaultValue: 'inherit',
+        defaultValue: 'public-inbox',
       },
       {
         name: 'topicBindingAccess',
@@ -62,57 +62,57 @@ export const messagingComponents: ComponentEntry[] = [
         control: {
           type: 'select',
           options: [
-            { label: 'Inherit workspace', value: 'inherit' },
-            { label: 'Custom allow-list', value: 'allow-list' },
-            { label: 'Open to anyone', value: 'open' },
+            { label: 'Public inbox', value: 'public-inbox' },
+            { label: 'Owner control', value: 'owner-control' },
+            { label: 'Disabled', value: 'disabled' },
           ],
         },
-        defaultValue: 'inherit',
+        defaultValue: 'public-inbox',
       },
     ],
     variants: [
       {
-        name: 'Migration: open mode + pending requests',
+        name: 'Public inbox + pending requests',
         description:
-          'Existing workspace, accessMode=open. Banner prompts owner to lock down; pending list grows as random senders try the bot.',
+          'Workspace in public inbox. Banner states messages do not start an agent session; pending list grows as senders try the bot.',
         props: {
-          accessMode: 'open',
+          accessMode: 'public-inbox',
           pending: 'three',
-          dmBindingAccess: 'open',
-          topicBindingAccess: 'open',
+          dmBindingAccess: 'public-inbox',
+          topicBindingAccess: 'public-inbox',
         },
       },
       {
-        name: 'Locked-down · with owner · 1 pending',
+        name: 'Owner control · with owner · 1 pending',
         description:
           'Default state for a freshly-paired bot: one owner, one pending request to consider.',
         props: {
-          accessMode: 'owner-only-with-owner',
+          accessMode: 'owner-control-with-owner',
           pending: 'one',
-          dmBindingAccess: 'inherit',
-          topicBindingAccess: 'inherit',
+          dmBindingAccess: 'owner-control',
+          topicBindingAccess: 'owner-control',
         },
       },
       {
-        name: 'Locked-down · empty list',
+        name: 'Owner control · empty list',
         description:
-          'Bot is locked down but no owners are recorded yet (rare — typically right after a manual lock-down with empty seed).',
+          'Bot is in owner control but no owners are recorded yet (rare — typically right after a manual switch with empty seed).',
         props: {
-          accessMode: 'owner-only-empty',
+          accessMode: 'owner-control-empty',
           pending: 'none',
-          dmBindingAccess: 'inherit',
-          topicBindingAccess: 'inherit',
+          dmBindingAccess: 'owner-control',
+          topicBindingAccess: 'owner-control',
         },
       },
       {
-        name: 'Per-binding: custom allow-list',
+        name: 'Per-binding: owner control + disabled topic',
         description:
-          'Owner narrowed the DM binding to a custom allow-list, while the supergroup topic still inherits.',
+          'Owner narrowed the DM binding to owner control, while the supergroup topic is disabled.',
         props: {
-          accessMode: 'owner-only-with-owner',
+          accessMode: 'owner-control-with-owner',
           pending: 'none',
-          dmBindingAccess: 'allow-list',
-          topicBindingAccess: 'inherit',
+          dmBindingAccess: 'owner-control',
+          topicBindingAccess: 'disabled',
         },
       },
     ],

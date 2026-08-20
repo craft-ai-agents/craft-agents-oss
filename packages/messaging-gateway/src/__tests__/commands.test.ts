@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import type { Session } from '@craft-agent/shared/protocol'
 import type { ISessionManager } from '@craft-agent/server-core/handlers'
 import { BindingStore } from '../binding-store'
-import { Commands } from '../commands'
+import { Commands, type AccessControlDeps } from '../commands'
 import type { IncomingMessage, PlatformAdapter, SentMessage } from '../types'
 
 function makeSession(id: string, name: string, lastMessageAt: number): Session {
@@ -92,6 +92,22 @@ function makeStore(): BindingStore {
   return new BindingStore(dir)
 }
 
+function ownerAccess(): AccessControlDeps {
+  return {
+    getWorkspaceConfig: () => ({
+      enabled: true,
+      platforms: {
+        whatsapp: {
+          enabled: true,
+          accessMode: 'owner-control',
+          owners: [{ userId: 'u1', addedAt: 0 }],
+        },
+      },
+    }),
+    seedOwnerOnFirstPair: async () => [],
+  }
+}
+
 describe('Commands', () => {
   it('binds by numbered recent-session index on non-inline platforms', async () => {
     const sessions = [
@@ -99,7 +115,15 @@ describe('Commands', () => {
       makeSession('sess-2', 'Newest', 200),
     ]
     const store = makeStore()
-    const commands = new Commands(makeSessionManager(sessions), store, 'ws1')
+    const commands = new Commands(makeSessionManager(sessions), store, 'ws1', undefined, undefined, {
+      getWorkspaceConfig: () => ({
+        enabled: true,
+        platforms: {
+          whatsapp: { enabled: true, accessMode: 'owner-control', owners: [{ userId: 'u1', addedAt: 0 }] },
+        },
+      }),
+      seedOwnerOnFirstPair: async () => [],
+    })
     const adapter = makeAdapter('whatsapp', false)
 
     await commands.handleCommand(adapter, makeMessage('/bind 1'))
@@ -114,7 +138,15 @@ describe('Commands', () => {
       makeSession('sess-2', 'Beta', 200),
     ]
     const store = makeStore()
-    const commands = new Commands(makeSessionManager(sessions), store, 'ws1')
+    const commands = new Commands(makeSessionManager(sessions), store, 'ws1', undefined, undefined, {
+      getWorkspaceConfig: () => ({
+        enabled: true,
+        platforms: {
+          whatsapp: { enabled: true, accessMode: 'owner-control', owners: [{ userId: 'u1', addedAt: 0 }] },
+        },
+      }),
+      seedOwnerOnFirstPair: async () => [],
+    })
     const adapter = makeAdapter('whatsapp', false)
 
     await commands.handleCommand(adapter, makeMessage('/bind'))

@@ -23,7 +23,7 @@ import {
   type PushTarget,
   type ErrorCode,
 } from '@craft-agent/shared/protocol'
-import type { RpcServer, HandlerFn, RequestContext } from './types'
+import type { RpcServer, HandlerFn, RequestContext, RpcHandlerOptions } from './types'
 import { serializeEnvelope, deserializeEnvelope } from './codec'
 import { createLogger } from '@craft-agent/shared/utils'
 
@@ -43,6 +43,11 @@ interface ClientConnection {
   ws: WebSocket
   workspaceId: string | null
   webContentsId: number | null
+  /**
+   * Present only when Electron main resolved the handshake proof to a current
+   * window/workspace binding. Raw handshake fields never create this state.
+   */
+  localBinding: TrustedLocalClientBinding | null
   capabilities: Set<string>
   missedPongs: number
   alive: boolean
@@ -59,6 +64,22 @@ interface PendingInvoke {
   resolve: (value: any) => void
   reject: (error: Error) => void
   timeout: ReturnType<typeof setTimeout>
+}
+
+interface RegisteredHandler {
+  readonly handler: HandlerFn
+  readonly access: RpcHandlerOptions['access']
+}
+
+export interface LocalClientBindingCandidate {
+  readonly workspaceId: string | null
+  readonly webContentsId: number | null
+  readonly localClientProof: string | null
+}
+
+export interface TrustedLocalClientBinding {
+  readonly workspaceId: string
+  readonly webContentsId: number
 }
 
 // ---------------------------------------------------------------------------
@@ -100,9 +121,21 @@ export interface WsRpcServerOptions {
   /** Maximum concurrent clients. 0 = unlimited. Default: 50 */
   maxClients?: number
   /** Called when a client completes handshake. */
-  onClientConnected?: (info: { clientId: string; webContentsId: number | null; workspaceId: string | null; capabilities: string[] }) => void
+  onClientConnected?: (info: {
+    clientId: string
+    webContentsId: number | null
+    workspaceId: string | null
+    capabilities: string[]
+    isLocalElectronClient: boolean
+  }) => void
   /** Called when a client disconnects. */
   onClientDisconnected?: (clientId: string) => void
+  /**
+   * Electron main may turn an untrusted handshake candidate into an
+   * authoritative local renderer binding. Returning null leaves the client
+   * unbound and unable to access local-Electron handlers.
+   */
+  resolveLocalClientBinding?: (candidate: LocalClientBindingCandidate) => TrustedLocalClientBinding | null
   /**
    * Optional HTTP request handler for non-WebSocket requests.
    * When provided, regular HTTP requests to the server's port are
@@ -124,14 +157,16 @@ export class WsRpcServer implements RpcServer {
   private httpServer: HttpServer | null = null
   private httpsServer: HttpsServer | null = null
   private clients = new Map<string, ClientConnection>()
-  private handlers = new Map<string, HandlerFn>()
-  private pendingInvokes = new Map<string, PendingInvoke>()
+  private handlers = new Map<string, RegisteredHandler>()
+  private localElectronChannels = new Set<string>()
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private _port = 0
   private _protocol: 'ws' | 'wss' = 'ws'
 
   /** Recently disconnected clients retained for reconnect replay. */
   private disconnectedClients = new Map<string, { client: ClientConnection; timer: ReturnType<typeof setTimeout> }>()
+  /** Requests sent from the server that still await a client response. */
+  private pendingInvokes = new Map<string, PendingInvoke>()
 
   private readonly host: string
   private readonly requestedPort: number
@@ -144,6 +179,7 @@ export class WsRpcServer implements RpcServer {
   private readonly maxClients: number
   private readonly onClientConnected: WsRpcServerOptions['onClientConnected']
   private readonly onClientDisconnected: WsRpcServerOptions['onClientDisconnected']
+  private readonly resolveLocalClientBinding: WsRpcServerOptions['resolveLocalClientBinding']
   private readonly httpHandler: WsRpcServerOptions['httpHandler']
 
   constructor(opts?: WsRpcServerOptions) {
@@ -158,6 +194,7 @@ export class WsRpcServer implements RpcServer {
     this.maxClients = opts?.maxClients ?? 50
     this.onClientConnected = opts?.onClientConnected
     this.onClientDisconnected = opts?.onClientDisconnected
+    this.resolveLocalClientBinding = opts?.resolveLocalClientBinding
     this.httpHandler = opts?.httpHandler
   }
 
@@ -180,11 +217,34 @@ export class WsRpcServer implements RpcServer {
   // RpcServer interface
   // -------------------------------------------------------------------------
 
-  handle(channel: string, handler: HandlerFn): void {
+  handle(channel: string, handler: HandlerFn, options?: RpcHandlerOptions): void {
     if (this.handlers.has(channel)) {
       throw new Error(`Handler already registered for channel: ${channel}`)
     }
-    this.handlers.set(channel, handler)
+    const access = options?.access
+    this.handlers.set(channel, { handler, access })
+    if (access === 'localElectron') {
+      this.localElectronChannels.add(channel)
+    }
+  }
+
+  private registeredChannelsFor(client: Pick<ClientConnection, 'localBinding'>): string[] {
+    return [...this.handlers].flatMap(([channel, registration]) =>
+      registration.access === 'localElectron' && !client.localBinding ? [] : [channel],
+    )
+  }
+
+  private resolveBinding(envelope: MessageEnvelope): TrustedLocalClientBinding | null {
+    const rawWebContentsId = envelope.webContentsId
+    const candidate: LocalClientBindingCandidate = {
+      workspaceId: typeof envelope.workspaceId === 'string' ? envelope.workspaceId : null,
+      webContentsId: typeof rawWebContentsId === 'number' && Number.isSafeInteger(rawWebContentsId)
+        ? rawWebContentsId
+        : null,
+      localClientProof: typeof envelope.localClientProof === 'string' ? envelope.localClientProof : null,
+    }
+    const binding = this.resolveLocalClientBinding?.(candidate) ?? null
+    return isTrustedLocalClientBinding(binding) ? binding : null
   }
 
   push(channel: string, target: PushTarget, ...args: any[]): void {
@@ -448,17 +508,29 @@ export class WsRpcServer implements RpcServer {
           }
         }
 
+        const localBinding = this.resolveBinding(envelope)
+        const workspaceId = localBinding?.workspaceId ?? envelope.workspaceId ?? null
+        const webContentsId = localBinding?.webContentsId ?? envelope.webContentsId ?? null
+
         // ── Reconnect attempt ──
         if (envelope.reconnectClientId && envelope.lastSeq != null) {
           const entry = this.disconnectedClients.get(envelope.reconnectClientId)
           if (entry) {
             const prevClient = entry.client
 
-            // Identity must match (workspace + webContentsId)
+            // A reconnect must prove the same effective identity. In particular,
+            // an old local client cannot reconnect without renewing its
+            // Electron-main binding proof.
             const identityMatch =
-              prevClient.workspaceId === (envelope.workspaceId ?? null) &&
-              prevClient.webContentsId === (envelope.webContentsId ?? null)
-
+              prevClient.workspaceId === workspaceId
+              && prevClient.webContentsId === webContentsId
+              && (
+                (prevClient.localBinding === null && localBinding === null)
+                || (
+                  prevClient.localBinding?.workspaceId === localBinding?.workspaceId
+                  && prevClient.localBinding?.webContentsId === localBinding?.webContentsId
+                )
+              )
             if (identityMatch) {
               // Valid reconnect — prepare client state but do NOT add to
               // this.clients yet. The client stays in disconnectedClients
@@ -494,7 +566,7 @@ export class WsRpcServer implements RpcServer {
                   protocolVersion: PROTOCOL_VERSION,
                   serverVersion: this.serverVersion || undefined,
                   clientId: prevClient.id,
-                  registeredChannels: [...this.handlers.keys()],
+                  registeredChannels: this.registeredChannelsFor(prevClient),
                   reconnected: true,
                 }
                 this.safeSend(ws, serializeEnvelope(ack))
@@ -517,7 +589,7 @@ export class WsRpcServer implements RpcServer {
                   protocolVersion: PROTOCOL_VERSION,
                   serverVersion: this.serverVersion || undefined,
                   clientId: prevClient.id,
-                  registeredChannels: [...this.handlers.keys()],
+                  registeredChannels: this.registeredChannelsFor(prevClient),
                   reconnected: true,
                   stale: true,
                 }
@@ -542,6 +614,7 @@ export class WsRpcServer implements RpcServer {
                 webContentsId: prevClient.webContentsId,
                 workspaceId: prevClient.workspaceId,
                 capabilities: [...prevClient.capabilities],
+                isLocalElectronClient: prevClient.localBinding !== null,
               })
               return
             }
@@ -559,8 +632,9 @@ export class WsRpcServer implements RpcServer {
         const client: ClientConnection = {
           id: clientId,
           ws,
-          workspaceId: envelope.workspaceId ?? null,
-          webContentsId: envelope.webContentsId ?? null,
+          workspaceId,
+          webContentsId,
+          localBinding,
           capabilities: new Set(envelope.clientCapabilities ?? []),
           missedPongs: 0,
           alive: true,
@@ -578,11 +652,12 @@ export class WsRpcServer implements RpcServer {
           protocolVersion: PROTOCOL_VERSION,
           serverVersion: this.serverVersion || undefined,
           clientId,
-          registeredChannels: [...this.handlers.keys()],
+          registeredChannels: this.registeredChannelsFor(client),
+          webContentsId: client.webContentsId ?? undefined,
+          workspaceId: client.workspaceId ?? undefined,
         }
         this.safeSend(ws, serializeEnvelope(ack))
 
-        // Notify lifecycle listener
         transportLog.info('Client connected', {
           clientId,
           webContentsId: client.webContentsId,
@@ -593,6 +668,7 @@ export class WsRpcServer implements RpcServer {
           webContentsId: client.webContentsId,
           workspaceId: client.workspaceId,
           capabilities: [...client.capabilities],
+          isLocalElectronClient: client.localBinding !== null,
         })
 
         this.setupClientHandlers(ws, client)
@@ -647,8 +723,16 @@ export class WsRpcServer implements RpcServer {
       return
     }
 
-    const handler = this.handlers.get(channel)
-    if (!handler) {
+    // Local-Electron channels are denied before consulting the handler map.
+    // This protects accidental registration in a remote/headless profile and
+    // makes unbound clients observe the same result as an absent channel.
+    if (!client.localBinding && this.localElectronChannels.has(channel)) {
+      this.sendResponseError(client.ws, id, channel, 'CHANNEL_NOT_FOUND', `No handler for: ${channel}`)
+      return
+    }
+
+    const registration = this.handlers.get(channel)
+    if (!registration) {
       this.sendResponseError(client.ws, id, channel, 'CHANNEL_NOT_FOUND', `No handler for: ${channel}`)
       return
     }
@@ -661,7 +745,7 @@ export class WsRpcServer implements RpcServer {
 
     try {
       const result = await Promise.race([
-        handler(ctx, ...(args ?? [])),
+        registration.handler(ctx, ...(args ?? [])),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error(`Handler timeout: ${channel} (${WsRpcServer.HANDLER_TIMEOUT_MS}ms)`)),
             WsRpcServer.HANDLER_TIMEOUT_MS),
@@ -812,10 +896,14 @@ export class WsRpcServer implements RpcServer {
     }
   }
 
-  /** Update a client's workspaceId (called after SWITCH_WORKSPACE so push routing stays correct). */
+  /**
+   * Legacy workspace updates are only valid for unbound remote clients.
+   * A local-Electron binding is minted by Electron main and cannot be widened
+   * or replaced by a request-path caller.
+   */
   updateClientWorkspace(clientId: string, workspaceId: string): void {
     const client = this.clients.get(clientId)
-    if (client) {
+    if (client && !client.localBinding) {
       client.workspaceId = workspaceId
     }
   }
@@ -884,4 +972,15 @@ export class WsRpcServer implements RpcServer {
       ws.send(data)
     }
   }
+}
+
+function isTrustedLocalClientBinding(value: unknown): value is TrustedLocalClientBinding {
+  if (!value || typeof value !== 'object') return false
+  if (!('workspaceId' in value) || !('webContentsId' in value)) return false
+  const { workspaceId, webContentsId } = value
+  return typeof workspaceId === 'string'
+    && workspaceId.length > 0
+    && typeof webContentsId === 'number'
+    && Number.isSafeInteger(webContentsId)
+    && webContentsId > 0
 }

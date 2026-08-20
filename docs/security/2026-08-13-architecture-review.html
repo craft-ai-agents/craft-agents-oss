@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Architecture review — craft-agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .leak { stroke: #dc2626; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-12">
+      <header class="space-y-3">
+        <p class="text-xs uppercase tracking-wider text-slate-500">craft-agent · 2026-08-13</p>
+        <h1 class="font-serif text-4xl">Architecture review</h1>
+        <p class="text-sm text-slate-600">Solid box = module · dashed = seam · red = leakage · thick dark = deep module</p>
+      </header>
+
+      <section id="candidates" class="space-y-10">
+        <article id="root-policy" class="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="font-serif text-2xl">Deepen owned-root policy</h2>
+            <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs px-2 py-1">Strong</span>
+            <span class="rounded-full bg-slate-100 text-slate-700 text-xs px-2 py-1">in-process</span>
+          </div>
+          <ul class="font-mono text-sm text-slate-700 space-y-1">
+            <li>packages/shared/src/config/paths.ts:17-19</li>
+            <li>packages/shared/src/workspaces/storage.ts:42,88-107</li>
+          </ul>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 p-4">
+              <p class="text-xs uppercase tracking-wider mb-2">Before — shallow</p>
+              <pre class="mermaid">
+flowchart TB
+  ENV["CRAFT_CONFIG_DIR"] --> CAPTURE["CONFIG_DIR module-eval"]
+  CAPTURE --> WS["workspaces/storage"]
+  CAPTURE --> NOTES["notes default root"]
+  WS -.leak.-> HOME["~/.craft-agent"]
+  classDef leak stroke:#dc2626,stroke-width:2px;
+  class WS,HOME leak
+              </pre>
+            </div>
+            <div class="rounded-lg border border-slate-900 p-4 bg-slate-900 text-slate-50">
+              <p class="text-xs uppercase tracking-wider mb-2">After — deep</p>
+              <pre class="mermaid">
+flowchart TB
+  POLICY["OwnedRootPolicy interface"]
+  POLICY --> IMPL["resolve ~/ROX/.rox + ~/ROX/Notes"]
+  POLICY --> TEST["injected adapter in tests"]
+              </pre>
+            </div>
+          </div>
+          <p><strong>Problem.</strong> The path module is shallow — interface is an env read at import time, almost identical to the implementation.</p>
+          <p><strong>Solution.</strong> One OwnedRootPolicy module; callers take a resolved root, never capture env themselves.</p>
+          <ul class="list-disc pl-5 text-sm space-y-1">
+            <li>locality: root bugs concentrate in one module</li>
+            <li>leverage: one interface, N path call sites</li>
+            <li>seam: tests inject an adapter; production does not read env after boot</li>
+          </ul>
+        </article>
+
+        <article id="migrate-notes" class="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="font-serif text-2xl">Move Notes import seam off the wire</h2>
+            <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs px-2 py-1">Strong</span>
+            <span class="rounded-full bg-slate-100 text-slate-700 text-xs px-2 py-1">ports &amp; adapters</span>
+          </div>
+          <ul class="font-mono text-sm text-slate-700 space-y-1">
+            <li>packages/shared/src/protocol/channels.ts:183</li>
+            <li>packages/shared/src/protocol/routing.ts:500</li>
+            <li>packages/shared/src/protocol/__tests__/routing.test.ts:133-137</li>
+            <li>packages/server-core/src/handlers/rpc/knowledge.ts:1620-1655</li>
+          </ul>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 p-4">
+              <p class="text-xs uppercase tracking-wider mb-2">Before — leak</p>
+              <pre class="mermaid">
+sequenceDiagram
+  participant Remote
+  participant RPC as knowledge:migrateNotes
+  participant FS as local sourceRoot
+  Remote->>RPC: REMOTE_ELIGIBLE
+  RPC->>FS: importNotes(path)
+  Note over RPC,FS: filesystem capability on the wire
+              </pre>
+            </div>
+            <div class="rounded-lg border border-slate-900 p-4 bg-slate-900 text-slate-50">
+              <p class="text-xs uppercase tracking-wider mb-2">After — deep</p>
+              <pre class="mermaid">
+sequenceDiagram
+  participant Main as Electron main
+  participant Import as local-only import module
+  participant Remote
+  Remote--x Import: deny before lookup
+  Main->>Import: opaque sourceId
+              </pre>
+            </div>
+          </div>
+          <p><strong>Problem.</strong> The import module's seam sits on a remote-eligible channel while the implementation walks a local filesystem path.</p>
+          <p><strong>Solution.</strong> LOCAL_ONLY routing plus main-owned source locators. Tests already encode the leak (`migrateNotes is REMOTE_ELIGIBLE`).</p>
+          <ul class="list-disc pl-5 text-sm space-y-1">
+            <li>locality: trust check lives with the import module</li>
+            <li>leverage: one deny path for every remote adapter</li>
+          </ul>
+          <div class="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm">Notes implementation plan forbids shipping this until security acceptance — record the seam, do not start the Notes plan.</div>
+        </article>
+
+        <article id="sources-index" class="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="font-serif text-2xl">Split index from agent-context ingress</h2>
+            <span class="rounded-full bg-amber-100 text-amber-900 text-xs px-2 py-1">Worth exploring</span>
+            <span class="rounded-full bg-slate-100 text-slate-700 text-xs px-2 py-1">in-process</span>
+          </div>
+          <ul class="font-mono text-sm text-slate-700 space-y-1">
+            <li>packages/server-core/src/sources/source-index.ts:1-7,557</li>
+            <li>packages/server-core/src/sessions/SessionManager.ts:4158-4166</li>
+          </ul>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 p-4">
+              <p class="text-xs uppercase tracking-wider mb-2">Before</p>
+              <pre class="mermaid">
+flowchart LR
+  PATH["arbitrary local path"] --> IDX["source-index body_text"]
+  IDX --> SM["SessionManager"]
+  SM --> PROMPT["memoryBlocks.sourcesBlock"]
+  classDef leak stroke:#dc2626,stroke-width:2px;
+  class PATH,PROMPT leak
+              </pre>
+            </div>
+            <div class="rounded-lg border border-slate-900 p-4 bg-slate-900 text-slate-50">
+              <p class="text-xs uppercase tracking-wider mb-2">After</p>
+              <pre class="mermaid">
+flowchart LR
+  IDX["FTS index module"] --> RET["retrieval interface"]
+  RET --> POLICY["consent + capability adapter"]
+  POLICY --> PROMPT["prompt block"]
+              </pre>
+            </div>
+          </div>
+          <p><strong>Problem.</strong> Indexing and prompt injection share one interface; any registered local path leaks into agent context.</p>
+          <p><strong>Solution.</strong> Keep the index module; add a retrieval seam that requires a grant. Two adapters: granted workspace sources vs deny.</p>
+        </article>
+
+        <article id="credential-legacy" class="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="font-serif text-2xl">Keep CF-1; stop raw RPC value</h2>
+            <span class="rounded-full bg-slate-200 text-slate-800 text-xs px-2 py-1">Speculative</span>
+            <span class="rounded-full bg-slate-100 text-slate-700 text-xs px-2 py-1">ports &amp; adapters</span>
+          </div>
+          <ul class="font-mono text-sm text-slate-700 space-y-1">
+            <li>packages/shared/src/credentials/types.ts StoredCredential.value</li>
+            <li>packages/shared/src/credentials/envelope.ts (CF-1 landed)</li>
+            <li>packages/core/src/platform/identity/credential-types.ts (registry, no payload)</li>
+            <li>packages/core/src/platform/identity/types.ts:51 credentialRef string</li>
+            <li>packages/server-core/src/handlers/rpc/identity.ts credentialValue</li>
+          </ul>
+          <p><strong>Problem.</strong> A deep metadata module already exists; the identity RPC interface still accepts a raw `credentialValue`.</p>
+          <p><strong>Solution.</strong> CF-2/CF-4 later. Do not grow the registry. Shrink the RPC interface so new callers cannot pass payload.</p>
+          <ul class="list-disc pl-5 text-sm space-y-1">
+            <li>leverage: CF-1 registry already pays for metadata call sites</li>
+            <li>do not open CF-3/CF-4 this session</li>
+          </ul>
+        </article>
+      </section>
+
+      <section id="top-recommendation" class="rounded-2xl border-2 border-slate-900 bg-white p-8 space-y-3">
+        <p class="text-xs uppercase tracking-wider">Top recommendation</p>
+        <h2 class="font-serif text-3xl"><a href="#root-policy" class="underline">Deepen owned-root policy</a></h2>
+        <p>Highest leverage: every Notes/workspace/config path inherits a module-eval capture. Fix the seam once. Do not implement the Notes plan until G2/G1/security gates open.</p>
+      </section>
+    </main>
+  </body>
+</html>

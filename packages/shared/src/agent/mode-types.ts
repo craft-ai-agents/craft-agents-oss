@@ -138,6 +138,15 @@ export const PermissionsConfigSchema = z.object({
   allowedBashPatterns: z.array(PatternSchema).optional(),
   /** MCP tool patterns to allow (regex strings) */
   allowedMcpPatterns: z.array(PatternSchema).optional(),
+  /**
+   * Knowledge provider operation patterns to allow (regex strings matched
+   * against knowledge operation names, e.g. "knowledge:search").
+   * P1 ships a READ-ONLY provider only (spec 03): the bundled defaults allow
+   * the read operations so they run in Explore mode without prompting.
+   * No mutation operations exist in P1 — mutation ops (proposeMutation/
+   * applyMutation/discardMutation) are P3 and MUST NOT be added here.
+   */
+  allowedKnowledgePatterns: z.array(PatternSchema).optional(),
   /** API endpoint rules - method + path pattern */
   allowedApiEndpoints: z.array(ApiEndpointRuleSchema).optional(),
   /** File paths to allow writes in Explore mode (glob patterns) */
@@ -146,9 +155,75 @@ export const PermissionsConfigSchema = z.object({
   blockedTools: z.array(PatternSchema).optional(),
   /** Command-specific hint messages for blocked Bash commands */
   blockedCommandHints: z.array(BlockedCommandHintSchema).optional(),
+  /**
+   * Extension Center permission grants bookkeeping (S-05 §3.6).
+   * Optional — absence means no extension-scoped grants recorded yet.
+   */
+  extensions: z
+    .record(
+      z.string(),
+      z.object({
+        granted: z.array(z.string()),
+        grantedAt: z.string(),
+        revoked: z.array(z.string()).optional(),
+      }),
+    )
+    .optional(),
 });
 
 export type PermissionsConfigFile = z.infer<typeof PermissionsConfigSchema>;
+
+// ============================================================
+// Knowledge Permissions Vocabulary (P1 read-only provider)
+// ============================================================
+
+/**
+ * Read-only knowledge provider operations (P1, spec 03). This is the
+ * "knowledge.read" permission vocabulary: operations matching these names are
+ * allowed in Explore mode without prompting, via the `allowedKnowledgePatterns`
+ * section of permissions.json (bundled default.json ships the anchored regex
+ * covering exactly this list).
+ *
+ * P1 exit criterion: the provider is READ-ONLY — mutation operations
+ * (proposeMutation/applyMutation/discardMutation, P3) and engine lifecycle
+ * (engineStart/engineStop, P7) MUST NOT be added to this allowlist.
+ */
+export const KNOWLEDGE_READ_ONLY_OPERATIONS: readonly string[] = [
+  'listConnections',
+  'capabilities',
+  'search',
+  'get',
+  'getContext',
+  'getBacklinks',
+  'snapshotCreate',
+  'snapshotGet',
+  'engineStatus',
+];
+
+// ============================================================
+// Knowledge Write Operations Vocabulary (P3 mutation proposals)
+// ============================================================
+
+/**
+ * Knowledge WRITE capability names (P3, spec 05 §3.6): the proposal-creation
+ * tools of the mutation pipeline. Unlike KNOWLEDGE_READ_ONLY_OPERATIONS (bare
+ * operation names matched by the anchored `allowedKnowledgePatterns` regex),
+ * these are dot-namespaced capability identifiers matched EXACTLY (Set lookup)
+ * through `blockedTools` — same mechanism as the hardcoded core write tools.
+ *
+ * Safety invariant: in `safe` (Explore) mode these four are always blocked —
+ * the bundled default.json seeds them into `blockedTools` and the merge is
+ * additive (union-only, never removable). They MUST NOT be added to
+ * `allowedKnowledgePatterns` or to KNOWLEDGE_READ_ONLY_OPERATIONS: even in
+ * `allow-all`, every SiYuan write flows through an approved MutationProposal
+ * (spec 05 §3.6: no mode bypasses the pipeline; no auto-approve exists).
+ */
+export const KNOWLEDGE_WRITE_OPERATIONS: readonly string[] = [
+  'knowledge.propose_update',
+  'knowledge.create_document',
+  'knowledge.append_block',
+  'knowledge.set_attribute',
+];
 
 // ============================================================
 // Mode Config Types
@@ -237,6 +312,12 @@ export interface ModeConfig {
   blockedCommandHints?: CompiledBlockedCommandHint[];
   /** Read-only MCP patterns (tools matching these are allowed) */
   readOnlyMcpPatterns: RegExp[];
+  /**
+   * Read-only knowledge operation patterns (operations matching these are
+   * allowed in Explore mode without prompting). Read-only by definition:
+   * P1 ships no mutation operations (spec 03, P1 exit criteria).
+   */
+  readOnlyKnowledgePatterns: RegExp[];
   /** Fine-grained API endpoint rules (method + path pattern) */
   allowedApiEndpoints: CompiledApiEndpointRule[];
   /** File paths allowed for writes in Explore mode (glob patterns) */
@@ -277,6 +358,9 @@ export const SAFE_MODE_CONFIG: ModeConfig = {
   readOnlyBashPatterns: [],
   blockedCommandHints: [],
   readOnlyMcpPatterns: [],
+  // Empty fallback - actual knowledge read patterns loaded from default.json.
+  // P1 note: knowledge provider is read-only; only read ops are ever allowlisted.
+  readOnlyKnowledgePatterns: [],
   allowedApiEndpoints: [],
   displayName: 'Explore',
   shortcutHint: 'SHIFT+TAB',

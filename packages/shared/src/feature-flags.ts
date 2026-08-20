@@ -58,6 +58,16 @@ export function isEmbeddedServerEnabled(): boolean {
   if (override !== undefined) return override;
   return false;
 }
+/**
+ * Runtime-evaluated check for the native Knowledge mode (SiYuan document surface).
+ *
+ * Defaults to enabled. Override with CRAFT_FEATURE_KNOWLEDGE=1|0.
+ */
+export function isKnowledgeFeatureEnabled(): boolean {
+  const override = parseBooleanEnv(getEnv('CRAFT_FEATURE_KNOWLEDGE'));
+  if (override !== undefined) return override;
+  return true;
+}
 
 export const FEATURE_FLAGS = {
   /** Enable Opus 4.7 fast mode (speed:"fast" + beta header). 6x pricing. */
@@ -86,5 +96,13 @@ export const FEATURE_FLAGS = {
    */
   get embeddedServer(): boolean {
     return isEmbeddedServerEnabled();
+  },
+  /**
+   * Enable native Knowledge mode (SiYuan as first-class Craft shell surface).
+   *
+   * Defaults to enabled. Override with CRAFT_FEATURE_KNOWLEDGE=1|0.
+   */
+  get knowledge(): boolean {
+    return isKnowledgeFeatureEnabled();
   },
 } as const;

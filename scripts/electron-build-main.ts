@@ -20,6 +20,17 @@ const PI_AGENT_SERVER_OUTPUT = join(PI_AGENT_SERVER_DIR, "dist/index.js");
 const WA_WORKER_DIR = join(ROOT_DIR, "packages/messaging-whatsapp-worker");
 const WA_WORKER_SOURCE = join(WA_WORKER_DIR, "src/worker.ts");
 const WA_WORKER_OUTPUT = join(WA_WORKER_DIR, "dist/worker.cjs");
+const DISCORD_WORKER_DIR = join(ROOT_DIR, "packages/messaging-discord-worker");
+const DISCORD_WORKER_SOURCE = join(DISCORD_WORKER_DIR, "src/worker.ts");
+const DISCORD_WORKER_OUTPUT = join(DISCORD_WORKER_DIR, "dist/worker.cjs");
+const EXTENSION_HOST_WORKER_SOURCE = join(
+  ROOT_DIR,
+  "apps/electron/src/main/extension-host/worker.ts",
+);
+const EXTENSION_HOST_WORKER_OUTPUT = join(
+  DIST_DIR,
+  "extension-host-worker.cjs",
+);
 
 // Load .env file if it exists
 function loadEnvFile(): void {
@@ -310,6 +321,71 @@ async function buildWhatsAppWorker(): Promise<void> {
   console.log("✅ WhatsApp worker built successfully");
 }
 
+/**
+ * Build the Discord worker bundle. Delegates to the canonical
+ * `scripts/build-discord-worker.ts` so the packaged path stays in sync with
+ * dev/CI (discord.js bundled into a self-contained worker.cjs).
+ */
+async function buildDiscordWorker(): Promise<void> {
+  if (!existsSync(DISCORD_WORKER_SOURCE)) {
+    console.log("⏭️  Discord worker skipped (package not found)");
+    return;
+  }
+
+  console.log("🎮 Building Discord worker...");
+  const proc = spawn({
+    cmd: ["bun", "run", "scripts/build-discord-worker.ts"],
+    cwd: ROOT_DIR,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    console.error("❌ Discord worker build failed with exit code", exitCode);
+    process.exit(exitCode);
+  }
+  if (!existsSync(DISCORD_WORKER_OUTPUT)) {
+    console.error("❌ Discord worker output not found at", DISCORD_WORKER_OUTPUT);
+    process.exit(1);
+  }
+  console.log("✅ Discord worker built successfully");
+}
+
+async function buildExtensionHostWorker(): Promise<void> {
+  console.log("🔨 Building extension-host worker...");
+  if (!existsSync(EXTENSION_HOST_WORKER_SOURCE)) {
+    console.error("❌ Extension host worker source missing:", EXTENSION_HOST_WORKER_SOURCE);
+    process.exit(1);
+  }
+  const proc = spawn({
+    cmd: [
+      "bun",
+      "run",
+      "esbuild",
+      "apps/electron/src/main/extension-host/worker.ts",
+      "--bundle",
+      "--platform=node",
+      "--format=cjs",
+      "--outfile=apps/electron/dist/extension-host-worker.cjs",
+      "--external:electron",
+    ],
+    cwd: ROOT_DIR,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    console.error("❌ extension-host worker build failed with exit code", exitCode);
+    process.exit(exitCode);
+  }
+  const verification = await verifyJsFile(EXTENSION_HOST_WORKER_OUTPUT);
+  if (!verification.valid) {
+    console.error("❌ extension-host worker verification failed:", verification.error);
+    process.exit(1);
+  }
+  console.log("✅ extension-host worker built");
+}
+
 async function main(): Promise<void> {
   loadEnvFile();
 
@@ -334,6 +410,12 @@ async function main(): Promise<void> {
   // Build WhatsApp worker (Baileys subprocess — optional package)
   await buildWhatsAppWorker();
 
+  // Build Discord worker (discord.js subprocess — optional package)
+  await buildDiscordWorker();
+
+  // Build Extension Host craft-sandbox worker (utilityProcess entry)
+  await buildExtensionHostWorker();
+
   const buildDefines = getBuildDefines();
 
   console.log("🔨 Building main process...");
@@ -354,6 +436,12 @@ async function main(): Promise<void> {
       // Electron 39 ships Node 22.x which supports require() of ESM without TLA, so the
       // bundled main.cjs's `require('@anthropic-ai/claude-agent-sdk')` works.
       "--external:@anthropic-ai/claude-agent-sdk",
+      // M2 semantic memory: native ONNX runtime + native sharp can't be
+      // bundled by esbuild (.node addons). Externalized and resolved from
+      // node_modules at runtime; lazy-loaded only when memory.semantic=true.
+      "--external:@xenova/transformers",
+      "--external:onnxruntime-node",
+      "--external:sharp",
       // Replace grammY's bundled polyfills (node-fetch@2 + abort-controller@3)
       // with native Node globals. esbuild otherwise renames the polyfill's
       // `class AbortSignal` to `_AbortSignal` to dodge collision with the
@@ -361,6 +449,9 @@ async function main(): Promise<void> {
       // fails every Telegram API call with a TypeError.
       "--alias:node-fetch=./apps/electron/src/main/shims/node-fetch.cjs",
       "--alias:abort-controller=./apps/electron/src/main/shims/abort-controller.cjs",
+      // server-core memory FTS uses bun:sqlite (Bun-only); Electron main runs
+      // Node whose node:sqlite exposes the same DatabaseSync surface (22.5+).
+      "--alias:bun:sqlite=./apps/electron/src/main/shims/node-sqlite.cjs",
       ...buildDefines,
     ],
     cwd: ROOT_DIR,

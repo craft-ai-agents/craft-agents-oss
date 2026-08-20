@@ -25,6 +25,10 @@ interface ChatInputZoneProps {
   sessionStatuses?: SessionStatus[]
   currentSessionStatus?: string
   onSessionStatusChange?: (stateId: string) => void
+  /** Workspace projects for main-session Projects chip (omit in compact/EditPopover) */
+  projects?: Array<{ id: string; slug: string; name: string; color?: string }>
+  projectId?: string | null
+  onSetProjectId?: (projectId: string | null) => void
   className?: string
   inputProps: React.ComponentProps<typeof InputContainer>
 }
@@ -45,6 +49,9 @@ export function ChatInputZone({
   sessionStatuses = [],
   currentSessionStatus = 'todo',
   onSessionStatusChange,
+  projects,
+  projectId,
+  onSetProjectId,
   className,
   inputProps,
 }: ChatInputZoneProps) {
@@ -97,6 +104,9 @@ export function ChatInputZone({
           sessionStatuses={sessionStatuses}
           currentSessionStatus={currentSessionStatus}
           onSessionStatusChange={onSessionStatusChange}
+          projects={!compactMode ? projects : undefined}
+          projectId={!compactMode ? projectId : undefined}
+          onSetProjectId={!compactMode ? onSetProjectId : undefined}
         />
       )}
 

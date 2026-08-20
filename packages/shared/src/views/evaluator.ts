@@ -2,7 +2,7 @@
  * View Evaluator
  *
  * Compiles Filtrex expressions into native JS functions (once, on config load)
- * and evaluates them against session context (per render).
+ * and evaluates them against session or knowledge context (per render).
  *
  * Architecture:
  *   config load → compileAllViews() → CompiledView[]  (cached)
@@ -12,7 +12,12 @@
  */
 
 import { compileExpression, useDotAccessOperatorAndOptionalChaining } from 'filtrex';
-import type { ViewConfig, CompiledView, ViewEvaluationContext } from './types.ts';
+import type {
+  ViewConfig,
+  CompiledView,
+  ViewEvaluationContext,
+  KnowledgeViewEvaluationContext,
+} from './types.ts';
 import { VIEW_FUNCTIONS } from './functions.ts';
 import { debug } from '../utils/debug.ts';
 
@@ -35,7 +40,7 @@ export function compileView(config: ViewConfig): CompiledView | null {
 
     return {
       config,
-      evaluate: fn as (context: ViewEvaluationContext) => unknown,
+      evaluate: fn as (context: object) => unknown,
     };
   } catch (error) {
     debug(`[views] Failed to compile expression for "${config.id}": ${config.expression}`, error);
@@ -62,15 +67,18 @@ export function compileAllViews(configs: ViewConfig[]): CompiledView[] {
 }
 
 /**
- * Evaluate all compiled views against a session context.
+ * Evaluate all compiled views against a context object.
  * Returns the configs of matching views (expression returned truthy).
+ *
+ * Accepts session ViewEvaluationContext or KnowledgeViewEvaluationContext
+ * (filtrex takes plain objects).
  *
  * Each evaluation is a native JS function call — very fast.
  * Errors during evaluation (e.g. runtime type issues) are caught per-view
  * so one broken expression doesn't prevent others from matching.
  */
 export function evaluateViews(
-  context: ViewEvaluationContext,
+  context: object,
   compiled: CompiledView[]
 ): ViewConfig[] {
   const matches: ViewConfig[] = [];
@@ -88,6 +96,17 @@ export function evaluateViews(
   }
 
   return matches;
+}
+
+/**
+ * Evaluate a single compiled view against a context (truthy match).
+ */
+export function evaluateView(context: object, compiled: CompiledView): boolean {
+  try {
+    return Boolean(compiled.evaluate(context));
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -153,5 +172,79 @@ export function buildViewContext(meta: {
 
     // Arrays
     labels: meta.labels ?? [],
+  };
+}
+
+/** Minimal hit/node/envelope shapes accepted by buildKnowledgeViewContext (no hard dep on core). */
+export interface KnowledgeViewContextHit {
+  title?: string;
+  snippet?: string;
+  notebookPath?: string;
+  updatedAt?: number;
+  ref?: { kind?: string; id?: string };
+  path?: string;
+  /** Optional — SearchHit does not carry attributes today */
+  attributes?: Record<string, string> | Array<{ key: string; value: string }>;
+}
+
+export interface KnowledgeViewContextNode {
+  title?: string;
+  path?: string;
+  updatedAt?: number;
+  ref?: { kind?: string };
+  attributes?: Array<{ key: string; value: string }> | Record<string, string>;
+}
+
+export interface KnowledgeViewContextEnvelope {
+  status?: string;
+  labels?: string[];
+  flagged?: boolean;
+  archived?: boolean;
+}
+
+function attributesToRecord(
+  attrs?: Record<string, string> | Array<{ key: string; value: string }>,
+): Record<string, string> {
+  if (!attrs) return {};
+  if (Array.isArray(attrs)) {
+    const out: Record<string, string> = {};
+    for (const a of attrs) {
+      if (a && typeof a.key === 'string') out[a.key] = String(a.value ?? '');
+    }
+    return out;
+  }
+  return { ...attrs };
+}
+
+/**
+ * Build a knowledge view evaluation context from a search hit and optional node/envelope.
+ */
+export function buildKnowledgeViewContext(
+  hit: KnowledgeViewContextHit,
+  node?: KnowledgeViewContextNode | null,
+  envelope?: KnowledgeViewContextEnvelope | null,
+): KnowledgeViewEvaluationContext {
+  const attributes = {
+    ...attributesToRecord(hit.attributes),
+    ...attributesToRecord(node?.attributes),
+  };
+  const path = node?.path ?? hit.path ?? hit.notebookPath ?? '';
+  const notebook =
+    hit.notebookPath?.split('/').filter(Boolean)[0] ??
+    path.split('/').filter(Boolean)[0] ??
+    '';
+  return {
+    title: node?.title ?? hit.title ?? '',
+    notebook,
+    path,
+    kind: node?.ref?.kind ?? hit.ref?.kind ?? '',
+    updatedAt: node?.updatedAt ?? hit.updatedAt ?? 0,
+    attributes,
+    topic: attributes.topic ?? '',
+    backlinkCount: 0,
+    status: envelope?.status ?? '',
+    labels: envelope?.labels ?? [],
+    flagged: envelope?.flagged ?? false,
+    archived: envelope?.archived ?? false,
   };
 }

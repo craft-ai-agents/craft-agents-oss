@@ -90,6 +90,28 @@ export type {
   BuiltServers,
 } from './server-builder.ts';
 
+// Built-in source templates and generated local source seeders
+export {
+  getDocsSource,
+  getBuiltinSources,
+  isBuiltinSource,
+  ensureBuiltinSources,
+  ensureLocalNotesSource,
+  hasExaKey,
+  hasFirecrawlKey,
+  estimateSourceGuideTokens,
+  formatTokenEstimate,
+  BUILTIN_SOURCE_SLUGS,
+  DEFAULT_ENABLED_LOCAL_SOURCE_SLUGS,
+  type BuiltinSourceSlug,
+} from './builtin-sources.ts';
+
+export {
+  computeSourceTokenStats,
+  type SourceFileStat,
+  type SourceTokenStats,
+} from './source-stats.ts';
+
 // API Tools (types)
 export type { SummarizeCallback } from './api-tools.ts';
 

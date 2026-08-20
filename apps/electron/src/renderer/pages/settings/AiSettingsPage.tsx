@@ -16,13 +16,14 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
-import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw, Settings2, MessageSquareMore, Zap, Clock, Check } from 'lucide-react'
+import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw, Settings2, MessageSquareMore, Zap, Clock, Check, Plus } from 'lucide-react'
 import type { CredentialHealthStatus, CredentialHealthIssue } from '../../../shared/types'
 import { Spinner, FullscreenOverlayBase, Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import { useSetAtom } from 'jotai'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
 import { motion, AnimatePresence } from 'motion/react'
-import type { LlmConnectionWithStatus, ThinkingLevel, WorkspaceSettings, Workspace } from '../../../shared/types'
+import type { LlmConnectionWithStatus, ThinkingLevel, WorkspaceSettings, Workspace, ToolchainToolStatus } from '../../../shared/types'
+import { useToolchainStatus } from '@/hooks/useToolchainStatus'
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVELS } from '@craft-agent/shared/agent/thinking-levels'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import {
@@ -50,9 +51,11 @@ import {
 import { useOnboarding } from '@/hooks/useOnboarding'
 import { useWorkspaceIcon } from '@/hooks/useWorkspaceIcon'
 import { OnboardingWizard, type ApiSetupMethod } from '@/components/onboarding'
+import type { ProviderChoice } from '@/components/onboarding/ProviderSelectStep'
 import { RenameDialog } from '@/components/ui/rename-dialog'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { getModelShortName, type ModelDefinition } from '@config/models'
+import type { CustomEndpointModelInput } from '@/components/apisetup'
 import { getModelsForProviderType, resolveMidStreamBehavior, type CustomEndpointApi, type MidStreamBehavior } from '@config/llm-connections'
 import { toast } from 'sonner'
 
@@ -65,6 +68,35 @@ function formatTokenCount(n: number): string {
   if (n < 1000) return String(n)
   if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`
   return `${(n / 1_000_000).toFixed(1)}M`
+}
+
+function formatDurationShort(ms: number): string {
+  if (ms <= 0) return '0m'
+  const minutes = Math.max(1, Math.round(ms / 60_000))
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.round(minutes / 60)
+  if (hours < 48) return `${hours}h`
+  return `${Math.round(hours / 24)}d`
+}
+
+function getOAuthStatusLine(connection: LlmConnectionWithStatus, t: ReturnType<typeof useTranslation>['t']): string | null {
+  if (connection.authType !== 'oauth') return null
+  if (connection.oauthRefreshError) return t('settings.ai.oauthRefreshFailed')
+  if (connection.oauthTimeRemainingMs !== undefined && connection.oauthExpiresAt !== undefined) {
+    if (connection.oauthTimeRemainingMs <= 0) return t('settings.ai.oauthExpired')
+    return t('settings.ai.oauthExpiresIn', {
+      time: formatDurationShort(connection.oauthTimeRemainingMs),
+      expiresAt: new Date(connection.oauthExpiresAt).toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      }),
+    })
+  }
+  // No expiration data available (e.g. Anthropic doesn't always return expires_in).
+  // Don't clutter the UI — the auto-refresh mechanism handles expired tokens transparently.
+  return null
 }
 
 /**
@@ -193,14 +225,17 @@ interface ConnectionRowProps {
   onValidate: () => void
   onReauthenticate: () => void
   onEdit: () => void
+  onAddAnother?: () => void
   onSetMidStreamBehavior: (behavior: MidStreamBehavior) => void
   validationState: ValidationState
   validationError?: string
   /** True when another OAuth connection resolves to the same Anthropic account (issue #838) */
   isDuplicateAccount?: boolean
+  /** Live status of the 'omp' runtime tool; shown inline for omp connections. */
+  ompToolStatus?: ToolchainToolStatus
 }
 
-function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onReauthenticate, onEdit, onSetMidStreamBehavior, validationState, validationError, isDuplicateAccount }: ConnectionRowProps) {
+function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onReauthenticate, onEdit, onAddAnother, onSetMidStreamBehavior, validationState, validationError, isDuplicateAccount, ompToolStatus }: ConnectionRowProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [piBaseUrl, setPiBaseUrl] = useState<string | undefined>(undefined)
@@ -251,6 +286,7 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
           ? 'Manifest'
           : 'Craft Agents Backend Compatible')
         break
+      case 'omp': parts.push('OMP'); break
       default: parts.push(provider || 'Unknown')
     }
 
@@ -278,6 +314,30 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
     // Auth status
     if (!connection.isAuthenticated) parts.push(t("settings.ai.notAuthenticated"))
 
+    // OMP connection: surface toolchain runtime state inline — the omprunner
+    // binary arrives via the first-run download manager, so a fresh install
+    // shows "Installing runtime… %" here instead of a bare provider label.
+    if (provider === 'omp' && ompToolStatus && ompToolStatus.phase !== 'ready') {
+      const { phase, downloadedBytes, totalBytes } = ompToolStatus
+      if (phase === 'downloading' || phase === 'installing') {
+        const percent =
+          phase === 'downloading' && downloadedBytes && totalBytes
+            ? Math.min(100, Math.max(0, Math.round((downloadedBytes / totalBytes) * 100)))
+            : undefined
+        parts.unshift(
+          percent != null
+            ? t('settings.ai.installingRuntime', { percent })
+            : t('settings.ai.installingRuntimeWait'),
+        )
+      } else if (phase === 'error') {
+        parts.unshift(t('settings.ai.toolchainError'))
+      } else if (phase === 'offline') {
+        parts.unshift(t('settings.ai.toolchainOffline'))
+      } else if (phase === 'missing') {
+        parts.unshift(t('settings.ai.installingRuntimeWait'))
+      }
+    }
+
     return parts.join(' · ')
   }
 
@@ -287,6 +347,7 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
   const oauthIdentityLine = connection.authType === 'oauth' && connection.oauthAccountEmail
     ? [connection.oauthAccountEmail, connection.oauthOrganizationName].filter(Boolean).join(' · ')
     : null
+  const oauthStatusLine = getOAuthStatusLine(connection, t)
 
   return (
     <SettingsRow
@@ -311,8 +372,20 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
               </Tooltip>
             )}
           </div>
-          {oauthIdentityLine && (
-            <span className="text-xs text-muted-foreground truncate">{oauthIdentityLine}</span>
+          {(oauthIdentityLine || oauthStatusLine) && (
+            <span className="text-xs text-muted-foreground truncate">
+              {oauthIdentityLine}
+              {oauthIdentityLine && oauthStatusLine && ' · '}
+              {oauthStatusLine && (
+                <span className={cn(
+                  connection.oauthTimeRemainingMs !== undefined && connection.oauthTimeRemainingMs <= 0
+                    ? "text-destructive"
+                    : connection.oauthRefreshError
+                      ? "text-amber-500"
+                      : "text-muted-foreground"
+                )}>{oauthStatusLine}</span>
+              )}
+            </span>
           )}
         </div>
       )}
@@ -339,10 +412,18 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
             </StyledDropdownMenuItem>
           )}
           {connection.authType === 'oauth' ? (
-            <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onReauthenticate)}>
-              <RefreshCcw className="h-3.5 w-3.5" />
-              <span>{t("settings.ai.reAuthenticate")}</span>
-            </StyledDropdownMenuItem>
+            <>
+              <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onReauthenticate)}>
+                <RefreshCcw className="h-3.5 w-3.5" />
+                <span>{t("settings.ai.reAuthenticate")}</span>
+              </StyledDropdownMenuItem>
+              {onAddAnother && (
+                <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onAddAnother)}>
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>{t("settings.ai.addAnotherSubscription")}</span>
+                </StyledDropdownMenuItem>
+              )}
+            </>
           ) : (
             <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onEdit)}>
               <Settings2 className="h-3.5 w-3.5" />
@@ -636,7 +717,7 @@ export default function AiSettingsPage() {
     baseUrl?: string
     connectionDefaultModel?: string
     activePreset?: string
-    models?: string[]
+    models?: CustomEndpointModelInput[]
     customApi?: CustomEndpointApi
   } | undefined>(undefined)
   const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
@@ -661,6 +742,11 @@ export default function AiSettingsPage() {
 
   // Credential health state (for startup warning banner)
   const [credentialHealthIssues, setCredentialHealthIssues] = useState<CredentialHealthIssue[]>([])
+
+  // OMP runtime readiness (toolchain download manager) — shown inline on
+  // omp connections while the runtime binary is downloading/being installed.
+  const { getTool: getToolchainTool } = useToolchainStatus()
+  const ompToolStatus = getToolchainTool('omp')
 
   // Rename dialog state
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
@@ -814,6 +900,24 @@ export default function AiSettingsPage() {
       apiSetupOnboarding.handleStartOAuth(method, connection.slug)
     }
   }, [apiSetupOnboarding, openApiSetup])
+
+  const handleAddProviderAccount = useCallback((choice: ProviderChoice) => {
+    setIsDirectEdit(false)
+    setEditInitialValues(undefined)
+    apiSetupOnboarding.reset()
+    openApiSetup()
+    setTimeout(() => apiSetupOnboarding.handleSelectProvider(choice), 0)
+  }, [apiSetupOnboarding, openApiSetup])
+
+  const handleAddAnotherLike = useCallback((connection: LlmConnectionWithStatus) => {
+    if (connection.providerType === 'anthropic') {
+      handleAddProviderAccount('claude')
+    } else if (connection.providerType === 'pi' && connection.piAuthProvider === 'github-copilot') {
+      handleAddProviderAccount('copilot')
+    } else {
+      handleAddProviderAccount('chatgpt')
+    }
+  }, [handleAddProviderAccount])
 
   const handleEditConnection = useCallback(async (connection: LlmConnectionWithStatus) => {
     // Fetch stored API key (best-effort — if IPC not available yet, skip pre-fill)
@@ -1062,7 +1166,9 @@ export default function AiSettingsPage() {
                       value: conn.slug,
                       label: conn.name,
                       description: conn.providerType === 'anthropic' ? 'Anthropic API' :
+                                   conn.providerType === 'anthropic_compat' ? 'Anthropic-Compatible' :
                                    conn.providerType === 'pi' ? 'Craft Agents Backend' :
+                                   conn.providerType === 'omp' ? 'OMP' :
                                    conn.providerType === 'pi_compat' ? (conn.baseUrl?.toLowerCase().includes('manifest.build') ? 'Manifest' : 'Craft Agents Backend Compatible') :
                                    conn.providerType || 'Unknown',
                     }))}
@@ -1132,10 +1238,12 @@ export default function AiSettingsPage() {
                         onValidate={() => handleValidateConnection(conn.slug)}
                         onReauthenticate={() => handleReauthenticateConnection(conn)}
                         onEdit={() => handleEditConnection(conn)}
+                        onAddAnother={conn.authType === 'oauth' ? () => handleAddAnotherLike(conn) : undefined}
                         onSetMidStreamBehavior={(behavior) => handleSetMidStreamBehavior(conn, behavior)}
                         validationState={validationStates[conn.slug]?.state || 'idle'}
                         validationError={validationStates[conn.slug]?.error}
                         isDuplicateAccount={!!conn.oauthAccountUuid && duplicateAccountUuids.has(conn.oauthAccountUuid)}
+                        ompToolStatus={ompToolStatus}
                       />
                     ))
                   )}
@@ -1243,6 +1351,7 @@ export default function AiSettingsPage() {
                   onStartOAuth={apiSetupOnboarding.handleStartOAuth}
                   onFinish={handleApiSetupFinish}
                   isWaitingForCode={apiSetupOnboarding.isWaitingForCode}
+                  isProviderOAuthPending={apiSetupOnboarding.isProviderOAuthPending}
                   onSubmitAuthCode={apiSetupOnboarding.handleSubmitAuthCode}
                   onCancelOAuth={apiSetupOnboarding.handleCancelOAuth}
                   copilotDeviceCode={apiSetupOnboarding.copilotDeviceCode}

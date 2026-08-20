@@ -39,6 +39,13 @@ export const actions = {
     defaultHotkey: 'mod+f',
     category: 'General',
   },
+  'app.omnibox': {
+    id: 'app.omnibox',
+    label: 'Command Palette',
+    description: 'Open the unified command palette',
+    defaultHotkey: 'mod+k',
+    category: 'General',
+  },
   'app.keyboardShortcuts': {
     id: 'app.keyboardShortcuts',
     label: 'Keyboard Shortcuts',

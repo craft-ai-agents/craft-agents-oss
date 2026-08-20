@@ -17,7 +17,7 @@
 
 import * as React from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useAtomValue } from 'jotai'
+import { useAtomValue, useSetAtom } from 'jotai'
 import { useTranslation } from 'react-i18next'
 import { Panel } from './Panel'
 import { MultiSelectPanel } from './MultiSelectPanel'
@@ -30,22 +30,41 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isMemoryNavigation,
+  isNotesNavigation,
   isAutomationsNavigation,
   isProjectsNavigation,
+  isBrowserNavigation,
+  isKnowledgeNavigation,
+  isDiffNavigation,
+  isExtensionNavigation,
+  isConnectionsNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
 import { extractLabelId } from '@craft-agent/shared/labels'
 import type { SessionStatusId } from '@/config/session-status-config'
-import { SourceInfoPage, ChatPage } from '@/pages'
+import { SourceInfoPage, ChatPage, BrowserPanelPage, KnowledgeSurfacePage, ExtensionSurfacePage } from '@/pages'
+import NotesPage from '@/pages/NotesPage'
+import ConnectionsPage from '@/pages/ConnectionsPage'
+import KnowledgeEntityPage from '@/pages/KnowledgeEntityPage'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { AutomationInfoPage } from '../automations/AutomationInfoPage'
+import { AutomationGraphWorkspaceEditor } from '../automations/AutomationGraphWorkspaceEditor'
 import ProjectInfoPage from '@/pages/ProjectInfoPage'
 import { KanbanBoardContainer } from './kanban/KanbanBoardContainer'
+import { SessionTableHost } from './session-table/SessionTableHost'
 import type { ExecutionEntry } from '../automations/types'
 import { automationsAtom } from '@/atoms/automations'
 import { SendResourceToWorkspaceDialog, type SendResourceType } from './SendResourceToWorkspaceDialog'
+import { KnowledgeDiff } from '../../knowledge/KnowledgeDiff'
+import {
+  KnowledgeHome,
+  knowledgeActiveViewIdAtom,
+  knowledgeHomeViewAtom,
+} from '../../knowledge/KnowledgeHome'
+import { KnowledgeProposals } from '../../knowledge/KnowledgeProposals'
 
 export interface MainContentPanelProps {
   /** Whether both sidebar and navigator are hidden (focus mode / CMD+.) */
@@ -58,12 +77,15 @@ export interface MainContentPanelProps {
    * Used by PanelSlot to render panels in the panel stack.
    */
   navStateOverride?: import('../../../shared/types').NavigationState | null
+  /** Owning panel id in the panel stack (used by embedded surfaces like browser panels) */
+  panelId?: string
 }
 
 export function MainContentPanel({
   isSidebarAndNavigatorHidden = false,
   className,
   navStateOverride,
+  panelId,
 }: MainContentPanelProps) {
   const { t } = useTranslation()
   const globalNavState = useNavigationState()
@@ -75,6 +97,7 @@ export function MainContentPanel({
     onArchiveSession,
     onSessionLabelsChange,
     sessionStatuses,
+    projects,
     labels,
     onTestAutomation,
     onToggleAutomation,
@@ -93,11 +116,26 @@ export function MainContentPanel({
   const { clearMultiSelect } = useSessionSelection()
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const automations = useAtomValue(automationsAtom)
+  const setKnowledgeHomeView = useSetAtom(knowledgeHomeViewAtom)
+  const setKnowledgeActiveViewId = useSetAtom(knowledgeActiveViewIdAtom)
+
+  // P5: deep-link knowledge/view/{viewId} → KnowledgeHome saved-view surface.
+  // Leaving a view route (bare knowledge nav or other knowledge details) clears the atom.
+  useEffect(() => {
+    if (!isKnowledgeNavigation(navState)) return
+    if (navState.details?.type === 'knowledge-view') {
+      setKnowledgeActiveViewId(navState.details.viewId)
+      setKnowledgeHomeView('view')
+      return
+    }
+    setKnowledgeActiveViewId(null)
+    // Leaving a view deep-link returns to search (proposals stays if user toggled it).
+    setKnowledgeHomeView('search')
+  }, [navState, setKnowledgeActiveViewId, setKnowledgeHomeView])
 
   // Execution history for the selected automation
   const selectedAutomationId = isAutomationsNavigation(navState) ? navState.details?.automationId : undefined
   const [executions, setExecutions] = useState<ExecutionEntry[]>([])
-
   useEffect(() => {
     if (!selectedAutomationId || !getAutomationHistory) {
       setExecutions([])
@@ -316,6 +354,17 @@ export function MainContentPanel({
     )
   }
 
+  // Memory navigator - the panel lives in the navigator column; main content shows a hint
+  if (isMemoryNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <div className="flex items-center justify-center h-full text-muted-foreground">
+          <p className="text-sm">{t("memory.emptyHint")}</p>
+        </div>
+      </Panel>
+    )
+  }
+
   // Automations navigator - show automation info, multi-select panel, or empty state
   if (isAutomationsNavigation(navState)) {
     if (isAutomationMultiSelectActive) {
@@ -351,8 +400,17 @@ export function MainContentPanel({
     }
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <div className="flex items-center justify-center h-full text-muted-foreground">
-          <p className="text-sm">{t("automations.noAutomationsConfigured")}</p>
+        <div className="flex h-full min-h-0 flex-col gap-3 p-4">
+          <div className="shrink-0">
+            <h1 className="text-lg font-semibold">{t('entityView.graph')}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t('automations.emptyDescription')}
+            </p>
+          </div>
+          <AutomationGraphWorkspaceEditor
+            workspaceId={activeWorkspaceId}
+            className="min-h-0 flex-1"
+          />
         </div>
       </Panel>
     )
@@ -377,6 +435,96 @@ export function MainContentPanel({
     )
   }
 
+  // Browser navigator - embedded browser instance panel
+  if (isBrowserNavigation(navState)) {
+    const instanceId = navState.details?.type === 'browser' ? navState.details.id : null
+    if (instanceId) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <BrowserPanelPage instanceId={instanceId} panelId={panelId} />
+        </Panel>
+      )
+    }
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <div className="flex items-center justify-center h-full text-muted-foreground">
+          <p className="text-sm">{t('browser.noInstanceSelected', { defaultValue: 'No browser instance selected' })}</p>
+        </div>
+      </Panel>
+    )
+  }
+
+  // Knowledge navigator - embedded SiYuan surface panel (W2)
+  if (isKnowledgeNavigation(navState)) {
+    const details = navState.details?.type === 'knowledge' ? navState.details : null
+    if (details) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <KnowledgeEntityPage kind={details.kind} id={details.id} panelId={panelId} />
+        </Panel>
+      )
+    }
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <KnowledgeHome />
+      </Panel>
+    )
+  }
+
+  // Extension navigator - sandboxed extension UI surface (S-05)
+  if (isExtensionNavigation(navState)) {
+    const details = navState.details?.type === 'extension' ? navState.details : null
+    if (details?.extensionId && details.viewId) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <ExtensionSurfacePage
+            extensionId={details.extensionId}
+            viewId={details.viewId}
+            panelId={panelId}
+          />
+        </Panel>
+      )
+    }
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <div className="flex items-center justify-center h-full text-muted-foreground">
+          <p className="text-sm">
+            {t('extensions.surface.noViewSelected', {
+              defaultValue: 'Select an extension view to open',
+            })}
+          </p>
+        </div>
+      </Panel>
+    )
+  }
+
+  // Diff navigator - mutation-proposal review/conflict surface (P3, spec K-05 §3.5)
+  if (isDiffNavigation(navState)) {
+    const proposalId = navState.details?.type === 'diff' ? navState.details.proposalId : null
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        {proposalId ? <KnowledgeDiff proposalId={proposalId} /> : <KnowledgeProposals className="h-full" />}
+      </Panel>
+    )
+  }
+
+  if (isConnectionsNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <ConnectionsPage />
+      </Panel>
+    )
+  }
+
+  // Notes navigator - self-contained notes workspace
+  if (isNotesNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <NotesPage selectedNoteId={navState.details?.type === 'note' ? navState.details.noteId : null} />
+      </Panel>
+    )
+  }
+
   // Chats navigator - show chat, multi-select panel, or empty state
   if (isSessionsNavigation(navState)) {
     // Board view: full-width Kanban over all sessions (placement independent of status)
@@ -384,6 +532,15 @@ export function MainContentPanel({
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
           <KanbanBoardContainer />
+        </Panel>
+      )
+    }
+
+    // Table view: full-width sessions table shell (B0 placeholder host)
+    if (navState.viewMode === 'table') {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <SessionTableHost />
         </Panel>
       )
     }

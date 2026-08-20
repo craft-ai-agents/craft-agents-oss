@@ -49,13 +49,24 @@ export type RunLogEntry =
 export function tasksRoot(workspaceRoot: string): string {
   return join(workspaceRoot, TASKS_DIR);
 }
+
+const SAFE_SLUG = /^[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}$/;
+
+export function assertSafePathSegment(slug: string): void {
+  if (!SAFE_SLUG.test(slug) || slug.includes('..')) {
+    throw new Error(`Invalid path segment: ${JSON.stringify(slug)}`);
+  }
+}
+
 export function taskDir(workspaceRoot: string, slug: string): string {
+  assertSafePathSegment(slug);
   return join(workspaceRoot, TASKS_DIR, slug);
 }
 export function taskYamlPath(workspaceRoot: string, slug: string): string {
   return join(taskDir(workspaceRoot, slug), TASK_FILE);
 }
 export function runDir(workspaceRoot: string, slug: string, runId: string): string {
+  assertSafePathSegment(runId);
   return join(taskDir(workspaceRoot, slug), RUNS_DIR, runId);
 }
 
@@ -194,6 +205,7 @@ export function writeNodeOutput(
   nodeId: string,
   output: NodeOutput,
 ): void {
+  assertSafePathSegment(nodeId);
   const dir = join(runDir(workspaceRoot, slug, runId), NODES_DIR);
   ensureDir(dir);
   atomicWriteFileSync(join(dir, `${nodeId}.json`), JSON.stringify(output, null, 2));
@@ -205,6 +217,7 @@ export function readNodeOutput(
   runId: string,
   nodeId: string,
 ): NodeOutput | null {
+  assertSafePathSegment(nodeId);
   const path = join(runDir(workspaceRoot, slug, runId), NODES_DIR, `${nodeId}.json`);
   if (!existsSync(path)) return null;
   try {

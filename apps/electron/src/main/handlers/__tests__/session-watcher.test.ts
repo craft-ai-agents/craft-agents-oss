@@ -93,6 +93,24 @@ function makeCtx(clientId: string, workspaceId = 'ws-1'): RequestContext {
 }
 
 // ---------------------------------------------------------------------------
+// Tests helpers
+// ---------------------------------------------------------------------------
+
+/** Event-driven ждать предиката (вместо фиксированного sleep): fs.watch/FSEvents
+ *  на нагруженной машине (полный bun test) может доставлять ~секунды.
+ *  Исключение ts-no-test-timers: интеграционный тест реальных FS-событий ядра —
+ *  fake timers не могут прогнать доставку FSEvents. */
+async function waitUntil(pred: () => boolean, timeoutMs = 8000, stepMs = 25): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (pred()) return
+    const { promise, resolve } = Promise.withResolvers<void>()
+    setTimeout(resolve, stepMs)
+    await promise
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -123,8 +141,8 @@ describe('session file watcher isolation', () => {
     // Trigger a change in s1
     writeFileSync(join(dir1, 'output.txt'), 'hello')
 
-    // Wait for debounce + fs.watch delay
-    await new Promise(r => setTimeout(r, 300))
+    // Дождаться доставки push (debounce + fs.watch latency), не фиксированный sleep
+    await waitUntil(() => pushCalls.some(p => p.target?.clientId === 'client-a'))
 
     // Only client-a should have received the notification
     const clientAPushes = pushCalls.filter(p => p.target?.clientId === 'client-a')
@@ -144,7 +162,7 @@ describe('session file watcher isolation', () => {
 
     // Trigger a change in s2
     writeFileSync(join(dir2, 'data.json'), '{}')
-    await new Promise(r => setTimeout(r, 300))
+    await waitUntil(() => pushCalls.some(p => p.target?.clientId === 'client-b'))
 
     // Client B should still receive notifications
     const clientBAfter = pushCalls.filter(p => p.target?.clientId === 'client-b')

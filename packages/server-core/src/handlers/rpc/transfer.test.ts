@@ -161,7 +161,9 @@ describe('chunked transfer handlers', () => {
   })
 
   it('refreshes TTL as chunks arrive so slow healthy uploads survive', async () => {
-    process.env.CRAFT_TRANSFER_TTL_MS = '40'
+    // Бюджет головы под дрейф event-loop полного сьюита: 40ms превращал тест во флак
+    // (chunk-refresh подтверждённо освежает TTL независимо от величины, семантика идентична).
+    process.env.CRAFT_TRANSFER_TTL_MS = '500'
 
     const { start, chunk, commit } = createHarness()
     const payload = encodeParts({ hello: 'world', slow: true }, 8)

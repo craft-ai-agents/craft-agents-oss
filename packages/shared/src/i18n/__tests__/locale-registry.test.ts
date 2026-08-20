@@ -14,8 +14,23 @@ const localeFilesOnDisk = readdirSync(LOCALES_DIR)
   .filter((f) => f.endsWith(".json"))
   .map((f) => f.replace(".json", ""));
 
+const APPROVED_LANGUAGE_CODES = [
+  "en",
+  "ru",
+  "es",
+  "zh-Hans",
+  "ja",
+  "de",
+  "ko",
+  "ar",
+] as const;
+
 describe("locale registry completeness", () => {
   const registryCodes = Object.keys(LOCALE_REGISTRY);
+
+  it("contains exactly the approved eight language codes", () => {
+    expect(Object.keys(LOCALE_REGISTRY)).toEqual([...APPROVED_LANGUAGE_CODES]);
+  });
 
   it("every locale file on disk is registered in LOCALE_REGISTRY", () => {
     const unregistered = localeFilesOnDisk.filter(
@@ -58,6 +73,10 @@ describe("locale registry entries", () => {
 // ---------------------------------------------------------------------------
 
 describe("derived exports", () => {
+  it("SUPPORTED_LANGUAGE_CODES contains exactly the approved codes", () => {
+    expect(SUPPORTED_LANGUAGE_CODES).toEqual(APPROVED_LANGUAGE_CODES);
+  });
+
   it("SUPPORTED_LANGUAGE_CODES matches registry keys", () => {
     const registryCodes = Object.keys(LOCALE_REGISTRY).sort() as string[];
     const supported = ([...SUPPORTED_LANGUAGE_CODES] as string[]).sort();
@@ -86,37 +105,38 @@ describe("derived exports", () => {
 
 describe("getDateLocale", () => {
   it("en resolves to English (US)", () => {
-    const locale = getDateLocale("en");
-    expect(locale.code).toBe("en-US");
+    expect(getDateLocale("en").code).toBe("en-US");
+  });
+
+  it("ru resolves to Russian", () => {
+    expect(getDateLocale("ru").code).toBe("ru");
   });
 
   it("es resolves to Spanish", () => {
-    const locale = getDateLocale("es");
-    expect(locale.code).toBe("es");
+    expect(getDateLocale("es").code).toBe("es");
   });
 
   it("zh-Hans resolves to Simplified Chinese", () => {
-    const locale = getDateLocale("zh-Hans");
-    expect(locale.code).toBe("zh-CN");
+    expect(getDateLocale("zh-Hans").code).toBe("zh-CN");
   });
 
-  it("hu resolves to Hungarian", () => {
-    const locale = getDateLocale("hu");
-    expect(locale.code).toBe("hu");
+  it("ja resolves to Japanese", () => {
+    expect(getDateLocale("ja").code).toBe("ja");
   });
 
   it("de resolves to German", () => {
-    const locale = getDateLocale("de");
-    expect(locale.code).toBe("de");
+    expect(getDateLocale("de").code).toBe("de");
   });
 
-  it("pl resolves to Polish", () => {
-    const locale = getDateLocale("pl");
-    expect(locale.code).toBe("pl");
+  it("ko resolves to Korean", () => {
+    expect(getDateLocale("ko").code).toBe("ko");
+  });
+
+  it("ar resolves to Arabic", () => {
+    expect(getDateLocale("ar").code).toBe("ar");
   });
 
   it("unknown locale falls back to English", () => {
-    const locale = getDateLocale("xx-FAKE");
-    expect(locale.code).toBe("en-US");
+    expect(getDateLocale("xx-FAKE").code).toBe("en-US");
   });
 });

@@ -17,7 +17,11 @@
   ],
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/*",
+    "!apps/online-docs",
+    "!apps/marketing",
+    "!packages/craft-cli",
+    "!packages/craft-agents-commands"
   ],
   "scripts": {
     "test": "bun test && for f in $(find . -name '*.isolated.ts' -not -path './node_modules/*'); do bun test \"$f\" || exit 1; done",
@@ -59,8 +63,10 @@
     "electron:build:renderer": "bun run scripts/electron-build-renderer.ts",
     "electron:build:resources": "bun run scripts/electron-build-resources.ts",
     "build:wa-worker": "bun run scripts/build-wa-worker.ts",
+    "build:discord-worker": "bun run scripts/build-discord-worker.ts",
     "electron:build:assets": "cd apps/electron && bun scripts/copy-assets.ts",
-    "electron:build": "bun run electron:build:main && bun run electron:build:preload && bun run electron:build:renderer && bun run electron:build:resources && bun run electron:build:assets",
+    "electron:build:subprocess": "bun run scripts/electron-build-subprocess.ts",
+    "electron:build": "bun run electron:build:subprocess && bun run build:discord-worker && bun run electron:build:main && bun run electron:build:preload && bun run electron:build:renderer && bun run electron:build:resources && bun run electron:build:assets",
     "electron:start": "bun run electron:build && electron apps/electron",
     "electron:dev": "bun run scripts/electron-dev.ts",
     "electron:dev:terminal": "bun run scripts/electron-dev.ts --terminal",
@@ -144,8 +150,8 @@
     "@dnd-kit/dom": "^0.4.0-beta-20260227032529",
     "@dnd-kit/helpers": "^0.4.0-beta-20260227032529",
     "@github/copilot-sdk": "^0.1.23",
-    "@earendil-works/pi-ai": "0.80.6",
-    "@earendil-works/pi-coding-agent": "0.80.6",
+    "@earendil-works/pi-ai": "0.80.7",
+    "@earendil-works/pi-coding-agent": "0.80.7",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-collapsible": "^1.1.12",

@@ -304,6 +304,41 @@ function copyDependencyTree(
       // Skip if package.json is malformed
     }
   }
+
+  // Nested node_modules are copied verbatim above, but those packages' own deps may
+  // be hoisted to the root tree — recurse so they get pulled in too.
+  const nestedModules = join(src, 'node_modules');
+  if (existsSync(nestedModules)) {
+    for (const nestedPkgJson of collectNestedPackageJsons(nestedModules)) {
+      try {
+        const pkg = JSON.parse(readFileSync(nestedPkgJson, 'utf-8'));
+        for (const childDep of Object.keys(pkg.dependencies || {})) {
+          copyDependencyTree(childDep, srcModules, destModules, visited);
+        }
+      } catch {
+        // Skip if package.json is malformed
+      }
+    }
+  }
+}
+
+/** List package.json paths of packages directly inside a node_modules dir (incl. scoped). */
+function collectNestedPackageJsons(modulesDir: string): string[] {
+  const results: string[] = [];
+  for (const entry of readdirSync(modulesDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name.startsWith('@')) {
+      for (const scoped of readdirSync(join(modulesDir, entry.name), { withFileTypes: true })) {
+        if (!scoped.isDirectory()) continue;
+        const p = join(modulesDir, entry.name, scoped.name, 'package.json');
+        if (existsSync(p)) results.push(p);
+      }
+    } else {
+      const p = join(modulesDir, entry.name, 'package.json');
+      if (existsSync(p)) results.push(p);
+    }
+  }
+  return results;
 }
 
 /**
@@ -462,6 +497,7 @@ function copyWorkspacePackages(config: ServerBuildConfig): void {
     'session-mcp-server',
     'messaging-gateway',
     'messaging-whatsapp-worker',
+    'messaging-discord-worker',
   ];
 
   for (const pkg of packages) {
@@ -860,6 +896,10 @@ async function main(): Promise<void> {
   // The bundle embeds Baileys + transitive deps; see scripts/build-wa-worker.ts.
   console.log('  Building WhatsApp worker bundle...');
   await $`bun run ${join(rootDir, 'scripts', 'build-wa-worker.ts')}`.cwd(rootDir);
+
+  // Build the Discord worker bundle (discord.js embedded); mirrors WhatsApp.
+  console.log('  Building Discord worker bundle...');
+  await $`bun run ${join(rootDir, 'scripts', 'build-discord-worker.ts')}`.cwd(rootDir);
 
   // Step 5: Assemble resources
   console.log('\n[5/8] Assembling resources...');

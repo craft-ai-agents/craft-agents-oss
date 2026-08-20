@@ -165,6 +165,45 @@ describe('evaluateConditions', () => {
       expect(evaluateConditions(conditions, ctx({}))).toBe(false);
     });
 
+    it('resolves nested attribute.name field path', () => {
+      const conditions: AutomationCondition[] = [
+        { condition: 'state', field: 'attribute.name', value: 'workflow_status' },
+      ];
+      expect(
+        evaluateConditions(
+          conditions,
+          ctx({ attribute: { name: 'workflow_status', type: 'text' }, newValue: 'needs-research' }),
+        ),
+      ).toBe(true);
+      expect(
+        evaluateConditions(
+          conditions,
+          ctx({ attribute: { name: 'other', type: 'text' }, newValue: 'needs-research' }),
+        ),
+      ).toBe(false);
+    });
+
+    it('matches flat attributeName alias for nested attribute.name', () => {
+      const conditions: AutomationCondition[] = [
+        { condition: 'state', field: 'attribute.name', value: 'workflow_status' },
+      ];
+      expect(
+        evaluateConditions(conditions, ctx({ attributeName: 'workflow_status', newValue: 'x' })),
+      ).toBe(true);
+      expect(
+        evaluateConditions(conditions, ctx({ attributeName: 'other', newValue: 'x' })),
+      ).toBe(false);
+    });
+
+    it('matches flat attributeName field directly', () => {
+      const conditions: AutomationCondition[] = [
+        { condition: 'state', field: 'attributeName', value: 'workflow_status' },
+      ];
+      expect(
+        evaluateConditions(conditions, ctx({ attributeName: 'workflow_status' })),
+      ).toBe(true);
+    });
+
     describe('from/to transitions', () => {
       it('should match permissionMode to', () => {
         const conditions: AutomationCondition[] = [

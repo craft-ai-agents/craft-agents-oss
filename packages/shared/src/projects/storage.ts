@@ -327,6 +327,11 @@ export function updateProject(
     updatedAt: Date.now(),
   };
 
+  // Allow clearing optional icon via empty string / nullish from IPC
+  if ('icon' in patch && !patch.icon) {
+    delete updated.icon;
+  }
+
   saveProjectConfig(workspaceRootPath, updated);
   return updated;
 }

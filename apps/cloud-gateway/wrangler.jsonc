@@ -1,0 +1,36 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "craft-cloud-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "containers": [
+    {
+      "class_name": "RunAgent",
+      "image": "./Dockerfile",
+      "instance_type": "standard-2",
+      "max_instances": 100,
+      "rollout_active_grace_period": 0,
+      "rollout_step_percentage": [100]
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RunAgent",
+        "class_name": "RunAgent"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["RunAgent"]
+    }
+  ],
+  "observability": {
+    "traces": {
+      "enabled": true
+    }
+  }
+}

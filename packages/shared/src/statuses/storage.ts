@@ -30,18 +30,13 @@ const STATUS_CONFIG_FILE = 'statuses/config.json';
 const STATUS_ICONS_DIR = 'statuses/icons';
 
 /**
- * Get default status configuration (matches current hardcoded behavior)
- * Note: icon field is omitted - uses auto-discovered files in statuses/icons/{id}.svg
+ * Get default status configuration (matches current hardcoded behavior).
+ * Icons and colors are intentionally omitted: icons are auto-discovered, and
+ * colors resolve through the canonical shared palette. Persisted `color`
+ * values remain explicit user overrides. Built-in status IDs continue to map
+ * to their existing i18n label keys at presentation time.
  */
 export function getDefaultStatusConfig(): WorkspaceStatusConfig {
-  // Note: color is omitted - defaults from colors/defaults.ts are applied:
-  // - backlog: foreground/50 (muted, not yet planned)
-  // - todo: foreground/50 (muted, ready to work on)
-  // - needs-review: info (amber, attention needed)
-  // - done: accent (purple, completed)
-  // - cancelled: foreground/50 (muted, inactive)
-  //
-  // Note: icon is omitted - auto-discovered from statuses/icons/{id}.svg
   return {
     version: 1,
     statuses: [
@@ -62,12 +57,20 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
         order: 1,
       },
       {
+        id: 'in-progress',
+        label: 'In Progress',
+        category: 'open',
+        isFixed: false,
+        isDefault: true,
+        order: 2,
+      },
+      {
         id: 'needs-review',
         label: 'Needs Review',
         category: 'open',
         isFixed: false,
         isDefault: true,
-        order: 2,
+        order: 3,
       },
       {
         id: 'done',
@@ -75,7 +78,7 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
         category: 'closed',
         isFixed: true,
         isDefault: false,
-        order: 3,
+        order: 4,
       },
       {
         id: 'cancelled',
@@ -83,7 +86,7 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
         category: 'closed',
         isFixed: true,
         isDefault: false,
-        order: 4,
+        order: 5,
       },
     ],
     defaultStatusId: 'todo',
@@ -128,10 +131,52 @@ function validateStatusConfig(config: WorkspaceStatusConfig): boolean {
 }
 
 /**
+ * Insert any missing stock default statuses (e.g. `in-progress` added in P1)
+ * without clobbering user-authored statuses or reordering customs.
+ * Returns true when the config was mutated.
+ */
+function ensureStockDefaultStatuses(config: WorkspaceStatusConfig): boolean {
+  const defaults = getDefaultStatusConfig().statuses;
+  const defaultOrder = defaults.map(s => s.id);
+  const existingIds = new Set(config.statuses.map(s => s.id));
+  let changed = false;
+
+  for (const stock of defaults) {
+    if (existingIds.has(stock.id)) continue;
+
+    // Place after the nearest preceding stock status that already exists;
+    // fall back to before the nearest following stock status; else append.
+    const stockIdx = defaultOrder.indexOf(stock.id);
+    let insertAt = config.statuses.length;
+    for (let i = stockIdx - 1; i >= 0; i--) {
+      const prevIdx = config.statuses.findIndex(s => s.id === defaultOrder[i]);
+      if (prevIdx !== -1) {
+        insertAt = prevIdx + 1;
+        break;
+      }
+    }
+    for (let i = stockIdx + 1; i < defaultOrder.length; i++) {
+      const nextIdx = config.statuses.findIndex(s => s.id === defaultOrder[i]);
+      if (nextIdx !== -1 && nextIdx < insertAt) {
+        insertAt = nextIdx;
+        break;
+      }
+    }
+
+    config.statuses.splice(insertAt, 0, { ...stock });
+    existingIds.add(stock.id);
+    changed = true;
+  }
+
+  return changed;
+}
+
+/**
  * Load workspace status configuration
  * Returns defaults if no config exists or validation fails.
  * Ensures icon files exist.
  * Auto-migrates old Tailwind color format to EntityColor on first load.
+ * Ensures newly seeded stock statuses (e.g. in-progress) exist.
  */
 export function loadStatusConfig(workspaceRootPath: string): WorkspaceStatusConfig {
   // Ensure default icon files exist (self-healing)
@@ -153,11 +198,23 @@ export function loadStatusConfig(workspaceRootPath: string): WorkspaceStatusConf
       return getDefaultStatusConfig();
     }
 
+    let dirty = false;
+
+    // Seed any stock defaults missing from older workspace configs (P1: in-progress).
+    if (ensureStockDefaultStatuses(config)) {
+      dirty = true;
+      debug('[loadStatusConfig] Inserted missing stock default statuses');
+    }
+
     // Auto-migrate old Tailwind class colors (e.g., "text-accent") to new EntityColor format.
     // If migration occurs, write the updated config back to disk.
     const migrated = migrateStatusColors(config);
     if (migrated) {
-      debug('[loadStatusConfig] Migrated old color format, writing back');
+      dirty = true;
+      debug('[loadStatusConfig] Migrated old color format');
+    }
+
+    if (dirty) {
       saveStatusConfig(workspaceRootPath, config);
     }
 

@@ -1,5 +1,4 @@
-@import "tailwindcss" source(none);
-@plugin "@tailwindcss/typography";
+@import "@craft-agent/ui/styles";
 
 /* Tell Tailwind where to scan for utility classes */
 @source "../renderer/App.tsx";
@@ -8,6 +7,7 @@
 @source "../renderer/contexts/**/*.{ts,tsx,jsx}";
 @source "../renderer/hooks/**/*.{ts,tsx,jsx}";
 @source "../renderer/pages/**/*.{ts,tsx,jsx}";
+@source "../renderer/mindmap/**/*.{ts,tsx,jsx}";
 @source "../renderer/tabs/**/*.{ts,tsx,jsx}";
 @source "../renderer/playground/**/*.{ts,tsx,jsx}";
 @source "../renderer/utils/**/*.{ts,tsx,jsx}";
@@ -15,175 +15,15 @@
 @source "../../../../packages/ui/src/components/**/*.{ts,tsx,jsx}";
 @source "../../../../packages/ui/src/lib/**/*.{ts,tsx,jsx}";
 
-/* CSS Custom Highlight API styles are injected at runtime via ChatDisplay.tsx
-   to avoid LightningCSS warnings (::highlight is not yet recognized by the optimizer) */
-
-/* =============================================================================
-   ANIMATABLE CSS CUSTOM PROPERTIES
-
-   Register theme color variables as animatable using @property.
-   This enables smooth transitions when themes change (e.g., hover preview).
-   Chromium/Electron has full support for @property.
-============================================================================= */
-
-@property --background {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: oklch(0.98 0.003 265);
-}
-
-@property --foreground {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: oklch(0.185 0.01 270);
-}
-
-@property --accent {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: oklch(0.62 0.13 293);
-}
-
-@property --info {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: oklch(0.65 0.16 70);
-}
-
-@property --success {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: oklch(0.55 0.17 145);
-}
-
-@property --destructive {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: oklch(0.55 0.22 27);
-}
-
-/* =============================================================================
-   CRAFT AGENT THEME - 6 Color System
-
-   Base colors:
-   - background: Light/dark surface
-   - foreground: Text and icons
-   - accent: Brand purple (highlights, Auto mode)
-   - info: Amber (warnings, Ask mode)
-   - success: Green (connected, checkmarks)
-   - destructive: Red (errors, failed)
-
-   Variants:
-   - /50 = 50% alpha (transparency) - for borders, hovers, overlays
-   - -50 = 50% mix toward background (solid) - for Explore mode
-
-   Example: bg-foreground/10, text-accent, bg-foreground-60
-============================================================================= */
-
-/* Light Mode */
+/* Renderer-only tokens. Core color, font, elevation, and status tokens come
+   from @craft-agent/ui/styles so Electron and shared surfaces cannot diverge. */
 :root {
-  /* === 6 BASE COLORS === */
-  --background: oklch(0.98 0.003 265);
-  --background-elevated: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
-  --foreground: oklch(0.185 0.01 270);
-  --foreground-dimmed: color-mix(in srgb, var(--foreground) 80%, var(--background)); /* unfocused panel text */
-  --foreground-rgb: 38, 36, 42;             /* RGB for shadow borders */
-  --user-message-bubble: oklch(from var(--foreground) l c h / 0.05);
-  --user-message-bubble-dimmed: oklch(from var(--foreground) l c h / 0.03);
-  --accent: oklch(0.62 0.13 293);           /* purple - brand, Auto mode */
-  --accent-rgb: 104, 78, 133;               /* darkened RGB for shadow-tinted (70% of accent) */
-  --info: oklch(0.75 0.16 70);              /* amber - warnings, Ask mode */
-  --info-rgb: 180, 120, 40;                 /* RGB for shadow-tinted */
-  --success: oklch(0.55 0.17 145);          /* green - connected, checkmarks */
-  --success-rgb: 34, 120, 60;               /* RGB for shadow-tinted */
-  --destructive: oklch(0.58 0.24 28);       /* red - errors, failed */
-  --destructive-rgb: 180, 60, 50;           /* RGB for shadow-tinted */
-
-  /* === SHADOW OPACITY (light mode = subtle, dark mode = stronger) === */
-  --shadow-border-opacity: 0.08;            /* Border ring opacity */
-  --shadow-blur-opacity: 0.06;              /* Blur/spread shadow opacity */
-
-  /* === SHADOW VALUES (reusable across utility classes and component overrides) === */
-  --shadow-minimal:
-    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-    rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
-    rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 1px 1px -0.5px,
-    rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 3px 3px -1.5px;
-
-  /* Minimal shadow without blur layers — just the border ring */
-  --shadow-minimal-flat:
-    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-    rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px;
-
-  --shadow-modal-small:
-    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-    rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
-    rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 1px 1px -0.5px,
-    rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 3px 3px 0px,
-    rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 6px 6px 0px,
-    rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 12px 12px 0px,
-    rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 24px 24px 0px;
-
-  /* Drag-lift elevation — a card genuinely peeled off the surface. Shared by the
-     Planner's in-place sortable (`--sortable-shadow-active`) and the Kanban's
-     DragOverlay clone (`.shadow-dragging`). Keeps the two leading transparent
-     layers so it matches `--shadow-minimal`'s 5-layer count and the Planner's
-     selected→grabbed `box-shadow` transition stays interpolatable. The ring uses
-     `--foreground-rgb`, which flips per theme, so light/dark are covered for free. */
+  --foreground-1\.5: color-mix(in oklch, var(--foreground) 1.5%, var(--background));
   --shadow-dragging:
-    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-    rgba(var(--foreground-rgb), 0.13) 0px 0px 0px 1px,
-    rgba(0, 0, 0, 0.18) 0px 8px 10px -2px,
-    rgba(0, 0, 0, 0.24) 0px 18px 24px -10px;
+    inset 0 0 0 1px var(--focus),
+    0 0 0 4px color-mix(in oklch, var(--focus) 18%, transparent);
 
-  /* === MIX VARIANTS (solid interpolation toward background) === */
-  /* Use -2, -3, -5, -10, -20, ..., -90, -95 for solid colors (e.g., separators, Explore mode) */
-  --foreground-1\.5: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
-  --foreground-2: color-mix(in srgb, var(--foreground) 2%, var(--background));
-  --foreground-3: color-mix(in srgb, var(--foreground) 3%, var(--background));
-  --foreground-5: color-mix(in srgb, var(--foreground) 5%, var(--background));
-  --foreground-10: color-mix(in srgb, var(--foreground) 10%, var(--background));
-  --foreground-20: color-mix(in srgb, var(--foreground) 20%, var(--background));
-  --foreground-30: color-mix(in srgb, var(--foreground) 30%, var(--background));
-  --foreground-40: color-mix(in srgb, var(--foreground) 40%, var(--background));
-  --foreground-50: color-mix(in srgb, var(--foreground) 50%, var(--background));
-  --foreground-60: color-mix(in srgb, var(--foreground) 60%, var(--background));
-  --foreground-70: color-mix(in srgb, var(--foreground) 70%, var(--background));
-  --foreground-80: color-mix(in srgb, var(--foreground) 80%, var(--background));
-  --foreground-90: color-mix(in srgb, var(--foreground) 90%, var(--background));
-  --foreground-95: color-mix(in srgb, var(--foreground) 95%, var(--background));
-
-  /* Success/destructive/info interpolated toward foreground (for tinted text) */
-  /* Using oklab for perceptually uniform mixing without hue shifts */
-  --success-text: color-mix(in oklab, var(--success) 50%, var(--foreground));
-  --destructive-text: color-mix(in oklab, var(--destructive) 50%, var(--foreground));
-  --info-text: color-mix(in oklab, var(--info) 50%, var(--foreground));
-
-  /* === SHADCN COMPATIBILITY (derived from 6 base colors) === */
-  /* These variables exist for shadcn/ui component updates */
-  --secondary: oklch(from var(--foreground) l c h / 0.05);
-  --secondary-foreground: var(--foreground);
-  --muted: oklch(from var(--foreground) l c h / 0.05);
-  --muted-foreground: var(--foreground-50);
-  --card: var(--background);
-  --card-foreground: var(--foreground);
-  --popover: var(--background);
-  --popover-foreground: var(--foreground);
-  --border: oklch(from var(--foreground) l c h / 0.05);
-  --input: oklch(from var(--foreground) l c h / 0.1);
-  --ring: oklch(from var(--foreground) l c h / 0.25);
-  --ring-width: 1px;
-  --ring-offset: 0px;
-
-  /* Markdown list markers */
-  --md-bullets: var(--foreground-50);
-  --md-counters: var(--foreground-50);
-
-  /* Onboarding step styling */
+  /* Onboarding layout tokens remain renderer-specific. */
   --step-icon-size: 4rem;
   --step-icon-inner-size: 2rem;
   --step-icon-radius: 1rem;
@@ -192,122 +32,6 @@
   --step-actions-gap: 0.75rem;
   --step-content-gap: 1.5rem;
   --step-actions-margin: 2rem;
-
-  /* Fonts - System fonts as default, Inter via data-font="inter" */
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --font-default: var(--font-sans);
-
-  /* Layout */
-  --font-size-base: 15px;
-  --radius: 0rem;
-  --spacing: 0.25rem;
-  --tracking-normal: 0em;
-
-  /* === Z-INDEX SCALE ===
-     Centralized z-index registry for consistent stacking order.
-     Use semantic names (z-panel, z-modal) instead of magic numbers.
-
-     Layer              Value   Use Case
-     ─────────────────────────────────────────────────────
-     base               0       Default content
-     local              10      Local stacking (sticky headers, icons)
-     sticky             20      Sticky section headers
-     titlebar           40      Window titlebar drag region
-     panel              50      App panels (sidebar, chat, detail)
-     dropdown           100     Dropdowns, popovers, select menus
-     tooltip            150     Tooltips (above dropdowns)
-     modal              200     Dialogs, drawers
-     overlay            300     Full-screen overlays (settings, app chrome)
-     fullscreen         350     Fullscreen content viewers (above app chrome)
-     floating-backdrop  390     Backdrop for floating menus
-     floating-menu      400     Floating menus above modals
-     island-overlay     390     Backdrop for annotation island interactions
-     island             400     Annotation island menu surface
-     island-popover     410     Popovers/dropdowns opened from island content
-     splash             600     Splash screen, workspace creation
-  */
-  --z-base: 0;
-  --z-local: 10;
-  --z-sticky: 20;
-  --z-titlebar: 40;
-  --z-panel: 50;
-  --z-dropdown: 100;
-  --z-tooltip: 150;
-  --z-modal: 200;
-  --z-overlay: 300;
-  --z-fullscreen: 350;
-  --z-floating-backdrop: 390;
-  --z-floating-menu: 400;
-  --z-island-overlay: 390;
-  --z-island: 400;
-  --z-island-popover: 410;
-  --z-splash: 600;
-
-}
-
-/* Dark Mode */
-.dark {
-  /* === 6 BASE COLORS (must match DEFAULT_THEME.dark in theme.ts) === */
-  --background: oklch(0.145 0.015 270);
-  --background-elevated: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
-  --foreground: oklch(0.95 0.01 270);
-  --foreground-dimmed: color-mix(in srgb, var(--foreground) 80%, var(--background)); /* unfocused panel text */
-  --foreground-rgb: 237, 236, 240;           /* RGB for shadow borders */
-  --user-message-bubble: oklch(from var(--foreground) l c h / 0.05);
-  --user-message-bubble-dimmed: oklch(from var(--foreground) l c h / 0.03);
-  --accent: oklch(0.65 0.22 293);            /* brighter purple in dark */
-  --accent-rgb: 130, 75, 185;               /* darkened RGB for shadow-tinted (70% of accent) */
-  --info: oklch(0.78 0.14 70);               /* amber */
-  --info-rgb: 210, 155, 55;                  /* RGB for shadow-tinted */
-  --success: oklch(0.60 0.17 145);           /* green */
-  --success-rgb: 50, 140, 80;               /* RGB for shadow-tinted */
-  --destructive: oklch(0.65 0.22 28);        /* brighter red in dark */
-  --destructive-rgb: 200, 70, 60;            /* RGB for shadow-tinted */
-
-  /* === SHADOW OPACITY (stronger in dark mode for visibility) === */
-  --shadow-border-opacity: 0.15;
-  --shadow-blur-opacity: 0.12;
-
-  /* === MIX VARIANTS === */
-  --foreground-1\.5: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
-  --foreground-2: color-mix(in srgb, var(--foreground) 2%, var(--background));
-  --foreground-3: color-mix(in srgb, var(--foreground) 3%, var(--background));
-  --foreground-5: color-mix(in srgb, var(--foreground) 5%, var(--background));
-  --foreground-10: color-mix(in srgb, var(--foreground) 10%, var(--background));
-  --foreground-20: color-mix(in srgb, var(--foreground) 20%, var(--background));
-  --foreground-30: color-mix(in srgb, var(--foreground) 30%, var(--background));
-  --foreground-40: color-mix(in srgb, var(--foreground) 40%, var(--background));
-  --foreground-50: color-mix(in srgb, var(--foreground) 50%, var(--background));
-  --foreground-60: color-mix(in srgb, var(--foreground) 60%, var(--background));
-  --foreground-70: color-mix(in srgb, var(--foreground) 70%, var(--background));
-  --foreground-80: color-mix(in srgb, var(--foreground) 80%, var(--background));
-  --foreground-90: color-mix(in srgb, var(--foreground) 90%, var(--background));
-  --foreground-95: color-mix(in srgb, var(--foreground) 95%, var(--background));
-
-  /* Success/destructive/info interpolated toward foreground (for tinted text) */
-  /* Using oklab for perceptually uniform mixing without hue shifts */
-  --success-text: color-mix(in oklab, var(--success) 50%, var(--foreground));
-  --destructive-text: color-mix(in oklab, var(--destructive) 50%, var(--foreground));
-  --info-text: color-mix(in oklab, var(--info) 50%, var(--foreground));
-
-  /* === SHADCN COMPATIBILITY (derived from 6 base colors) === */
-  --secondary: oklch(from var(--foreground) l c h / 0.05);
-  --secondary-foreground: var(--foreground);
-  --muted: oklch(from var(--foreground) l c h / 0.05);
-  --muted-foreground: var(--foreground-50);
-  --card: var(--background);
-  --card-foreground: var(--foreground);
-  --popover: var(--background);
-  --popover-foreground: var(--foreground);
-  --border: oklch(from var(--foreground) l c h / 0.05);
-  --input: oklch(from var(--foreground) l c h / 0.1);
-  --ring: oklch(from var(--foreground) l c h / 0.25);
-
-  /* Markdown list markers */
-  --md-bullets: var(--foreground-50);
-  --md-counters: var(--foreground-50);
 }
 
 /* Theme Override - Semi-transparent background to allow vibrancy through */
@@ -383,68 +107,12 @@ html[data-scenic] {
   --background: oklch(0.2 0.005 270 / 0.55);
 }
 
-/* Inter Font - Opt-in via data-font="inter" attribute
-   Loaded from Google Fonts in index.html with optical sizing (opsz) axis */
-html[data-font="inter"] {
-  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-default: var(--font-sans);
-  font-optical-sizing: auto;
-  font-feature-settings: "cv01", "cv02", "cv03", "cv04", "case";
-}
-
-/* Theme integration for Tailwind v4 */
+/* Renderer-specific Tailwind utilities layered on top of the shared theme. */
 @theme inline {
-  /* === 6 BASE COLORS === */
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-accent: var(--accent);
-  --color-info: var(--info);
-  --color-success: var(--success);
-  --color-destructive: var(--destructive);
-
-  /* === MIX VARIANTS (solid interpolation) === */
   --color-foreground-1\.5: var(--foreground-1\.5);
-  --color-foreground-2: var(--foreground-2);
-  --color-foreground-3: var(--foreground-3);
-  --color-foreground-5: var(--foreground-5);
-  --color-foreground-10: var(--foreground-10);
-  --color-foreground-20: var(--foreground-20);
-  --color-foreground-30: var(--foreground-30);
-  --color-foreground-40: var(--foreground-40);
-  --color-foreground-50: var(--foreground-50);
-  --color-foreground-60: var(--foreground-60);
-  --color-foreground-70: var(--foreground-70);
-  --color-foreground-80: var(--foreground-80);
-  --color-foreground-90: var(--foreground-90);
-  --color-foreground-95: var(--foreground-95);
+  --color-sidebar-hover: color-mix(in oklch, var(--text-primary) 4%, var(--surface-rail));
 
-  /* === SEMANTIC SURFACE COLORS === */
-  /* Subtle hover background for sidebar list items (2% foreground opacity) */
-  --color-sidebar-hover: oklch(from var(--foreground) l c h / 0.02);
-  /* User message bubble background (overridden on unfocused panels) */
-  --color-user-message-bubble: var(--user-message-bubble);
-
-  /* === LEGACY COMPATIBILITY === */
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-destructive-foreground: var(--background);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-md-bullets: var(--md-bullets);
-  --color-md-counters: var(--md-counters);
-
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-  --font-serif: var(--font-serif);
-
-  /* === Z-INDEX SCALE === */
+  /* Electron-specific stacking and container query utilities. */
   --z-index-base: var(--z-base);
   --z-index-local: var(--z-local);
   --z-index-sticky: var(--z-sticky);
@@ -462,77 +130,26 @@ html[data-font="inter"] {
   --z-index-island-popover: var(--z-island-popover);
   --z-index-splash: var(--z-splash);
 
-  --shadow-2xs: var(--shadow-2xs);
-  --shadow-xs: var(--shadow-xs);
-  --shadow-sm: var(--shadow-sm);
-  --shadow: var(--shadow);
-  --shadow-md: var(--shadow-md);
-  --shadow-lg: var(--shadow-lg);
-  --shadow-xl: var(--shadow-xl);
-  --shadow-2xl: var(--shadow-2xl);
-
-  /* === CONTAINER QUERY BREAKPOINTS === */
-  /* Custom breakpoints for responsive panel layouts.
-   * Generates @panel-compact:, @panel-medium:, @mobile: Tailwind utility prefixes. */
-  --container-3xs: 16rem;           /* 256px */
-  --container-panel-compact: 28rem; /* 448px — PANEL_MIN_WIDTH */
-  --container-panel-medium: 40rem;  /* 640px */
-  --container-mobile: 48rem;        /* 768px — mobile breakpoint */
+  --container-3xs: 16rem;
+  --container-panel-compact: 28rem;
+  --container-panel-medium: 40rem;
+  --container-mobile: 48rem;
 }
 
-/* Global styles - MUST be in @layer base so utilities can override */
+/* Renderer layout owns the viewport; shared styles own base visual tokens. */
 @layer base {
-  * {
-    box-sizing: border-box;
-    border-color: var(--border);
-  }
-
-  html {
-    font-size: var(--font-size-base);
-  }
-
   html, body, #root {
     height: 100%;
     overflow: hidden;
   }
 
   body {
-    font-family: var(--font-default);
     background: transparent;
-    color: var(--foreground);
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-
-  /* Scrollbar styling */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: var(--border);
-    border-radius: 4px;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: var(--muted-foreground);
-  }
-
-  /* Focus ring styles - override Tailwind ring utilities */
-  *:focus-visible {
-    outline: none;
-    --tw-ring-offset-width: var(--ring-offset);
-    --tw-ring-width: var(--ring-width);
-    --tw-ring-color: var(--ring);
   }
 }
 
-/* Override Tailwind ring width utilities to use theme variable */
+/* Renderer-only utilities. Shared shadow and popover classes come from
+   @craft-agent/ui/styles. */
 @layer utilities {
   .ring-1, .ring-2, .ring-\[3px\], .ring-4 {
     --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
@@ -540,39 +157,10 @@ html[data-font="inter"] {
     box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
   }
 
-  /* Thin horizontal scrollbar for panel stack */
   .panel-scroll::-webkit-scrollbar {
     height: 4px;
   }
 
-  /* Hide scrollbar but keep scrolling */
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
-
-  /* Hide scrollbar until parent .group is hovered */
-  .scrollbar-hover::-webkit-scrollbar {
-    width: 4px;
-  }
-  .scrollbar-hover::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .scrollbar-hover::-webkit-scrollbar-thumb {
-    background: transparent;
-    border-radius: 4px;
-  }
-  .group:hover .scrollbar-hover::-webkit-scrollbar-thumb {
-    background: var(--border);
-  }
-  .group:hover .scrollbar-hover::-webkit-scrollbar-thumb:hover {
-    background: var(--muted-foreground);
-  }
-
-  /* Mask fade utilities - for fading content at edges over transparent/image backgrounds */
   .mask-fade-y {
     mask-image: linear-gradient(to bottom, transparent 0%, black 32px, black calc(100% - 32px), transparent 100%);
     -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 32px, black calc(100% - 32px), transparent 100%);
@@ -583,148 +171,27 @@ html[data-font="inter"] {
     -webkit-mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 32px), transparent 100%);
   }
 
-  /* Custom shadow utilities
-     - Border layer (1px ring) uses foreground color with --shadow-border-opacity
-     - Blur/spread layers use black with --shadow-blur-opacity
-     - Dark mode has stronger values for visibility */
   .shadow-thin {
-    box-shadow:
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px;
+    box-shadow: var(--shadow-minimal);
   }
 
-  /* Semantic inset separators for table rows/headers (border-like, but shadow-based) */
   .shadow-bottom-border {
-    box-shadow: inset 0 -1.5px 0 var(--color-border);
+    box-shadow: inset 0 -1.5px 0 var(--border-subtle);
   }
 
   .shadow-bottom-border-thin {
-    box-shadow: inset 0 -1px 0 var(--color-border);
-  }
-
-  .shadow-minimal {
-    box-shadow: var(--shadow-minimal);
+    box-shadow: inset 0 -1px 0 var(--border-subtle);
   }
 
   .shadow-dragging {
     box-shadow: var(--shadow-dragging);
   }
 
-  .shadow-middle {
-    box-shadow:
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
-      rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 1px 1px -0.5px,
-      rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 3px 3px -1.5px,
-      rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 6px 6px -3px;
-  }
-
-  /* Tinted shadow using CSS variable - use with style={{ '--shadow-color': 'r, g, b' }} */
-  .shadow-tinted {
-    --shadow-color: 0, 0, 0;
-    box-shadow:
-      rgba(var(--shadow-color), 0) 0px 0px 0px 0px,
-      rgba(var(--shadow-color), 0) 0px 0px 0px 0px,
-      rgba(var(--shadow-color), calc(var(--shadow-border-opacity) * 1.5)) 0px 0px 0px 1px,
-      rgba(var(--shadow-color), var(--shadow-border-opacity)) 0px 1px 1px -0.5px,
-      rgba(var(--shadow-color), var(--shadow-blur-opacity)) 0px 3px 3px -1.5px,
-      rgba(var(--shadow-color), calc(var(--shadow-blur-opacity) * 0.67)) 0px 6px 6px -3px;
-  }
-
-  /* Dark mode: outline only, no blur glow
-     Uses uniform lightness (0.5) for consistent border visibility across all colors */
-  .dark .shadow-tinted {
-    box-shadow:
-      rgba(var(--shadow-color), 0) 0px 0px 0px 0px,
-      rgba(var(--shadow-color), 0) 0px 0px 0px 0px,
-      oklch(from rgb(var(--shadow-color)) 0.425 c h / 0.6) 0px 0px 0px 1px,
-      rgba(var(--shadow-color), 0) 0px 1px 1px -0.5px,
-      rgba(var(--shadow-color), 0) 0px 3px 3px -1.5px,
-      rgba(var(--shadow-color), 0) 0px 6px 6px -3px;
-  }
-
-  .shadow-strong {
-    box-shadow:
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
-      rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 1px 1px -0.5px,
-      rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 3px 3px -1.5px,
-      rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 6px 6px -3px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 12px 12px -6px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 24px 24px -12px;
-  }
-
   .shadow-panel-focused {
     position: relative;
     box-shadow:
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 1px 1px -0.5px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 3px 3px 1px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.5)) 0px 6px 6px 2px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.5)) 0px 12px 12px 3px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 24px 24px 4px;
-  }
-
-  /* Gradient border: lighter at top, stronger at bottom */
-  .shadow-panel-focused::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(
-      to bottom,
-      rgba(var(--foreground-rgb), 0.1),
-      rgba(var(--foreground-rgb), 0.3)
-    );
-    -webkit-mask:
-      linear-gradient(#fff 0 0) content-box,
-      linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
-    z-index: 1;
-  }
-
-  /* Ensure content sits above the ::before pseudo-element */
-  .shadow-panel-focused > * {
-    position: relative;
-    z-index: 2;
-  }
-
-  .shadow-modal-small {
-    box-shadow: var(--shadow-modal-small);
-  }
-
-  /* =============================================================================
-     UNIFIED POPOVER STYLING
-
-     Use this class for all dropdowns, popovers, dialogs, and floating menus
-     to ensure consistent appearance across the app. Matches the vibrancy style:
-     - Semi-transparent dark background with blur
-     - 8px corner radius
-     - Layered shadow (shadow-modal-small)
-     - No visible border
-  ============================================================================= */
-  .popover-styled {
-    background: var(--background);
-    color: var(--foreground);
-    border-radius: 8px;
-    border: none;
-    box-shadow:
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 1px 1px -0.5px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 3px 3px 0px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 6px 6px 0px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 12px 12px 0px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 24px 24px 0px;
+      inset 0 0 0 1px var(--focus),
+      0 0 0 4px color-mix(in oklch, var(--focus) 14%, transparent);
   }
 }
 

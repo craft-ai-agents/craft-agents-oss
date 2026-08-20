@@ -46,8 +46,25 @@ export interface SetupNeeds {
   needsBillingConfig: boolean;
   /** Billing type set but missing credentials → show credential entry */
   needsCredentials: boolean;
-  /** Everything complete → go straight to App */
+  /** Rox cloud account (rox.one) not connected — product gate */
+  needsRoxCloud?: boolean;
+  /**
+   * The app can enter its local workspace.
+   *
+   * Credentials, billing, and OAuth setup are optional recommendations; use
+   * `needsBillingConfig` and `needsCredentials` to inspect that state.
+   */
   isFullyConfigured: boolean;
+  /** A persisted, explicit "Setup later" choice; diagnostic only. */
+  isSetupDeferred?: boolean;
+  /**
+   * Whether automatic app launch should open the setup wizard.
+   *
+   * The local-first launch policy leaves this false for unfinished setup so
+   * credentials, billing, and OAuth remain explicit user actions. Optional to
+   * tolerate payloads from older clients.
+   */
+  shouldShowOnboardingOnLaunch?: boolean;
   /** User has legacy tokens that need migration */
   needsMigration?: MigrationInfo;
 }

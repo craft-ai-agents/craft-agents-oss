@@ -9,7 +9,7 @@
 // Platform types
 // ---------------------------------------------------------------------------
 
-export type PlatformType = 'telegram' | 'whatsapp' | 'lark'
+export type PlatformType = 'telegram' | 'whatsapp' | 'lark' | 'discord' | 'wechat'
 
 // ---------------------------------------------------------------------------
 // Logger
@@ -70,7 +70,7 @@ export interface AdapterCapabilities {
   inlineButtons: boolean
   maxButtons: number
   maxMessageLength: number
-  markdown: 'v2' | 'whatsapp' | 'lark-post'
+  markdown: 'v2' | 'whatsapp' | 'lark-post' | 'discord' | 'wechat'
   webhookSupport: boolean
 }
 
@@ -102,6 +102,18 @@ export interface IncomingMessage {
    * the router; surfaces in `IncomingMessage` so access-control can audit.
    */
   senderIsBot?: boolean
+  /**
+   * Discord only: `true` when the message arrived in a DM channel. Undefined
+   * for non-Discord platforms. Used by the router's guild-trigger gate.
+   */
+  isDM?: boolean
+  /**
+   * Discord only: `true` when the bot user was @mentioned in the message.
+   * Undefined for non-Discord platforms. Combined with the binding's
+   * `discordGuildTrigger`, the router decides whether a guild-channel message
+   * routes to the session.
+   */
+  mentionedBot?: boolean
   text: string
   attachments?: IncomingAttachment[]
   replyToMessageId?: string
@@ -249,13 +261,23 @@ export type ResponseMode = 'streaming' | 'progress' | 'final_only'
 /**
  * Per-binding access policy.
  *
- * - `inherit`     — defer to the platform's owners list (default for new bindings).
- * - `allow-list`  — only senders in `allowedSenderIds` may route to the bound session.
- * - `open`        — anyone in an accepted chat may route. Used as the migration
- *                   default for bindings created before access control existed,
- *                   and for explicitly-public bindings (e.g. support bots).
+ * - `public-inbox`  — unknown senders get a non-executing pairing path.
+ * - `owner-control` — only owners / `allowedSenderIds` may route to a session.
+ * - `disabled`      — no inbound routing.
+ *
+ * Legacy persisted `open` / `inherit` / missing values normalize to `public-inbox`.
+ * Legacy `owner-only` / `allow-list` normalize to `owner-control`.
  */
-export type BindingAccessMode = 'inherit' | 'allow-list' | 'open'
+export type MessagingAccessMode = 'public-inbox' | 'owner-control' | 'disabled'
+export type BindingAccessMode = MessagingAccessMode
+export type PlatformAccessMode = MessagingAccessMode
+
+/** Map persisted/legacy names onto the explicit access mode. */
+export function normalizeMessagingAccessMode(raw: unknown): MessagingAccessMode {
+  if (raw === 'owner-only' || raw === 'owner-control' || raw === 'allow-list') return 'owner-control'
+  if (raw === 'disabled') return 'disabled'
+  return 'public-inbox'
+}
 
 export interface BindingConfig {
   /** How outbound agent output is rendered. Default: 'progress' */
@@ -275,17 +297,23 @@ export interface BindingConfig {
   /**
    * Per-binding access mode. Governs Router.route() admission for this
    * binding only. Defaults vary by migration vs. fresh creation:
-   *  - Fresh bindings (created after access control shipped): `'inherit'`.
-   *  - Migrated bindings (legacy data with no field set): `'open'` so prod
-   *    behaviour is unchanged until the owner explicitly locks down.
+   *  - Fresh bindings default to `'owner-control'`.
+   *  - Legacy missing/`open`/`inherit` records normalize to `'public-inbox'`.
    */
   accessMode: BindingAccessMode
   /**
-   * Sender ids permitted to route into this binding when `accessMode === 'allow-list'`.
-   * Ignored otherwise. The list is platform-native (Telegram numeric user_id
-   * as a string).
+   * Sender ids permitted to route into this binding when `accessMode === 'owner-control'`.
+   * Combined with workspace `owners`. The list is platform-native.
    */
   allowedSenderIds: string[]
+  /**
+   * Discord-only: in a bound guild text channel, decides which messages
+   * route to the session.
+   *  - `'mention'` (default) — only messages that @mention the bot route.
+   *  - `'all'` — every message in the channel routes.
+   * Ignored for DMs (always route) and non-Discord platforms.
+   */
+  discordGuildTrigger: 'mention' | 'all'
 }
 
 export const DEFAULT_BINDING_CONFIG: BindingConfig = {
@@ -294,8 +322,9 @@ export const DEFAULT_BINDING_CONFIG: BindingConfig = {
   showToolActivity: false,
   approvalChannel: 'chat',
   editIntervalMs: 3500,
-  accessMode: 'inherit',
+  accessMode: 'owner-control',
   allowedSenderIds: [],
+  discordGuildTrigger: 'mention',
 }
 
 export function getDefaultBindingConfig(platform: PlatformType): BindingConfig {
@@ -314,11 +343,10 @@ export function normalizeBindingConfig(
     config?.responseMode ??
     (config?.streamResponses === false ? 'final_only' : config?.streamResponses === true ? 'streaming' : base.responseMode)
 
-  // Migration rule: if a persisted config predates access control (no
-  // `accessMode` field), treat the binding as `'open'` so prod behaviour
-  // doesn't change silently. Owners explicitly lock down via Settings.
   const accessMode: BindingAccessMode =
-    config?.accessMode ?? (config !== undefined ? 'open' : base.accessMode)
+    config === undefined
+      ? base.accessMode
+      : normalizeMessagingAccessMode(config.accessMode)
 
   const allowedSenderIds = Array.isArray(config?.allowedSenderIds)
     ? [...config!.allowedSenderIds]
@@ -377,19 +405,17 @@ export interface TelegramSupergroupConfig {
 /**
  * Workspace-level access policy for a messaging platform.
  *
- * - `open`        — anyone in an accepted chat can run pre-binding commands
- *                   (`/new`, `/bind`) and bound chats fall back to their own
- *                   `BindingConfig.accessMode` for routing.
- * - `owner-only`  — pre-binding commands require sender to be on the
- *                   platform's `owners` list. Bindings whose `accessMode`
- *                   is `'inherit'` use the same list as their allow-list.
+ * - `public-inbox`  — unknown senders stay out of sessions and tools.
+ * - `owner-control` — owners (and binding allow-lists) may route.
+ * - `disabled`      — no inbound routing.
  *
- * Defaults vary by migration vs. fresh setup:
- *  - Fresh workspaces pairing the bot for the first time → `'owner-only'`.
- *  - Existing workspaces that predate access control → `'open'` so the
- *    Settings UI can show a "Lock down" banner without breaking traffic.
+ * Fresh pairing still seeds owners; missing legacy fields become `public-inbox`.
  */
-export type PlatformAccessMode = 'open' | 'owner-only'
+export interface PlatformAccessSlice {
+  enabled: boolean
+  accessMode?: PlatformAccessMode
+  owners?: PlatformOwner[]
+}
 
 /**
  * A user authorised to interact with the workspace's bot. Platform-native
@@ -463,52 +489,22 @@ export interface PendingSender {
 export interface MessagingConfig {
   enabled: boolean
   platforms: {
-    telegram?: {
-      enabled: boolean
-      /**
-       * Optional configured supergroup. Adapter accepts messages from this
-       * chat in addition to DMs. Sessions can bind to specific topics within.
-       */
+    telegram?: PlatformAccessSlice & {
+      /** Optional configured supergroup. Adapter accepts this chat plus DMs. */
       supergroup?: TelegramSupergroupConfig
-      /**
-       * Workspace-level access policy. Missing field = `'open'` for back-
-       * compat with workspaces that predate access control. Fresh setups
-       * land on `'owner-only'` automatically (registry sets it on first pair).
-       */
-      accessMode?: PlatformAccessMode
-      /**
-       * Telegram user ids permitted to drive the bot at workspace level.
-       * Gates `/new`, `/bind`, `/unbind`, `/status`, `/stop` and serves as
-       * the default sender allow-list for bindings whose `accessMode === 'inherit'`.
-       *
-       * `/pair` itself stays open: if the list is empty, the first
-       * successful redeem seeds the list with the consuming sender. After
-       * that, only existing owners may redeem further codes.
-       */
-      owners?: PlatformOwner[]
     }
-    whatsapp?: {
-      enabled: boolean
+    whatsapp?: PlatformAccessSlice & {
       /**
        * When true, messages sent from other devices on the same WA account
        * to the self-JID (your own number) are routed to a bound session.
-       * The worker filters its own echoes via sent-ID tracking + a response
-       * prefix. Defaults to `true` when unset — the no-second-phone flow is
-       * the expected UX for new users.
        */
       selfChatMode?: boolean
     }
-    lark?: {
-      enabled: boolean
-      /**
-       * Which Lark/Feishu domain the bot belongs to. A bot is registered
-       * with one Open Platform — they're separate ecosystems despite
-       * sharing the same SDK + protocols.
-       *  - `lark` → open.larksuite.com (international)
-       *  - `feishu` → open.feishu.cn (China)
-       */
+    lark?: PlatformAccessSlice & {
       domain?: 'lark' | 'feishu'
     }
+    discord?: PlatformAccessSlice
+    wechat?: PlatformAccessSlice
   }
 }
 

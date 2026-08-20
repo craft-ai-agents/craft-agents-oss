@@ -5,7 +5,7 @@
  * workspace-specific theme overrides, and CLI tool icon mappings.
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LANGUAGES, type LanguageCode } from '@craft-agent/shared/i18n'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -30,6 +30,7 @@ import {
 } from '@/components/settings'
 import { useAtom } from 'jotai'
 import * as storage from '@/lib/local-storage'
+import { WORKSPACE_SELECTOR_RAIL_CHANGED_EVENT } from '@/components/app-shell/workspace-rail'
 import { useWorkspaceIcons } from '@/hooks/useWorkspaceIcon'
 import { WorkspaceAvatar } from '@/components/ui/workspace-avatar'
 import { ColorPicker } from '@/components/ui/color-picker'
@@ -38,7 +39,12 @@ import { kanbanColumnColorsAtom, kanbanColumnStatusAtom, kanbanLivePulseAtom } f
 import { showBackgroundFinishedChipAtom } from '@/atoms/background-finished'
 import { KANBAN_COLUMNS } from '@/components/app-shell/kanban/status-column'
 import { DEFAULT_KANBAN_COLUMN_COLORS } from '@/components/app-shell/kanban/kanban-colors'
-import type { KanbanColumnId } from '@/components/app-shell/kanban/types'
+import type { BuiltInKanbanColumnId, KanbanColumnId } from '@/components/app-shell/kanban/types'
+import {
+  getDefaultKanbanBoardConfig,
+  patchKanbanColumn,
+  type KanbanBoardConfig,
+} from '@craft-agent/shared/kanban/browser'
 import { setProjectColorTreatment, useProjectColorTreatment } from '@/hooks/useProjectColorTreatment'
 import { PROJECT_COLOR_PALETTE, type ProjectColorTreatment } from '@/utils/project-colors'
 import { Info_DataTable, SortableHeader } from '@/components/info/Info_DataTable'
@@ -146,6 +152,20 @@ export default function AppearanceSettingsPage() {
     setShowConnectionIcons(checked)
     storage.set(storage.KEYS.showConnectionIcons, checked)
   }, [])
+  const handleLanguageChange = useCallback((value: string) => {
+    void (async () => {
+      try {
+        console.info('[i18n] Appearance dropdown change', {
+          from: i18n.resolvedLanguage ?? null,
+          to: value,
+        })
+        await i18n.changeLanguage(value)
+        await window.electronAPI?.changeLanguage?.(value)
+      } catch (error) {
+        console.error('Failed to change language:', error)
+      }
+    })()
+  }, [i18n])
 
   // Project color treatment in the SessionList
   const projectColorTreatment = useProjectColorTreatment()
@@ -166,31 +186,110 @@ export default function AppearanceSettingsPage() {
     })
   }, [setWorkspaceAvatarColors])
 
-  // Kanban board appearance (persisted in localStorage via atomWithStorage).
-  const [kanbanColumnColors, setKanbanColumnColors] = useAtom(kanbanColumnColorsAtom)
-  const setKanbanColumnColor = useCallback((column: KanbanColumnId, hex: string) => {
-    setKanbanColumnColors(prev => ({ ...prev, [column]: hex }))
-  }, [setKanbanColumnColors])
-  const resetKanbanColumnColor = useCallback((column: KanbanColumnId) => {
-    setKanbanColumnColors(prev => {
-      const next = { ...prev }
-      delete next[column]
-      return next
+  // Kanban board appearance — source of truth is workspace kanban/config.json
+  // via getKanbanConfig/setKanbanConfig. Atoms remain an optional local mirror.
+  const [kanbanBoardConfig, setKanbanBoardConfig] = useState<KanbanBoardConfig | null>(null)
+  const kanbanBoardConfigRef = useRef<KanbanBoardConfig | null>(null)
+  kanbanBoardConfigRef.current = kanbanBoardConfig
+
+  const [, setKanbanColumnColors] = useAtom(kanbanColumnColorsAtom)
+  const [, setKanbanColumnStatus] = useAtom(kanbanColumnStatusAtom)
+
+  const syncKanbanAtomsFromConfig = useCallback(
+    (cfg: KanbanBoardConfig) => {
+      const colors: Partial<Record<KanbanColumnId, string>> = {}
+      const statuses: Partial<Record<KanbanColumnId, string>> = {}
+      for (const col of cfg.columns) {
+        const id = col.id as KanbanColumnId
+        if (col.color) colors[id] = col.color
+        if (col.dropStatusId) statuses[id] = col.dropStatusId
+      }
+      setKanbanColumnColors(colors)
+      setKanbanColumnStatus(statuses)
+    },
+    [setKanbanColumnColors, setKanbanColumnStatus],
+  )
+
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setKanbanBoardConfig(null)
+      return
+    }
+    const remoteWorkspaceId = workspaces.find(w => w.id === activeWorkspaceId)?.remoteServer?.remoteWorkspaceId
+    let cancelled = false
+    void window.electronAPI.getKanbanConfig(activeWorkspaceId).then(
+      cfg => {
+        if (cancelled) return
+        setKanbanBoardConfig(cfg)
+        syncKanbanAtomsFromConfig(cfg)
+      },
+      () => {
+        if (!cancelled) setKanbanBoardConfig(getDefaultKanbanBoardConfig())
+      },
+    )
+    const unsub = window.electronAPI.onKanbanConfigChanged?.((wsId, cfg) => {
+      if (wsId !== activeWorkspaceId && wsId !== remoteWorkspaceId) return
+      setKanbanBoardConfig(cfg)
+      syncKanbanAtomsFromConfig(cfg)
     })
-  }, [setKanbanColumnColors])
+    return () => {
+      cancelled = true
+      unsub?.()
+    }
+  }, [activeWorkspaceId, workspaces, syncKanbanAtomsFromConfig])
+
+  const persistKanbanConfig = useCallback(
+    async (next: KanbanBoardConfig) => {
+      setKanbanBoardConfig(next)
+      kanbanBoardConfigRef.current = next
+      syncKanbanAtomsFromConfig(next)
+      if (!activeWorkspaceId) return
+      try {
+        const saved = await window.electronAPI.setKanbanConfig(activeWorkspaceId, next)
+        setKanbanBoardConfig(saved)
+        kanbanBoardConfigRef.current = saved
+        syncKanbanAtomsFromConfig(saved)
+      } catch (error) {
+        console.error('Failed to save kanban board config:', error)
+      }
+    },
+    [activeWorkspaceId, syncKanbanAtomsFromConfig],
+  )
+
+  const setKanbanColumnColor = useCallback(
+    (column: KanbanColumnId, hex: string) => {
+      const base = kanbanBoardConfigRef.current ?? getDefaultKanbanBoardConfig()
+      void persistKanbanConfig(patchKanbanColumn(base, column, { color: hex }))
+    },
+    [persistKanbanConfig],
+  )
+  const resetKanbanColumnColor = useCallback(
+    (column: KanbanColumnId) => {
+      const base = kanbanBoardConfigRef.current ?? getDefaultKanbanBoardConfig()
+      const stock = DEFAULT_KANBAN_COLUMN_COLORS[column as BuiltInKanbanColumnId]
+      void persistKanbanConfig(
+        patchKanbanColumn(base, column, {
+          color: stock ?? undefined,
+        }),
+      )
+    },
+    [persistKanbanConfig],
+  )
   const [kanbanLivePulse, setKanbanLivePulse] = useAtom(kanbanLivePulseAtom)
 
   // Per-column status applied when a task is dragged into that column. Empty
-  // selection ('') removes the mapping → status left unchanged on move.
-  const [kanbanColumnStatus, setKanbanColumnStatus] = useAtom(kanbanColumnStatusAtom)
-  const setColumnStatus = useCallback((column: KanbanColumnId, statusId: string) => {
-    setKanbanColumnStatus(prev => {
-      const next = { ...prev }
-      if (statusId) next[column] = statusId
-      else delete next[column]
-      return next
-    })
-  }, [setKanbanColumnStatus])
+  // selection ('') clears the override (built-ins normalize back to column id).
+  const setColumnStatus = useCallback(
+    (column: KanbanColumnId, statusId: string) => {
+      const base = kanbanBoardConfigRef.current ?? getDefaultKanbanBoardConfig()
+      void persistKanbanConfig(
+        patchKanbanColumn(base, column, {
+          dropStatusId: statusId || undefined,
+        }),
+      )
+    },
+    [persistKanbanConfig],
+  )
   const columnStatusOptions = useMemo(
     () => [
       { value: '', label: t("settings.appearance.kanbanColumnStatusNone") },
@@ -198,6 +297,39 @@ export default function AppearanceSettingsPage() {
     ],
     [sessionStatuses, t]
   )
+  // Workspace selector placement toggle
+  const [workspaceSelectorRail, setWorkspaceSelectorRail] = useState(() =>
+    storage.get(storage.KEYS.workspaceSelectorRail, false)
+  )
+  const handleWorkspaceSelectorRailChange = useCallback((checked: boolean) => {
+    setWorkspaceSelectorRail(checked)
+    storage.set(storage.KEYS.workspaceSelectorRail, checked)
+    window.dispatchEvent(new CustomEvent(WORKSPACE_SELECTOR_RAIL_CHANGED_EVENT, { detail: checked }))
+  }, [])
+  // Turn activity cards: default expansion state (persisted in localStorage)
+  const [turnActivitiesExpandedByDefault, setTurnActivitiesExpandedByDefault] = useState(() =>
+    storage.get(storage.KEYS.turnActivitiesExpandedByDefault, false)
+  )
+  const handleTurnActivitiesDefaultChange = useCallback((value: string) => {
+    const expanded = value === 'expanded'
+    setTurnActivitiesExpandedByDefault(expanded)
+    storage.set(storage.KEYS.turnActivitiesExpandedByDefault, expanded)
+    window.dispatchEvent(new CustomEvent(storage.EVENTS.turnActivitiesExpandedByDefaultChanged, { detail: expanded }))
+  }, [])
+
+  // Default zoom level (persisted in config.json and applied to every app window)
+  const [defaultZoomLevel, setDefaultZoomLevel] = useState(90)
+  useEffect(() => {
+    window.electronAPI?.getDefaultZoomLevel?.().then(setDefaultZoomLevel)
+  }, [])
+  const handleDefaultZoomLevelChange = useCallback(async (level: number) => {
+    setDefaultZoomLevel(level)
+    await window.electronAPI?.setDefaultZoomLevel?.(level)
+  }, [])
+
+  // "Background session finished" chip toggle (renderer-only appearance pref,
+  // persisted in localStorage via atomWithStorage — read by App.tsx + ChatPage).
+  const [showBackgroundFinishedChip, setShowBackgroundFinishedChip] = useAtom(showBackgroundFinishedChipAtom)
 
   // Rich tool descriptions toggle (persisted in config.json, read by SDK subprocess)
   const [richToolDescriptions, setRichToolDescriptions] = useState(true)
@@ -209,9 +341,6 @@ export default function AppearanceSettingsPage() {
     await window.electronAPI?.setRichToolDescriptions?.(checked)
   }, [])
 
-  // "Background session finished" chip toggle (renderer-only appearance pref,
-  // persisted in localStorage via atomWithStorage — read by App.tsx + ChatPage).
-  const [showBackgroundFinishedChip, setShowBackgroundFinishedChip] = useAtom(showBackgroundFinishedChipAtom)
 
   // Load preset themes on mount
   useEffect(() => {
@@ -350,18 +479,24 @@ export default function AppearanceSettingsPage() {
                   <SettingsRow label={t("settings.appearance.language")}>
                     <SettingsMenuSelect
                       value={(i18n.resolvedLanguage ?? i18n.language) as LanguageCode}
-                      onValueChange={(value) => {
-                        console.info('[i18n] Appearance dropdown change', {
-                          from: i18n.resolvedLanguage ?? null,
-                          to: value,
-                        })
-                        i18n.changeLanguage(value)
-                        window.electronAPI?.changeLanguage?.(value)
-                      }}
+                      onValueChange={handleLanguageChange}
                       options={Object.entries(LANGUAGES).map(([code, config]) => ({
                         value: code,
                         label: config.nativeName,
                       }))}
+                    />
+                  </SettingsRow>
+                  <SettingsRow
+                    label={t("settings.appearance.turnActivities")}
+                    description={t("settings.appearance.turnActivitiesDesc")}
+                  >
+                    <SettingsSegmentedControl
+                      value={turnActivitiesExpandedByDefault ? 'expanded' : 'collapsed'}
+                      onValueChange={handleTurnActivitiesDefaultChange}
+                      options={[
+                        { value: 'collapsed', label: t("settings.appearance.turnActivitiesCollapsed") },
+                        { value: 'expanded', label: t("settings.appearance.turnActivitiesExpanded") },
+                      ]}
                     />
                   </SettingsRow>
                 </SettingsCard>
@@ -436,11 +571,37 @@ export default function AppearanceSettingsPage() {
               {/* Interface */}
               <SettingsSection title={t("settings.appearance.interface")}>
                 <SettingsCard>
+                  <SettingsRow
+                    label={t("settings.appearance.defaultZoomLevel")}
+                    description={t("settings.appearance.defaultZoomLevelDesc")}
+                  >
+                    <div className="flex items-center gap-3 w-64">
+                      <input
+                        type="range"
+                        min={50}
+                        max={150}
+                        step={10}
+                        value={defaultZoomLevel}
+                        onChange={(event) => handleDefaultZoomLevelChange(Number(event.target.value))}
+                        className="w-44 accent-primary"
+                        aria-label={t("settings.appearance.defaultZoomLevel")}
+                      />
+                      <span className="w-12 text-right text-sm font-medium tabular-nums">
+                        {defaultZoomLevel}%
+                      </span>
+                    </div>
+                  </SettingsRow>
                   <SettingsToggle
                     label={t("settings.appearance.connectionIcons")}
                     description={t("settings.appearance.connectionIconsDesc")}
                     checked={showConnectionIcons}
                     onCheckedChange={handleConnectionIconsChange}
+                  />
+                  <SettingsToggle
+                    label={t("settings.appearance.workspaceIconRail")}
+                    description={t("settings.appearance.workspaceIconRailDesc")}
+                    checked={workspaceSelectorRail}
+                    onCheckedChange={handleWorkspaceSelectorRailChange}
                   />
                   <SettingsToggle
                     label={t("settings.appearance.richToolDescriptions")}
@@ -477,13 +638,16 @@ export default function AppearanceSettingsPage() {
               >
                 <SettingsCard>
                   {KANBAN_COLUMNS.map(column => {
-                    const merged = kanbanColumnColors[column.id] ?? DEFAULT_KANBAN_COLUMN_COLORS[column.id]
+                    const cfgCol = kanbanBoardConfig?.columns.find(c => c.id === column.id)
+                    const stock = DEFAULT_KANBAN_COLUMN_COLORS[column.id]
+                    const merged = cfgCol?.color ?? stock
+                    const isCustom = Boolean(cfgCol?.color && cfgCol.color !== stock)
                     return (
                       <SettingsRow key={column.id} label={t(column.labelKey)}>
                         <ColorPicker
                           value={merged}
                           onChange={(hex) => setKanbanColumnColor(column.id, hex)}
-                          onClear={kanbanColumnColors[column.id] ? () => resetKanbanColumnColor(column.id) : undefined}
+                          onClear={isCustom ? () => resetKanbanColumnColor(column.id) : undefined}
                           clearLabel={t("settings.appearance.kanbanColumnColorReset")}
                           presets={PROJECT_COLOR_PALETTE}
                           ariaLabel={t("settings.appearance.kanbanColumnColor", { column: t(column.labelKey) })}
@@ -507,15 +671,21 @@ export default function AppearanceSettingsPage() {
                 description={t("settings.appearance.kanbanColumnStatusDesc")}
               >
                 <SettingsCard>
-                  {KANBAN_COLUMNS.map(column => (
-                    <SettingsRow key={column.id} label={t(column.labelKey)}>
-                      <SettingsMenuSelect
-                        value={kanbanColumnStatus[column.id] ?? ''}
-                        onValueChange={(value) => setColumnStatus(column.id, value)}
-                        options={columnStatusOptions}
-                      />
-                    </SettingsRow>
-                  ))}
+                  {KANBAN_COLUMNS.map(column => {
+                    const dropStatusId =
+                      kanbanBoardConfig?.columns.find(c => c.id === column.id)?.dropStatusId ??
+                      column.dropStatusId ??
+                      ''
+                    return (
+                      <SettingsRow key={column.id} label={t(column.labelKey)}>
+                        <SettingsMenuSelect
+                          value={dropStatusId}
+                          onValueChange={(value) => setColumnStatus(column.id, value)}
+                          options={columnStatusOptions}
+                        />
+                      </SettingsRow>
+                    )
+                  })}
                 </SettingsCard>
               </SettingsSection>
 

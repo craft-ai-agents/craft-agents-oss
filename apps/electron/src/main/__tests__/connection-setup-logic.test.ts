@@ -82,9 +82,11 @@ describe('createBuiltInConnection', () => {
 
   it('creates anthropic-api with baseUrl as compat provider', () => {
     const conn = createBuiltInConnection('anthropic-api', 'https://custom.endpoint.com')
-    expect(conn.providerType).toBe('pi_compat')
+    expect(conn.providerType).toBe('anthropic_compat')
     expect(conn.authType).toBe('api_key_with_endpoint')
     expect(conn.name).toBe('Custom Anthropic-Compatible')
+    expect(conn.customEndpoint).toEqual({ api: 'anthropic-messages' })
+    expect(conn.midStreamBehavior).toBe('queue')
   })
 
   it('creates claude-max with oauth', () => {

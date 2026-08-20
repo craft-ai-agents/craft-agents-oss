@@ -3,23 +3,36 @@ import { useTranslation } from "react-i18next"
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { SlashCommandMenu, DEFAULT_SLASH_COMMAND_GROUPS, type SlashCommandId } from '@/components/ui/slash-command-menu'
-import { ChevronDown, Info } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+  StyledDropdownMenuSeparator,
+  StyledDropdownMenuSubTrigger,
+  StyledDropdownMenuSubContent,
+  DropdownMenuSub,
+} from '@/components/ui/styled-dropdown'
+import { Check, ChevronDown, FolderKanban, Info, Tag } from 'lucide-react'
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from '@craft-agent/shared/agent/modes'
 import { ActiveTasksBar, type BackgroundTask } from './ActiveTasksBar'
 import type { TerminalOverlayData } from './TaskActionMenu'
 import { LabelIcon, LabelValueTypeIcon } from '@/components/ui/label-icon'
 import { LabelValuePopover } from '@/components/ui/label-value-popover'
 import type { LabelConfig } from '@craft-agent/shared/labels'
-import { flattenLabels, parseLabelEntry, formatLabelEntry, formatDisplayValue } from '@craft-agent/shared/labels'
+import { extractLabelId, flattenLabels, parseLabelEntry, formatLabelEntry, formatDisplayValue, toggleLabelInList } from '@craft-agent/shared/labels'
 import { resolveEntityColor } from '@craft-agent/shared/colors'
 import { useTheme } from '@/context/ThemeContext'
 import { useDynamicStack } from '@/hooks/useDynamicStack'
 import type { SessionStatus } from '@/config/session-status-config'
-import { getState } from '@/config/session-status-config'
+import { getState, resolveStatusDisplayLabel, resolveLabelDisplayName } from '@/config/session-status-config'
 import { SessionStatusMenu } from '@/components/ui/session-status-menu'
 import { MetadataBadge } from '@/components/ui/metadata-badge'
 import { openLabelLink } from '@/lib/open-label-link'
 import { SessionInfoPopover } from './SessionInfoPopover'
+import { LabelMenuItems } from './SessionMenuParts'
 
 // ============================================================================
 // Permission Mode Icon Component
@@ -78,6 +91,12 @@ export interface ActiveOptionBadgesProps {
   currentSessionStatus?: string
   /** Callback when state changes */
   onSessionStatusChange?: (stateId: string) => void
+  /** Workspace projects for the Projects assigner (main session chrome) */
+  projects?: Array<{ id: string; slug: string; name: string; color?: string }>
+  /** Currently bound project id */
+  projectId?: string | null
+  /** Bind/unbind session project (`null` clears) */
+  onSetProjectId?: (projectId: string | null) => void
   /** Additional CSS classes */
   className?: string
 }
@@ -107,6 +126,9 @@ export function ActiveOptionBadges({
   sessionStatuses = [],
   currentSessionStatus,
   onSessionStatusChange,
+  projects = [],
+  projectId,
+  onSetProjectId,
   className,
 }: ActiveOptionBadgesProps) {
   // Resolve session label entries to their config objects + parsed values.
@@ -127,6 +149,9 @@ export function ActiveOptionBadges({
   }, [sessionLabels, labels])
 
   const hasLabels = resolvedLabels.length > 0
+  const showLabelsAssigner = labels.length > 0 && !!onLabelsChange
+  const boundProject = projectId ? projects.find(p => p.id === projectId) : undefined
+  const showProjectAssigner = projects.length > 0 && !!onSetProjectId
 
   // Resolve the current state from sessionStatuses for the badge display.
   // Every session always has a state — fall back to the default state (or 'todo')
@@ -144,7 +169,7 @@ export function ActiveOptionBadges({
   const stackRef = useDynamicStack({ gap: 8, minVisible: 20, reservedStart: 0 })
 
   // Only render if badges or tasks are active
-  if (!permissionMode && tasks.length === 0 && !hasState && !hasStackContent) {
+  if (!permissionMode && tasks.length === 0 && !hasState && !hasStackContent && !showProjectAssigner && !showLabelsAssigner) {
     return null
   }
 
@@ -166,7 +191,7 @@ export function ActiveOptionBadges({
       )}
 
     <div className={cn("flex items-start gap-2 mb-2 px-px pt-px pb-0.5", className)}>
-      {/* Left side: mode → state → labels stack */}
+      {/* Left side: mode → state → project → labels assign → labels stack */}
       <div className="flex items-start gap-2 min-w-0 flex-1">
         {/* Permission Mode Badge */}
         {permissionMode && (
@@ -186,6 +211,31 @@ export function ActiveOptionBadges({
               state={resolvedState}
               sessionStatuses={sessionStatuses}
               onSessionStatusChange={onSessionStatusChange}
+              sessionId={sessionId}
+            />
+          </div>
+        )}
+
+        {/* Projects assigner (main session chrome) */}
+        {showProjectAssigner && (
+          <div className="shrink-0">
+            <ProjectBadge
+              projects={projects}
+              projectId={projectId}
+              projectName={boundProject?.name}
+              onSetProjectId={onSetProjectId}
+              sessionId={sessionId}
+            />
+          </div>
+        )}
+
+        {/* Labels assigner — always present when labels exist (not only applied chips) */}
+        {showLabelsAssigner && (
+          <div className="shrink-0">
+            <LabelsAssignBadge
+              labels={labels}
+              sessionLabels={sessionLabels}
+              onLabelsChange={onLabelsChange}
               sessionId={sessionId}
             />
           </div>
@@ -277,6 +327,7 @@ function LabelBadge({
   sessionId?: string
 }) {
   const { isDark } = useTheme()
+  const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
 
   // Auto-open the value popover when this label was just added via # menu
@@ -306,7 +357,7 @@ function LabelBadge({
       sessionId={sessionId}
     >
       <MetadataBadge
-        label={label.name}
+        label={resolveLabelDisplayName(label, t)}
         value={displayValue}
         onValueClick={label.valueType === 'link' && value ? () => openLabelLink(value) : undefined}
         icon={<LabelIcon label={label} size="lg" />}
@@ -354,8 +405,7 @@ function StateBadge({
   const badgeColor = state.resolvedColor || 'var(--foreground)'
   const applyColor = state.iconColorable
 
-  const DEFAULT_STATUS_IDS = new Set(['backlog', 'todo', 'needs-review', 'done', 'cancelled'])
-  const stateLabel = DEFAULT_STATUS_IDS.has(state.id) ? t(`status.${state.id}`, state.label) : state.label
+  const stateLabel = resolveStatusDisplayLabel(state, t)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -396,6 +446,144 @@ function StateBadge({
         />
       </PopoverContent>
     </Popover>
+  )
+}
+
+function ProjectBadge({
+  projects,
+  projectId,
+  projectName,
+  onSetProjectId,
+  sessionId,
+}: {
+  projects: Array<{ id: string; slug: string; name: string; color?: string }>
+  projectId?: string | null
+  projectName?: string
+  onSetProjectId?: (projectId: string | null) => void
+  sessionId?: string
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = React.useState(false)
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <MetadataBadge
+          label={projectName || t('sessionMenu.projects')}
+          badgeColor={projectName ? 'var(--info)' : 'var(--foreground)'}
+          interactive
+          isActive={open}
+          showChevron
+          icon={<FolderKanban className="h-3.5 w-3.5 shrink-0" />}
+          className="pl-2.5"
+        />
+      </DropdownMenuTrigger>
+      <StyledDropdownMenuContent
+        align="start"
+        side="top"
+        sideOffset={4}
+        minWidth="min-w-[180px]"
+        onCloseAutoFocus={(e) => {
+          e.preventDefault()
+          window.dispatchEvent(new CustomEvent('craft:focus-input', {
+            detail: { sessionId },
+          }))
+        }}
+      >
+        <StyledDropdownMenuItem
+          onClick={() => {
+            onSetProjectId?.(null)
+            setOpen(false)
+          }}
+        >
+          {!projectId && <Check className="h-3.5 w-3.5" />}
+          <span className={projectId ? 'flex-1 ml-[18px]' : 'flex-1'}>
+            {t('sessionMenu.noProject')}
+          </span>
+        </StyledDropdownMenuItem>
+        <StyledDropdownMenuSeparator />
+        {projects.map((p) => {
+          const isBound = projectId === p.id
+          return (
+            <StyledDropdownMenuItem
+              key={p.id}
+              onClick={() => {
+                onSetProjectId?.(p.id)
+                setOpen(false)
+              }}
+            >
+              {isBound && <Check className="h-3.5 w-3.5" />}
+              <span className={isBound ? 'flex-1' : 'flex-1 ml-[18px]'}>{p.name}</span>
+            </StyledDropdownMenuItem>
+          )
+        })}
+      </StyledDropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function LabelsAssignBadge({
+  labels,
+  sessionLabels,
+  onLabelsChange,
+  sessionId,
+}: {
+  labels: LabelConfig[]
+  sessionLabels: string[]
+  onLabelsChange: (updatedLabels: string[]) => void
+  sessionId?: string
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = React.useState(false)
+  const appliedLabelIds = React.useMemo(
+    () => new Set(sessionLabels.map(extractLabelId)),
+    [sessionLabels],
+  )
+
+  const handleToggle = React.useCallback((labelId: string) => {
+    onLabelsChange(toggleLabelInList(sessionLabels, labelId))
+  }, [onLabelsChange, sessionLabels])
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <MetadataBadge
+          label={t('sessionMenu.labels')}
+          value={sessionLabels.length > 0 ? String(sessionLabels.length) : undefined}
+          badgeColor="var(--foreground)"
+          interactive
+          isActive={open}
+          showChevron
+          icon={<Tag className="h-3.5 w-3.5 shrink-0" />}
+          className="pl-2.5"
+        />
+      </DropdownMenuTrigger>
+      <StyledDropdownMenuContent
+        align="start"
+        side="top"
+        sideOffset={4}
+        minWidth="min-w-[180px]"
+        onCloseAutoFocus={(e) => {
+          e.preventDefault()
+          window.dispatchEvent(new CustomEvent('craft:focus-input', {
+            detail: { sessionId },
+          }))
+        }}
+      >
+        <LabelMenuItems
+          labels={labels}
+          appliedLabelIds={appliedLabelIds}
+          onToggle={handleToggle}
+          menu={{
+            MenuItem: StyledDropdownMenuItem,
+            Separator: StyledDropdownMenuSeparator,
+            Sub: DropdownMenuSub,
+            SubTrigger: StyledDropdownMenuSubTrigger,
+            SubContent: StyledDropdownMenuSubContent,
+          }}
+        />
+      </StyledDropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

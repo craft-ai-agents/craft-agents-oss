@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { DatabaseZap } from 'lucide-react'
+import { DatabaseZap, RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { deriveConnectionStatus } from '@/components/ui/source-status-indicator'
 import { EntityPanel } from '@/components/ui/entity-panel'
@@ -11,8 +12,8 @@ import { SourceMenu } from './SourceMenu'
 import { SendResourceToWorkspaceDialog } from './SendResourceToWorkspaceDialog'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
+import { cn } from '@/lib/utils'
 import type { LoadedSource, SourceConnectionStatus, SourceFilter } from '../../../shared/types'
-
 const SOURCE_TYPE_CONFIG: Record<string, { labelKey: string; colorClass: string }> = {
   mcp: { labelKey: 'sourcesList.typeMcp', colorClass: 'bg-accent/10 text-accent' },
   api: { labelKey: 'sourcesList.typeApi', colorClass: 'bg-success/10 text-success' },
@@ -25,6 +26,17 @@ const SOURCE_STATUS_CONFIG: Record<string, { labelKey: string; colorClass: strin
   failed: { labelKey: 'sourcesList.statusDisconnected', colorClass: 'bg-destructive/10 text-destructive' },
   untested: { labelKey: 'sourcesList.statusNotTested', colorClass: 'bg-foreground/10 text-foreground/50' },
   local_disabled: { labelKey: 'sourcesList.statusDisabled', colorClass: 'bg-foreground/10 text-foreground/50' },
+}
+
+function estimateTokensFromGuide(raw: string | undefined): number {
+  if (!raw) return 0
+  return Math.ceil(raw.length / 4)
+}
+
+function formatApproxTokens(n: number): string {
+  if (n >= 1_000_000) return `≈${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1000) return `≈${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k`
+  return `≈${n}`
 }
 
 const SOURCE_TYPE_FILTER_LABEL_KEYS: Record<string, string> = {
@@ -62,6 +74,8 @@ export function SourcesListPanel({
   const [sendDialogOpen, setSendDialogOpen] = React.useState(false)
   const [sendResourceSlug, setSendResourceSlug] = React.useState<string | null>(null)
   const [sendResourceLabel, setSendResourceLabel] = React.useState('')
+  const [indexFileCount, setIndexFileCount] = React.useState<number | null>(null)
+  const [reindexing, setReindexing] = React.useState(false)
 
   const filteredSources = React.useMemo(() => {
     if (!sourceFilter) return sources
@@ -77,8 +91,53 @@ export function SourcesListPanel({
     return t('sourcesList.noSourcesConfigured')
   }, [sourceFilter, t])
 
+  const handleReindex = React.useCallback(async () => {
+    if (!activeWorkspaceId || reindexing) return
+    if (typeof window.electronAPI.reindexSources !== 'function') {
+      toast.error(t('sourcesList.reindexUnavailable'))
+      return
+    }
+    setReindexing(true)
+    try {
+      const result = await window.electronAPI.reindexSources(activeWorkspaceId)
+      setIndexFileCount(result.indexed)
+      toast.success(
+        t('sourcesList.reindexDone', {
+          count: result.indexed,
+          indexed: result.indexed,
+        }),
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(t('sourcesList.reindexFailed', { error: msg }))
+    } finally {
+      setReindexing(false)
+    }
+  }, [activeWorkspaceId, reindexing, t])
+
   return (
     <>
+    <div className="flex items-center justify-end gap-2 px-3 pt-2 pb-1">
+      {indexFileCount != null && (
+        <span className="text-[11px] text-muted-foreground tabular-nums">
+          {t('sourcesList.indexHitCount', { count: indexFileCount })}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={() => void handleReindex()}
+        disabled={reindexing || !activeWorkspaceId}
+        className={cn(
+          'inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-border/50 bg-background px-2.5',
+          'text-[11px] font-medium text-muted-foreground shadow-minimal',
+          'hover:bg-foreground/[0.03] hover:text-foreground disabled:opacity-50',
+        )}
+        title={t('sourcesList.reindexHint')}
+      >
+        <RefreshCw className={cn('h-3 w-3', reindexing && 'animate-spin')} />
+        {reindexing ? t('sourcesList.reindexing') : t('sourcesList.reindex')}
+      </button>
+    </div>
     <EntityPanel<LoadedSource>
       items={filteredSources}
       getId={(s) => s.config.slug}
@@ -126,6 +185,15 @@ export function SourcesListPanel({
                   {t(statusConfig.labelKey)}
                 </EntityListBadge>
               )}
+              {(() => {
+                const tokens = estimateTokensFromGuide(source.guide?.raw)
+                if (tokens <= 0) return null
+                return (
+                  <EntityListBadge colorClass="bg-foreground/5 text-foreground/55" className="cursor-default tabular-nums">
+                    {t('sourcesList.tokenEstimate', { tokens: formatApproxTokens(tokens) })}
+                  </EntityListBadge>
+                )
+              })()}
               {subtitle && <span className="truncate">{subtitle}</span>}
             </>
           ),

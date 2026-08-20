@@ -32,16 +32,19 @@ import {
 } from "./submit-helpers"
 
 import type { CustomEndpointApi, CustomEndpointConfig } from '@config/llm-connections'
+import type { ModelDefinition } from '@config/models'
 
 export type ApiKeyStatus = 'idle' | 'validating' | 'success' | 'error'
 
 export type { CustomEndpointApi }
 
+export type CustomEndpointModelInput = string | ModelDefinition
+
 export interface ApiKeySubmitData {
   apiKey: string
   baseUrl?: string
   connectionDefaultModel?: string
-  models?: string[]
+  models?: CustomEndpointModelInput[]
   piAuthProvider?: string
   modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
   /** Custom endpoint protocol — set when user configures an arbitrary API endpoint */
@@ -77,7 +80,7 @@ export interface ApiKeyInputProps {
     baseUrl?: string
     connectionDefaultModel?: string
     activePreset?: string
-    models?: string[]
+    models?: CustomEndpointModelInput[]
     /** Pre-fill the protocol toggle for custom endpoints */
     customApi?: CustomEndpointApi
   }
@@ -99,21 +102,21 @@ const ANTHROPIC_PRESETS: Preset[] = [
   { key: 'openai-us', label: 'OpenAI US', url: 'https://us.api.openai.com/v1', placeholder: 'sk-...' },
   { key: 'google', label: 'Google AI Studio', url: 'https://generativelanguage.googleapis.com/v1beta', placeholder: 'AIza...' },
   { key: 'openrouter', label: 'OpenRouter', url: 'https://openrouter.ai/api/v1', placeholder: 'sk-or-...' },
-  { key: 'azure-openai-responses', label: 'Azure OpenAI', url: '', placeholder: 'Paste your key here...' },
+  { key: 'azure-openai-responses', label: 'Azure OpenAI', url: '', placeholder: '__pasteKeyHere__' },
   { key: 'amazon-bedrock', label: 'Amazon Bedrock', url: 'https://bedrock-runtime.us-east-1.amazonaws.com', placeholder: 'AKIA...' },
   { key: 'groq', label: 'Groq', url: 'https://api.groq.com/openai/v1', placeholder: 'gsk_...' },
-  { key: 'mistral', label: 'Mistral', url: 'https://api.mistral.ai/v1', placeholder: 'Paste your key here...' },
+  { key: 'mistral', label: 'Mistral', url: 'https://api.mistral.ai/v1', placeholder: '__pasteKeyHere__' },
   { key: 'deepseek', label: 'DeepSeek', url: 'https://api.deepseek.com', placeholder: 'sk-...' },
   { key: 'xai', label: 'xAI (Grok)', url: 'https://api.x.ai/v1', placeholder: 'xai-...' },
   { key: 'cerebras', label: 'Cerebras', url: 'https://api.cerebras.ai/v1', placeholder: 'csk-...' },
-  { key: 'zai', label: 'z.ai (GLM)', url: 'https://api.z.ai/api/coding/paas/v4', placeholder: 'Paste your key here...' },
+  { key: 'zai', label: 'z.ai (GLM)', url: 'https://api.z.ai/api/coding/paas/v4', placeholder: '__pasteKeyHere__' },
   { key: 'huggingface', label: 'Hugging Face', url: 'https://router.huggingface.co/v1', placeholder: 'hf_...' },
-  { key: 'minimax-global', label: 'Minimax Global', url: 'https://api.minimax.io/anthropic', placeholder: 'Paste your key here...' },
-  { key: 'minimax-cn', label: 'Minimax CN', url: 'https://api.minimaxi.com/anthropic', placeholder: 'Paste your key here...' },
+  { key: 'minimax-global', label: 'Minimax Global', url: 'https://api.minimax.io/anthropic', placeholder: '__pasteKeyHere__' },
+  { key: 'minimax-cn', label: 'Minimax CN', url: 'https://api.minimaxi.com/anthropic', placeholder: '__pasteKeyHere__' },
   { key: 'kimi-coding', label: 'Kimi (Coding)', url: 'https://api.kimi.com/coding', placeholder: 'sk-kimi-...' },
-  { key: 'vercel-ai-gateway', label: 'Vercel AI Gateway', url: 'https://ai-gateway.vercel.sh', placeholder: 'Paste your key here...' },
+  { key: 'vercel-ai-gateway', label: 'Vercel AI Gateway', url: 'https://ai-gateway.vercel.sh', placeholder: '__pasteKeyHere__' },
   { key: 'manifest', label: 'Manifest', url: 'https://app.manifest.build/v1', placeholder: 'mnfst_...' },
-  { key: 'custom', label: 'Custom', url: '', placeholder: 'Paste your key here...' },
+  { key: 'custom', label: 'Custom', url: '', placeholder: '__pasteKeyHere__' },
 ]
 
 /**
@@ -148,7 +151,7 @@ const PI_ONLY_PRESET_KEYS: ReadonlySet<string> = new Set(['minimax-global', 'min
 const COMPAT_ANTHROPIC_DEFAULTS = 'claude-opus-4-8, claude-opus-4-7, claude-sonnet-4-6, claude-haiku-4-5'
 const COMPAT_OPENAI_DEFAULTS = 'openai/gpt-5.2-codex, openai/gpt-5.1-codex-mini'
 const COMPAT_MINIMAX_DEFAULTS = 'MiniMax-M2.5, MiniMax-M2.5-highspeed'
-const COMPAT_KIMI_DEFAULTS = 'k2p5, kimi-k2-thinking'
+const COMPAT_KIMI_DEFAULTS = 'k3, kimi-for-coding, kimi-for-coding-highspeed'
 
 function getPresetsForProvider(providerType: 'anthropic' | 'openai' | 'pi' | 'google' | 'pi_api_key'): Preset[] {
   if (providerType === 'pi_api_key') return ANTHROPIC_PRESETS
@@ -164,11 +167,85 @@ function getPresetForUrl(url: string, presets: Preset[]): PresetKey {
   return match?.key ?? 'custom'
 }
 
-function parseModelList(value: string): string[] {
+export function getModelId(model: CustomEndpointModelInput): string {
+  return typeof model === 'string' ? model : model.id
+}
+
+export function formatModelList(models: CustomEndpointModelInput[] | undefined, fallback: string): string {
+  if (!models?.length) return fallback
+  return models.map(getModelId).join(', ')
+}
+
+export function parseModelList(value: string): CustomEndpointModelInput[] {
   return value
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean)
+}
+
+export function makeCustomModelDefinition(values: Partial<ModelDefinition> & { id: string }): ModelDefinition {
+  return {
+    id: values.id,
+    name: values.name || values.id,
+    shortName: values.shortName || values.name || values.id,
+    description: values.description || '',
+    provider: values.provider || 'pi',
+    contextWindow: values.contextWindow ?? 131_072,
+    ...(values.supportsImages !== undefined ? { supportsImages: values.supportsImages } : {}),
+    ...(values.supportsThinking !== undefined ? { supportsThinking: values.supportsThinking } : {}),
+  }
+}
+
+export function parseCustomModelsJson(value: string): { models?: CustomEndpointModelInput[]; error?: string } {
+  const trimmed = value.trim()
+  if (!trimmed) return {}
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch (error) {
+    return { error: `Invalid JSON: ${error instanceof Error ? error.message : 'Unable to parse model metadata.'}` }
+  }
+
+  if (!Array.isArray(parsed)) {
+    return { error: 'Model metadata must be a JSON array.' }
+  }
+
+  const models: CustomEndpointModelInput[] = []
+  for (const [index, item] of parsed.entries()) {
+    if (typeof item === 'string') {
+      const id = item.trim()
+      if (!id) return { error: `Model metadata entry ${index + 1} is empty.` }
+      models.push(id)
+      continue
+    }
+
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return { error: `Model metadata entry ${index + 1} must be a string or object.` }
+    }
+
+    const raw = item as Record<string, unknown>
+    if (typeof raw.id !== 'string' || !raw.id.trim()) {
+      return { error: `Model metadata entry ${index + 1} must include a non-empty string id.` }
+    }
+
+    const model: Partial<ModelDefinition> & { id: string } = { id: raw.id.trim() }
+    if (typeof raw.name === 'string' && raw.name.trim()) model.name = raw.name.trim()
+    if (typeof raw.shortName === 'string' && raw.shortName.trim()) model.shortName = raw.shortName.trim()
+    if (typeof raw.description === 'string') model.description = raw.description
+    if (typeof raw.contextWindow === 'number' && Number.isFinite(raw.contextWindow)) model.contextWindow = raw.contextWindow
+    if (typeof raw.supportsImages === 'boolean') model.supportsImages = raw.supportsImages
+    if (typeof raw.supportsThinking === 'boolean') model.supportsThinking = raw.supportsThinking
+    models.push(makeCustomModelDefinition(model))
+  }
+
+  return { models }
+}
+
+export function formatCustomModelsJson(models: CustomEndpointModelInput[] | undefined): string {
+  const objectModels = models?.filter((model) => typeof model !== 'string')
+  if (!objectModels?.length) return ''
+  return JSON.stringify(objectModels, null, 2)
 }
 
 // ============================================================
@@ -200,8 +277,9 @@ export function ApiKeyInput({
   const [lastNonCustomPreset, setLastNonCustomPreset] = useState<PresetKey | null>(
     initialPreset !== 'custom' ? initialPreset : defaultPreset.key
   )
-  const [connectionDefaultModel, setConnectionDefaultModel] = useState(initialValues?.connectionDefaultModel ?? '')
+  const [connectionDefaultModel, setConnectionDefaultModel] = useState(formatModelList(initialValues?.models, initialValues?.connectionDefaultModel ?? ''))
   const [customApi, setCustomApi] = useState<CustomEndpointApi>(initialValues?.customApi ?? 'openai-completions')
+  const [customModelsJson, setCustomModelsJson] = useState(formatCustomModelsJson(initialValues?.models))
   const [modelError, setModelError] = useState<string | null>(null)
 
   // Bedrock auth state
@@ -233,11 +311,12 @@ export function ApiKeyInput({
 
   // Provider-specific placeholders from the active preset
   const activePresetObj = presets.find(p => p.key === activePreset)
-  const apiKeyPlaceholder = activePresetObj?.placeholder
+  const rawPresetPlaceholder = activePresetObj?.placeholder
     ?? (providerType === 'google' ? 'AIza...'
     : providerType === 'pi' ? 'pi-...'
     : providerType === 'openai' ? 'sk-...'
-    : 'Paste your key here...')
+    : '__pasteKeyHere__')
+  const apiKeyPlaceholder = rawPresetPlaceholder === '__pasteKeyHere__' ? t('apiSetup.pasteKeyHere') : rawPresetPlaceholder
 
   // Fetch Pi SDK models when a provider is selected in pi_api_key flow.
   // Returns all models sorted by cost (expensive-first) for the searchable tier dropdowns.
@@ -252,7 +331,7 @@ export function ApiKeyInput({
       setPiModels(result.models)
 
       if (hydratedTierProviderRef.current !== provider) {
-        const tiers = resolveTierModels(result.models, provider === initialPreset ? initialValues?.models : undefined)
+        const tiers = resolveTierModels(result.models, provider === initialPreset ? initialValues?.models?.map(getModelId) : undefined)
         setBestModel(tiers.best)
         setDefaultModel(tiers.default_)
         setCheapModel(tiers.cheap)
@@ -360,11 +439,11 @@ export function ApiKeyInput({
     // Submit with auth method and optional IAM credentials.
     if (isBedrock) {
       if (bedrockAuthMethod === 'iam_credentials' && !awsAccessKeyId.trim()) {
-        setModelError('Access Key ID is required for IAM authentication.')
+        setModelError(t('apiSetup.iamAccessKeyRequired'))
         return
       }
       if (bedrockAuthMethod === 'iam_credentials' && !awsSecretAccessKey.trim()) {
-        setModelError('Secret Access Key is required for IAM authentication.')
+        setModelError(t('apiSetup.iamSecretKeyRequired'))
         return
       }
       const parsedModels = parseModelList(connectionDefaultModel)
@@ -380,7 +459,7 @@ export function ApiKeyInput({
             ...(awsSessionToken.trim() ? { sessionToken: awsSessionToken.trim() } : {}),
           },
         } : {}),
-        connectionDefaultModel: parsedModels[0],
+        connectionDefaultModel: parsedModels[0] ? getModelId(parsedModels[0]) : undefined,
         models: parsedModels.length > 0 ? parsedModels : undefined,
       })
       return
@@ -389,11 +468,21 @@ export function ApiKeyInput({
     const effectiveBaseUrl = baseUrl.trim()
 
     const parsedModels = parseModelList(connectionDefaultModel)
+    const parsedModelIds = parsedModels.map(getModelId)
+    const metadataParse = parseCustomModelsJson(customModelsJson)
+    if (metadataParse.error) {
+      setModelError(metadataParse.error)
+      return
+    }
+    const metadataById = new Map((metadataParse.models ?? []).map((model) => [getModelId(model), model]))
+    const modelsWithMetadata = parsedModels.map((model) => metadataById.get(getModelId(model)) ?? model)
+    const extraMetadataModels = (metadataParse.models ?? []).filter((model) => !parsedModelIds.includes(getModelId(model)))
+    const submittedModels = [...modelsWithMetadata, ...extraMetadataModels]
 
     const isUsingDefaultEndpoint = isDefaultProviderPreset || !effectiveBaseUrl
     const requiresModel = !isDefaultProviderPreset && !!effectiveBaseUrl
-    if (requiresModel && parsedModels.length === 0) {
-      setModelError('Default model is required for custom endpoints.')
+    if (requiresModel && submittedModels.length === 0) {
+      setModelError(t('apiSetup.defaultModelRequired'))
       return
     }
 
@@ -411,8 +500,8 @@ export function ApiKeyInput({
     onSubmit({
       apiKey: apiKey.trim(),
       baseUrl: isUsingDefaultEndpoint ? undefined : effectiveBaseUrl,
-      connectionDefaultModel: parsedModels[0],
-      models: parsedModels.length > 0 ? parsedModels : undefined,
+      connectionDefaultModel: submittedModels[0] ? getModelId(submittedModels[0]) : undefined,
+      models: submittedModels.length > 0 ? submittedModels : undefined,
       piAuthProvider: resolvedPiAuthProvider,
       modelSelectionMode: isPiApiKeyFlow
         ? (parsedModels.length > 0 ? 'userDefined3Tier' : 'automaticallySyncedFromProvider')
@@ -422,11 +511,11 @@ export function ApiKeyInput({
   }
 
   const tierConfigs = [
-    { label: 'Best', desc: 'most capable', value: bestModel, onChange: setBestModel },
-    { label: 'Balanced', desc: 'good for everyday use', value: defaultModel, onChange: setDefaultModel },
-    { label: 'Fast', desc: 'summarization & utility', value: cheapModel, onChange: setCheapModel },
+    { id: 'best', label: t('apiSetup.modelTier.best'), desc: t('apiSetup.modelTier.bestDesc'), value: bestModel, onChange: setBestModel },
+    { id: 'balanced', label: t('apiSetup.modelTier.balanced'), desc: t('apiSetup.modelTier.balancedDesc'), value: defaultModel, onChange: setDefaultModel },
+    { id: 'fast', label: t('apiSetup.modelTier.fast'), desc: t('apiSetup.modelTier.fastDesc'), value: cheapModel, onChange: setCheapModel },
   ]
-  const activeTierConfig = openTier ? tierConfigs.find(t => t.label === openTier) : null
+  const activeTierConfig = openTier ? tierConfigs.find(t => t.id === openTier) : null
 
   return (
     <form id={formId} onSubmit={handleSubmit} className="space-y-6">
@@ -522,8 +611,9 @@ export function ApiKeyInput({
             isDisabled && "opacity-50 pointer-events-none"
           )}>
             {([
-              { value: 'openai-completions' as const, label: 'OpenAI Compatible' },
-              { value: 'anthropic-messages' as const, label: 'Anthropic Compatible' },
+              { value: 'openai-completions' as const, label: t('apiSetup.format.openaiCompatible') },
+              { value: 'openai-responses' as const, label: 'OpenAI Responses' },
+              { value: 'anthropic-messages' as const, label: t('apiSetup.format.anthropicCompatible') },
             ]).map(({ value, label }) => (
               <button
                 key={value}
@@ -542,7 +632,7 @@ export function ApiKeyInput({
             ))}
           </div>
           <p className="text-xs text-foreground/30">
-            Most third-party APIs (Ollama, vLLM, DashScope) use OpenAI Compatible.
+            {t('apiSetup.protocolThirdPartyHint')}
           </p>
         </div>
       )}
@@ -552,15 +642,15 @@ export function ApiKeyInput({
         <>
           {/* Auth Method Toggle */}
           <div className="space-y-2">
-            <Label>Authentication</Label>
+            <Label>{t('apiSetup.authentication')}</Label>
             <div className={cn(
               "flex rounded-md shadow-minimal overflow-hidden",
               "bg-foreground-2",
               isDisabled && "opacity-50 pointer-events-none"
             )}>
               {([
-                { value: 'iam_credentials' as const, label: 'IAM Credentials' },
-                { value: 'environment' as const, label: 'Environment (AWS CLI)' },
+                { value: 'iam_credentials' as const, label: t('apiSetup.credentials.iam') },
+                { value: 'environment' as const, label: t('apiSetup.credentials.environment') },
               ]).map(({ value, label }) => (
                 <button
                   key={value}
@@ -585,7 +675,7 @@ export function ApiKeyInput({
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="aws-access-key-id" className="text-muted-foreground font-normal text-xs">
-                  Access Key ID
+                  {t('apiSetup.accessKeyId')}
                 </Label>
                 <div className={cn("rounded-md shadow-minimal transition-colors", "bg-foreground-2 focus-within:bg-background")}>
                   <Input
@@ -602,7 +692,7 @@ export function ApiKeyInput({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="aws-secret-key" className="text-muted-foreground font-normal text-xs">
-                  Secret Access Key
+                  {t('apiSetup.secretAccessKey')}
                 </Label>
                 <div className={cn("relative rounded-md shadow-minimal transition-colors", "bg-foreground-2 focus-within:bg-background")}>
                   <Input
@@ -626,7 +716,7 @@ export function ApiKeyInput({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="aws-session-token" className="text-muted-foreground font-normal text-xs">
-                  Session Token <span className="text-foreground/30">· optional</span>
+                  Session Token <span className="text-foreground/30">· {t('apiSetup.optionalField')}</span>
                 </Label>
                 <div className={cn("rounded-md shadow-minimal transition-colors", "bg-foreground-2 focus-within:bg-background")}>
                   <Input
@@ -682,8 +772,8 @@ export function ApiKeyInput({
             </div>
           ) : (
             <>
-              {tierConfigs.map(({ label, desc, value }) => (
-                <div key={label} className="space-y-1.5">
+              {tierConfigs.map(({ id, label, desc, value }) => (
+                <div key={id} className="space-y-1.5">
                   <Label className="text-muted-foreground font-normal text-xs">
                     {label}{' '}
                     <span className="text-foreground/30">· {desc}</span>
@@ -692,13 +782,13 @@ export function ApiKeyInput({
                     type="button"
                     disabled={isDisabled}
                     onClick={(e) => {
-                      if (openTier === label) {
+                      if (openTier === id) {
                         setOpenTier(null)
                         setTierFilter('')
                       } else {
                         const rect = e.currentTarget.getBoundingClientRect()
                         setTierDropdownPosition({ top: rect.bottom + 4, left: rect.left, width: rect.width })
-                        setOpenTier(label)
+                        setOpenTier(id)
                         setTierFilter('')
                         setTimeout(() => tierFilterInputRef.current?.focus(), 0)
                       }
@@ -711,7 +801,7 @@ export function ApiKeyInput({
                     )}
                   >
                     <span className="truncate text-foreground">
-                      {piModels.find(m => m.id === value)?.name ?? 'Select model...'}
+                      {piModels.find(m => m.id === value)?.name ?? t('apiSetup.selectModel')}
                     </span>
                     <ChevronDown className="size-3 opacity-50 shrink-0" />
                   </button>
@@ -785,9 +875,9 @@ export function ApiKeyInput({
       ) : !isDefaultProviderPreset && (
         <div className="space-y-2">
           <Label htmlFor="connection-default-model" className="text-muted-foreground font-normal">
-            Default Model{' '}
+            {t('apiSetup.defaultModelLabel')}{' '}
             <span className="text-foreground/30">
-              · {!isBedrock && baseUrl.trim() ? 'required' : 'optional'}
+              · {!isBedrock && baseUrl.trim() ? t('onboarding.localModel.required') : t('apiSetup.optionalField')}
             </span>
           </Label>
           <div className={cn(
@@ -818,6 +908,32 @@ export function ApiKeyInput({
             <p className="text-xs text-foreground/30">
               Required for custom endpoints. Use the provider-specific model ID.
             </p>
+          )}
+          {activePreset === 'custom' && (
+            <div className="space-y-1.5 pt-2">
+              <Label htmlFor="custom-model-metadata" className="text-muted-foreground font-normal text-xs">
+                Advanced model metadata <span className="text-foreground/30">· optional JSON</span>
+              </Label>
+              <textarea
+                id="custom-model-metadata"
+                value={customModelsJson}
+                onChange={(e) => {
+                  setCustomModelsJson(e.target.value)
+                  setModelError(null)
+                }}
+                placeholder={'[{\n  "id": "gpt-5.5",\n  "name": "GPT 5.5",\n  "shortName": "GPT 5.5",\n  "supportsImages": true,\n  "contextWindow": 131072\n}]'}
+                className={cn(
+                  "min-h-[120px] w-full resize-y rounded-md border-0 bg-foreground-2 px-3 py-2 font-mono text-xs shadow-minimal outline-none transition-colors",
+                  "focus:bg-background focus:ring-1 focus:ring-ring/30",
+                  isDisabled && "opacity-50 pointer-events-none",
+                  modelError && "ring-1 ring-destructive/40"
+                )}
+                disabled={isDisabled}
+              />
+              <p className="text-xs text-foreground/30">
+                Add objects here to set friendly names or capabilities. Entries are matched by id and merged with the model list above.
+              </p>
+            </div>
           )}
         </div>
       )}

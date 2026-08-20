@@ -41,6 +41,12 @@ export interface MessageEnvelope {
   serverId?: string
   /** Electron webContents.id, sent on handshake by local clients. */
   webContentsId?: number
+  /**
+   * Ephemeral proof issued by Electron main for its own local renderer.
+   * It is accepted only by a server-side trusted binding resolver and is never
+   * retained, logged, or used as a general authentication credential.
+   */
+  localClientProof?: string
   /** Client capabilities advertised on handshake. */
   clientCapabilities?: string[]
   /** Server-registered channels, sent in handshake_ack. Clients use this to avoid calling unavailable channels. */
@@ -91,6 +97,19 @@ export type ErrorCode =
   | 'BROWSER_INSTANCE_NOT_OWNED'
   | 'BROWSER_REMOTE_UPLOAD_NOT_SUPPORTED'
   | 'BROWSER_REMOTE_EVALUATE_BLOCKED'
+  | 'TOOL_NOT_IN_MANIFEST'
+  | 'MARKETPLACE_ENTRY_NOT_FOUND'
+  | 'MARKETPLACE_ENTRY_NOT_INSTALLED'
+  | 'MARKETPLACE_OPERATION_IN_FLIGHT'
+  | 'MARKETPLACE_TOOL_INSTALL_FAILED'
+  // Knowledge provider (P1 read-only), spec 03 §3.2 KnowledgeErrorCode
+  | 'CONNECTION_UNAVAILABLE'
+  | 'UNSUPPORTED_OPERATION'
+  | 'NOT_FOUND'
+  | 'HASH_CONFLICT'
+  | 'INVALID_REF'
+  | 'CAPABILITY_DISABLED'
+  | 'PROVIDER_ERROR'
 
 const KNOWN_ERROR_CODES: ReadonlySet<string> = new Set<ErrorCode>([
   'HANDLER_ERROR',
@@ -111,6 +130,18 @@ const KNOWN_ERROR_CODES: ReadonlySet<string> = new Set<ErrorCode>([
   'BROWSER_INSTANCE_NOT_OWNED',
   'BROWSER_REMOTE_UPLOAD_NOT_SUPPORTED',
   'BROWSER_REMOTE_EVALUATE_BLOCKED',
+  'TOOL_NOT_IN_MANIFEST',
+  'MARKETPLACE_ENTRY_NOT_FOUND',
+  'MARKETPLACE_ENTRY_NOT_INSTALLED',
+  'MARKETPLACE_OPERATION_IN_FLIGHT',
+  'MARKETPLACE_TOOL_INSTALL_FAILED',
+  'CONNECTION_UNAVAILABLE',
+  'UNSUPPORTED_OPERATION',
+  'NOT_FOUND',
+  'HASH_CONFLICT',
+  'INVALID_REF',
+  'CAPABILITY_DISABLED',
+  'PROVIDER_ERROR',
 ])
 
 export function isErrorCode(value: unknown): value is ErrorCode {

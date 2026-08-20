@@ -7,6 +7,7 @@ export type {
   WorkspaceInfo,
   Workspace,
   RemoteServerConfig,
+  RemoteTlsTrust,
   McpAuthType,
   AuthType,
   OAuthCredentials,
@@ -19,6 +20,7 @@ export type {
   StoredSession,
   SessionMetadata,
   SessionStatus,
+  SessionMemoryMode,
 } from './session.ts';
 
 // Message types

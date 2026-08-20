@@ -157,6 +157,12 @@ function buildMainProcess(config: BuildConfig): void {
 
   // Use node to run esbuild directly
   run(`node ./node_modules/esbuild/bin/esbuild ${mainArgs.join(' ')}`, rootDir);
+
+  console.log('  Building extension-host worker...');
+  run(
+    'node ./node_modules/esbuild/bin/esbuild apps/electron/src/main/extension-host/worker.ts --bundle --platform=node --format=cjs --outfile=apps/electron/dist/extension-host-worker.cjs --external:electron',
+    rootDir,
+  );
 }
 
 /**

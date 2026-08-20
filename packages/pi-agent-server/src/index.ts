@@ -26,6 +26,8 @@ import {
   SessionManager as PiSessionManager,
   AuthStorage as PiAuthStorage,
   ModelRegistry as PiModelRegistry,
+  DefaultResourceLoader,
+  SettingsManager as PiSettingsManager,
   createReadToolDefinition,
   createBashToolDefinition,
   createEditToolDefinition,
@@ -40,6 +42,7 @@ import type {
   AgentToolResult,
   AuthCredential,
   CreateAgentSessionOptions,
+  ExtensionFactory,
   ToolDefinition,
 } from '@earendil-works/pi-coding-agent';
 
@@ -65,9 +68,11 @@ import {
   type CustomEndpointModelEntry,
   type CustomEndpointModelOverrides,
 } from './custom-endpoint-models.ts';
+import { registerKimiCodingModels } from './kimi-coding-models.ts';
 
 // Direct source imports from shared (bundled by bun build)
 import { handleLargeResponse, estimateTokens, tokenLimitFor } from '../../shared/src/utils/large-response.ts';
+import { isContextOverflowMessage } from '../../shared/src/agent/errors.ts';
 import { getSessionPlansPath, getSessionPath } from '../../shared/src/sessions/storage.ts';
 import { buildCallLlmRequest, withTimeout, LLM_QUERY_TIMEOUT_MS } from '../../shared/src/agent/llm-tool.ts';
 import type { LLMQueryRequest, LLMQueryResult } from '../../shared/src/agent/llm-tool.ts';
@@ -90,7 +95,7 @@ type PiCredential =
   | { type: 'iam'; accessKeyId: string; secretAccessKey: string; region?: string; sessionToken?: string };
 
 /** Custom endpoint protocol — determines which streaming adapter Pi SDK uses */
-type CustomEndpointApi = 'openai-completions' | 'anthropic-messages';
+type CustomEndpointApi = 'openai-completions' | 'openai-responses' | 'anthropic-messages';
 
 /** Init message from main process — configures the Pi agent server */
 interface InitMessage {
@@ -114,7 +119,7 @@ interface InitMessage {
   branchFromSessionPath?: string;
   branchFromSdkTurnId?: string;
   customEndpoint?: { api: CustomEndpointApi; supportsImages?: boolean };
-  customModels?: Array<string | { id: string; contextWindow?: number; supportsImages?: boolean }>;
+  customModels?: Array<string | { id: string; name?: string; shortName?: string; contextWindow?: number; supportsImages?: boolean }>;
   piAuth?: { provider: string; credential: PiCredential };
 }
 
@@ -126,7 +131,7 @@ interface RuntimeConfigUpdateMessage {
   authType?: string;
   baseUrl?: string;
   customEndpoint?: { api: CustomEndpointApi; supportsImages?: boolean };
-  customModels?: Array<string | { id: string; contextWindow?: number; supportsImages?: boolean }>;
+  customModels?: Array<string | { id: string; name?: string; shortName?: string; contextWindow?: number; supportsImages?: boolean }>;
 }
 
 /** Messages from main process (stdin) */
@@ -241,6 +246,19 @@ let piSession: AgentSession | null = null;
 let piModelRegistry: PiModelRegistry | null = null;
 let moduleAuthStorage: PiAuthStorage | null = null;
 let unsubscribeEvents: (() => void) | null = null;
+
+// System prompt sent from main process; injected via before_agent_start hook
+// because session.prompt() resets agent.state.systemPrompt every turn.
+let currentMainSystemPrompt: string | null = null;
+
+const mainSystemPromptInjector: ExtensionFactory = (pi) => {
+  pi.on('before_agent_start', () => {
+    if (currentMainSystemPrompt) {
+      return { systemPrompt: currentMainSystemPrompt };
+    }
+    return undefined;
+  });
+};
 
 // Init config (set on 'init' message)
 let initConfig: Extract<InboundMessage, { type: 'init' }> | null = null;
@@ -444,8 +462,10 @@ function registerCustomEndpointModels(
 ): void {
   for (const m of models) {
     customEndpointModelIds.add(m.id);
-    if (m.contextWindow || m.supportsImages !== undefined) {
+    if (m.name !== undefined || m.shortName !== undefined || m.contextWindow || m.supportsImages !== undefined) {
       customModelOverrides.set(m.id, {
+        ...(m.name !== undefined ? { name: m.name } : {}),
+        ...(m.shortName !== undefined ? { shortName: m.shortName } : {}),
         ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
         ...(m.supportsImages !== undefined ? { supportsImages: m.supportsImages } : {}),
       });
@@ -459,7 +479,10 @@ function registerCustomEndpointModels(
     authHeader: true,
     models: allIds.map(id => buildCustomEndpointModelDef(
       id,
-      { supportsImages: initConfig?.customEndpoint?.supportsImages === true },
+      {
+        supportsImages: initConfig?.customEndpoint?.supportsImages === true,
+        reasoning: api === 'openai-responses',
+      },
       customModelOverrides.get(id),
     )),
   });
@@ -495,6 +518,15 @@ function createAuthenticatedRegistry(): {
   }
 
   const modelRegistry = PiModelRegistry.inMemory(authStorage);
+
+  // Craft's pinned Pi catalog predates Kimi K3. Register current Kimi models
+  // under the existing provider while retaining legacy IDs for saved sessions.
+  if (
+    initConfig?.piAuth?.provider === 'kimi-coding'
+    && initConfig.piAuth.credential.type === 'api_key'
+  ) {
+    registerKimiCodingModels(modelRegistry, initConfig.piAuth.credential.key);
+  }
 
   // Register custom endpoint models dynamically via Pi SDK's registerProvider API.
   // This makes arbitrary OpenAI/Anthropic-compatible endpoints work through the Pi SDK
@@ -586,7 +618,6 @@ async function ensureSession(): Promise<AgentSession> {
     const agentDir = initConfig.agentDir || join(initConfig.sessionPath, '.pi-agent');
     mkdirSync(agentDir, { recursive: true });
     sessionOptions.agentDir = agentDir;
-
     // Session resume: use a per-Craft-session directory so the Pi SDK can
     // persist and resume its own session across subprocess restarts.
     // continueRecent() loads the existing session if one exists, otherwise
@@ -659,6 +690,19 @@ async function ensureSession(): Promise<AgentSession> {
   const piThinkingLevel = THINKING_TO_PI[initConfig.thinkingLevel as keyof typeof THINKING_TO_PI];
   if (piThinkingLevel) {
     sessionOptions.thinkingLevel = piThinkingLevel;
+  }
+
+  // Inject our system-prompt-override extension via a custom ResourceLoader.
+  if (sessionOptions.agentDir) {
+    const settingsManager = PiSettingsManager.create(cwd, sessionOptions.agentDir);
+    sessionOptions.settingsManager = settingsManager;
+    sessionOptions.resourceLoader = new DefaultResourceLoader({
+      cwd,
+      agentDir: sessionOptions.agentDir,
+      settingsManager,
+      extensionFactories: [mainSystemPromptInjector],
+    });
+    await sessionOptions.resourceLoader.reload();
   }
 
   // Create the session — tools flow through customTools + allowlist (see comment above).
@@ -1123,6 +1167,14 @@ function handleSessionEvent(event: AgentSessionEvent): void {
     const msg = event.message as { role?: string; stopReason?: string; errorMessage?: string } | undefined;
     if (msg?.stopReason === 'error') {
       debugLog(`API error in message_end: ${msg.errorMessage || 'unknown'}`);
+      // TODO(#666): when errorMessage is a context overflow, this is the place
+      // to trigger compact + replay (mirroring the synchronous-throw recovery
+      // at handlePrompt's catch block). Deferred from this change because
+      // mid-stream recovery needs to align with the renderer's UI cleanup
+      // semantics for the partial assistant message that's already on screen.
+      // For now the parent's parseError will at least classify the surfaced
+      // error as 'context_overflow' so the user gets an actionable message
+      // instead of a raw provider error string.
     }
 
     if (msg?.role === 'assistant' && piSession) {
@@ -1271,6 +1323,9 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
   });
 }
 
+// Context-overflow detection lives in @craft-agent/shared (errors.ts) so the
+// subprocess and the parent's parseError stay in sync (#666).
+const isContextOverflowErrorMessage = isContextOverflowMessage;
 /**
  * Wait for any in-flight compaction to finish before sending a prompt or
  * starting another compaction. Prevents a race in the Pi SDK where concurrent
@@ -1314,11 +1369,10 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
 
     const session = await ensureSession();
 
-    // Force the Craft-built system prompt onto the Pi session. Direct assignment
-    // to `state.systemPrompt` is wiped on every `session.prompt()` call by the Pi
-    // SDK (see system-prompt-override.ts).
+    // System prompt is injected via the before_agent_start extension hook;
+    // writing agent.state.systemPrompt here would be overwritten inside prompt().
     if (msg.systemPrompt) {
-      applySystemPromptOverride(session, msg.systemPrompt);
+      currentMainSystemPrompt = msg.systemPrompt;
     }
 
     // Wire up event handler
@@ -1790,7 +1844,12 @@ function main(): void {
     const msg = reason instanceof Error ? reason.message : String(reason);
     debugLog(`Unhandled rejection: ${msg}`);
     try {
-      send({ type: 'error', message: `Unhandled rejection: ${msg}`, code: 'unhandled_rejection' });
+      // Tag overflow rejections so the parent's parseError can classify them
+      // as context_overflow rather than generic unhandled_rejection (#666).
+      const code = isContextOverflowErrorMessage(msg)
+        ? 'context_overflow_unhandled'
+        : 'unhandled_rejection';
+      send({ type: 'error', message: `Unhandled rejection: ${msg}`, code });
     } catch {
       // stdout may be broken — swallow to avoid re-triggering
     }

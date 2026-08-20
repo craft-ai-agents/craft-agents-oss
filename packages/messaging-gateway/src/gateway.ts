@@ -721,7 +721,8 @@ export class MessagingGateway {
       return true
     }
 
-    if (verdict.allow) return true
+    if (verdict.kind === 'route') return true
+    if (verdict.kind === 'public-inbox') return false
 
     await executeRejection(
       adapter,

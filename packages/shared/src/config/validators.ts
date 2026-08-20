@@ -62,12 +62,13 @@ const WorkspaceSchema = z.object({
   createdAt: z.number().int().positive(),
   sessionId: z.string().optional(),
   iconUrl: z.string().optional(),
+  orgId: z.string().optional(),
 });
 
 // --- LLM Connection schema for config validation ---
 
 const LlmProviderTypeSchema = z.enum([
-  'anthropic', 'openai', 'openai_compat', 'pi', 'pi_compat', 'copilot',
+  'anthropic', 'openai', 'openai_compat', 'pi', 'pi_compat', 'omp', 'copilot',
   // Legacy values kept for config parsing tolerance (migrated at runtime):
   'anthropic_compat', 'bedrock', 'vertex',
 ]);
@@ -78,7 +79,7 @@ const LlmAuthTypeSchema = z.enum([
 ]);
 
 const CustomEndpointSchema = z.object({
-  api: z.enum(['openai-completions', 'anthropic-messages']),
+  api: z.enum(['openai-completions', 'openai-responses', 'anthropic-messages']),
   supportsImages: z.boolean().optional(),
 });
 
@@ -96,12 +97,25 @@ const LlmConnectionSchema = z.object({
   // Allow additional fields (codexPath, awsRegion, gcpProjectId, etc.)
 }).passthrough();
 
+const CloudRunsConfigSchema = z.object({
+  // P0: cloud runs on by default with Cloudflare gateway (token still optional until seeded).
+  enabled: z.boolean().default(true),
+  provider: z.enum(['local', 'cloudflare', 'modal', 'e2b']).default('cloudflare'),
+  gatewayUrl: z.string().optional(),        // cloud gateway base URL (cloudflare/modal providers)
+  defaultMaxWallClockSec: z.number().int().positive().optional(),
+  defaultMaxLlmTokens: z.number().int().positive().optional(),
+  defaultMaxArtifactsBytes: z.number().int().positive().optional(),
+  notifyWebhookUrl: z.string().url().optional(),
+  cheapModelId: z.string().optional(),
+  personas: z.boolean().optional(),
+}).passthrough();
 export const StoredConfigSchema = z.object({
   workspaces: z.array(WorkspaceSchema).min(0),
   activeWorkspaceId: z.string().nullable(),
   activeSessionId: z.string().nullable(),
   llmConnections: z.array(LlmConnectionSchema).optional(),
   defaultLlmConnection: z.string().optional(),
+  cloudRuns: CloudRunsConfigSchema.optional(),
   defaultThinkingLevel: z.enum([...THINKING_LEVEL_IDS, 'think'] as [string, ...string[]]).transform(v => v === 'think' ? 'medium' : v).optional(),
   // Note: tokenDisplay, showCost, cumulativeUsage, defaultPermissionMode removed
   // Permission mode and cyclable modes are now per-workspace in workspace config.json
@@ -117,6 +131,9 @@ const LocationSchema = z.object({
 
 export const UserPreferencesSchema = z.object({
   name: z.string().optional(),
+  userId: z.string().optional(),
+  username: z.string().optional(),
+  email: z.string().optional(),
   timezone: z.string().optional(),  // TODO: Could validate against IANA timezone list
   location: LocationSchema.optional(),
   notes: z.string().optional(),

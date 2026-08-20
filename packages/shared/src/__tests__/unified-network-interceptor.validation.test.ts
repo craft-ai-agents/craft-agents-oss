@@ -296,5 +296,112 @@ describe('unified-network-interceptor validators (#613)', () => {
       expect(result.droppedToolCalls).toBe(0);
       expect(result.droppedToolResults).toBe(0);
     });
+
+    it('rewrites duplicate tool_call IDs and updates corresponding tool results', () => {
+      // Simulates a proxy that resets IDs per response (call_0 reused across turns).
+      const body = {
+        messages: [
+          { role: 'user', content: 'step 1' },
+          {
+            role: 'assistant',
+            tool_calls: [
+              { id: 'call_0', type: 'function', function: { name: 'read', arguments: '{"path":"a.txt"}' } },
+            ],
+          },
+          { role: 'tool', tool_call_id: 'call_0', content: 'file a' },
+          { role: 'user', content: 'step 2' },
+          {
+            role: 'assistant',
+            tool_calls: [
+              { id: 'call_0', type: 'function', function: { name: 'read', arguments: '{"path":"b.txt"}' } },
+            ],
+          },
+          { role: 'tool', tool_call_id: 'call_0', content: 'file b' },
+        ],
+      };
+
+      const result = sanitizeOpenAiHistoryInPlace(body);
+
+      expect(result.rewrittenDuplicateIds).toBe(1);
+      expect(result.droppedToolCalls).toBe(0);
+
+      // The sanitized body should now pass validation.
+      expect(() => validateOpenAiChatBody(body)).not.toThrow();
+
+      // The first call_0 keeps its original ID; the second gets rewritten.
+      const messages = body.messages as Array<{ role?: string; tool_calls?: Array<{ id?: string }>; tool_call_id?: string }>;
+      expect(messages[1]?.tool_calls?.[0]?.id).toBe('call_0');
+      expect(messages[4]?.tool_calls?.[0]?.id).not.toBe('call_0');
+      // The tool result for the second call should reference the new ID.
+      expect(messages[5]?.tool_call_id).toBe(messages[4]?.tool_calls?.[0]?.id);
+    });
+
+    it('rewrites multiple duplicates in the same assistant message', () => {
+      // Proxy emits parallel tool calls with colliding IDs across turns.
+      const body = {
+        messages: [
+          {
+            role: 'assistant',
+            tool_calls: [
+              { id: 'call_0', type: 'function', function: { name: 'ls', arguments: '{}' } },
+              { id: 'call_1', type: 'function', function: { name: 'read', arguments: '{"path":"x"}' } },
+            ],
+          },
+          { role: 'tool', tool_call_id: 'call_0', content: 'dir listing' },
+          { role: 'tool', tool_call_id: 'call_1', content: 'file x' },
+          {
+            role: 'assistant',
+            tool_calls: [
+              { id: 'call_0', type: 'function', function: { name: 'write', arguments: '{"path":"y"}' } },
+              { id: 'call_1', type: 'function', function: { name: 'grep', arguments: '{"pattern":"z"}' } },
+            ],
+          },
+          { role: 'tool', tool_call_id: 'call_0', content: 'wrote y' },
+          { role: 'tool', tool_call_id: 'call_1', content: 'grep result' },
+        ],
+      };
+
+      const result = sanitizeOpenAiHistoryInPlace(body);
+
+      expect(result.rewrittenDuplicateIds).toBe(2);
+      expect(() => validateOpenAiChatBody(body)).not.toThrow();
+
+      // All tool_call IDs should now be unique.
+      const messages = body.messages as Array<{ role?: string; tool_calls?: Array<{ id?: string }>; tool_call_id?: string }>;
+      const allIds = new Set<string>();
+      for (const msg of messages) {
+        if (msg.tool_calls) {
+          for (const tc of msg.tool_calls) {
+            allIds.add(tc.id!);
+          }
+        }
+      }
+      expect(allIds.size).toBe(4);
+    });
+
+    it('is a no-op when IDs are already unique', () => {
+      const body = {
+        messages: [
+          {
+            role: 'assistant',
+            tool_calls: [
+              { id: 'call_abc', type: 'function', function: { name: 'ls', arguments: '{}' } },
+            ],
+          },
+          { role: 'tool', tool_call_id: 'call_abc', content: 'ok' },
+          {
+            role: 'assistant',
+            tool_calls: [
+              { id: 'call_def', type: 'function', function: { name: 'read', arguments: '{}' } },
+            ],
+          },
+          { role: 'tool', tool_call_id: 'call_def', content: 'ok' },
+        ],
+      };
+      const before = JSON.stringify(body);
+      const result = sanitizeOpenAiHistoryInPlace(body);
+      expect(result.rewrittenDuplicateIds).toBe(0);
+      expect(JSON.stringify(body)).toBe(before);
+    });
   });
 });

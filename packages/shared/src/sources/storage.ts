@@ -72,7 +72,11 @@ export function loadSourceConfig(
   try {
     const config = readJsonFileSync<FolderSourceConfig>(configPath);
 
-    // Expand path variables in local source paths for portability
+    // Expand path variables in local source paths for portability.
+    // This is safe to do at load time because local paths are only used
+    // for working directory resolution, not persisted back by source_test.
+    // MCP field expansion happens at build time in server-builder.ts to avoid
+    // persisting expanded values back to config.json.
     if (config.type === 'local' && config.local?.path) {
       config.local.path = expandPath(config.local.path);
     }
@@ -415,10 +419,20 @@ export function isSourceUsable(source: LoadedSource): boolean {
 export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): LoadedSource[] {
   const sources: LoadedSource[] = [];
   for (const slug of slugs) {
-    // Load user-configured source from disk
+    // craft-agents-docs is MCP-only (no folder). Exa/Firecrawl live on disk.
+    if (slug === 'craft-agents-docs') {
+      sources.push(getDocsSource(workspaceId, workspaceRootPath));
+      continue;
+    }
     const source = loadSource(workspaceRootPath, slug);
     if (source) {
       sources.push(source);
+      continue;
+    }
+    // Fallback in-memory builtins if folder not yet seeded
+    if (isBuiltinSource(slug)) {
+      const builtin = getBuiltinSources(workspaceId, workspaceRootPath).find((s) => s.config.slug === slug);
+      if (builtin) sources.push(builtin);
     }
   }
   return sources;
@@ -430,7 +444,14 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
  * Use this when the agent needs visibility into all available sources.
  */
 export function loadAllSources(workspaceRootPath: string): LoadedSource[] {
-  return loadWorkspaceSources(workspaceRootPath);
+  const workspaceId = basename(workspaceRootPath);
+  const userSources = loadWorkspaceSources(workspaceRootPath);
+  const present = new Set(userSources.map((s) => s.config.slug));
+  // Only inject in-memory builtins that are not already on disk (e.g. docs MCP).
+  const builtinSources = getBuiltinSources(workspaceId, workspaceRootPath).filter(
+    (s) => !present.has(s.config.slug),
+  );
+  return [...userSources, ...builtinSources];
 }
 
 // ============================================================

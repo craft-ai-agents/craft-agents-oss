@@ -77,6 +77,7 @@ const ACTION_LABEL_KEYS: Partial<Record<ActionId, string>> = {
   'app.settings': 'shortcuts.action.settings',
   'app.toggleTheme': 'shortcuts.action.toggleTheme',
   'app.search': 'shortcuts.action.search',
+  'app.omnibox': 'shortcuts.action.omnibox',
   'app.keyboardShortcuts': 'shortcuts.action.keyboardShortcuts',
   'app.newWindow': 'shortcuts.action.newWindow',
   'app.quit': 'shortcuts.action.quit',

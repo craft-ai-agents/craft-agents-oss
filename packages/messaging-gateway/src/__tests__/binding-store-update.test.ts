@@ -31,7 +31,7 @@ describe('BindingStore.updateBindingConfig', () => {
     expect(next).not.toBeNull()
     expect(next!.id).toBe(original.id)
     expect(next!.createdAt).toBe(original.createdAt)
-    expect(next!.config.accessMode).toBe('allow-list')
+    expect(next!.config.accessMode).toBe('owner-control')
     expect(next!.config.allowedSenderIds).toEqual(['42'])
   })
 
@@ -51,7 +51,7 @@ describe('BindingStore.updateBindingConfig', () => {
     const b = new BindingStore(dir)
     const reloaded = b.getAll().find((x) => x.id === original.id)
     expect(reloaded).toBeDefined()
-    expect(reloaded!.config.accessMode).toBe('allow-list')
+    expect(reloaded!.config.accessMode).toBe('owner-control')
     expect(reloaded!.config.allowedSenderIds).toEqual(['7'])
     expect(reloaded!.createdAt).toBe(original.createdAt)
   })
@@ -76,7 +76,7 @@ describe('BindingStore.updateBindingConfig', () => {
     expect(all).toHaveLength(2)
     const aReloaded = all.find((x) => x.id === a.id)!
     const bReloaded = all.find((x) => x.id === b.id)!
-    expect(aReloaded.config.accessMode).toBe('open')
-    expect(bReloaded.config.accessMode).toBe('inherit')
+    expect(aReloaded.config.accessMode).toBe('public-inbox')
+    expect(bReloaded.config.accessMode).toBe('owner-control')
   })
 })

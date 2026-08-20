@@ -21,7 +21,7 @@ import { resolveAutomationsConfigPath, generateShortId } from './resolve-config-
 import { compactAutomationHistorySync } from './history-store.ts';
 import { createLogger } from '../utils/debug.ts';
 import { WorkspaceEventBus, type EventPayloadMap } from './event-bus.ts';
-import { PromptHandler, EventLogHandler, WebhookHandler, type AutomationsConfigProvider } from './handlers/index.ts';
+import { PromptHandler, EventLogHandler, WebhookHandler, KnowledgeHandler, type AutomationsConfigProvider, type KnowledgeActionExecutor, type CloudRunSubmitExecutor } from './handlers/index.ts';
 import { type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type WebhookActionResult, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
 import { validateAutomationsConfig } from './validation.ts';
 import { matcherMatchesSdk } from './utils.ts';
@@ -56,6 +56,10 @@ export interface AutomationSystemOptions {
   onError?: (event: AutomationEvent, error: Error) => void;
   /** Called when events are lost after retries */
   onEventLost?: (events: string[], error: Error) => void;
+  /** Knowledge action executor (server-core). When provided, registers KnowledgeHandler. */
+  knowledgeExecutor?: KnowledgeActionExecutor;
+  /** Cloud run submit executor. Optional even when knowledgeExecutor is set. */
+  cloudRunSubmitExecutor?: CloudRunSubmitExecutor;
 }
 
 // ============================================================================
@@ -71,6 +75,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
   private webhookHandler: WebhookHandler | null = null;
   private eventLogHandler: EventLogHandler | null = null;
   private scheduler: SchedulerService | null = null;
+  private knowledgeHandler: KnowledgeHandler | null = null;
   private disposed = false;
 
   // Session metadata tracking (moved from SessionManager)
@@ -275,6 +280,21 @@ export class AutomationSystem implements AutomationsConfigProvider {
       onEventLost: this.options.onEventLost,
     });
     this.eventLogHandler.subscribe(this.eventBus);
+
+    // Knowledge handler (optional — requires executor from server-core)
+    if (this.options.knowledgeExecutor) {
+      this.knowledgeHandler = new KnowledgeHandler(
+        {
+          workspaceId: this.options.workspaceId,
+          workspaceRootPath: this.options.workspaceRootPath,
+          knowledgeExecutor: this.options.knowledgeExecutor,
+          cloudRunSubmitExecutor: this.options.cloudRunSubmitExecutor,
+          onError: this.options.onError,
+        },
+        this,
+      );
+      this.knowledgeHandler.subscribe(this.eventBus);
+    }
 
     log.debug(`[AutomationSystem] Handlers created and subscribed`);
   }
@@ -549,6 +569,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
     // Dispose handlers
     this.promptHandler?.dispose();
     this.webhookHandler?.dispose();
+    this.knowledgeHandler?.dispose();
     await this.eventLogHandler?.dispose();
 
     // Dispose event bus

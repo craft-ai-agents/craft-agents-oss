@@ -1,12 +1,20 @@
 import { existsSync } from 'node:fs'
 import { join } from 'path'
-import { homedir } from 'os'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, updateWorkspaceRemoteServer } from '@craft-agent/shared/config'
+import {
+  addWorkspace,
+  createAndActivateLocalWorkspace,
+  getActiveWorkspace,
+  getWorkspaceByNameOrId,
+  setActiveWorkspace,
+  updateWorkspaceRemoteServer,
+} from '@craft-agent/shared/config'
+import { CONFIG_DIR } from '@craft-agent/shared/config/paths'
 import { perf } from '@craft-agent/shared/utils'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { isValidWorkspaceRootPath } from '../../utils/path-validation'
+import type { RemoteServerConfig, Workspace } from '@craft-agent/core/types'
 
 export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.workspaces.GET,
@@ -34,6 +42,33 @@ export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.logo.GET_URL,
 ] as const
 
+interface WorkspaceAuthorityInput {
+  kind?: 'personal' | 'team'
+  orgId?: string
+}
+
+function activationPayload(activation: {
+  activeWorkspaceId: string
+  workspace: Workspace
+  session: {
+    id: string
+    name?: string
+    createdAt: number
+    lastUsedAt: number
+  }
+}) {
+  return {
+    workspaceId: activation.workspace.id,
+    activeWorkspaceId: activation.activeWorkspaceId,
+    session: {
+      id: activation.session.id,
+      name: activation.session.name,
+      createdAt: activation.session.createdAt,
+      lastUsedAt: activation.session.lastUsedAt,
+    },
+  }
+}
+
 export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDeps): void {
   const { sessionManager } = deps
   const windowManager = deps.windowManager
@@ -43,47 +78,129 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     return sessionManager.getWorkspaces()
   })
 
-  // Create a new workspace at a folder path (Obsidian-style: folder IS the workspace)
-  server.handle(RPC_CHANNELS.workspaces.CREATE, async (_ctx, folderPath: string, name: string, remoteServer?: { url: string; token: string; remoteWorkspaceId: string }) => {
-    const rootPath = folderPath.trim()
-    const validation = isValidWorkspaceRootPath(rootPath)
-    if (!validation.valid) {
-      throw new Error(validation.reason!)
-    }
+  // Create a workspace at a folder path (Obsidian-style: folder IS the
+  // workspace). Local creation uses the durable create/bind/activate lifecycle.
+  server.handle(
+    RPC_CHANNELS.workspaces.CREATE,
+    async (
+      _ctx,
+      folderPath: string,
+      name: string,
+      remoteServer?: RemoteServerConfig,
+      authority?: WorkspaceAuthorityInput,
+    ) => {
+      const rootPath = typeof folderPath === 'string' ? folderPath.trim() : ''
+      const trimmedName = typeof name === 'string' ? name.trim() : ''
+      const validation = isValidWorkspaceRootPath(rootPath)
+      if (!validation.valid) {
+        throw new Error(validation.reason!)
+      }
+      if (!trimmedName) throw new Error('Workspace name is required')
+      if (
+        authority?.kind !== undefined &&
+        authority.kind !== 'personal' &&
+        authority.kind !== 'team'
+      ) {
+        throw new Error('Workspace kind must be personal or team')
+      }
+      if (authority?.orgId !== undefined && typeof authority.orgId !== 'string') {
+        throw new Error('orgId must be a string when provided')
+      }
 
-    const workspace = addWorkspace({ name, rootPath, ...(remoteServer && { remoteServer }) })
-    // Make it active
-    setActiveWorkspace(workspace.id)
-    deps.platform.logger.info(`Created workspace "${name}" at ${rootPath}${remoteServer ? ` (remote: ${remoteServer.url})` : ''}`)
-    return workspace
-  })
+      // Remote workspaces do not have a real remote prepare/commit/abort
+      // endpoint in this protocol. Preserve the existing personal path only;
+      // never pretend a local transaction made a remote TeamSpace atomic.
+      if (remoteServer) {
+        if (authority?.kind === 'team' || authority?.orgId?.trim()) {
+          throw new Error(
+            'Remote TeamSpace creation requires a remote prepare/commit/abort endpoint',
+          )
+        }
+        const workspace = addWorkspace({
+          name: trimmedName,
+          rootPath,
+          remoteServer,
+        })
+        setActiveWorkspace(workspace.id)
+        deps.platform.logger.info(
+          `Created workspace "${trimmedName}" at ${rootPath} (remote: ${remoteServer.url})`,
+        )
+        return workspace
+      }
+
+      const activation = await createAndActivateLocalWorkspace({
+        name: trimmedName,
+        rootPath,
+        kind: authority?.kind,
+        orgId: authority?.orgId,
+      })
+      sessionManager.setupConfigWatcher(
+        activation.workspace.rootPath,
+        activation.workspace.id,
+      )
+      deps.platform.logger.info(
+        `Created and activated ${activation.workspace.kind} workspace "${trimmedName}" at ${rootPath}`,
+      )
+      return {
+        ...activation.workspace,
+        activation: activationPayload(activation),
+      }
+    },
+  )
 
   // Check if a workspace slug already exists (for validation before creation)
   server.handle(RPC_CHANNELS.workspaces.CHECK_SLUG, async (_ctx, slug: string) => {
-    const defaultWorkspacesDir = join(homedir(), '.craft-agent', 'workspaces')
+    const defaultWorkspacesDir = join(CONFIG_DIR, 'workspaces')
     const workspacePath = join(defaultWorkspacesDir, slug)
     const exists = existsSync(workspacePath)
     return { exists, path: workspacePath }
   })
 
   // Update remote server config for an existing workspace (reconnect flow)
-  server.handle(RPC_CHANNELS.workspaces.UPDATE_REMOTE, async (_ctx, workspaceId: string, remoteServer: { url: string; token: string; remoteWorkspaceId: string }) => {
+  server.handle(RPC_CHANNELS.workspaces.UPDATE_REMOTE, async (_ctx, workspaceId: string, remoteServer: RemoteServerConfig) => {
     updateWorkspaceRemoteServer(workspaceId, remoteServer)
     deps.platform.logger.info(`Updated remote server for workspace ${workspaceId}: ${remoteServer.url}`)
     return { success: true }
   })
 
-  // Get workspace ID for the calling window
+  // Get workspace ID for the calling window. Fresh local installs may have a
+  // usable active workspace before a window mapping exists; select it locally
+  // rather than forcing the renderer into a picker.
   server.handle(RPC_CHANNELS.window.GET_WORKSPACE, (ctx) => {
-    const workspaceId = ctx.workspaceId ?? windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
-    // Set up ConfigWatcher for live updates (labels, statuses, sources, themes)
-    if (workspaceId) {
-      const workspace = getWorkspaceByNameOrId(workspaceId)
-      if (workspace) {
-        sessionManager.setupConfigWatcher(workspace.rootPath, workspaceId)
+    const requestedWorkspaceId =
+      ctx.workspaceId ??
+      (ctx.webContentsId !== null
+        ? windowManager?.getWorkspaceForWindow(ctx.webContentsId)
+        : undefined)
+    const requestedWorkspace = requestedWorkspaceId
+      ? getWorkspaceByNameOrId(requestedWorkspaceId)
+      : null
+    const activeWorkspace = getActiveWorkspace()
+    const localFallback =
+      activeWorkspace && !activeWorkspace.remoteServer
+        ? activeWorkspace
+        : sessionManager.getWorkspaces().find((candidate) => !candidate.remoteServer)
+    const workspace = requestedWorkspace ?? localFallback ?? activeWorkspace
+    if (!workspace) return null
+
+    // Validate/setup before mutating the client or window routing state.
+    sessionManager.setupConfigWatcher(workspace.rootPath, workspace.id)
+
+    if (windowManager && ctx.webContentsId !== null) {
+      const current = windowManager.getWorkspaceForWindow(ctx.webContentsId)
+      if (current !== workspace.id) {
+        const updated = windowManager.updateWindowWorkspace(
+          ctx.webContentsId,
+          workspace.id,
+        )
+        if (!updated) {
+          const win = windowManager.getWindowByWebContentsId(ctx.webContentsId)
+          if (win) windowManager.registerWindow(win, workspace.id)
+        }
       }
     }
-    return workspaceId
+    server.updateClientWorkspace?.(ctx.clientId, workspace.id)
+    return workspace.id
   })
 
   // Get mode for the calling window (always 'main' now)
@@ -93,33 +210,30 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
 
   // Switch workspace in current window (in-window switching)
   server.handle(RPC_CHANNELS.window.SWITCH_WORKSPACE, async (ctx, workspaceId: string) => {
-    const end = perf.start('ipc.switchWorkspace', { workspaceId })
+    if (typeof workspaceId !== 'string' || !workspaceId.trim()) {
+      throw new Error('Workspace id is required')
+    }
 
-    // Keep WS push routing in sync (works for both GUI and headless)
-    server.updateClientWorkspace?.(ctx.clientId, workspaceId)
+    // Resolve membership and all persistence-facing validation before changing
+    // client/window routing. On failure the prior visible workspace remains.
+    const workspace = getWorkspaceByNameOrId(workspaceId.trim())
+    if (!workspace) throw new Error('Workspace not found or not authorized')
+    sessionManager.setupConfigWatcher(workspace.rootPath, workspace.id)
 
-    if (windowManager) {
-      const wcId = ctx.webContentsId!
-
-      // Get the old workspace ID before updating
+    const end = perf.start('ipc.switchWorkspace', { workspaceId: workspace.id })
+    if (windowManager && ctx.webContentsId !== null) {
+      const wcId = ctx.webContentsId
       const oldWorkspaceId = windowManager.getWorkspaceForWindow(wcId)
-
-      // Update the window's workspace mapping
-      const updated = windowManager.updateWindowWorkspace(wcId, workspaceId)
-
-      // If update failed, the window may have been re-created (e.g., after refresh)
-      // Try to register it
+      const updated = windowManager.updateWindowWorkspace(wcId, workspace.id)
       if (!updated) {
         const win = windowManager.getWindowByWebContentsId(wcId)
         if (win) {
-          windowManager.registerWindow(win, workspaceId)
-          deps.platform.logger.info(`Re-registered window ${wcId} for workspace ${workspaceId}`)
+          windowManager.registerWindow(win, workspace.id)
+          deps.platform.logger.info(`Re-registered window ${wcId} for workspace ${workspace.id}`)
         }
       }
 
-      // Clear activeViewingSession for old workspace if no other windows are viewing it
-      // This ensures read/unread state is correct after workspace switch
-      if (oldWorkspaceId && oldWorkspaceId !== workspaceId) {
+      if (oldWorkspaceId && oldWorkspaceId !== workspace.id) {
         const otherWindows = windowManager.getAllWindowsForWorkspace(oldWorkspaceId)
         if (otherWindows.length === 0) {
           sessionManager.clearActiveViewingSession(oldWorkspaceId)
@@ -127,18 +241,12 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
       }
     }
 
-    // Set up ConfigWatcher for the new workspace
-    const workspace = getWorkspaceByNameOrId(workspaceId)
-    if (workspace) {
-      sessionManager.setupConfigWatcher(workspace.rootPath, workspaceId)
-    }
+    // Routing changes occur only after all validation/setup steps passed.
+    server.updateClientWorkspace?.(ctx.clientId, workspace.id)
     end()
-
-    // Return connection details so the preload RoutedClient can decide
-    // whether to connect directly to a remote server for this workspace.
     return {
-      workspaceId,
-      remoteServer: workspace?.remoteServer ?? null,
+      workspaceId: workspace.id,
+      remoteServer: workspace.remoteServer ?? null,
     }
   })
 

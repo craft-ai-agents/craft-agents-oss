@@ -30,6 +30,14 @@ import { PairingCodeManager } from './pairing'
 import { TelegramAdapter } from './adapters/telegram/index'
 import { WhatsAppAdapter, type WhatsAppEvent } from './adapters/whatsapp/index'
 import { LarkAdapter, parseLarkCredentials, type LarkCredentials } from './adapters/lark/index'
+import { DiscordAdapter, parseDiscordCredentials, type DiscordCredentials, type DiscordEvent } from './adapters/discord/index'
+import {
+  WeChatAdapter,
+  parseWeChatCredentials,
+  startWeChatQrLogin,
+  type WeChatCredentials,
+  type WeChatLoginEvent,
+} from './adapters/wechat/index'
 import { TopicRegistry } from './topic-registry'
 import type { SessionEvent } from './renderer'
 import type { EventSinkFn } from './event-fanout'
@@ -44,6 +52,7 @@ import type {
   PlatformOwner,
   PlatformType,
 } from './types'
+import { normalizeMessagingAccessMode } from './types'
 
 const consoleLogger: MessagingLogger = {
   info: (message, meta) => console.log('[MessagingRegistry]', message, meta ?? ''),
@@ -77,6 +86,13 @@ export interface MessagingGatewayRegistryOptions {
     /** Pairing flow: 'qr' or 'code'. Defaults to 'code' (phone-number based). */
     pairingMode?: 'qr' | 'code'
   }
+  /** Optional Discord worker config — required to enable the Discord adapter. */
+  discord?: {
+    /** Absolute path to the worker entry (packaged/unpacked from @craft-agent/messaging-discord-worker). */
+    workerEntry: string
+    /** Node binary override (defaults to process.execPath with ELECTRON_RUN_AS_NODE). */
+    nodeBin?: string
+  }
   /** Optional logger — shared with the gateway and adapters. */
   logger?: MessagingLogger
 }
@@ -88,11 +104,16 @@ interface WorkspaceState {
   botUsernames: Partial<Record<PlatformType, string>>
   whatsapp: WhatsAppAdapter | null
   whatsappOffEvent?: () => void
+  discord: DiscordAdapter | null
+  discordOffEvent?: () => void
   runtime: Record<PlatformType, MessagingPlatformRuntimeInfo>
 }
 
+
 export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
   private readonly workspaces = new Map<string, WorkspaceState>()
+  /** In-flight WeChat QR logins awaiting a verify code from the UI, per workspace. */
+  private readonly wechatVerifyResolvers = new Map<string, Array<(code: string) => void>>()
   private readonly pairing = new PairingCodeManager()
   private readonly log: MessagingLogger
 
@@ -167,6 +188,37 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       })
     }
 
+    if (isPlatformConfigured(config, 'discord')) {
+      this.setPlatformRuntime(workspaceId, state, 'discord', {
+        configured: true,
+        connected: false,
+        state: 'connecting',
+        lastError: undefined,
+      })
+      void this.tryConnectDiscord(workspaceId, state).catch((err) => {
+        this.log.error('background Discord connect failed', {
+          event: 'discord_connect_failed',
+          workspaceId,
+          error: err,
+        })
+      })
+    }
+    if (isPlatformConfigured(config, 'wechat')) {
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: true,
+        connected: false,
+        state: 'connecting',
+        lastError: undefined,
+      })
+      void this.tryConnectWeChat(workspaceId, state).catch((err) => {
+        this.log.error('background WeChat connect failed', {
+          event: 'wechat_connect_failed',
+          workspaceId,
+          error: err,
+        })
+      })
+    }
+
     if (isPlatformConfigured(config, 'whatsapp')) {
       if (this.hasWhatsAppAuthState(workspaceId)) {
         this.setPlatformRuntime(workspaceId, state, 'whatsapp', {
@@ -208,6 +260,8 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
   }
 
   async stopAll(): Promise<void> {
+    for (const state of this.workspaces.values()) {
+    }
     const stops = Array.from(this.workspaces.values()).map((s) => s.gateway.stop().catch(() => {}))
     await Promise.all(stops)
     this.workspaces.clear()
@@ -231,6 +285,8 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         telegram: cloneRuntime(state.runtime.telegram),
         whatsapp: cloneRuntime(state.runtime.whatsapp),
         lark: cloneRuntime(state.runtime.lark),
+        discord: cloneRuntime(state.runtime.discord),
+        wechat: cloneRuntime(state.runtime.wechat),
       },
     }
   }
@@ -250,9 +306,17 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       await state.gateway.unregisterAdapter('telegram').catch(() => {})
       await state.gateway.unregisterAdapter('whatsapp').catch(() => {})
       await state.gateway.unregisterAdapter('lark').catch(() => {})
+      await state.gateway.unregisterAdapter('discord').catch(() => {})
+      await state.gateway.unregisterAdapter('wechat').catch(() => {})
       state.whatsappOffEvent?.()
       state.whatsappOffEvent = undefined
       state.whatsapp = null
+      state.discordOffEvent?.()
+      state.discordOffEvent = undefined
+      if (state.discord) {
+        await state.discord.destroy().catch(() => {})
+        state.discord = null
+      }
       this.setPlatformRuntime(workspaceId, state, 'telegram', {
         configured: false,
         connected: false,
@@ -274,10 +338,24 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         identity: undefined,
         lastError: undefined,
       })
+      this.setPlatformRuntime(workspaceId, state, 'discord', {
+        configured: false,
+        connected: false,
+        state: 'disconnected',
+        identity: undefined,
+        lastError: undefined,
+      })
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: false,
+        connected: false,
+        state: 'disconnected',
+        identity: undefined,
+        lastError: undefined,
+      })
       return
     }
 
-    for (const platform of ['telegram', 'whatsapp', 'lark'] as const) {
+    for (const platform of ['telegram', 'whatsapp', 'lark', 'discord', 'wechat'] as const) {
       const configured = isPlatformConfigured(cfg, platform)
       if (!configured && state.gateway.getAdapter(platform)) {
         await state.gateway.unregisterAdapter(platform).catch(() => {})
@@ -286,6 +364,14 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         state.whatsappOffEvent?.()
         state.whatsappOffEvent = undefined
         state.whatsapp = null
+      }
+      if (!configured && platform === 'discord') {
+        state.discordOffEvent?.()
+        state.discordOffEvent = undefined
+        if (state.discord) {
+          await state.discord.destroy().catch(() => {})
+          state.discord = null
+        }
       }
       if (!configured) {
         this.setPlatformRuntime(workspaceId, state, platform, {
@@ -722,6 +808,15 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       }
     }
 
+    if (platform === 'discord') {
+      state.discordOffEvent?.()
+      state.discordOffEvent = undefined
+      if (state.discord) {
+        await state.discord.destroy().catch(() => {})
+        state.discord = null
+      }
+    }
+
     await state.gateway.unregisterAdapter(platform).catch(() => {})
     state.botUsernames[platform] = undefined
     this.pairing.clearWorkspace(workspaceId)
@@ -1011,10 +1106,13 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       topicRegistry,
       botUsernames: {},
       whatsapp: null,
+      discord: null,
       runtime: {
         telegram: createRuntime('telegram', isPlatformConfigured(cfg, 'telegram')),
         whatsapp: createRuntime('whatsapp', isPlatformConfigured(cfg, 'whatsapp')),
         lark: createRuntime('lark', isPlatformConfigured(cfg, 'lark')),
+        discord: createRuntime('discord', isPlatformConfigured(cfg, 'discord')),
+        wechat: createRuntime('wechat', isPlatformConfigured(cfg, 'wechat')),
       },
     }
     this.workspaces.set(workspaceId, state)
@@ -1090,6 +1188,364 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         error: err,
       })
       this.setPlatformRuntime(workspaceId, state, 'lark', {
+        configured: true,
+        connected: false,
+        state: 'error',
+        lastError: err instanceof Error ? err.message : String(err),
+      })
+      throw err
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Discord — subprocess lifecycle
+  // -------------------------------------------------------------------------
+
+  /**
+   * Validate a Discord bot token by calling `GET /users/@me` with a
+   * `Bot <token>` authorization header. Returns the bot username on success,
+   * or a descriptive error the UI can surface.
+   */
+  async testDiscordCredentials(
+    creds: DiscordCredentials,
+  ): Promise<{ success: boolean; botName?: string; error?: string }> {
+    if (!creds.token) {
+      return { success: false, error: 'Bot token is empty' }
+    }
+    try {
+      const res = await fetch('https://discord.com/api/v10/users/@me', {
+        headers: { Authorization: `Bot ${creds.token}` },
+      })
+      if (res.status === 401) {
+        return { success: false, error: 'Invalid bot token' }
+      }
+      if (!res.ok) {
+        return { success: false, error: `Discord API error (${res.status})` }
+      }
+      const body = (await res.json()) as { username?: string; bot?: boolean }
+      return { success: true, botName: body.username }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Network error' }
+    }
+  }
+
+  async saveDiscordCredentials(workspaceId: string, creds: DiscordCredentials): Promise<void> {
+    if (!creds.token) throw new Error('Bot token is empty')
+
+    const test = await this.testDiscordCredentials(creds)
+    if (!test.success) throw new Error(test.error ?? 'Invalid Discord credentials')
+
+    await this.opts.credentialManager.set(
+      {
+        type: 'messaging_bearer',
+        workspaceId,
+        name: 'discord',
+      },
+      { value: JSON.stringify(creds) },
+    )
+
+    const state = this.workspaces.get(workspaceId) ?? this.bootstrapWorkspace(workspaceId)
+    state.configStore.update({
+      enabled: true,
+      platforms: { discord: { enabled: true } },
+    })
+
+    this.setPlatformRuntime(workspaceId, state, 'discord', {
+      configured: true,
+      connected: false,
+      state: 'connecting',
+      lastError: undefined,
+    })
+
+    await this.tryConnectDiscord(workspaceId, state)
+    await state.gateway.start()
+  }
+
+  private async tryConnectDiscord(workspaceId: string, state: WorkspaceState): Promise<void> {
+    const discordConfig = this.opts.discord
+    if (!discordConfig) {
+      this.setPlatformRuntime(workspaceId, state, 'discord', {
+        configured: true,
+        connected: false,
+        state: 'error',
+        lastError: 'Discord support is not configured on this server.',
+      })
+      return
+    }
+
+    const cred = await this.opts.credentialManager
+      .get({ type: 'messaging_bearer', workspaceId, name: 'discord' })
+      .catch(() => null)
+
+    if (!cred?.value) {
+      this.setPlatformRuntime(workspaceId, state, 'discord', {
+        configured: true,
+        connected: false,
+        state: 'error',
+        lastError: 'Discord credentials are missing.',
+      })
+      return
+    }
+
+    let creds: DiscordCredentials
+    try {
+      creds = parseDiscordCredentials(cred.value)
+    } catch (err) {
+      this.setPlatformRuntime(workspaceId, state, 'discord', {
+        configured: true,
+        connected: false,
+        state: 'error',
+        lastError: err instanceof Error ? err.message : 'Discord credentials are malformed',
+      })
+      return
+    }
+
+    // Tear down any prior adapter (reconnect path).
+    await state.gateway.unregisterAdapter('discord').catch(() => {})
+    state.discordOffEvent?.()
+    state.discordOffEvent = undefined
+    if (state.discord) {
+      await state.discord.destroy().catch(() => {})
+      state.discord = null
+    }
+
+    try {
+      const adapter = new DiscordAdapter()
+      state.discord = adapter
+      state.discordOffEvent = adapter.onEvent((ev) => this.onDiscordEvent(workspaceId, ev))
+
+      await adapter.initialize({
+        token: creds.token,
+        workerEntry: discordConfig.workerEntry,
+        nodeBin: discordConfig.nodeBin,
+        logger: this.log.child({
+          component: 'discord-adapter',
+          workspaceId,
+          platform: 'discord',
+        }),
+      })
+
+      state.gateway.registerAdapter(adapter)
+      // Runtime flips to 'connected' when the worker emits its `connected`
+      // event (see onDiscordEvent); until then we stay in 'connecting'.
+      this.setPlatformRuntime(workspaceId, state, 'discord', {
+        configured: true,
+        connected: false,
+        state: 'connecting',
+        lastError: undefined,
+      })
+    } catch (err) {
+      this.log.error('failed to connect Discord', {
+        event: 'discord_connect_failed',
+        workspaceId,
+        error: err,
+      })
+      state.discordOffEvent?.()
+      state.discordOffEvent = undefined
+      state.discord = null
+      this.setPlatformRuntime(workspaceId, state, 'discord', {
+        configured: true,
+        connected: false,
+        state: 'error',
+        lastError: err instanceof Error ? err.message : String(err),
+      })
+      throw err
+    }
+  }
+
+  private onDiscordEvent(workspaceId: string, event: DiscordEvent): void {
+    const state = this.workspaces.get(workspaceId)
+    if (!state) return
+
+    switch (event.type) {
+      case 'connected':
+        state.botUsernames.discord = event.username
+        this.setPlatformRuntime(workspaceId, state, 'discord', {
+          configured: true,
+          connected: true,
+          state: 'connected',
+          identity: event.username,
+          lastError: undefined,
+        })
+        return
+      case 'disconnected':
+        this.setPlatformRuntime(workspaceId, state, 'discord', {
+          configured: true,
+          connected: false,
+          state: event.loggedOut ? 'reconnect_required' : 'disconnected',
+          lastError: event.reason,
+          identity: undefined,
+        })
+        return
+      case 'unavailable':
+        this.setPlatformRuntime(workspaceId, state, 'discord', {
+          configured: true,
+          connected: false,
+          state: 'error',
+          lastError: event.message,
+          identity: undefined,
+        })
+        return
+      case 'error':
+        if (!state.runtime.discord.connected) {
+          this.setPlatformRuntime(workspaceId, state, 'discord', {
+            configured: true,
+            connected: false,
+            state: 'error',
+            lastError: event.message,
+          })
+        }
+        return
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // WeChat — QR login + iLink long-poll lifecycle
+  // -------------------------------------------------------------------------
+
+  async startWeChatConnect(workspaceId: string): Promise<void> {
+    const state = this.workspaces.get(workspaceId) ?? this.bootstrapWorkspace(workspaceId)
+    this.setPlatformRuntime(workspaceId, state, 'wechat', {
+      configured: true,
+      connected: false,
+      state: 'connecting',
+      lastError: undefined,
+    })
+
+    const verifyResolvers: Array<(code: string) => void> = []
+    // Unblock any prior in-flight login for this workspace so it settles instead
+    // of hanging on its verify-code waiter until the long-poll timeout.
+    const prior = this.wechatVerifyResolvers.get(workspaceId)
+    if (prior) for (const resolve of prior.splice(0)) resolve('')
+    this.wechatVerifyResolvers.set(workspaceId, verifyResolvers)
+
+    const result = await startWeChatQrLogin({
+      onEvent: (event: WeChatLoginEvent) => {
+        this.opts.publishEvent?.(
+          RPC_CHANNELS.messaging.WECHAT_UI_EVENT,
+          { to: 'workspace', workspaceId },
+          { workspaceId, event },
+        )
+        if (event.type === 'error') {
+          this.setPlatformRuntime(workspaceId, state, 'wechat', {
+            configured: false,
+            connected: false,
+            state: 'error',
+            lastError: event.message,
+          })
+        }
+      },
+      verifyCodeProvider: () =>
+        new Promise<string>((resolve) => {
+          verifyResolvers.push(resolve)
+        }),
+    }).finally(() => {
+      // Only clear if we're still the active login — a newer connect may have
+      // replaced our resolver array.
+      if (this.wechatVerifyResolvers.get(workspaceId) === verifyResolvers) {
+        this.wechatVerifyResolvers.delete(workspaceId)
+      }
+    })
+
+    if (!result) return
+
+    // Already bound to this instance — reconnect from the stored credential.
+    if (result === 'already-connected') {
+      await this.tryConnectWeChat(workspaceId, state)
+      await state.gateway.start()
+      return
+    }
+
+    await this.opts.credentialManager.set(
+      { type: 'messaging_bearer', workspaceId, name: 'wechat' },
+      { value: JSON.stringify(result) },
+    )
+    state.configStore.update({
+      enabled: true,
+      platforms: { wechat: { enabled: true } },
+    })
+    await this.tryConnectWeChat(workspaceId, state)
+    await state.gateway.start()
+  }
+
+  /** Submit a verify code from the UI for an in-progress WeChat login. */
+  submitWeChatVerifyCode(workspaceId: string, code: string): void {
+    const resolvers = this.wechatVerifyResolvers.get(workspaceId)
+    const resolve = resolvers?.shift()
+    if (resolve) resolve(code)
+  }
+  /** Cancel an in-flight WeChat QR login: settles all pending verify-code waiters. */
+  async cancelWeChatConnect(workspaceId: string): Promise<void> {
+    const resolvers = this.wechatVerifyResolvers.get(workspaceId)
+    this.wechatVerifyResolvers.delete(workspaceId)
+    if (resolvers) for (const resolve of resolvers.splice(0)) resolve('')
+    const state = this.workspaces.get(workspaceId)
+    if (state) {
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: false,
+        connected: false,
+        state: 'disconnected',
+        lastError: undefined,
+      })
+    }
+  }
+
+  private async tryConnectWeChat(workspaceId: string, state: WorkspaceState): Promise<void> {
+    const cred = await this.opts.credentialManager
+      .get({ type: 'messaging_bearer', workspaceId, name: 'wechat' })
+      .catch(() => null)
+
+    if (!cred?.value) {
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: true,
+        connected: false,
+        state: 'error',
+        lastError: 'WeChat credentials are missing.',
+      })
+      return
+    }
+
+    let creds: WeChatCredentials
+    try {
+      creds = parseWeChatCredentials(cred.value)
+    } catch (err) {
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: true,
+        connected: false,
+        state: 'error',
+        lastError: err instanceof Error ? err.message : 'WeChat credentials are malformed',
+      })
+      return
+    }
+
+    await state.gateway.unregisterAdapter('wechat').catch(() => {})
+
+    try {
+      const adapter = new WeChatAdapter()
+      await adapter.initialize({
+        token: cred.value,
+        logger: this.log.child({
+          component: 'wechat-adapter',
+          workspaceId,
+          platform: 'wechat',
+        }),
+      })
+      state.botUsernames.wechat = adapter.getBotInfo().name
+      state.gateway.registerAdapter(adapter)
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: true,
+        connected: true,
+        state: 'connected',
+        identity: state.botUsernames.wechat ?? creds.userId,
+        lastError: undefined,
+      })
+    } catch (err) {
+      this.log.error('failed to connect WeChat', {
+        event: 'wechat_connect_failed',
+        workspaceId,
+        error: err,
+      })
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
         configured: true,
         connected: false,
         state: 'error',
@@ -1260,7 +1716,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     // to `owner-only` once an owner exists. Existing 'open' workspaces
     // are respected (the operator chose to stay public).
     this.patchTelegramConfig(workspaceId, {
-      accessMode: cfg.platforms.telegram?.accessMode ?? 'owner-only',
+      accessMode: normalizeMessagingAccessMode(cfg.platforms.telegram?.accessMode === undefined ? 'owner-control' : cfg.platforms.telegram.accessMode),
       owners: nextOwners,
     })
     this.log.info('seeded first owner', {
@@ -1293,9 +1749,9 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
   }
 
   getPlatformAccessMode(workspaceId: string, platform: PlatformType): PlatformAccessMode {
-    if (platform !== 'telegram') return 'open'
+    if (platform !== 'telegram') return 'public-inbox'
     const state = this.workspaces.get(workspaceId) ?? this.bootstrapWorkspace(workspaceId)
-    return state.configStore.get().platforms.telegram?.accessMode ?? 'open'
+    return normalizeMessagingAccessMode(state.configStore.get().platforms.telegram?.accessMode)
   }
 
   setPlatformAccessMode(
@@ -1306,14 +1762,10 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     if (platform !== 'telegram') {
       throw new Error('Access mode is only supported on Telegram in this build.')
     }
-    this.patchTelegramConfig(workspaceId, { accessMode: mode })
+    const next = normalizeMessagingAccessMode(mode)
+    this.patchTelegramConfig(workspaceId, { accessMode: next })
 
-    // Lock-down semantics: switching the workspace to `owner-only` must
-    // also close any binding that's still in `open` mode, otherwise the
-    // operator clicks "Lock down", the banner disappears, but legacy
-    // bindings remain public — exactly the false-sense-of-security UX
-    // the feature is supposed to prevent.
-    if (mode === 'owner-only') {
+    if (next === 'owner-control') {
       this.migrateOpenBindingsToInherit(workspaceId)
     }
 
@@ -1331,8 +1783,8 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     const store = state.gateway.getBindingStore()
     for (const b of store.getAll()) {
       if (b.platform !== 'telegram') continue
-      if (b.config.accessMode !== 'open') continue
-      store.updateBindingConfig(b.id, { accessMode: 'inherit', allowedSenderIds: [] })
+      if (b.config.accessMode !== 'public-inbox' && b.config.accessMode !== 'open') continue
+      store.updateBindingConfig(b.id, { accessMode: 'owner-control', allowedSenderIds: [] })
     }
   }
 
@@ -1415,10 +1867,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       const next = Array.from(new Set([...binding.config.allowedSenderIds, userId]))
       store.updateBindingConfig(bindingId, {
         allowedSenderIds: next,
-        // Defensive: ensure the binding is in allow-list mode after
-        // promotion. Otherwise a binding that was 'inherit' would still
-        // ignore the new allowedSenderIds entry.
-        accessMode: binding.config.accessMode === 'allow-list' ? 'allow-list' : 'allow-list',
+        accessMode: 'owner-control',
       })
       state.gateway.getPendingStore().dismiss(platform, userId, {
         reason: 'not-on-binding-allowlist',
@@ -1448,7 +1897,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     const tg = cfg.platforms.telegram
     this.patchTelegramConfig(workspaceId, {
       owners: nextOwners,
-      accessMode: tg?.accessMode ?? 'owner-only',
+      accessMode: normalizeMessagingAccessMode(tg?.accessMode === undefined ? 'owner-control' : tg.accessMode),
     })
     // Dismiss every pending row for this sender — they're now an owner,
     // so any binding-allow-list rejects pending against them have been
@@ -1472,10 +1921,10 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     const state = this.workspaces.get(workspaceId)
     if (!state) throw new Error('Workspace not initialised')
     const store = state.gateway.getBindingStore()
+    const mode = normalizeMessagingAccessMode(access.mode)
     const next = store.updateBindingConfig(bindingId, {
-      accessMode: access.mode,
-      allowedSenderIds:
-        access.mode === 'allow-list' ? [...(access.allowedSenderIds ?? [])] : [],
+      accessMode: mode,
+      allowedSenderIds: [...(access.allowedSenderIds ?? [])],
     })
     if (!next) throw new Error('Binding not found')
     this.emitBindingChanged(workspaceId)
@@ -1531,7 +1980,7 @@ function toBindingInfo(b: ChannelBinding): MessagingBindingInfo {
 }
 
 function isKnownPlatform(p: string): p is PlatformType {
-  return p === 'telegram' || p === 'whatsapp' || p === 'lark'
+  return p === 'telegram' || p === 'whatsapp' || p === 'lark' || p === 'discord' || p === 'wechat'
 }
 
 function capitalize(value: string): string {

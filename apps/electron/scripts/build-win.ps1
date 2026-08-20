@@ -280,6 +280,10 @@ Push-Location $RootDir
 try {
     & npx esbuild @MainArgs
     if ($LASTEXITCODE -ne 0) { throw "Main process build failed" }
+
+    Write-Host "  Building extension-host worker..."
+    & npx esbuild "apps/electron/src/main/extension-host/worker.ts" --bundle --platform=node --format=cjs --outfile=apps/electron/dist/extension-host-worker.cjs --external:electron
+    if ($LASTEXITCODE -ne 0) { throw "Extension host worker build failed" }
 } finally {
     Pop-Location
 }

@@ -1,6 +1,8 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
+import type { RemoteTlsTrust } from '@craft-agent/core/types'
 import type { HandlerDeps } from './handler-deps'
+import { peerTrustOptionsForRemote } from '../../shared/remote-tls-client-options.ts'
 
 export const GUI_HANDLED_CHANNELS = [
   RPC_CHANNELS.remote.TEST_CONNECTION,
@@ -20,14 +22,19 @@ export const GUI_HANDLED_CHANNELS = [
  * bundles as one response frame and need more headroom over WAN.
  * Returns the connected client or null + error message.
  */
-export async function connectToRemote(url: string, token: string, workspaceId?: string, opts?: { requestTimeout?: number }) {
+export async function connectToRemote(url: string, token: string, workspaceId?: string, opts?: { requestTimeout?: number; tlsTrust?: RemoteTlsTrust }) {
   const { WsRpcClient } = await import('../../transport/client')
   const client = new WsRpcClient(url, {
     token,
     workspaceId,
     autoReconnect: false,
-    tlsRejectUnauthorized: false,
     requestTimeout: opts?.requestTimeout,
+    ...peerTrustOptionsForRemote({
+      url,
+      token,
+      remoteWorkspaceId: workspaceId ?? '',
+      tlsTrust: opts?.tlsTrust,
+    }),
   })
 
   const connected = await new Promise<boolean>((resolve) => {

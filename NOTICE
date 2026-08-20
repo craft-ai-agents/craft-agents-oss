@@ -11,5 +11,30 @@ Commercial Terms of Service: https://www.anthropic.com/legal/commercial-terms
 
 ---
 
+The WeChat (Weixin) messaging adapter under
+packages/messaging-gateway/src/adapters/wechat/protocol/ ports source code
+from openclaw-weixin (https://github.com/Tencent/openclaw-weixin), which is
+Copyright (C) 2026 Tencent and licensed under the MIT License. The ported
+files retain their original headers; modifications and the surrounding
+adapter code are licensed under Apache-2.0 along with the rest of this
+project.
+
+---
+
 Third-party dependencies are listed in package.json files and are subject
 to their respective licenses.
+
+---
+
+This product includes vendored source code from:
+
+  @tencent-weixin/openclaw-weixin
+  Copyright (C) 2026 Tencent. All rights reserved.
+  Licensed under the MIT License.
+  https://www.npmjs.com/package/@tencent-weixin/openclaw-weixin
+
+The vendored snapshot lives under:
+  packages/messaging-gateway/src/adapters/wechat/ilink/
+
+See that directory's LICENSE and README.md for the full license text,
+the pinned upstream version, and the list of local adaptations.

@@ -1,21 +1,21 @@
-import { LayoutGrid, List } from 'lucide-react'
+import { LayoutGrid, List, Table2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
-export type BoardListValue = 'list' | 'board'
+export type CollectionViewMode = 'list' | 'board' | 'table'
 
-interface BoardListToggleProps {
-  value: BoardListValue
-  onChange: (value: BoardListValue) => void
+export interface CollectionViewToggleProps {
+  value: CollectionViewMode
+  onChange: (value: CollectionViewMode) => void
   className?: string
 }
 
 /**
- * List ⇄ Board view switch. Rendered both in the sessions navigator header (list
- * mode) and in the board's own header (board mode), since the navigator is hidden
- * while the board is open and would otherwise have nowhere to host the switch.
+ * List ⇄ Board ⇄ Table view switch. Rendered in the sessions navigator header
+ * (list mode), the board header (board mode — navigator is collapsed), and the
+ * table host header.
  */
-export function BoardListToggle({ value, onChange, className }: BoardListToggleProps) {
+export function CollectionViewToggle({ value, onChange, className }: CollectionViewToggleProps) {
   const { t } = useTranslation()
   return (
     <div
@@ -24,12 +24,23 @@ export function BoardListToggle({ value, onChange, className }: BoardListToggleP
         className
       )}
     >
-      <ToggleButton active={value === 'list'} icon={List} label={t('kanban.list')} onClick={() => onChange('list')} />
+      <ToggleButton
+        active={value === 'list'}
+        icon={List}
+        label={t('collection.view.list')}
+        onClick={() => onChange('list')}
+      />
       <ToggleButton
         active={value === 'board'}
         icon={LayoutGrid}
-        label={t('kanban.board')}
+        label={t('collection.view.board')}
         onClick={() => onChange('board')}
+      />
+      <ToggleButton
+        active={value === 'table'}
+        icon={Table2}
+        label={t('collection.view.table')}
+        onClick={() => onChange('table')}
       />
     </div>
   )

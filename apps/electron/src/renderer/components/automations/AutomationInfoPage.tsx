@@ -23,6 +23,7 @@ import { AutomationMenu } from './AutomationMenu'
 import { AutomationActionRow } from './AutomationActionRow'
 import { AutomationTestPanel } from './AutomationTestPanel'
 import { AutomationEventTimeline } from './AutomationEventTimeline'
+import { AutomationGraphWorkspaceEditor } from './AutomationGraphWorkspaceEditor'
 import { PhaseBadge } from './PhaseBadge'
 import { getEventDisplayName, getPermissionDisplayName, flattenConditions, type AutomationListItem, type ExecutionEntry, type TestResult } from './types'
 import { describeCron, computeNextRuns } from './utils'
@@ -203,6 +204,13 @@ export function AutomationInfoPage({
             ))}
           </div>
         </Info_Section>
+        <Info_Section title={t('entityView.graph')}>
+          <AutomationGraphWorkspaceEditor
+            workspaceId={workspace?.id}
+            className="min-h-[360px]"
+          />
+        </Info_Section>
+
 
         {/* Test results (if any) */}
         {testResult && testResult.state !== 'idle' && (

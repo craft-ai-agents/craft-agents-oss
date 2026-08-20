@@ -113,7 +113,7 @@ export const DOCS: Record<DocFeature, DocInfo> = {
     path: '/messaging/overview',
     title: 'Messaging',
     summary:
-      'Connect a session to a chat platform — Telegram, WhatsApp, or Lark / Feishu — and reach your agent from anywhere. Pair workspace supergroups, route automations to forum topics, and send rich replies natively.',
+      'Connect a session to a chat platform — Telegram, WhatsApp, Lark / Feishu, or Discord — and reach your agent from anywhere. Pair workspace supergroups, route automations to forum topics, and send rich replies natively.',
   },
 }
 

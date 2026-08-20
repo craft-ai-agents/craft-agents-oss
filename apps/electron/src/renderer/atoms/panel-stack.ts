@@ -13,7 +13,7 @@ function generatePanelId(): string {
   return `panel-${++nextPanelId}-${Date.now()}`
 }
 
-export type PanelType = 'session' | 'source' | 'settings' | 'skills' | 'other'
+export type PanelType = 'session' | 'source' | 'settings' | 'skills' | 'browser' | 'knowledge' | 'other'
 export type PanelLaneId = 'main'
 export type OpenIntent = 'implicit' | 'explicit'
 
@@ -29,7 +29,7 @@ export const PANEL_LANE_POLICIES: Record<PanelLaneId, PanelLanePolicy> = {
   main: {
     id: 'main',
     order: 0,
-    allowedTypes: ['session', 'source', 'settings', 'skills', 'other'],
+    allowedTypes: ['session', 'source', 'settings', 'skills', 'browser', 'knowledge', 'other'],
     locked: false,
     singleton: false,
   },
@@ -75,6 +75,16 @@ export function getPanelTypeFromRoute(route: ViewRoute): PanelType {
       return 'settings'
     case 'skills':
       return 'skills'
+    case 'browser':
+      return 'browser'
+    // SiYuan Knowledge surface — routes.view.siyuan → 'knowledge/{kind}/{id}' (W2).
+    // The route prefix is 'knowledge'; the deep-link scheme is 'siyuan' but never
+    // appears as a route prefix.
+    // 'diff/{proposalId}' (P3 write-back review surface) is knowledge-domain UI —
+    // reuse the knowledge PanelType rather than widening the union.
+    case 'knowledge':
+    case 'diff':
+      return 'knowledge'
     default:
       return 'other'
   }

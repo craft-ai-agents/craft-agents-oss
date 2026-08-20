@@ -1,9 +1,13 @@
 import { existsSync, writeFileSync } from 'fs';
+import { randomUUID } from 'crypto';
 import { join } from 'path';
 import { ensureConfigDir } from './storage.ts';
 import { CONFIG_DIR } from './paths.ts';
 import { readJsonFileSync } from '../utils/files.ts';
-import { i18n, SUPPORTED_LANGUAGE_CODES } from '../i18n/index.ts';
+import {
+  DEFAULT_LANGUAGE_CODE,
+  isSupportedLanguageCode,
+} from '../i18n/languages.ts';
 import { LOCALE_REGISTRY, type LanguageCode } from '../i18n/registry.ts';
 
 export interface UserLocation {
@@ -25,6 +29,12 @@ export interface DiffViewerPreferences {
 
 export interface UserPreferences {
   name?: string;
+  /** Stable local user id (UUID). Generated once on first ensure. */
+  userId?: string;
+  /** Optional handle used for org invites */
+  username?: string;
+  /** Optional email used for org invites */
+  email?: string;
   timezone?: string;
   location?: UserLocation;
   // Free-form notes the agent learns about the user
@@ -36,11 +46,20 @@ export interface UserPreferences {
   /**
    * Internal: persisted UI language code (mirrors Appearance → Language).
    * Maintained only by the main-process `i18n:changeLanguage` IPC handler.
+   * Missing or unsupported persisted values resolve to the Russian default.
    * Not user-editable; not exposed via the `update_user_preferences` tool.
    */
   uiLanguage?: LanguageCode;
   // When the preferences were last updated
   updatedAt?: number;
+}
+
+/** Local identity fields used by orgs / profile (never empty userId after ensure). */
+export interface LocalUserIdentity {
+  userId: string;
+  username?: string;
+  email?: string;
+  name?: string;
 }
 
 const PREFERENCES_FILE = join(CONFIG_DIR, 'preferences.json');
@@ -87,20 +106,58 @@ export function updatePreferences(updates: Partial<UserPreferences>): UserPrefer
   return updated;
 }
 
+/**
+ * Ensure preferences.json has a stable local `userId` (UUID v4).
+ * Generates once and persists; never overwrites an existing userId.
+ * Also fills username from name when username is absent (non-destructive).
+ */
+export function ensureLocalUserIdentity(): LocalUserIdentity {
+  const current = loadPreferences();
+  let changed = false;
+  let userId = typeof current.userId === 'string' ? current.userId.trim() : '';
+  if (!userId) {
+    userId = randomUUID();
+    current.userId = userId;
+    changed = true;
+  }
+  // Seed username from display name once so invite flows have a handle.
+  if (!current.username && typeof current.name === 'string' && current.name.trim()) {
+    const seed = current.name
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_]+/g, '-')
+      .replace(/[^a-z0-9.-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+    if (seed) {
+      current.username = seed;
+      changed = true;
+    }
+  }
+  if (changed) savePreferences(current);
+  return {
+    userId,
+    username: current.username,
+    email: current.email,
+    name: current.name,
+  };
+}
+
 export function getPreferencesPath(): string {
   return PREFERENCES_FILE;
 }
 
 /**
- * Read the persisted UI language code (validated against the supported set).
- * Returns `undefined` when the field is missing or holds an unrecognised value.
+ * Resolve the persisted UI language against the supported registry.
+ *
+ * An explicit supported choice wins. Missing, legacy, or unsupported values
+ * resolve to the Russian default without rewriting unrelated user data.
  */
-export function getPersistedUiLanguage(): LanguageCode | undefined {
-  const prefs = loadPreferences();
-  const candidate = prefs.uiLanguage;
-  if (!candidate) return undefined;
-  if (!SUPPORTED_LANGUAGE_CODES.includes(candidate)) return undefined;
-  return candidate;
+export function getPersistedUiLanguage(): LanguageCode {
+  const candidate = loadPreferences().uiLanguage;
+  return isSupportedLanguageCode(candidate)
+    ? candidate
+    : DEFAULT_LANGUAGE_CODE;
 }
 
 /**
@@ -115,19 +172,13 @@ export function setPersistedUiLanguage(code: LanguageCode): void {
 }
 
 /**
- * Native-language name to request for AI-generated session titles, or
- * `undefined` to let the model follow the conversation's own language.
+ * Native-language name to request for AI-generated session titles.
  *
- * Resolves from the explicitly persisted UI language (disk-backed) rather than
- * `i18n.resolvedLanguage`, which in the main process hydrates asynchronously at
- * startup and can still read the `'en'` fallback when an early title fires
- * (#885). Returning `undefined` when no language was chosen lets the title
- * prompt auto-detect the conversation language instead of being forced to
- * English.
+ * Uses the same persisted UI-language resolution as app startup, so fresh and
+ * invalid configurations consistently use the Russian default.
  */
-export function resolveTitleLanguageName(): string | undefined {
-  const code = getPersistedUiLanguage();
-  return code ? LOCALE_REGISTRY[code]?.nativeName : undefined;
+export function resolveTitleLanguageName(): string {
+  return LOCALE_REGISTRY[getPersistedUiLanguage()].nativeName;
 }
 
 /**
@@ -136,10 +187,9 @@ export function resolveTitleLanguageName(): string | undefined {
 export function formatPreferencesForPrompt(): string {
   const prefs = loadPreferences();
 
-  // Derive language from the app's i18n setting (Appearance > Language).
-  const langCode = (i18n.resolvedLanguage ?? 'en') as LanguageCode;
-  const langEntry = LOCALE_REGISTRY[langCode];
-  const langName = langEntry?.nativeName ?? 'English';
+  // Derive language from the persisted Appearance → Language choice.
+  const langCode = getPersistedUiLanguage();
+  const langName = LOCALE_REGISTRY[langCode].nativeName;
 
   if (Object.keys(prefs).length === 0 ||
       (!prefs.name && !prefs.timezone && !prefs.location && !prefs.notes && langCode === 'en')) {
@@ -208,9 +258,9 @@ export function formatPreferencesDisplay(): string {
       lines.push('- Location: (not set)');
     }
 
-    const displayLangCode = (i18n.resolvedLanguage ?? 'en') as LanguageCode;
-    const displayLangEntry = LOCALE_REGISTRY[displayLangCode];
-    lines.push(`- Language: ${displayLangEntry?.nativeName ?? 'English'} (via Appearance settings)`);
+    const displayLangCode = getPersistedUiLanguage();
+    const displayLangName = LOCALE_REGISTRY[displayLangCode].nativeName;
+    lines.push(`- Language: ${displayLangName} (via Appearance settings)`);
 
     if (hasNotes) {
       lines.push('', '**Notes**', prefs.notes!);

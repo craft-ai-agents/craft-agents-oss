@@ -12,11 +12,37 @@ export type McpAuthType = 'workspace_oauth' | 'workspace_bearer' | 'public';
  * Configuration for a remote Craft Agent Server.
  * When set on a workspace, handler calls are proxied over WebSocket.
  */
+export type RemoteTlsTrust =
+  | { mode: 'public-ca' }
+  | {
+      mode: 'spki-pin';
+      origin: string;
+      spkiSha256: string;
+      enrolledAt: number;
+    };
+
 export interface RemoteServerConfig {
   url: string;              // ws://host:port or wss://host:port
   token: string;            // Auth token for the remote server
   remoteWorkspaceId: string; // ID of the workspace on the remote server
+  /** When set, reached over an SSH tunnel: sshHostId + the host store are the durable
+   * identity, so url/token are ephemeral and re-resolved before every dial. */
+  sshHostId?: string;
+  /**
+   * Direct remote TLS policy. Legacy records normalize to public-CA trust;
+   * self-hosted remotes persist a canonical origin-bound SPKI pin.
+   */
+  tlsTrust?: RemoteTlsTrust;
 }
+
+/**
+ * Workspace authority boundary.
+ *
+ * New and migrated records always persist this discriminator. It remains
+ * optional in the wire type solely so older clients and persisted records can
+ * be read and normalized without a breaking source migration.
+ */
+export type WorkspaceKind = 'personal' | 'team';
 
 /**
  * Client-facing workspace DTO — safe to send over RPC to remote clients.
@@ -31,6 +57,13 @@ export interface WorkspaceInfo {
   mcpUrl?: string;
   mcpAuthType?: McpAuthType;
   remoteServer?: RemoteServerConfig;
+  /**
+   * Explicit authority mode. Runtime persistence normalizes legacy missing
+   * values to `personal`; team workspaces require a non-empty `orgId`.
+   */
+  kind?: WorkspaceKind;
+  /** Present only when `kind` is `team`; personal workspaces never persist it. */
+  orgId?: string;
 }
 
 /**

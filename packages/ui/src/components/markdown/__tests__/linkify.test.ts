@@ -273,4 +273,15 @@ describe('isFilePathTarget', () => {
   it('rejects non-file strings', () => {
     expect(isFilePathTarget('not a link at all')).toBe(false)
   })
+
+  it('accepts absolute paths with a percent-encoded space (#944)', () => {
+    expect(isFilePathTarget('/Users/chris/My%20Documents/report.md')).toBe(true)
+  })
+
+  it('accepts paths with multiple percent-encoded octets', () => {
+    expect(isFilePathTarget('/Users/chris/Q3%20Report%20%28Draft%29.pdf')).toBe(true)
+  })
+
+  // Bare unescaped `%` is accepted on main (see decodeFilePath + the 100%done
+  // routing test): tolerated as a literal, not treated as a broken escape.
 })

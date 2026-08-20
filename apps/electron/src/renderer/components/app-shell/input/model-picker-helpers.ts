@@ -27,6 +27,15 @@ export function stripPiPrefixForDisplay(value: string): string {
 
 export type ConnectionGroup = [groupName: string, connections: LlmConnection[]]
 
+export function getConnectionIdentityLabel(connection: Pick<LlmConnection, 'oauthAccountEmail' | 'oauthOrganizationName'>): string | null {
+  const parts = [connection.oauthOrganizationName, connection.oauthAccountEmail].filter(Boolean)
+  return parts.length > 0 ? parts.join(' · ') : null
+}
+
+export function getConnectionPickerMeta(connection: LlmConnection): string | null {
+  return getConnectionIdentityLabel(connection)
+}
+
 /**
  * Group connections by provider type for hierarchical picker rendering.
  * Each provider section can contain multiple connections (API Key, OAuth, …).
@@ -38,6 +47,7 @@ export function groupConnectionsByProvider<T extends LlmConnection>(
 ): Array<[string, T[]]> {
   const groups: Record<string, T[]> = {
     'Anthropic': [],
+    'OMP': [],
     'Local': [],
     'Craft Agents Backend': [],
   }
@@ -45,6 +55,8 @@ export function groupConnectionsByProvider<T extends LlmConnection>(
     const provider = conn.providerType || 'anthropic'
     if (provider === 'anthropic') {
       groups['Anthropic'].push(conn)
+    } else if (provider === 'omp') {
+      groups['OMP'].push(conn)
     } else if (provider === 'pi_compat' && isLocalConnection(conn)) {
       groups['Local'].push(conn)
     } else if (provider === 'pi' || provider === 'pi_compat') {

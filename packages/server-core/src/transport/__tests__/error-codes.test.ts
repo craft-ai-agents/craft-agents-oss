@@ -25,20 +25,35 @@ afterEach(async () => {
   }
 })
 
-async function startPair(opts?: { clientCapabilities?: string[]; workspaceId?: string }) {
+async function startPair(opts?: {
+  clientCapabilities?: string[]
+  workspaceId?: string
+  webContentsId?: number
+  localClientProof?: string
+  resolveLocalClientBinding?: (candidate: {
+    workspaceId: string | null
+    webContentsId: number | null
+    localClientProof: string | null
+  }) => { workspaceId: string; webContentsId: number } | null
+  configureServer?: (server: WsRpcServer) => void
+}) {
   const server = new WsRpcServer({
     host: '127.0.0.1',
     port: 0,
     requireAuth: true,
     validateToken: async (t) => t === TEST_TOKEN,
     serverId: 'test',
+    resolveLocalClientBinding: opts?.resolveLocalClientBinding,
   })
+  opts?.configureServer?.(server)
   await server.listen()
   teardown.push(() => server.close())
 
   const client = new WsRpcClient(`ws://127.0.0.1:${server.port}`, {
     token: TEST_TOKEN,
     workspaceId: opts?.workspaceId ?? 'ws-a',
+    webContentsId: opts?.webContentsId,
+    localClientProof: opts?.localClientProof,
     clientCapabilities: opts?.clientCapabilities ?? [],
     autoReconnect: false,
   })
@@ -115,6 +130,32 @@ describe('Transport — error code preservation', () => {
   })
 })
 
+
+describe('Transport — local binding proof', () => {
+  it('sends local proof only through the client handshake and receives main-derived scope', async () => {
+    const { client } = await startPair({
+      workspaceId: 'forged_workspace',
+      webContentsId: 41,
+      localClientProof: 'issued-by-electron-main',
+      resolveLocalClientBinding: candidate => (
+        candidate.localClientProof === 'issued-by-electron-main' && candidate.webContentsId === 41
+          ? { workspaceId: 'authoritative_workspace', webContentsId: 41 }
+          : null
+      ),
+      configureServer: server => {
+        server.handle('workgraph:getHealth', context => ({
+          workspaceId: context.workspaceId,
+          webContentsId: context.webContentsId,
+        }), { access: 'localElectron' })
+      },
+    })
+
+    await expect(client.invoke('workgraph:getHealth')).resolves.toEqual({
+      workspaceId: 'authoritative_workspace',
+      webContentsId: 41,
+    })
+  })
+})
 describe('Transport — capability introspection', () => {
   it('hasClientCapability returns true only for advertised capabilities', async () => {
     const { server } = await startPair({ clientCapabilities: [CLIENT_BROWSER_INVOKE] })

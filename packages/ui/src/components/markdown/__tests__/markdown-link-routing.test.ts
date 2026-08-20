@@ -136,6 +136,10 @@ describe('classifyMarkdownLinkTarget', () => {
     expect(classifyMarkdownLinkTarget('file:///Users/tester/report.xlsx')).toBe('file')
   })
 
+  it('classifies bare file paths with percent-encoded spaces as file', () => {
+    expect(classifyMarkdownLinkTarget('/Users/tester/My%20Documents/report.xlsx')).toBe('file')
+  })
+
   it('classifies https links as url', () => {
     expect(classifyMarkdownLinkTarget('https://example.com/image.jpg')).toBe('url')
   })

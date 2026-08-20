@@ -29,7 +29,7 @@ export interface SkillMetadata {
 }
 
 /** Source of a loaded skill */
-export type SkillSource = 'global' | 'workspace' | 'project';
+export type SkillSource = 'global' | 'workspace' | 'project' | 'omp';
 
 /**
  * Plugin name for project-level and global skills.
@@ -56,4 +56,11 @@ export interface LoadedSkill {
   path: string;
   /** Where this skill was loaded from */
   source: SkillSource;
+  /**
+   * Set for OMP skills whose slug is also provided by a craft skill
+   * (global/workspace/project). Craft wins — the OMP variant is shown in the
+   * skills panel as inactive with an explanation and is NOT used for
+   * @-mention resolution.
+   */
+  shadowedByCraft?: boolean;
 }

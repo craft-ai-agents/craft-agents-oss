@@ -14,21 +14,23 @@ import type { Locale } from "date-fns";
 
 // ─── Translation resources ───────────────────────────────────────────────────
 import enMessages from "./locales/en.json";
+import ruMessages from "./locales/ru.json";
 import esMessages from "./locales/es.json";
 import zhHansMessages from "./locales/zh-Hans.json";
 import jaMessages from "./locales/ja.json";
-import huMessages from "./locales/hu.json";
 import deMessages from "./locales/de.json";
-import plMessages from "./locales/pl.json";
+import koMessages from "./locales/ko.json";
+import arMessages from "./locales/ar.json";
 
 // ─── date-fns locales ────────────────────────────────────────────────────────
 import { enUS } from "date-fns/locale/en-US";
+import { ru as ruDateLocale } from "date-fns/locale/ru";
 import { es as esDateLocale } from "date-fns/locale/es";
 import { zhCN } from "date-fns/locale/zh-CN";
 import { ja as jaDateLocale } from "date-fns/locale/ja";
-import { hu as huDateLocale } from "date-fns/locale/hu";
 import { de as deDateLocale } from "date-fns/locale/de";
-import { pl as plDateLocale } from "date-fns/locale/pl";
+import { ko as koDateLocale } from "date-fns/locale/ko";
+import { ar as arDateLocale } from "date-fns/locale/ar";
 
 // ─── Registry ────────────────────────────────────────────────────────────────
 
@@ -40,6 +42,7 @@ interface LocaleEntry {
 
 export const LOCALE_REGISTRY = {
   en: { nativeName: "English", messages: enMessages, dateLocale: enUS },
+  ru: { nativeName: "Русский", messages: ruMessages, dateLocale: ruDateLocale },
   es: { nativeName: "Español", messages: esMessages, dateLocale: esDateLocale },
   "zh-Hans": {
     nativeName: "简体中文",
@@ -47,13 +50,13 @@ export const LOCALE_REGISTRY = {
     dateLocale: zhCN,
   },
   ja: { nativeName: "日本語", messages: jaMessages, dateLocale: jaDateLocale },
-  hu: { nativeName: "Magyar", messages: huMessages, dateLocale: huDateLocale },
   de: {
     nativeName: "Deutsch",
     messages: deMessages,
     dateLocale: deDateLocale,
   },
-  pl: { nativeName: "Polski", messages: plMessages, dateLocale: plDateLocale },
+  ko: { nativeName: "한국어", messages: koMessages, dateLocale: koDateLocale },
+  ar: { nativeName: "العربية", messages: arMessages, dateLocale: arDateLocale },
 } satisfies Record<string, LocaleEntry>;
 
 export type LanguageCode = keyof typeof LOCALE_REGISTRY;

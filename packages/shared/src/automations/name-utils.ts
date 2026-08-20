@@ -29,11 +29,25 @@ export function deriveAutomationName(event: string, matcher: AutomationMatcher):
     return label.length > 40 ? label.slice(0, 40) + '...' : label;
   }
 
-  // Extract @skill/@source mention
-  const mentionMatch = firstAction.prompt.match(/@(\S+)/);
-  if (mentionMatch) return `${mentionMatch[1]} prompt`;
+  if (firstAction.type === 'knowledge') {
+    const label = `knowledge.${firstAction.op}`;
+    return label.length > 40 ? label.slice(0, 40) + '...' : label;
+  }
 
-  return firstAction.prompt.length > 40
-    ? firstAction.prompt.slice(0, 40) + '...'
-    : firstAction.prompt;
+  if (firstAction.type === 'cloud_run.submit') {
+    const slug = firstAction.skillSlug?.trim();
+    const label = slug ? `cloud_run.submit ${slug}` : 'cloud_run.submit';
+    return label.length > 40 ? label.slice(0, 40) + '...' : label;
+  }
+
+  if (firstAction.type === 'prompt') {
+    const mentionMatch = firstAction.prompt.match(/@(\S+)/);
+    if (mentionMatch) return `${mentionMatch[1]} prompt`;
+
+    return firstAction.prompt.length > 40
+      ? firstAction.prompt.slice(0, 40) + '...'
+      : firstAction.prompt;
+  }
+
+  return event;
 }

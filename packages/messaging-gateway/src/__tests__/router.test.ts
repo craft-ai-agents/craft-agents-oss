@@ -26,15 +26,18 @@ const TINY_PNG_B64 =
 
 let storeDir: string
 let fileDir: string
+let sessionDir: string
 
 beforeEach(() => {
   storeDir = mkdtempSync(join(tmpdir(), 'router-store-'))
   fileDir = mkdtempSync(join(tmpdir(), 'router-files-'))
+  sessionDir = mkdtempSync(join(tmpdir(), 'router-session-'))
 })
 
 afterEach(() => {
   rmSync(storeDir, { recursive: true, force: true })
   rmSync(fileDir, { recursive: true, force: true })
+  rmSync(sessionDir, { recursive: true, force: true })
 })
 
 // ---------------------------------------------------------------------------
@@ -88,8 +91,17 @@ function makeFakeAdapter(): PlatformAdapter {
   } as unknown as PlatformAdapter
 }
 
-function makeFakeSessionManager(): { sendMessage: ReturnType<typeof mock> } {
-  return { sendMessage: mock(async () => {}) }
+function makeFakeSessionManager(): {
+  sendMessage: ReturnType<typeof mock>
+  getSessionPath: ReturnType<typeof mock>
+} {
+  // Router.resolveAttachments copies inbound files into the session's
+  // attachments dir, so the fake points at the per-test scratch dir created
+  // in beforeEach (and torn down in afterEach).
+  return {
+    sendMessage: mock(async () => {}),
+    getSessionPath: mock(() => sessionDir),
+  }
 }
 
 function makeFakeCommands(): { handle: ReturnType<typeof mock> } {
@@ -98,7 +110,10 @@ function makeFakeCommands(): { handle: ReturnType<typeof mock> } {
 
 function makeRouter() {
   const store = new BindingStore(storeDir)
-  store.bind('ws1', 'sess-A', 'telegram', 'chat-1')
+  store.bind('ws1', 'sess-A', 'telegram', 'chat-1', undefined, {
+    accessMode: 'owner-control',
+    allowedSenderIds: ['user-1'],
+  })
   const sessionManager = makeFakeSessionManager()
   const commands = makeFakeCommands()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -121,7 +136,7 @@ describe('Router', () => {
     expect(args[2]).toBeUndefined() // fileAttachments
   })
 
-  it('materializes a localPath attachment into FileAttachment[]', async () => {
+  it('materializes a localPath attachment into FileAttachment[] and StoredAttachment[]', async () => {
     const { router, sessionManager } = makeRouter()
     const pngPath = writeTinyPng()
     await router.route(
@@ -151,6 +166,104 @@ describe('Router', () => {
     expect(first.type).toBe('image')
     expect(first.name).toBe('my-photo.png')
     expect(first.base64 && first.base64.length).toBeGreaterThan(0)
+
+    // StoredAttachment[] — what the user-message bubble renders against.
+    const storedAttachments = args[3] as Array<{
+      type: string
+      name: string
+      mimeType: string
+      storedPath: string
+      thumbnailBase64?: string
+    }>
+    expect(storedAttachments).toHaveLength(1)
+    const storedFirst = storedAttachments[0]!
+    expect(storedFirst.type).toBe('image')
+    expect(storedFirst.name).toBe('my-photo.png')
+    expect(storedFirst.mimeType).toBe('image/png')
+    // The file must be promoted into the session's attachments dir, not left
+    // in the adapter's tmp dir — that's what makes click-to-open work.
+    expect(storedFirst.storedPath.startsWith(join(sessionDir, 'attachments') + '/')).toBe(true)
+    // Tiny PNG is well under the inline-thumbnail size cap, so the bubble
+    // should get an embedded preview rather than falling back to an icon.
+    expect(storedFirst.thumbnailBase64 && storedFirst.thumbnailBase64.length).toBeGreaterThan(0)
+  })
+
+  it('does not leak binary bytes into FileAttachment.text for non-text media', async () => {
+    // Regression: `readFileAttachment` falls back to `type='text'` for any
+    // extension it doesn't recognise (including .mp4) and reads the file as
+    // utf-8 into `attachment.text`. Without the type-correction in Router,
+    // that garbled text gets attached to the model's prompt.
+    const { router, sessionManager } = makeRouter()
+    const mp4Path = join(fileDir, 'clip.mp4')
+    // 16 bytes of non-utf8 binary — enough to make `text` field obviously wrong.
+    writeFileSync(mp4Path, Buffer.from([0x00, 0xff, 0xfe, 0xfd, 0xfc, 0xfb, 0xfa, 0xf9, 0xf8, 0xf7, 0xf6, 0xf5, 0xf4, 0xf3, 0xf2, 0xf1]))
+
+    await router.route(
+      makeFakeAdapter(),
+      baseMsg({
+        text: '',
+        attachments: [
+          {
+            type: 'video',
+            fileId: 'v1',
+            fileName: 'clip.mp4',
+            mimeType: 'video/mp4',
+            localPath: mp4Path,
+          },
+        ],
+      }),
+    )
+
+    const args = sessionManager.sendMessage.mock.calls[0]!
+    const fileAttachments = args[2] as Array<{
+      type: string
+      mimeType: string
+      text?: string
+      base64?: string
+    }>
+    const first = fileAttachments[0]!
+    expect(first.type).toBe('unknown')
+    expect(first.text).toBeUndefined()
+    expect(first.base64).toBeUndefined()
+    // Adapter-supplied MIME survives so `getFileTypeLabel` can show "MP4".
+    expect(first.mimeType).toBe('video/mp4')
+
+    const stored = (args[3] as Array<{ type: string; mimeType: string }>)[0]!
+    expect(stored.type).toBe('unknown')
+    expect(stored.mimeType).toBe('video/mp4')
+  })
+
+  it('contains a path-traversal fileName inside the session attachments dir', async () => {
+    // A remote sender controls IncomingAttachment.fileName. Without
+    // sanitization, `path.join(attachmentsDir, "uuid_../../etc/passwd")`
+    // would resolve outside the session dir.
+    const { router, sessionManager } = makeRouter()
+    const pngPath = writeTinyPng()
+    await router.route(
+      makeFakeAdapter(),
+      baseMsg({
+        text: '',
+        attachments: [
+          {
+            type: 'photo',
+            fileId: 'p1',
+            fileName: '../../../etc/passwd.png',
+            mimeType: 'image/png',
+            localPath: pngPath,
+          },
+        ],
+      }),
+    )
+
+    const args = sessionManager.sendMessage.mock.calls[0]!
+    const stored = args[3] as Array<{ storedPath: string }>
+    expect(stored).toHaveLength(1)
+    const sessionAttachmentsDir = join(sessionDir, 'attachments') + '/'
+    expect(stored[0]!.storedPath.startsWith(sessionAttachmentsDir)).toBe(true)
+    // Ensure no `..` segments survived the sanitization step.
+    const tail = stored[0]!.storedPath.slice(sessionAttachmentsDir.length)
+    expect(tail.includes('/')).toBe(false)
+    expect(tail.includes('..')).toBe(false)
   })
 
   it('drops attachments that have no localPath', async () => {
@@ -203,8 +316,8 @@ describe('Router', () => {
   it('routes the same chatId + different threadIds to the per-topic session', async () => {
     // Two topics in the same supergroup → two distinct sessions
     const store = new BindingStore(storeDir)
-    store.bind('ws1', 'sess-Topic5', 'telegram', '-1001', undefined, undefined, 5)
-    store.bind('ws1', 'sess-Topic7', 'telegram', '-1001', undefined, undefined, 7)
+    store.bind('ws1', 'sess-Topic5', 'telegram', '-1001', undefined, { accessMode: 'owner-control', allowedSenderIds: ['user-1'] }, 5)
+    store.bind('ws1', 'sess-Topic7', 'telegram', '-1001', undefined, { accessMode: 'owner-control', allowedSenderIds: ['user-1'] }, 7)
 
     const sessionManager = makeFakeSessionManager()
     const commands = makeFakeCommands()
@@ -223,7 +336,7 @@ describe('Router', () => {
   it('falls through to Commands when message lands in an unbound topic', async () => {
     const store = new BindingStore(storeDir)
     // Only topic 5 is bound; topic 7 inbound has no binding
-    store.bind('ws1', 'sess-A', 'telegram', '-1001', undefined, undefined, 5)
+    store.bind('ws1', 'sess-A', 'telegram', '-1001', undefined, { accessMode: 'owner-control', allowedSenderIds: ['user-1'] }, 5)
     const sessionManager = makeFakeSessionManager()
     const commands = makeFakeCommands()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -232,5 +345,53 @@ describe('Router', () => {
     await router.route(makeFakeAdapter(), baseMsg({ channelId: '-1001', threadId: 7, text: '/help' }))
     expect(sessionManager.sendMessage).not.toHaveBeenCalled()
     expect(commands.handle).toHaveBeenCalledTimes(1)
+  })
+
+  // -------------------------------------------------------------------------
+  // Discord guild-trigger gate
+  // -------------------------------------------------------------------------
+
+  function makeDiscordRouter(trigger: 'mention' | 'all') {
+    const store = new BindingStore(storeDir)
+    store.bind('ws1', 'sess-D', 'discord', 'dchan', undefined, {
+      accessMode: 'owner-control',
+      allowedSenderIds: ['user-1'],
+      discordGuildTrigger: trigger,
+    })
+    const sessionManager = makeFakeSessionManager()
+    const commands = makeFakeCommands()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const router = new Router(sessionManager as any, store, commands as unknown as Commands)
+    return { router, sessionManager, commands }
+  }
+
+  function discordMsg(overrides: Partial<IncomingMessage>): IncomingMessage {
+    return baseMsg({ platform: 'discord', channelId: 'dchan', ...overrides })
+  }
+
+  it('ignores un-mentioned guild messages when trigger is "mention"', async () => {
+    const { router, sessionManager, commands } = makeDiscordRouter('mention')
+    await router.route(makeFakeAdapter(), discordMsg({ isDM: false, mentionedBot: false, text: 'chatter' }))
+    expect(sessionManager.sendMessage).not.toHaveBeenCalled()
+    expect(commands.handle).not.toHaveBeenCalled()
+  })
+
+  it('routes @mentioned guild messages when trigger is "mention"', async () => {
+    const { router, sessionManager } = makeDiscordRouter('mention')
+    await router.route(makeFakeAdapter(), discordMsg({ isDM: false, mentionedBot: true, text: 'hey bot' }))
+    expect(sessionManager.sendMessage).toHaveBeenCalledTimes(1)
+    expect(sessionManager.sendMessage.mock.calls[0]?.[0]).toBe('sess-D')
+  })
+
+  it('routes un-mentioned guild messages when trigger is "all"', async () => {
+    const { router, sessionManager } = makeDiscordRouter('all')
+    await router.route(makeFakeAdapter(), discordMsg({ isDM: false, mentionedBot: false, text: 'anything' }))
+    expect(sessionManager.sendMessage).toHaveBeenCalledTimes(1)
+  })
+
+  it('always routes DMs regardless of mention (trigger "mention")', async () => {
+    const { router, sessionManager } = makeDiscordRouter('mention')
+    await router.route(makeFakeAdapter(), discordMsg({ isDM: true, mentionedBot: false, text: 'dm text' }))
+    expect(sessionManager.sendMessage).toHaveBeenCalledTimes(1)
   })
 })

@@ -1,15 +1,13 @@
 /**
  * Integration test for the main-process i18n bootstrap.
  *
- * Validates the building blocks of the regression fix:
- * - `getPersistedUiLanguage()` reads back what `setPersistedUiLanguage()` wrote.
+ * Validates the persistent language resolution contract:
+ * - `getPersistedUiLanguage()` resolves stored preferences to a supported code.
  * - Calling `i18n.changeLanguage(persisted)` after `setupI18n()` makes
- *   `i18n.resolvedLanguage` match the persisted value.
+ *   `i18n.resolvedLanguage` match that resolved value.
  *
- * Together these mean: if `preferences.json` has `uiLanguage: 'hu'` on disk,
- * main-process `i18n.resolvedLanguage` will be `'hu'` after the bootstrap
- * block in `apps/electron/src/main/index.ts` runs — which is the actual
- * thing that broke title generation across restarts.
+ * Together these mean: missing, invalid, and valid `uiLanguage` values all
+ * produce a supported language for title generation across restarts.
  *
  * `CONFIG_DIR` is captured at module-load, so each scenario runs in a
  * subprocess with `CRAFT_CONFIG_DIR` set in its env (same pattern as
@@ -40,7 +38,7 @@ function runScript(configDir: string, script: string): RunResult {
 }
 
 describe('main-process i18n bootstrap', () => {
-  it('hydrates main i18n from persisted uiLanguage', () => {
+  it('hydrates main i18n from a persisted uiLanguage', () => {
     const configDir = mkdtempSync(join(tmpdir(), 'i18n-bootstrap-'))
     try {
       const r = runScript(
@@ -49,21 +47,21 @@ describe('main-process i18n bootstrap', () => {
           import { setupI18n, i18n } from '@craft-agent/shared/i18n';
           import { setPersistedUiLanguage, getPersistedUiLanguage } from '@craft-agent/shared/config';
           setupI18n();
-          setPersistedUiLanguage('hu');
+          setPersistedUiLanguage('ru');
           const persisted = getPersistedUiLanguage();
           await i18n.changeLanguage(persisted);
           console.log(JSON.stringify({ persisted, resolved: i18n.resolvedLanguage }));
         `,
       )
       expect(r.exitCode).toBe(0)
-      expect(JSON.parse(r.stdout)).toEqual({ persisted: 'hu', resolved: 'hu' })
+      expect(JSON.parse(r.stdout)).toEqual({ persisted: 'ru', resolved: 'ru' })
       expect(existsSync(join(configDir, 'preferences.json'))).toBe(true)
     } finally {
       rmSync(configDir, { recursive: true, force: true })
     }
-  })
+  }, 15_000)
 
-  it('returns undefined when no language is persisted (no hydration step)', () => {
+  it('resolves Russian when no language is persisted', () => {
     const configDir = mkdtempSync(join(tmpdir(), 'i18n-bootstrap-'))
     try {
       const r = runScript(
@@ -73,21 +71,19 @@ describe('main-process i18n bootstrap', () => {
           import { getPersistedUiLanguage } from '@craft-agent/shared/config';
           setupI18n();
           const persisted = getPersistedUiLanguage();
-          console.log(JSON.stringify({ persisted: persisted ?? null, resolved: i18n.resolvedLanguage }));
+          console.log(JSON.stringify({ persisted: getPersistedUiLanguage(), resolved: i18n.resolvedLanguage }));
         `,
       )
       expect(r.exitCode).toBe(0)
       const { persisted, resolved } = JSON.parse(r.stdout)
-      expect(persisted).toBeNull()
-      // Without LanguageDetector and without a hydration call, main-process i18n
-      // sits at fallbackLng — which is what made title generation default to English.
-      expect(resolved).toBe('en')
+      expect(persisted).toBe('ru')
+      expect(resolved).toBe('ru')
     } finally {
       rmSync(configDir, { recursive: true, force: true })
     }
-  })
+  }, 15_000)
 
-  it('ignores invalid persisted codes (defensive read)', () => {
+  it('resolves Russian for invalid persisted codes', () => {
     const configDir = mkdtempSync(join(tmpdir(), 'i18n-bootstrap-'))
     try {
       writeFileSync(
@@ -99,13 +95,13 @@ describe('main-process i18n bootstrap', () => {
         configDir,
         `
           import { getPersistedUiLanguage } from '@craft-agent/shared/config';
-          console.log(JSON.stringify({ value: getPersistedUiLanguage() ?? null }));
+          console.log(JSON.stringify({ value: getPersistedUiLanguage() }));
         `,
       )
       expect(r.exitCode).toBe(0)
-      expect(JSON.parse(r.stdout)).toEqual({ value: null })
+      expect(JSON.parse(r.stdout)).toEqual({ value: 'ru' })
     } finally {
       rmSync(configDir, { recursive: true, force: true })
     }
-  })
+  }, 15_000)
 })

@@ -1,5 +1,6 @@
 export * from './server.ts'
 export * from './client.ts'
+export * from './peer-trust.ts'
 export * from './codec.ts'
 export * from './capabilities.ts'
 export * from './browser-capability.ts'

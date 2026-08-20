@@ -1,9 +1,6 @@
 /**
- * access-control — unit tests for the pure permission evaluator.
- *
- * Exhaustive matrix over (workspace mode, binding mode, sender state).
- * Drives both `evaluatePreBindingAccess` (used by Commands) and
- * `evaluateBindingAccess` (used by Router).
+ * access-control — permission evaluator.
+ * Legacy missing/open/inherit modes must become public-inbox, never tool routing.
  */
 
 import { describe, expect, it } from 'bun:test'
@@ -11,13 +8,15 @@ import {
   buildRejectionReply,
   evaluateBindingAccess,
   evaluatePreBindingAccess,
+  readPlatformAccessMode,
 } from '../access-control'
 import {
   normalizeBindingConfig,
+  normalizeMessagingAccessMode,
   type BindingConfig,
   type IncomingMessage,
+  type MessagingAccessMode,
   type MessagingConfig,
-  type PlatformAccessMode,
   type PlatformOwner,
 } from '../types'
 
@@ -38,15 +37,17 @@ function buildMsg(overrides: Partial<IncomingMessage> = {}): IncomingMessage {
 }
 
 function buildConfig(args: {
-  accessMode?: PlatformAccessMode
+  accessMode?: MessagingAccessMode | 'open' | 'owner-only'
   owners?: PlatformOwner[]
+  platform?: IncomingMessage['platform']
 }): MessagingConfig {
+  const platform = args.platform ?? 'telegram'
   return {
     enabled: true,
     platforms: {
-      telegram: {
+      [platform]: {
         enabled: true,
-        ...(args.accessMode ? { accessMode: args.accessMode } : {}),
+        ...(args.accessMode ? { accessMode: args.accessMode as MessagingAccessMode } : {}),
         ...(args.owners ? { owners: args.owners } : {}),
       },
     },
@@ -61,173 +62,134 @@ function bindingWith(overrides: Partial<BindingConfig> = {}) {
 
 const OWNER: PlatformOwner = { userId: OWNER_ID, addedAt: 0 }
 
-// ---------------------------------------------------------------------------
-// Pre-binding (Commands) tests
-// ---------------------------------------------------------------------------
+describe('normalizeMessagingAccessMode', () => {
+  it('maps every legacy missing/open/inherit value to public-inbox', () => {
+    expect(normalizeMessagingAccessMode(undefined)).toBe('public-inbox')
+    expect(normalizeMessagingAccessMode('open')).toBe('public-inbox')
+    expect(normalizeMessagingAccessMode('inherit')).toBe('public-inbox')
+  })
+
+  it('maps owner-only and allow-list to owner-control', () => {
+    expect(normalizeMessagingAccessMode('owner-only')).toBe('owner-control')
+    expect(normalizeMessagingAccessMode('allow-list')).toBe('owner-control')
+    expect(normalizeMessagingAccessMode('owner-control')).toBe('owner-control')
+  })
+})
 
 describe('evaluatePreBindingAccess', () => {
-  it('open mode allows any non-bot sender', () => {
-    const verdict = evaluatePreBindingAccess({
-      msg: buildMsg({ senderId: STRANGER_ID }),
-      workspaceConfig: buildConfig({ accessMode: 'open' }),
-    })
-    expect(verdict.allow).toBe(true)
+  it('legacy open/missing is public-inbox, not route', () => {
+    for (const accessMode of [undefined, 'open'] as const) {
+      const verdict = evaluatePreBindingAccess({
+        msg: buildMsg({ senderId: STRANGER_ID }),
+        workspaceConfig: buildConfig(accessMode ? { accessMode } : {}),
+      })
+      expect(verdict).toEqual({ kind: 'public-inbox' })
+    }
   })
 
-  it('owner-only mode allows owners', () => {
-    const verdict = evaluatePreBindingAccess({
+  it('public-inbox is the same on every platform', () => {
+    for (const platform of ['telegram', 'whatsapp', 'lark', 'discord', 'wechat'] as const) {
+      const verdict = evaluatePreBindingAccess({
+        msg: buildMsg({ platform, senderId: STRANGER_ID }),
+        workspaceConfig: buildConfig({ platform }),
+      })
+      expect(verdict.kind).toBe('public-inbox')
+      expect(readPlatformAccessMode(buildConfig({ platform }), platform)).toBe('public-inbox')
+    }
+  })
+
+  it('owner-control routes owners and rejects strangers', () => {
+    expect(evaluatePreBindingAccess({
       msg: buildMsg({ senderId: OWNER_ID }),
-      workspaceConfig: buildConfig({ accessMode: 'owner-only', owners: [OWNER] }),
-    })
-    expect(verdict.allow).toBe(true)
-  })
-
-  it('owner-only mode rejects non-owners with reason "not-owner"', () => {
-    const verdict = evaluatePreBindingAccess({
+      workspaceConfig: buildConfig({ accessMode: 'owner-control', owners: [OWNER] }),
+    })).toEqual({ kind: 'route' })
+    expect(evaluatePreBindingAccess({
       msg: buildMsg({ senderId: STRANGER_ID }),
       workspaceConfig: buildConfig({ accessMode: 'owner-only', owners: [OWNER] }),
-    })
-    expect(verdict.allow).toBe(false)
-    if (!verdict.allow) expect(verdict.reason).toBe('not-owner')
+    })).toEqual({ kind: 'reject', reason: 'not-owner' })
   })
 
-  it('rejects bot senders with reason "bot-sender" regardless of mode', () => {
-    const verdict = evaluatePreBindingAccess({
-      msg: buildMsg({ senderId: OWNER_ID, senderIsBot: true }),
+  it('rejects bots and disabled platforms', () => {
+    expect(evaluatePreBindingAccess({
+      msg: buildMsg({ senderIsBot: true }),
       workspaceConfig: buildConfig({ accessMode: 'open' }),
-    })
-    expect(verdict.allow).toBe(false)
-    if (!verdict.allow) expect(verdict.reason).toBe('bot-sender')
-  })
-
-  it('owner-only with empty owners list rejects every non-bot sender', () => {
-    // Edge case: locked-down workspace with no owners is effectively
-    // unusable until /pair seeds the first owner. The evaluator is
-    // strict — bootstrap concerns live in handlePair, not here.
-    const verdict = evaluatePreBindingAccess({
-      msg: buildMsg({ senderId: STRANGER_ID }),
-      workspaceConfig: buildConfig({ accessMode: 'owner-only', owners: [] }),
-    })
-    expect(verdict.allow).toBe(false)
-  })
-
-  it('missing accessMode defaults to "open"', () => {
-    const verdict = evaluatePreBindingAccess({
-      msg: buildMsg({ senderId: STRANGER_ID }),
-      workspaceConfig: buildConfig({}),
-    })
-    expect(verdict.allow).toBe(true)
+    })).toEqual({ kind: 'reject', reason: 'bot-sender' })
+    expect(evaluatePreBindingAccess({
+      msg: buildMsg({ senderId: OWNER_ID }),
+      workspaceConfig: buildConfig({ accessMode: 'disabled', owners: [OWNER] }),
+    })).toEqual({ kind: 'reject', reason: 'disabled' })
   })
 })
-
-// ---------------------------------------------------------------------------
-// Bound-channel (Router) tests
-// ---------------------------------------------------------------------------
 
 describe('evaluateBindingAccess', () => {
-  it('binding accessMode "open" allows any non-bot sender', () => {
-    const verdict = evaluateBindingAccess({
-      msg: buildMsg({ senderId: STRANGER_ID }),
-      workspaceConfig: buildConfig({ accessMode: 'owner-only', owners: [OWNER] }),
-      binding: bindingWith({ accessMode: 'open' }),
-    })
-    expect(verdict.allow).toBe(true)
+  it('legacy open/inherit binding cannot make an unknown sender tool-capable', () => {
+    for (const accessMode of ['open', 'inherit'] as const) {
+      const verdict = evaluateBindingAccess({
+        msg: buildMsg({ senderId: STRANGER_ID }),
+        workspaceConfig: buildConfig({ accessMode: 'open' }),
+        binding: bindingWith({ accessMode: accessMode as never }),
+      })
+      expect(verdict.kind).not.toBe('route')
+      expect(verdict.kind).toBe('public-inbox')
+    }
   })
 
-  it('binding "allow-list" accepts ids in allowedSenderIds', () => {
-    const verdict = evaluateBindingAccess({
+  it('owner-control plus allow-list routes only listed senders', () => {
+    expect(evaluateBindingAccess({
       msg: buildMsg({ senderId: STRANGER_ID }),
-      workspaceConfig: buildConfig({ accessMode: 'owner-only', owners: [OWNER] }),
-      binding: bindingWith({
-        accessMode: 'allow-list',
-        allowedSenderIds: [STRANGER_ID],
-      }),
-    })
-    expect(verdict.allow).toBe(true)
+      workspaceConfig: buildConfig({ accessMode: 'owner-control', owners: [OWNER] }),
+      binding: bindingWith({ accessMode: 'allow-list' as never, allowedSenderIds: [STRANGER_ID] }),
+    })).toEqual({ kind: 'route' })
+    expect(evaluateBindingAccess({
+      msg: buildMsg({ senderId: STRANGER_ID }),
+      workspaceConfig: buildConfig({ accessMode: 'owner-control', owners: [OWNER] }),
+      binding: bindingWith({ accessMode: 'owner-control', allowedSenderIds: [OWNER_ID] }),
+    })).toEqual({ kind: 'reject', reason: 'not-allowlisted' })
   })
 
-  it('binding "allow-list" rejects ids outside the list', () => {
-    const verdict = evaluateBindingAccess({
-      msg: buildMsg({ senderId: STRANGER_ID }),
-      workspaceConfig: buildConfig({ accessMode: 'owner-only', owners: [OWNER] }),
-      binding: bindingWith({
-        accessMode: 'allow-list',
-        allowedSenderIds: [OWNER_ID],
-      }),
-    })
-    expect(verdict.allow).toBe(false)
-    if (!verdict.allow) expect(verdict.reason).toBe('not-on-binding-allowlist')
+  it('owner-control on discord routes a listed owner', () => {
+    expect(evaluateBindingAccess({
+      msg: buildMsg({ platform: 'discord', senderId: OWNER_ID }),
+      workspaceConfig: buildConfig({ platform: 'discord', accessMode: 'owner-control', owners: [OWNER] }),
+      binding: bindingWith({ accessMode: 'owner-control', allowedSenderIds: [] }),
+    })).toEqual({ kind: 'route' })
   })
 
-  it('binding "inherit" defers to workspace owners (allow path)', () => {
-    const verdict = evaluateBindingAccess({
+  it('owner-control without a sender list uses workspace owners', () => {
+    expect(evaluateBindingAccess({
       msg: buildMsg({ senderId: OWNER_ID }),
-      workspaceConfig: buildConfig({ accessMode: 'owner-only', owners: [OWNER] }),
-      binding: bindingWith({ accessMode: 'inherit' }),
-    })
-    expect(verdict.allow).toBe(true)
-  })
-
-  it('binding "inherit" defers to workspace owners (reject path)', () => {
-    const verdict = evaluateBindingAccess({
+      workspaceConfig: buildConfig({ accessMode: 'owner-control', owners: [OWNER] }),
+      binding: bindingWith({ accessMode: 'owner-control', allowedSenderIds: [] }),
+    })).toEqual({ kind: 'route' })
+    expect(evaluateBindingAccess({
       msg: buildMsg({ senderId: STRANGER_ID }),
-      workspaceConfig: buildConfig({ accessMode: 'owner-only', owners: [OWNER] }),
-      binding: bindingWith({ accessMode: 'inherit' }),
-    })
-    expect(verdict.allow).toBe(false)
-    if (!verdict.allow) expect(verdict.reason).toBe('not-owner')
-  })
-
-  it('binding "inherit" with workspace "open" allows everyone (legacy behaviour)', () => {
-    const verdict = evaluateBindingAccess({
-      msg: buildMsg({ senderId: STRANGER_ID }),
-      workspaceConfig: buildConfig({ accessMode: 'open' }),
-      binding: bindingWith({ accessMode: 'inherit' }),
-    })
-    expect(verdict.allow).toBe(true)
-  })
-
-  it('rejects bot senders before any access mode logic runs', () => {
-    const verdict = evaluateBindingAccess({
-      msg: buildMsg({ senderId: OWNER_ID, senderIsBot: true }),
-      workspaceConfig: buildConfig({ accessMode: 'open' }),
-      binding: bindingWith({ accessMode: 'open' }),
-    })
-    expect(verdict.allow).toBe(false)
-    if (!verdict.allow) expect(verdict.reason).toBe('bot-sender')
+      workspaceConfig: buildConfig({ accessMode: 'owner-control', owners: [OWNER] }),
+      binding: bindingWith({ accessMode: 'owner-control', allowedSenderIds: [] }),
+    })).toEqual({ kind: 'reject', reason: 'not-owner' })
   })
 })
-
-// ---------------------------------------------------------------------------
-// Migration: legacy bindings (no accessMode field) default to 'open'
-// ---------------------------------------------------------------------------
 
 describe('normalizeBindingConfig migration', () => {
-  it('persisted config without accessMode defaults to "open"', () => {
-    const raw = { responseMode: 'progress', streamResponses: true } as Partial<BindingConfig>
-    const normalized = normalizeBindingConfig('telegram', raw)
-    expect(normalized.accessMode).toBe('open')
-    expect(normalized.allowedSenderIds).toEqual([])
+  it('persisted config without accessMode becomes public-inbox', () => {
+    const normalized = normalizeBindingConfig('telegram', { responseMode: 'progress', streamResponses: true })
+    expect(normalized.accessMode).toBe('public-inbox')
   })
 
-  it('fresh BindingConfig (undefined) defaults to "inherit"', () => {
-    const normalized = normalizeBindingConfig('telegram')
-    expect(normalized.accessMode).toBe('inherit')
+  it('fresh BindingConfig defaults to owner-control', () => {
+    expect(normalizeBindingConfig('telegram').accessMode).toBe('owner-control')
   })
 
-  it('explicit accessMode is preserved across normalisation', () => {
-    const normalized = normalizeBindingConfig('telegram', {
-      accessMode: 'allow-list',
-      allowedSenderIds: ['42'],
-    })
-    expect(normalized.accessMode).toBe('allow-list')
-    expect(normalized.allowedSenderIds).toEqual(['42'])
+  it('legacy inherit/open persist as public-inbox', () => {
+    expect(normalizeBindingConfig('telegram', { accessMode: 'inherit' as never }).accessMode).toBe('public-inbox')
+    expect(normalizeBindingConfig('telegram', { accessMode: 'open' as never }).accessMode).toBe('public-inbox')
+  })
+
+  it('fresh bindings on every platform write owner-control, never open', () => {
+    for (const platform of ['telegram', 'whatsapp', 'lark', 'discord', 'wechat'] as const) {
+      expect(normalizeBindingConfig(platform).accessMode).toBe('owner-control')
+    }
   })
 })
-
-// ---------------------------------------------------------------------------
-// Reject reply copy
-// ---------------------------------------------------------------------------
 
 describe('buildRejectionReply', () => {
   it('returns null for bot-sender (silent drop)', () => {
@@ -235,14 +197,6 @@ describe('buildRejectionReply', () => {
   })
 
   it('returns user-friendly text for not-owner', () => {
-    const text = buildRejectionReply('not-owner')
-    expect(text).toBeTruthy()
-    expect(text).toContain('private')
-  })
-
-  it('returns user-friendly text for not-on-binding-allowlist', () => {
-    const text = buildRejectionReply('not-on-binding-allowlist')
-    expect(text).toBeTruthy()
-    expect(text).toContain('allow-list')
+    expect(buildRejectionReply('not-owner')).toContain('private')
   })
 })

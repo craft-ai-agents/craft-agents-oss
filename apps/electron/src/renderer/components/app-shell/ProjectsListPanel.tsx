@@ -9,6 +9,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { FolderKanban, MessageSquare, Plus, Trash2 } from 'lucide-react'
+import { ProjectIcon } from '@/components/projects/ProjectIcon'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -89,6 +90,7 @@ export function ProjectsListPanel({
               <ProjectRow
                 key={project.config.slug}
                 project={project}
+                workspaceId={workspaceId}
                 isSelected={selectedProjectSlug === project.config.slug}
                 isFirst={index === 0}
                 onClick={() => onProjectClick(project.config.slug)}
@@ -105,6 +107,7 @@ export function ProjectsListPanel({
 
 interface ProjectRowProps {
   project: LoadedProject
+  workspaceId: string
   isSelected: boolean
   isFirst: boolean
   onClick: () => void
@@ -112,7 +115,7 @@ interface ProjectRowProps {
   onJumpToSessions?: () => void
 }
 
-function ProjectRow({ project, isSelected, isFirst, onClick, onDelete, onJumpToSessions }: ProjectRowProps) {
+function ProjectRow({ project, workspaceId, isSelected, isFirst, onClick, onDelete, onJumpToSessions }: ProjectRowProps) {
   const config = project.config
   const subtitle = config.description?.trim() || config.workingDirectory || ''
 
@@ -127,7 +130,14 @@ function ProjectRow({ project, isSelected, isFirst, onClick, onDelete, onJumpToS
             onMouseDown={(e: React.MouseEvent) => {
               if (e.button === 0) onClick()
             }}
-            icon={<FolderKanban className="h-3.5 w-3.5 text-foreground/60" />}
+            icon={
+              <ProjectIcon
+                workspaceId={workspaceId}
+                projectSlug={config.slug}
+                iconFilename={config.icon}
+                color={config.color}
+              />
+            }
             title={config.name}
             subtitle={subtitle}
           />

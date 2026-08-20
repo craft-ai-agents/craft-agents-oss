@@ -28,6 +28,7 @@ export {
 } from './validate.ts'
 
 export {
+  DEFAULT_BUILTIN_STATUS_PALETTE,
   DEFAULT_STATUS_COLORS,
   DEFAULT_STATUS_FALLBACK,
   getDefaultStatusColor,

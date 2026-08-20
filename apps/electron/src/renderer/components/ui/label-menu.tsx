@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { LabelIcon } from './label-icon'
 import type { LabelConfig } from '@craft-agent/shared/labels'
 import { createLabelMenuItems, filterItems, segmentScore, type LabelMenuItem } from './label-menu-utils'
-import { getStatusIconStyle, type SessionStatus } from '@/config/session-status-config'
+import { getStatusIconStyle, resolveStatusDisplayLabel, resolveLabelDisplayName, type SessionStatus } from '@/config/session-status-config'
 
 export { createLabelMenuItems, filterItems, type LabelMenuItem } from './label-menu-utils'
 
@@ -252,7 +252,7 @@ export function InlineLabelMenu({
                       >
                         {state.icon}
                       </span>
-                      <div className="flex-1 min-w-0 truncate">{state.label}</div>
+                      <div className="flex-1 min-w-0 truncate">{resolveStatusDisplayLabel(state, t)}</div>
                       {/* Checkmark on active state */}
                       {isActive && (
                         <Check className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -301,7 +301,7 @@ export function InlineLabelMenu({
                         {item.parentPath && (
                           <span className="text-muted-foreground">{item.parentPath}</span>
                         )}
-                        <span>{item.label}</span>
+                        <span>{resolveLabelDisplayName(item.config, t)}</span>
                       </div>
                     </div>
                   )

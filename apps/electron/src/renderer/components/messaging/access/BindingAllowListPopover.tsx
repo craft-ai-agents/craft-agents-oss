@@ -1,55 +1,95 @@
 /**
- * Per-binding allow-list editor.
+ * Per-binding access editor.
  *
- * Trigger is a small pill rendered next to the binding row's actions; click
- * opens a popover with three modes:
- *  - inherit     — fall back to workspace owners (default for new bindings)
- *  - allow-list  — explicit subset of senders (always includes the owner)
- *  - open        — anyone in an accepted chat can route (back-compat / public)
+ * Three explicit modes:
+ *  - public-inbox  — pairing reply only; no session or tools
+ *  - owner-control — listed senders / workspace owners may route
+ *  - disabled      — inbound routing off
  *
- * Phase 1 keeps the allow-list editor minimal: the user can see existing
- * allowed senders and toggle owner names on/off. Adding arbitrary senders
- * happens via the workspace pending-requests flow — this popover only lets
- * you slice down which subset of *known* users can talk to *this* binding.
+ * Owner-control does not persist until at least one sender id is selected.
  */
 
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, ChevronDown, Lock, Globe, ShieldCheck } from 'lucide-react'
+import { Ban, Check, ChevronDown, Globe, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import type { BindingAccess, BindingAccessMode, PlatformOwner } from './types'
+import {
+  canCommitOwnerControl,
+  UI_ACCESS_MODES,
+  type UiMessagingAccessMode,
+} from './access-mode'
+import type { BindingAccess, PlatformOwner } from './types'
 
 interface Props {
   access: BindingAccess
-  /** Workspace owners; the inherit/allow-list modes operate against this set. */
   workspaceOwners: PlatformOwner[]
   onChange: (next: BindingAccess) => void
 }
 
-const MODE_LABEL_KEYS: Record<BindingAccessMode, string> = {
-  inherit: 'settings.messaging.telegram.access.bindingPopover.mode.inherit.label',
-  'allow-list': 'settings.messaging.telegram.access.bindingPopover.mode.allowList.label',
-  open: 'settings.messaging.telegram.access.bindingPopover.mode.open.label',
+const MODE_LABEL_KEYS: Record<UiMessagingAccessMode, string> = {
+  'public-inbox': 'settings.messaging.telegram.access.bindingPopover.mode.publicInbox.label',
+  'owner-control': 'settings.messaging.telegram.access.bindingPopover.mode.ownerControl.label',
+  disabled: 'settings.messaging.telegram.access.bindingPopover.mode.disabled.label',
 }
 
-const MODE_DESCRIPTION_KEYS: Record<BindingAccessMode, string> = {
-  inherit: 'settings.messaging.telegram.access.bindingPopover.mode.inherit.description',
-  'allow-list': 'settings.messaging.telegram.access.bindingPopover.mode.allowList.description',
-  open: 'settings.messaging.telegram.access.bindingPopover.mode.open.description',
+const MODE_DESCRIPTION_KEYS: Record<UiMessagingAccessMode, string> = {
+  'public-inbox': 'settings.messaging.telegram.access.bindingPopover.mode.publicInbox.description',
+  'owner-control': 'settings.messaging.telegram.access.bindingPopover.mode.ownerControl.description',
+  disabled: 'settings.messaging.telegram.access.bindingPopover.mode.disabled.description',
 }
 
-const MODE_ICONS: Record<BindingAccessMode, typeof ShieldCheck> = {
-  inherit: ShieldCheck,
-  'allow-list': Lock,
-  open: Globe,
+const MODE_ICONS: Record<UiMessagingAccessMode, typeof Lock> = {
+  'public-inbox': Globe,
+  'owner-control': Lock,
+  disabled: Ban,
+}
+
+const MODE_LABEL_DEFAULTS: Record<UiMessagingAccessMode, string> = {
+  'public-inbox': 'Public inbox',
+  'owner-control': 'Owner control',
+  disabled: 'Disabled',
+}
+
+const MODE_DESCRIPTION_DEFAULTS: Record<UiMessagingAccessMode, string> = {
+  'public-inbox':
+    'Unknown senders get a pairing reply. Messages do not start an agent session or run tools.',
+  'owner-control':
+    'Only selected senders and workspace owners can route to this session.',
+  disabled: 'This binding does not route inbound messages.',
 }
 
 export function BindingAllowListPopover({ access, workspaceOwners, onChange }: Props) {
   const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
+  const [draftIds, setDraftIds] = React.useState<string[]>(access.allowedSenderIds)
+  const [blockedEmptySave, setBlockedEmptySave] = React.useState(false)
 
-  const triggerLabel = buildTriggerLabel(access, workspaceOwners.length, t)
+  React.useEffect(() => {
+    setDraftIds(access.allowedSenderIds)
+    setBlockedEmptySave(false)
+  }, [access.allowedSenderIds, access.mode])
+
+  const triggerLabel = buildTriggerLabel(access, t)
+
+  const selectMode = (mode: UiMessagingAccessMode) => {
+    if (mode !== 'owner-control') {
+      setBlockedEmptySave(false)
+      onChange({ mode, allowedSenderIds: [] })
+      return
+    }
+    // Owner-control requires an exact selected sender. Do not inherit the
+    // full workspace owner set — that would recreate the legacy inherit path.
+    const nextIds = canCommitOwnerControl(draftIds)
+      ? draftIds.filter((id) => id.trim().length > 0)
+      : access.allowedSenderIds.filter((id) => id.trim().length > 0)
+    if (!canCommitOwnerControl(nextIds)) {
+      setBlockedEmptySave(true)
+      return
+    }
+    setBlockedEmptySave(false)
+    onChange({ mode: 'owner-control', allowedSenderIds: nextIds })
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -70,33 +110,29 @@ export function BindingAllowListPopover({ access, workspaceOwners, onChange }: P
           </div>
         </div>
         <div className="border-t border-border/50">
-          {(['inherit', 'allow-list', 'open'] as BindingAccessMode[]).map((mode) => (
+          {UI_ACCESS_MODES.map((mode) => (
             <ModeRow
               key={mode}
               mode={mode}
               selected={access.mode === mode}
-              onSelect={() =>
-                onChange({
-                  mode,
-                  // Reset allow-list when leaving 'allow-list' mode so the
-                  // gateway has no stale data to evaluate.
-                  allowedSenderIds:
-                    mode === 'allow-list'
-                      ? access.allowedSenderIds.length > 0
-                        ? access.allowedSenderIds
-                        : workspaceOwners.map((o) => o.userId)
-                      : [],
-                })
-              }
+              onSelect={() => selectMode(mode)}
             />
           ))}
         </div>
 
-        {access.mode === 'allow-list' && (
+        {(access.mode === 'owner-control' || blockedEmptySave) && (
           <div className="border-t border-border/50 px-3 py-2.5">
             <div className="text-xs font-medium">
               {t('settings.messaging.telegram.access.allowedUsersTitle')}
             </div>
+            {!canCommitOwnerControl(draftIds) && (
+              <div className="mt-1 text-xs text-foreground/50">
+                {t('settings.messaging.telegram.access.bindingPopover.saveDisabledHint', {
+                  defaultValue:
+                    'Select at least one allowed sender before saving owner control.',
+                })}
+              </div>
+            )}
             <div className="mt-2 flex flex-col gap-1">
               {workspaceOwners.length === 0 ? (
                 <div className="text-xs text-foreground/50">
@@ -104,7 +140,7 @@ export function BindingAllowListPopover({ access, workspaceOwners, onChange }: P
                 </div>
               ) : (
                 workspaceOwners.map((owner) => {
-                  const checked = access.allowedSenderIds.includes(owner.userId)
+                  const checked = draftIds.includes(owner.userId)
                   const primary = owner.displayName || owner.username || owner.userId
                   return (
                     <button
@@ -112,9 +148,15 @@ export function BindingAllowListPopover({ access, workspaceOwners, onChange }: P
                       type="button"
                       onClick={() => {
                         const next = checked
-                          ? access.allowedSenderIds.filter((id) => id !== owner.userId)
-                          : [...access.allowedSenderIds, owner.userId]
-                        onChange({ mode: 'allow-list', allowedSenderIds: next })
+                          ? draftIds.filter((id) => id !== owner.userId)
+                          : [...draftIds, owner.userId]
+                        setDraftIds(next)
+                        if (!canCommitOwnerControl(next)) {
+                          setBlockedEmptySave(true)
+                          return
+                        }
+                        setBlockedEmptySave(false)
+                        onChange({ mode: 'owner-control', allowedSenderIds: next })
                       }}
                       className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left transition-colors hover:bg-foreground/[0.05]"
                     >
@@ -144,7 +186,7 @@ function ModeRow({
   selected,
   onSelect,
 }: {
-  mode: BindingAccessMode
+  mode: UiMessagingAccessMode
   selected: boolean
   onSelect: () => void
 }) {
@@ -162,11 +204,13 @@ function ModeRow({
       />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 text-xs font-medium">
-          {t(MODE_LABEL_KEYS[mode])}
+          {t(MODE_LABEL_KEYS[mode], { defaultValue: MODE_LABEL_DEFAULTS[mode] })}
           {selected && <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />}
         </div>
         <div className="mt-0.5 text-xs text-foreground/50">
-          {t(MODE_DESCRIPTION_KEYS[mode])}
+          {t(MODE_DESCRIPTION_KEYS[mode], {
+            defaultValue: MODE_DESCRIPTION_DEFAULTS[mode],
+          })}
         </div>
       </div>
     </button>
@@ -175,20 +219,20 @@ function ModeRow({
 
 function buildTriggerLabel(
   access: BindingAccess,
-  workspaceOwnersCount: number,
   t: (key: string, opts?: Record<string, unknown>) => string,
 ): string {
-  if (access.mode === 'inherit') {
-    return workspaceOwnersCount === 0
-      ? t('settings.messaging.telegram.access.bindingPopover.trigger.inheritEmpty')
-      : t('settings.messaging.telegram.access.bindingPopover.trigger.inherit', {
-          count: workspaceOwnersCount,
-        })
+  if (access.mode === 'public-inbox') {
+    return t('settings.messaging.telegram.access.bindingPopover.trigger.publicInbox', {
+      defaultValue: 'Public inbox',
+    })
   }
-  if (access.mode === 'open') {
-    return t('settings.messaging.telegram.access.bindingPopover.trigger.open')
+  if (access.mode === 'disabled') {
+    return t('settings.messaging.telegram.access.bindingPopover.trigger.disabled', {
+      defaultValue: 'Disabled',
+    })
   }
-  return t('settings.messaging.telegram.access.bindingPopover.trigger.allowList', {
+  return t('settings.messaging.telegram.access.bindingPopover.trigger.ownerControl', {
     count: access.allowedSenderIds.length,
+    defaultValue: 'Owner control · {{count}}',
   })
 }

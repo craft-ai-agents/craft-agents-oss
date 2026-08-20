@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel } from '@craft-agent/shared/config'
+import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel, getRuntimeEnvOverrides, setRuntimeEnvOverrides } from '@craft-agent/shared/config'
 import { isValidThinkingLevel, normalizeThinkingLevel, THINKING_LEVEL_IDS } from '@craft-agent/shared/agent/thinking-levels'
 
 const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
@@ -29,6 +29,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.power.GET_KEEP_AWAKE,
   RPC_CHANNELS.appearance.GET_RICH_TOOL_DESCRIPTIONS,
   RPC_CHANNELS.appearance.SET_RICH_TOOL_DESCRIPTIONS,
+  RPC_CHANNELS.appearance.GET_DEFAULT_ZOOM_LEVEL,
   RPC_CHANNELS.caching.GET_EXTENDED_PROMPT_CACHE,
   RPC_CHANNELS.caching.SET_EXTENDED_PROMPT_CACHE,
   RPC_CHANNELS.caching.GET_ENABLE_1M_CONTEXT,
@@ -37,6 +38,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sessions.SET_MODEL,
   RPC_CHANNELS.settings.GET_DEFAULT_THINKING_LEVEL,
   RPC_CHANNELS.settings.SET_DEFAULT_THINKING_LEVEL,
+  RPC_CHANNELS.settings.GET_ENV_OVERRIDES,
+  RPC_CHANNELS.settings.SET_ENV_OVERRIDES,
   RPC_CHANNELS.tools.GET_BROWSER_TOOL_ENABLED,
   RPC_CHANNELS.tools.SET_BROWSER_TOOL_ENABLED,
   RPC_CHANNELS.settings.GET_NETWORK_PROXY,
@@ -64,6 +67,29 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     if (!success) {
       throw new Error('Failed to persist default thinking level')
     }
+    return { success: true }
+  })
+
+  // ============================================================
+  // Settings - Session Environment Overrides (App-Level)
+  // ============================================================
+
+  // Get user-configured env vars merged into every spawned agent session
+  server.handle(RPC_CHANNELS.settings.GET_ENV_OVERRIDES, async () => {
+    return getRuntimeEnvOverrides()
+  })
+
+  // Replace session env overrides (persisted to config runtime.envOverrides)
+  server.handle(RPC_CHANNELS.settings.SET_ENV_OVERRIDES, async (_ctx, env: Record<string, string>) => {
+    if (env === null || typeof env !== 'object' || Array.isArray(env)) {
+      throw new Error('env overrides must be a Record<string, string>')
+    }
+    for (const value of Object.values(env)) {
+      if (typeof value !== 'string') {
+        throw new Error('env override values must be strings')
+      }
+    }
+    setRuntimeEnvOverrides(env)
     return { success: true }
   })
 
@@ -115,6 +141,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       cyclablePermissionModes: config?.defaults?.cyclablePermissionModes,
       thinkingLevel: normalizeThinkingLevel(config?.defaults?.thinkingLevel),
       workingDirectory: config?.defaults?.workingDirectory,
+      notesPath: config?.notesPath,
       localMcpEnabled: config?.localMcpServers?.enabled ?? true,
       defaultLlmConnection: config?.defaults?.defaultLlmConnection,
       enabledSourceSlugs: config?.defaults?.enabledSourceSlugs ?? [],
@@ -129,7 +156,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       : value
 
     // Validate key is a known workspace setting
-    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled', 'defaultLlmConnection']
+    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'notesPath', 'localMcpEnabled', 'defaultLlmConnection']
     if (!validKeys.includes(key)) {
       throw new Error(`Invalid workspace setting key: ${key}. Valid keys: ${validKeys.join(', ')}`)
     }
@@ -162,6 +189,13 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       // Store in localMcpServers.enabled (top-level, not in defaults)
       config.localMcpServers = config.localMcpServers || { enabled: true }
       config.localMcpServers.enabled = Boolean(normalizedValue)
+    } else if (key === 'notesPath') {
+      // Top-level field; undefined/null clears it (revert to default location)
+      if (normalizedValue == null || normalizedValue === '') {
+        delete config.notesPath
+      } else {
+        config.notesPath = String(normalizedValue).trim()
+      }
     } else {
       // Update the setting in defaults
       config.defaults = config.defaults || {}
@@ -287,6 +321,12 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
   server.handle(RPC_CHANNELS.appearance.SET_RICH_TOOL_DESCRIPTIONS, async (_ctx, enabled: boolean) => {
     const { setRichToolDescriptions } = await import('@craft-agent/shared/config/storage')
     setRichToolDescriptions(enabled)
+  })
+
+  // Get default zoom level setting
+  server.handle(RPC_CHANNELS.appearance.GET_DEFAULT_ZOOM_LEVEL, async () => {
+    const { getDefaultZoomLevel } = await import('@craft-agent/shared/config/storage')
+    return getDefaultZoomLevel()
   })
 
   // ============================================================

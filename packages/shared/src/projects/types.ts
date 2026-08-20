@@ -46,6 +46,8 @@ export interface ProjectConfig {
   colorTheme?: string;
   /** Optional accent color (hex, e.g. "#6366f1") shown on bound sessions in the SessionList */
   color?: string;
+  /** Optional project icon filename inside assets/ (e.g. "project-icon.png") */
+  icon?: string;
   createdAt: number;
   updatedAt: number;
   /** Set when project is archived (hidden from sidebar but kept on disk) */

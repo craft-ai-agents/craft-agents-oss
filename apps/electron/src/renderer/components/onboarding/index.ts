@@ -35,3 +35,5 @@ export type {
 export type {
   CredentialStatus as CredentialStatusType,
 } from './CredentialsStep'
+export { RoxConnectStep } from "./RoxConnectStep"
+export type { RoxConnectCodes } from "./RoxConnectStep"

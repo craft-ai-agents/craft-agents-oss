@@ -173,9 +173,23 @@ function normalizeForComparison(path: string): string {
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
-function isWithin(base: string, target: string): boolean {
-  const normalizedBase = normalizeForComparison(base);
-  const normalizedTarget = normalizeForComparison(target);
+/**
+ * A drive-letter (`C:\...`) or UNC (`\\server\...`) path follows Windows
+ * filesystem semantics (backslash separators, case-insensitive comparison)
+ * regardless of the host platform — e.g. when validating commands for a
+ * remote/Windows shell from a POSIX host.
+ */
+function isWindowsStylePath(path: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(path) || path.startsWith('\\\\');
+}
+
+function isWithin(base: string, target: string, caseInsensitive?: boolean): boolean {
+  let normalizedBase = normalizeForComparison(base);
+  let normalizedTarget = normalizeForComparison(target);
+  if (caseInsensitive) {
+    normalizedBase = normalizedBase.toLowerCase();
+    normalizedTarget = normalizedTarget.toLowerCase();
+  }
   const rel = relative(normalizedBase, normalizedTarget);
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
@@ -190,10 +204,27 @@ function isPathWithinDirectory(targetPath: string, baseDir: string): boolean {
   const expandedTarget = expandHome(targetPath);
   const expandedBase = expandHome(baseDir);
 
+  // Windows-style paths get Windows comparison semantics (case-insensitive)
+  // on any host — validating a remote Windows shell's path from macOS/Linux
+  // must behave the same as validating it on Windows itself.
+  const windowsSemantics =
+    process.platform === 'win32' ||
+    isWindowsStylePath(expandedTarget) ||
+    isWindowsStylePath(expandedBase);
+
   const resolvedTarget = resolve(expandedTarget);
   const resolvedBase = resolve(expandedBase);
-  if (!isWithin(resolvedBase, resolvedTarget)) {
+  if (!isWithin(resolvedBase, resolvedTarget, windowsSemantics)) {
     return false;
+  }
+
+  // On a POSIX host a Windows-style path can never be a real filesystem
+  // path: resolve() folds it into a single literal component and the
+  // realpath walk below would escape to the cwd. Lexical containment is the
+  // only meaningful check here; the symlink-escape hardening still applies
+  // to native paths on every platform.
+  if (process.platform !== 'win32' && windowsSemantics) {
+    return true;
   }
 
   const realBase = existsSync(resolvedBase) ? realpathSync.native(resolvedBase) : resolvedBase;

@@ -21,6 +21,7 @@ import { join, dirname, basename, relative } from 'path';
 import { platform } from 'os';
 import type { FSWatcher } from 'fs';
 import { CONFIG_DIR } from './paths.ts';
+import { getContextDocsDir } from '../context-docs/index.ts';
 import { debug } from '../utils/debug.ts';
 import { expandPath } from '../utils/paths.ts';
 import { readJsonFileSync } from '../utils/files.ts';
@@ -134,6 +135,10 @@ export interface ConfigWatcherCallbacks {
   // Permissions callbacks
   /** Called when app-level default permissions change (~/.craft-agent/permissions/default.json) */
   onDefaultPermissionsChange?: () => void;
+
+  // Context docs callbacks (app-level: ~/.craft-agent/context/*.md)
+  /** Called when a runtime context document (soul.md, rules.md, user-added *.md) is created/changed/deleted */
+  onContextDocsChange?: () => void;
   /** Called when workspace permissions.json changes */
   onWorkspacePermissionsChange?: (workspaceId: string) => void;
   /** Called when a source's permissions.json changes */
@@ -286,6 +291,10 @@ export class ConfigWatcher {
     // Watch app-level permissions directory
     this.watchAppPermissionsDir();
     span.mark('watchAppPermissionsDir');
+
+    // Watch app-level context documents directory (~/.craft-agent/context/)
+    this.watchContextDocsDir();
+    span.mark('watchContextDocsDir');
 
     // Initial scan to populate known sources, skills, and themes
     this.scanSources();
@@ -1050,6 +1059,45 @@ export class ConfigWatcher {
 
     // Notify callback
     this.callbacks.onDefaultPermissionsChange?.();
+  }
+
+  /**
+   * Watch app-level context documents directory (~/.craft-agent/context/)
+   * Runtime context docs (soul.md, rules.md, user-added *.md) are injected into
+   * every session's system prompt at spawn time — this watch lets the UI refresh
+   * the Context settings view when files change (externally or via contextDocs:write).
+   */
+  private watchContextDocsDir(): void {
+    const contextDocsDir = getContextDocsDir();
+
+    // Create context docs directory if it doesn't exist
+    if (!existsSync(contextDocsDir)) {
+      mkdirSync(contextDocsDir, { recursive: true });
+    }
+
+    try {
+      const watcher = watch(contextDocsDir, (eventType, filename) => {
+        if (!filename) return;
+
+        // Only handle markdown documents
+        if (filename.endsWith('.md')) {
+          this.debounce('context-docs', () => this.handleContextDocsChange());
+        }
+      });
+
+      this.watchers.push(watcher);
+      debug('[ConfigWatcher] Watching context docs directory:', contextDocsDir);
+    } catch (error) {
+      debug('[ConfigWatcher] Error watching context docs directory:', error);
+    }
+  }
+
+  /**
+   * Handle context document change (app-level)
+   */
+  private handleContextDocsChange(): void {
+    debug('[ConfigWatcher] Context docs changed');
+    this.callbacks.onContextDocsChange?.();
   }
 
   /**

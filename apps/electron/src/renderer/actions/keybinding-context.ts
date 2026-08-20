@@ -103,6 +103,53 @@ export function getKeybindingContext(e: KeyboardEvent): KeybindingContext {
   }
 }
 
+/**
+ * Snapshot keybinding context without a KeyboardEvent.
+ * Uses document.activeElement for input/selection and the live zone/overlay state.
+ * Safe for palette listing and non-key event refresh paths.
+ */
+export function snapshotKeybindingContext(): KeybindingContext {
+  const active =
+    typeof document !== 'undefined'
+      ? (document.activeElement as HTMLElement | null)
+      : null
+  const target = active ?? ({ tagName: 'BODY', isContentEditable: false } as HTMLElement)
+  const isInput =
+    target.tagName === 'INPUT' ||
+    target.tagName === 'TEXTAREA' ||
+    Boolean(target.isContentEditable)
+
+  const hasSelection = (() => {
+    if (!isInput) return false
+
+    if (target.isContentEditable) {
+      if (typeof window === 'undefined') return false
+      const sel = window.getSelection()
+      return sel !== null && sel.toString().length > 0
+    }
+
+    const input = target as HTMLInputElement | HTMLTextAreaElement
+    if (
+      typeof input.selectionStart === 'number' &&
+      typeof input.selectionEnd === 'number'
+    ) {
+      return input.selectionStart !== input.selectionEnd
+    }
+
+    return false
+  })()
+
+  return {
+    inputFocus: isInput,
+    hasSelection,
+    chatFocus: _currentZone === 'chat',
+    navigatorFocus: _currentZone === 'navigator',
+    sidebarFocus: _currentZone === 'sidebar',
+    menuOpen: typeof document !== 'undefined' ? hasOpenOverlay() : false,
+  }
+}
+
+
 // ─────────────────────────────────────────────
 // When-clause evaluator
 // ─────────────────────────────────────────────

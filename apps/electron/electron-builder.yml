@@ -21,6 +21,7 @@ files:
   - resources/session-mcp-server/**/*
   # Include Pi agent server subprocess for Pi SDK sessions
   - resources/pi-agent-server/**/*
+  - resources/cloud-runner/**/*
   # Note: Bundled assets (docs, themes, permissions, tool-icons) are in resources/
   # and copied to dist/resources/ by build:copy. They're included via dist/**/* above.
   # Include network interceptor for API error capture and MCP schema injection
@@ -118,9 +119,21 @@ mac:
     # ripgrep (used by packages/server-core/src/services/search.ts).
     - from: node_modules/@vscode/ripgrep
       to: app/node_modules/@vscode/ripgrep
+    # WorkGraph local-only libSQL driver. The bundled main process dynamically
+    # imports the JavaScript facade; its NAPI arm64 artifact must remain a
+    # real file outside ASAR for Electron's native loader.
+    - from: ../../node_modules/@tursodatabase/database
+      to: app/node_modules/@tursodatabase/database
+    - from: ../../node_modules/@tursodatabase/database-common
+      to: app/node_modules/@tursodatabase/database-common
+    - from: ../../node_modules/@tursodatabase/database-darwin-arm64
+      to: app/node_modules/@tursodatabase/database-darwin-arm64
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs
+    # Discord worker subprocess (self-contained; discord.js bundled in).
+    - from: ../../packages/messaging-discord-worker/dist/worker.cjs
+      to: messaging-discord-worker/worker.cjs
   # Exclude binaries for other platforms
   files:
     - "!**/resources/bin/win32-*/**"
@@ -186,6 +199,9 @@ win:
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs
+    # Discord worker subprocess (self-contained; discord.js bundled in).
+    - from: ../../packages/messaging-discord-worker/dist/worker.cjs
+      to: messaging-discord-worker/worker.cjs
 
 nsis:
   oneClick: true
@@ -213,6 +229,9 @@ linux:
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs
+    # Discord worker subprocess (self-contained; discord.js bundled in).
+    - from: ../../packages/messaging-discord-worker/dist/worker.cjs
+      to: messaging-discord-worker/worker.cjs
   # Exclude binaries for other platforms
   files:
     - "!**/resources/bin/darwin-*/**"

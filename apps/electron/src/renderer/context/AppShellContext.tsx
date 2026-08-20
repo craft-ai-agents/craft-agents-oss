@@ -31,6 +31,21 @@ import { defaultSessionOptions } from '../hooks/useSessionOptions'
 import { sessionAtomFamily } from '../atoms/sessions'
 
 export interface AppShellContextType {
+  /** Registers a panel header for the compact top-bar slot. */
+  registerCompactHeader?: (
+    id: string,
+    render: () => React.ReactNode,
+    priority: number,
+  ) => void
+  /** Removes a panel header from the compact top-bar slot. */
+  unregisterCompactHeader?: (id: string) => void
+  /** Renderer for the highest-priority active compact panel header. */
+  compactHeaderRenderer?: () => React.ReactNode
+  /** Whether the active compact panel is a selected chat session. */
+  isCompactChatMode?: boolean
+  /** Whether the active compact panel is a Web UI settings detail page. */
+  isCompactSettingsMode?: boolean
+
   // Data
   // NOTE: sessions is NOT included here - use sessionMetaMapAtom for listing
   // and useSession(id) hook for individual sessions. This prevents closures
@@ -63,6 +78,10 @@ export interface AppShellContextType {
   labels?: import('@craft-agent/shared/labels').LabelConfig[]
   /** Callback when session labels change */
   onSessionLabelsChange?: (sessionId: string, labels: string[]) => void
+  /** Workspace projects for session project picker */
+  projects?: Array<{ id: string; slug: string; name: string; color?: string }>
+  /** Bind/unbind a session to a project (null clears) */
+  onSetProjectId?: (sessionId: string, projectId: string | null) => void
   /**
    * Open All Sessions scoped to a task: replaces the view's label filter (and project
    * filter when given) with the task's scope — the same user-clearable header-chip

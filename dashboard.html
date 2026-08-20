@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Craft Agents — Панель аналитики</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#07070d; --bg2:#0c0c16; --card:#101019; --card2:#151522;
+  --line:rgba(255,255,255,.07); --tx:#f2f0ff; --tx2:#9c97b8; --tx3:#8b86ab;
+  --ac:#7c6cff; --ac2:#4dd2ff; --ok:#3ee6a8; --warn:#ffb547; --bad:#ff6b8a;
+  --grad:linear-gradient(120deg,#7c6cff 0%,#4dd2ff 55%,#3ee6a8 110%);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--tx);font-family:'Inter Tight',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0;z-index:-2;
+  background:
+   radial-gradient(900px 500px at 15% -5%,rgba(124,108,255,.16),transparent 60%),
+   radial-gradient(800px 480px at 90% 0%,rgba(77,210,255,.12),transparent 55%),
+   radial-gradient(700px 600px at 50% 110%,rgba(62,230,168,.08),transparent 60%);}
+.mono{font-family:'JetBrains Mono',monospace}
+.wrap{max-width:1240px;margin:0 auto;padding:0 28px}
+/* ---------- hero ---------- */
+.hero{padding:64px 0 30px;position:relative}
+.badge{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--tx2);border:1px solid var(--line);border-radius:999px;
+  padding:8px 16px;background:rgba(255,255,255,.02)}
+.badge .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 12px var(--ok);animation:pulse 2.2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+h1{font-size:clamp(40px,6.5vw,84px);font-weight:900;letter-spacing:-.035em;line-height:1.02;margin:26px 0 14px;
+  background:linear-gradient(180deg,#fff 20%,#b9b3e8 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+h1 .glow{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 26px rgba(124,108,255,.45))}
+.sub{font-size:17px;color:#b7b2d6;max-width:640px;line-height:1.65}
+.sub b{color:var(--tx);font-weight:600}
+.meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+.chip{font-size:12.5px;color:var(--tx2);border:1px solid var(--line);background:var(--card);
+  padding:7px 13px;border-radius:9px}
+.chip b{color:var(--ac2);font-weight:600}
+/* ---------- bento ---------- */
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:18px;padding:26px 0 70px}
+.card{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);
+  border-radius:20px;padding:24px 26px;position:relative;overflow:hidden;
+  animation:rise .7s cubic-bezier(.2,.7,.3,1) both}
+.card::before{content:"";position:absolute;inset:0;border-radius:20px;pointer-events:none;
+  background:radial-gradient(500px 200px at var(--mx,50%) -20%,rgba(124,108,255,.09),transparent 65%)}
+@keyframes rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+.c1{grid-column:span 4}.c2{grid-column:span 4}.c3{grid-column:span 4}
+.cw{grid-column:span 8}.cf{grid-column:span 12}.ch{grid-column:span 6}
+.d1{animation-delay:.05s}.d2{animation-delay:.12s}.d3{animation-delay:.19s}.d4{animation-delay:.26s}
+.d5{animation-delay:.33s}.d6{animation-delay:.4s}.d7{animation-delay:.47s}
+.kpi-num{font-size:52px;font-weight:800;letter-spacing:-.03em;line-height:1;
+  background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.kpi-lab{font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--tx2);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.kpi-ico{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-size:13px;
+  background:rgba(124,108,255,.14);border:1px solid rgba(124,108,255,.25)}
+.kpi-sub{font-size:13.5px;color:var(--tx3);margin-top:10px}
+.kpi-sub b{color:var(--tx2)}
+h2{font-size:16px;font-weight:700;letter-spacing:-.01em;margin-bottom:4px}
+.hint{font-size:12.5px;color:var(--tx3);margin-bottom:18px}
+/* segmented bar */
+.seg{display:flex;height:14px;border-radius:8px;overflow:hidden;background:var(--bg2);margin:14px 0 10px}
+.seg>div{transition:width 1s cubic-bezier(.2,.7,.3,1);width:0}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12.5px;color:var(--tx2)}
+.legend i{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:6px;vertical-align:-1px}
+.legend b{color:var(--tx)}
+/* authors bars */
+.row{display:flex;align-items:center;gap:12px;padding:7px 0}
+.row .n{width:18px;font-size:12px;color:var(--tx3)}
+.row .who{width:150px;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar{flex:1;height:9px;border-radius:5px;background:var(--bg2);overflow:hidden}
+.bar>div{height:100%;border-radius:5px;background:var(--grad);width:0;transition:width 1.1s cubic-bezier(.2,.7,.3,1)}
+.row .v{width:30px;text-align:right;font-size:12.5px;color:var(--tx2)}
+/* donut */
+.donut-wrap{display:flex;align-items:center;gap:26px;flex-wrap:wrap}
+.donut{filter:drop-shadow(0 0 18px rgba(124,108,255,.25))}
+.donut-leg{font-size:12.5px;color:var(--tx2);display:grid;gap:7px}
+.donut-leg i{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:8px;vertical-align:-1px}
+.donut-leg b{color:var(--tx);font-family:'JetBrains Mono',monospace;font-size:11.5px}
+/* tables */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--tx3);text-align:left;
+  padding:8px 10px;border-bottom:1px solid var(--line);font-weight:600}
+td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--tx2)}
+td:first-child{font-family:'JetBrains Mono',monospace;color:var(--ac2);font-size:12px}
+td .tt{color:var(--tx);max-width:460px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+tr:hover td{background:rgba(124,108,255,.05)}
+.st{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px}
+.st.OPEN{color:var(--ok);background:rgba(62,230,168,.1);border:1px solid rgba(62,230,168,.25)}
+.st.CLOSED{color:var(--tx3);background:rgba(255,255,255,.05);border:1px solid var(--line)}
+.st.MERGED{color:var(--ac);background:rgba(124,108,255,.12);border:1px solid rgba(124,108,255,.3)}
+/* footer */
+footer{border-top:1px solid var(--line);padding:34px 0 54px;color:#aca6d0;font-size:13.5px;line-height:1.9;overflow-wrap:anywhere}
+footer b{color:var(--tx2)}
+footer .mono{font-size:12.5px;background:rgba(255,255,255,.04);padding:1px 5px;border-radius:5px}
+@media(max-width:900px){.c1,.c2,.c3,.cw,.ch,.cf{grid-column:span 12}.row .who{width:110px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <span class="badge"><span class="dot"></span>Локальная вилка · agisota/craft-agents-oss</span>
+    <h1>Аналитика репозитория<br><span class="glow">Craft Agents</span></h1>
+    <p class="sub">Панель собрана из архива метаданных <b>.github-archive</b>: <b class="mono" style="font-size:15px">594 задачи</b> и
+    <b class="mono" style="font-size:15px">267 pull-запросов</b> апстрима <b>craft-ai-agents/craft-agents-oss</b>.
+    Интерфейс приложения переведён на русский — локаль <b class="mono" style="font-size:15px">ru</b> (1 652 ключа) добавлена в реестр i18n и проходит все проверки паритета.</p>
+    <div class="meta">
+      <span class="chip mono">main @ <b>109e086ec</b></span>
+      <span class="chip">Ветки: <b>upstream + вилка</b></span>
+      <span class="chip">PR-рефы: <b class="mono">refs/pull/* загружены</b></span>
+      <span class="chip">Снимок данных: <b>05.08.2026</b></span>
+    </div>
+  </header>
+
+  <section class="grid" id="grid"></section>
+  <section class="grid" style="padding-top:0" id="grid2"></section>
+
+  <footer>
+    <b>Как воспроизвести.</b> <span class="mono">gh repo fork craft-ai-agents/craft-agents-oss</span> → клонирование в
+    <span class="mono">~/Projects/craft-agents</span>, загрузка всех веток и <span class="mono">refs/pull/*/head</span> апстрима,
+    экспорт задач и PR в <span class="mono">.github-archive/*.json</span>.<br>
+    Перевод: <span class="mono">packages/shared/src/i18n/locales/ru.json</span> — русские плюральные формы
+    <span class="mono">_one / _few / _many</span> по правилам i18next; регистрация в <span class="mono">LOCALE_REGISTRY</span>.
+    Тесты: <span class="mono">bun test packages/shared/src/i18n → 73 pass / 0 fail</span>, <span class="mono">tsc --noEmit</span> — чисто.
+  </footer>
+</div>
+
+<script>
+const D = {"i_total": 594, "p_total": 267, "i_state": {"OPEN": 325, "CLOSED": 269}, "p_state": {"OPEN": 151, "CLOSED": 112, "MERGED": 4}, "p_merged": 4, "labels": [["bug", 134], ["enhancement", 76], ["Under investigation", 22], ["Feature request", 21], ["v0.11.3", 13], ["v0.7.7", 10], ["v0.9.1", 7], ["v0.8.12", 6], ["v0.7.5", 6], ["v0.3.4", 6]], "ia": [["alexzadeh", 23], ["polina-raznitsyna", 13], ["jjjrmy", 11], ["jonzhan", 10], ["csmcneill", 9], ["nevgenov", 8], ["dxcore35", 8], ["jack-wz", 7]], "pa": [["fagemx", 6], ["kennyheard", 6], ["t4sh", 5], ["Kartalops", 5], ["ImLukeF", 5], ["roccoren", 4], ["liuxiaopai-ai", 4], ["AskTinNguyen", 4]], "tl": {"months": ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08"], "issues": [97, 124, 133, 115, 76, 23, 21, 5], "prs": [40, 45, 41, 44, 54, 16, 25, 2]}, "ri": [{"n": 1008, "t": "Long-running tool calls render heartbeat progress entries as repeated tool invocations in the UI", "s": "OPEN", "a": "SzeJim", "c": "2026-08-05"}, {"n": 1007, "t": "Bring Back Claude Opus 4.6 as a Model Option", "s": "OPEN", "a": "burhanalassad", "c": "2026-08-05"}, {"n": 1006, "t": "Self-hosted server with --allow-insecure-bind: desktop app silently fails on every reconnect (CSP blocks non-loopback ws://)", "s": "OPEN", "a": "capt-marbles", "c": "2026-08-05"}, {"n": 1004, "t": "source_google_oauth_trigger silently rejected before browser opens (Execute mode, v0.11.3)", "s": "OPEN", "a": "eruditavanitas", "c": "2026-08-04"}, {"n": 1002, "t": "MCP proxy-name collisions: deterministic disambiguation instead of keep-first", "s": "OPEN", "a": "rjulius23", "c": "2026-08-03"}, {"n": 1000, "t": "Bug: Unmemoized framer-motion animate object + oversensitive ResizeObserver keeps idle background session renderer at 50-90% CPU", "s": "OPEN", "a": "nevgenov", "c": "2026-07-31"}, {"n": 997, "t": "Could you enable \"Report a vulnerability\" in the security page?", "s": "CLOSED", "a": "Suuuuuzy", "c": "2026-07-28"}], "rp": [{"n": 1005, "t": "fix: Dockerfile.server COPYs package.json files that don't exist in this repo", "s": "OPEN", "a": "capt-marbles", "c": "2026-08-05"}, {"n": 1003, "t": "Fix/test infra and prod", "s": "OPEN", "a": "skobe79", "c": "2026-08-03"}, {"n": 996, "t": "Fix OpenAI streams with empty tool_calls arrays", "s": "OPEN", "a": "lc4t", "c": "2026-07-28"}, {"n": 994, "t": "Fix excluded filter inheritance for new sessions", "s": "OPEN", "a": "heyankitpatel", "c": "2026-07-28"}, {"n": 993, "t": "Rebuild + reinstall Craft Agents Mac app to pick up the ⌘K palette fix (Model group now lists Opus 5 from the live connection list).", "s": "OPEN", "a": "kiancjy", "c": "2026-07-27"}, {"n": 990, "t": "feat: add persistent VPS browser to Web UI", "s": "CLOSED", "a": "crebot51", "c": "2026-07-25"}, {"n": 989, "t": "Add Kimi K3 support", "s": "OPEN", "a": "Howell5", "c": "2026-07-24"}]};
+const ruMonth = m => { const [y,mm] = m.split('-'); return ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'][+mm-1] + ' ' + y.slice(2); };
+const plural = (n, a,b,c) => { const q=n%10, h=n%100; return (q===1&&h!==11)?a:((q>=2&&q<=4&&(h<12||h>14))?b:c); };
+const fmt = n => n.toLocaleString('ru-RU');
+
+/* KPI numbers */
+const iOpen=D.i_state.OPEN||0, iClosed=D.i_state.CLOSED||0;
+const pOpen=D.p_state.OPEN||0, pClosed=D.p_state.CLOSED||0, pMerged=D.p_state.MERGED||0;
+
+/* timeline svg */
+function areaChart(tl){
+  const W=760,H=230,P=34,max=Math.max(...tl.issues,...tl.prs)*1.15;
+  const X=i=>P+i*(W-2*P)/(tl.months.length-1), Y=v=>H-P-(v/max)*(H-2*P);
+  const line=a=>a.map((v,i)=>`${i?'L':'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+  const area=a=>line(a)+` L${X(tl.months.length-1).toFixed(1)},${H-P} L${P},${H-P} Z`;
+  const grid=[0.25,0.5,0.75,1].map(f=>{const y=Y(max*f/1.15);return `<line x1="${P}" y1="${y}" x2="${W-P}" y2="${y}" stroke="rgba(255,255,255,.05)"/><text x="${P-8}" y="${y+4}" text-anchor="end" font-size="10" fill="#5d5975" font-family="JetBrains Mono">${Math.round(max*f/1.15)}</text>`}).join('');
+  const labs=tl.months.map((m,i)=>`<text x="${X(i)}" y="${H-P+18}" text-anchor="middle" font-size="10.5" fill="#9c97b8" font-family="Inter Tight">${ruMonth(m)}</text>`).join('');
+  const dots=a=>a.map((v,i)=>`<circle cx="${X(i)}" cy="${Y(v)}" r="3.2" fill="#0c0c16" stroke-width="2"></circle>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">
+    <defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7c6cff" stop-opacity=".32"/><stop offset="1" stop-color="#7c6cff" stop-opacity="0"/></linearGradient>
+    <linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4dd2ff" stop-opacity=".3"/><stop offset="1" stop-color="#4dd2ff" stop-opacity="0"/></linearGradient></defs>
+    ${grid}${labs}
+    <path d="${area(tl.issues)}" fill="url(#ga)"/><path d="${area(tl.prs)}" fill="url(#gb)"/>
+    <path d="${line(tl.issues)}" fill="none" stroke="#7c6cff" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="${line(tl.prs)}" fill="none" stroke="#4dd2ff" stroke-width="2.4" stroke-linecap="round"/>
+    <g stroke="#7c6cff">${dots(tl.issues)}</g><g stroke="#4dd2ff">${dots(tl.prs)}</g>
+  </svg>`;
+}
+
+/* donut */
+function donut(labels){
+  const top=labels.slice(0,6), rest=labels.slice(6).reduce((s,l)=>s+l[1],0);
+  const parts=[...top,['прочее',rest]];
+  const cols=['#7c6cff','#4dd2ff','#3ee6a8','#ffb547','#ff6b8a','#b39dff','#3a3752'];
+  const total=parts.reduce((s,p)=>s+p[1],0); let acc=0; const R=54,C=2*Math.PI*R;
+  const segs=parts.map(([l,v],i)=>{const f=v/total;const el=`<circle r="${R}" cx="70" cy="70" fill="none" stroke="${cols[i]}" stroke-width="17" stroke-dasharray="${(f*C).toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-acc*C).toFixed(2)}" transform="rotate(-90 70 70)" stroke-linecap="butt"/>`;acc+=f;return el}).join('');
+  const leg=parts.map(([l,v],i)=>`<div><i style="background:${cols[i]}"></i>${l} <b>· ${v}</b></div>`).join('');
+  return `<div class="donut-wrap"><svg class="donut" width="150" height="150" viewBox="0 0 140 140">${segs}<text x="70" y="66" text-anchor="middle" font-size="19" font-weight="800" fill="#f2f0ff" font-family="Inter Tight">${total}</text><text x="70" y="84" text-anchor="middle" font-size="10" fill="#9c97b8">меток</text></svg><div class="donut-leg">${leg}</div></div>`;
+}
+
+const bars=(rows,suffix)=>rows.map(([w,v],i)=>`<div class="row"><span class="n">${i+1}</span><span class="who mono">${w}</span><div class="bar"><div data-w="${(v/rows[0][1]*100).toFixed(1)}"></div></div><span class="v mono">${v}</span></div>`).join('');
+const seg=(pairs,cols)=>`<div class="seg">${pairs.map(([,v],i)=>`<div data-w="${(v/pairs.reduce((s,p)=>s+p[1],0)*100).toFixed(1)}" style="background:${cols[i]}"></div>`).join('')}</div>`;
+
+const tbl=(rows,url)=>`<table><thead><tr><th>№</th><th>Заголовок</th><th>Статус</th><th>Автор</th><th>Дата</th></tr></thead><tbody>${
+ rows.map(r=>`<tr><td>${url?'PR':'#'}${r.n}</td><td><span class="tt">${r.t.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</span></td><td><span class="st ${r.s}">${{OPEN:'Открыт',CLOSED:'Закрыт',MERGED:'Слит'}[r.s]}</span></td><td class="mono" style="font-size:12px">${r.a}</td><td class="mono" style="font-size:12px">${r.c}</td></tr>`).join('')
+}</tbody></table>`;
+
+document.getElementById('grid').innerHTML = `
+  <div class="card c1 d1"><div class="kpi-lab"><span class="kpi-ico">◈</span>Задачи (issues)</div><div class="kpi-num" data-n="${D.i_total}">0</div><div class="kpi-sub">открыто <b>${iOpen}</b> · закрыто <b>${iClosed}</b></div>${seg([['Открыты',iOpen],['Закрыты',iClosed]],['#3ee6a8','#3a3752'])}</div>
+  <div class="card c2 d2"><div class="kpi-lab"><span class="kpi-ico">◬</span>Pull-запросы</div><div class="kpi-num" data-n="${D.p_total}">0</div><div class="kpi-sub">открыто <b>${pOpen}</b> · закрыто <b>${pClosed}</b> · слито <b>${pMerged}</b></div>${seg([['Открыты',pOpen],['Закрыты',pClosed],['Слиты',pMerged]],['#3ee6a8','#3a3752','#7c6cff'])}</div>
+  <div class="card c3 d3"><div class="kpi-lab"><span class="kpi-ico">◭</span>Локаль ru</div><div class="kpi-num" data-n="1652">0</div><div class="kpi-sub">ключ перевода · <b>8 языков</b> в реестре · тесты паритета <b style="color:var(--ok)">73/73</b></div></div>
+  <div class="card cw d4"><h2>Динамика активности по месяцам</h2><div class="hint">Новые задачи и pull-запросы апстрима, 2026</div>${areaChart(D.tl)}<div class="legend"><span><i style="background:#7c6cff"></i>Задачи</span><span><i style="background:#4dd2ff"></i>Pull-запросы</span></div></div>
+  <div class="card c1 d5"><h2>Топ меток</h2><div class="hint">По всем задачам</div>${donut(D.labels)}</div>
+  <div class="card ch d6"><h2>Авторы задач</h2><div class="hint">Топ-8 по числу открытых issue</div>${bars(D.ia)}</div>
+  <div class="card ch d7"><h2>Авторы pull-запросов</h2><div class="hint">Топ-8 по числу PR</div>${bars(D.pa)}</div>`;
+document.getElementById('grid2').innerHTML = `
+  <div class="card ch d6"><h2>Свежие задачи</h2><div class="hint">7 последних по дате создания</div>${tbl(D.ri)}</div>
+  <div class="card ch d7"><h2>Свежие pull-запросы</h2><div class="hint">7 последних по дате создания</div>${tbl(D.rp,true)}</div>`;
+
+/* animations */
+document.querySelectorAll('[data-n]').forEach(el=>el.textContent=fmt(+el.dataset.n));document.querySelectorAll('[data-w]').forEach(el=>{el.style.transition='width 1.1s cubic-bezier(.2,.7,.3,1)';requestAnimationFrame(()=>requestAnimationFrame(()=>el.style.width=el.dataset.w+'%'));});
+</script>
+</body></html>

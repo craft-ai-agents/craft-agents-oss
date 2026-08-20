@@ -4,8 +4,9 @@ import { useSetAtom } from "jotai"
 import { isToday, isYesterday, format, startOfDay } from "date-fns"
 import { getDateLocale } from "@craft-agent/shared/i18n"
 import { useAction } from "@/actions"
-import { Inbox, Archive } from "lucide-react"
+import { Inbox, Archive, ChevronRight } from "lucide-react"
 
+import { cn } from "@/lib/utils"
 import { getSessionStatus } from "@/utils/session"
 import * as storage from "@/lib/local-storage"
 import { KEYS } from "@/lib/local-storage"
@@ -18,6 +19,7 @@ import { EntityList, type EntityListGroup } from "@/components/ui/entity-list"
 import { RenameDialog } from "@/components/ui/rename-dialog"
 import { SessionSearchHeader } from "./SessionSearchHeader"
 import { SessionItem } from "./SessionItem"
+import { CollectionBulkBar } from "./collection/CollectionBulkBar"
 import { SessionListProvider, type SessionListContextValue } from "@/context/SessionListContext"
 import { useSessionSelection, useSessionSelectionStore } from "@/hooks/useSession"
 import { useSessionSearch, type FilterMode } from "@/hooks/useSessionSearch"
@@ -31,9 +33,38 @@ import { sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import type { ViewConfig } from "@craft-agent/shared/views"
 import type { SessionStatusId, SessionStatus } from "@/config/session-status-config"
 import { buildCollapsedGroupsScopeSuffix } from "@/utils/session-list-collapse"
+import {
+  buildSessionFamilies,
+  groupIntoFamilyUnits,
+  buildFamilyRowMeta,
+  familyCollapseKeys,
+  type FamilyUnit,
+  type FamilyUnitHead,
+} from "@/utils/session-families"
 
 export interface SessionListRow {
   item: SessionMeta
+  /** Present on the visible head row of a multi-member session family (root). */
+  familyHead?: FamilyUnitHead
+  /** Present on rows rendered as indented branch rows of a family. */
+  isFamilyBranch?: boolean
+}
+
+/**
+ * Flatten family units into consecutive rows, attaching per-row family
+ * decoration (head chevron info / branch indent flag). Pure helper kept
+ * module-level so all grouping modes share it.
+ */
+function hydrateFamilyRows(units: FamilyUnit<SessionMeta>[]): SessionListRow[] {
+  const meta = buildFamilyRowMeta(units)
+  const rows: SessionListRow[] = []
+  for (const unit of units) {
+    for (const item of unit.rows) {
+      const entry = meta.get(item.id)
+      rows.push(entry ? { item, ...entry } : { item })
+    }
+  }
+  return rows
 }
 
 /** Grouping mode for chat list */
@@ -167,6 +198,10 @@ export function SessionList({
 
   // Pre-flatten label tree once for efficient ID lookups in each SessionItem
   const flatLabels = useMemo(() => flattenLabels(labels), [labels])
+  const bulkLabelOptions = useMemo(
+    () => flatLabels.map(label => ({ id: label.id, name: label.name })),
+    [flatLabels],
+  )
 
   // Get current filter from navigation state (for preserving context in tab routes)
   const currentFilter = isSessionsNavigation(navState) ? navState.filter : undefined
@@ -237,6 +272,36 @@ export function SessionList({
   // --- Data pipeline (search, filtering, pagination, grouping) ---
   const scrollViewportRef = useRef<HTMLDivElement>(null)
 
+  // Session families (branch chats grouped under their root chat), computed
+  // from the full item set so lineage is stable across pagination/search.
+  // Computed BEFORE useSessionSearch: the search hook needs representatives for
+  // family-aware collapse buckets.
+  const { familyBySessionId } = useMemo(() => buildSessionFamilies(items), [items])
+
+  // sessionId → family's bucket representative (the member with max lastMessageAt,
+  // which SessionList also uses for the family's outer bucket). Keeps the whole
+  // family inside ONE collapsed bucket.
+  const bucketRepresentatives = useMemo(() => {
+    const itemById = new Map(items.map(i => [i.id, i]))
+    const bySessionId = new Map<string, SessionMeta>()
+    const seen = new Set<string>()
+    for (const family of familyBySessionId.values()) {
+      if (seen.has(family.rootId)) continue
+      seen.add(family.rootId)
+      if (family.isSingleton) continue // no-family sessions key by themselves
+      // Representative = member with max lastMessageAt; '>' keeps the FIRST on
+      // ties, matching groupIntoFamilyUnits' bucketItem selection.
+      let rep: SessionMeta | undefined
+      for (const id of family.memberIds) {
+        const item = itemById.get(id)
+        if (item && (!rep || (item.lastMessageAt ?? 0) > (rep.lastMessageAt ?? 0))) rep = item
+      }
+      if (!rep) continue
+      for (const id of family.memberIds) bySessionId.set(id, rep)
+    }
+    return bySessionId
+  }, [familyBySessionId, items])
+
   const {
     isSearchMode,
     highlightQuery,
@@ -262,13 +327,17 @@ export function SessionList({
     labelConfigs: labels,
     collapsedGroups,
     groupingMode,
+    bucketRepresentatives,
     scrollViewportRef,
   })
 
   const rowData = useMemo(() => {
     if (isSearchMode) {
-      const matchingRows: SessionListRow[] = matchingFilterItems.map(item => ({ item }))
-      const otherRows: SessionListRow[] = otherResultItems.map(item => ({ item }))
+      // Family grouping applies among matching rows only: non-matching members
+      // are absent; when the root doesn't match, the first matching branch is
+      // the visible head — rendered WITHOUT chevron/count.
+      const matchingRows = hydrateFamilyRows(groupIntoFamilyUnits(matchingFilterItems, familyBySessionId, collapsedGroups))
+      const otherRows = hydrateFamilyRows(groupIntoFamilyUnits(otherResultItems, familyBySessionId, collapsedGroups))
 
       const groups: EntityListGroup<SessionListRow>[] = []
       if (matchingRows.length > 0) {
@@ -287,7 +356,14 @@ export function SessionList({
     // flatItems only contains visible (expanded + paginated) items.
     // collapsedGroupsMeta provides key + count for collapsed groups so we
     // can insert header-only placeholder groups in the correct position.
-    const rows: SessionListRow[] = flatItems.map(item => ({ item }))
+    //
+    // Family assembly happens BEFORE outer-group bucketing: the whole family
+    // is assigned to ONE outer bucket — the bucket of its member with the
+    // latest activity (max lastMessageAt). This keeps a family together even
+    // when member activity spans several date buckets, in every grouping mode.
+    // Family position inside the bucket = family lastActivity (max). Branch
+    // rows of collapsed families are dropped from the stream (root stays).
+    const familyUnits = groupIntoFamilyUnits(flatItems, familyBySessionId, collapsedGroups)
 
     if (groupingMode === 'unread') {
       // Two fixed buckets: unread on top, read below. Within each, items keep
@@ -295,14 +371,17 @@ export function SessionList({
       // Both buckets always render — even when empty — so the user can see at
       // a glance which mode they're in. The header shows a count, so an empty
       // bucket is unambiguous (e.g. "Unread (0)").
-      const unreadRows: SessionListRow[] = []
-      const readRows: SessionListRow[] = []
-      for (const row of rows) {
-        if (row.item.hasUnread) unreadRows.push(row)
-        else readRows.push(row)
+      const unreadUnits: FamilyUnit<SessionMeta>[] = []
+      const readUnits: FamilyUnit<SessionMeta>[] = []
+      for (const unit of familyUnits) {
+        // Family bucket = bucket of its latest-activity member.
+        if (unit.bucketItem.hasUnread) unreadUnits.push(unit)
+        else readUnits.push(unit)
       }
-      unreadRows.sort((a, b) => (b.item.lastMessageAt || 0) - (a.item.lastMessageAt || 0))
-      readRows.sort((a, b) => (b.item.lastMessageAt || 0) - (a.item.lastMessageAt || 0))
+      unreadUnits.sort((a, b) => b.lastActivity - a.lastActivity)
+      readUnits.sort((a, b) => b.lastActivity - a.lastActivity)
+      const unreadRows = hydrateFamilyRows(unreadUnits)
+      const readRows = hydrateFamilyRows(readUnits)
 
       const collapsedUnread = collapsedGroupsMeta.find(m => m.key === 'unread-yes')
       const collapsedRead = collapsedGroupsMeta.find(m => m.key === 'unread-no')
@@ -341,32 +420,33 @@ export function SessionList({
       sessionStatuses.forEach((state, index) => statusOrder.set(state.id, index))
 
       // Build groups from visible items
-      const groupsByKey = new Map<string, { rows: SessionListRow[], statusId: string }>()
-      for (const row of rows) {
-        const statusId = getSessionStatus(row.item)
+      const groupsByKey = new Map<string, { units: FamilyUnit<SessionMeta>[], statusId: string }>()
+      for (const unit of familyUnits) {
+        // Family bucket = status of its latest-activity member.
+        const statusId = getSessionStatus(unit.bucketItem)
         const key = `status-${statusId}`
-        if (!groupsByKey.has(key)) groupsByKey.set(key, { rows: [], statusId })
-        groupsByKey.get(key)!.rows.push(row)
+        if (!groupsByKey.has(key)) groupsByKey.set(key, { units: [], statusId })
+        groupsByKey.get(key)!.units.push(unit)
       }
 
       // Insert collapsed placeholder groups
       for (const meta of collapsedGroupsMeta) {
         if (!groupsByKey.has(meta.key)) {
           const statusId = meta.key.replace('status-', '')
-          groupsByKey.set(meta.key, { rows: [], statusId })
+          groupsByKey.set(meta.key, { units: [], statusId })
         }
       }
 
       const orderedGroups: EntityListGroup<SessionListRow>[] = []
-      for (const [key, { rows: groupRows, statusId }] of groupsByKey) {
+      for (const [key, { units: groupUnits, statusId }] of groupsByKey) {
         const state = sessionStatuses.find(s => s.id === statusId)
         if (!state) continue
-        groupRows.sort((a, b) => (b.item.lastMessageAt || 0) - (a.item.lastMessageAt || 0))
+        groupUnits.sort((a, b) => b.lastActivity - a.lastActivity)
         const collapsedMeta = collapsedGroupsMeta.find(m => m.key === key)
         orderedGroups.push({
           key,
           label: t(`status.${state.id}`, state.label),
-          items: groupRows,
+          items: hydrateFamilyRows(groupUnits),
           collapsible: true,
           ...(collapsedMeta ? { collapsedCount: collapsedMeta.count } : {}),
         })
@@ -397,13 +477,14 @@ export function SessionList({
       const projectNameById = new Map<string, string>()
       ;(projects ?? []).forEach(p => projectNameById.set(p.id, p.name))
 
-      const groupsByKey = new Map<string, { rows: SessionListRow[], projectId: string | null }>()
-      for (const row of rows) {
-        const rawProjectId = (row.item as { projectId?: string }).projectId
+      const groupsByKey = new Map<string, { units: FamilyUnit<SessionMeta>[], projectId: string | null }>()
+      for (const unit of familyUnits) {
+        // Family bucket = project of its latest-activity member.
+        const rawProjectId = unit.bucketItem.projectId
         const resolvedProjectId = rawProjectId && projectNameById.has(rawProjectId) ? rawProjectId : null
         const key = resolvedProjectId ? `project-${resolvedProjectId}` : 'project-__none__'
-        if (!groupsByKey.has(key)) groupsByKey.set(key, { rows: [], projectId: resolvedProjectId })
-        groupsByKey.get(key)!.rows.push(row)
+        if (!groupsByKey.has(key)) groupsByKey.set(key, { units: [], projectId: resolvedProjectId })
+        groupsByKey.get(key)!.units.push(unit)
       }
 
       // Insert collapsed placeholder groups (header-only, items: [])
@@ -411,13 +492,13 @@ export function SessionList({
         if (!groupsByKey.has(meta.key)) {
           const idPart = meta.key.replace('project-', '')
           const projectId = idPart === '__none__' ? null : idPart
-          groupsByKey.set(meta.key, { rows: [], projectId })
+          groupsByKey.set(meta.key, { units: [], projectId })
         }
       }
 
       const orderedGroups: EntityListGroup<SessionListRow>[] = []
-      for (const [key, { rows: groupRows, projectId }] of groupsByKey) {
-        groupRows.sort((a, b) => (b.item.lastMessageAt || 0) - (a.item.lastMessageAt || 0))
+      for (const [key, { units: groupUnits, projectId }] of groupsByKey) {
+        groupUnits.sort((a, b) => b.lastActivity - a.lastActivity)
         const collapsedMeta = collapsedGroupsMeta.find(m => m.key === key)
         const label = projectId
           ? (projectNameById.get(projectId) ?? t('sidebar.unknownProject', { defaultValue: 'Unknown project' }))
@@ -425,7 +506,7 @@ export function SessionList({
         orderedGroups.push({
           key,
           label,
-          items: groupRows,
+          items: hydrateFamilyRows(groupUnits),
           collapsible: true,
           ...(collapsedMeta ? { collapsedCount: collapsedMeta.count } : {}),
         })
@@ -450,37 +531,27 @@ export function SessionList({
     }
 
     // Default: group by date
-    const groupsByKey = new Map<string, EntityListGroup<SessionListRow>>()
+    const unitsByKey = new Map<string, FamilyUnit<SessionMeta>[]>()
     const groupDates = new Map<string, Date>()
 
-    for (const row of rows) {
-      const day = startOfDay(new Date(row.item.lastMessageAt || 0))
+    for (const unit of familyUnits) {
+      // Family bucket = date of its latest-activity member, so a family never
+      // splits across day buckets when activity spans several days.
+      const day = startOfDay(new Date(unit.bucketItem.lastMessageAt || 0))
       const groupKey = day.toISOString()
 
-      if (!groupsByKey.has(groupKey)) {
-        groupsByKey.set(groupKey, {
-          key: groupKey,
-          label: formatDateGroupLabel(day, t, i18n.resolvedLanguage ?? 'en'),
-          items: [],
-          collapsible: true,
-        })
+      if (!unitsByKey.has(groupKey)) {
+        unitsByKey.set(groupKey, [])
         groupDates.set(groupKey, day)
       }
-      groupsByKey.get(groupKey)!.items.push(row)
+      unitsByKey.get(groupKey)!.push(unit)
     }
 
     // Insert collapsed placeholder groups (header-only, items: [])
     for (const meta of collapsedGroupsMeta) {
-      if (!groupsByKey.has(meta.key)) {
-        const date = new Date(meta.key)
-        groupsByKey.set(meta.key, {
-          key: meta.key,
-          label: formatDateGroupLabel(date, t, i18n.resolvedLanguage ?? 'en'),
-          items: [],
-          collapsible: true,
-          collapsedCount: meta.count,
-        })
-        groupDates.set(meta.key, date)
+      if (!unitsByKey.has(meta.key)) {
+        unitsByKey.set(meta.key, [])
+        groupDates.set(meta.key, new Date(meta.key))
       }
     }
 
@@ -489,7 +560,18 @@ export function SessionList({
       .sort(([, a], [, b]) => b.getTime() - a.getTime())
       .map(([key]) => key)
 
-    const orderedGroups = orderedKeys.map(key => groupsByKey.get(key)!)
+    const orderedGroups: EntityListGroup<SessionListRow>[] = orderedKeys.map(key => {
+      const bucketUnits = unitsByKey.get(key)!
+      bucketUnits.sort((a, b) => b.lastActivity - a.lastActivity)
+      const collapsedMeta = collapsedGroupsMeta.find(m => m.key === key)
+      return {
+        key,
+        label: formatDateGroupLabel(groupDates.get(key)!, t, i18n.resolvedLanguage ?? 'en'),
+        items: hydrateFamilyRows(bucketUnits),
+        collapsible: true,
+        ...(collapsedMeta ? { collapsedCount: collapsedMeta.count } : {}),
+      }
+    })
 
     // If only one group exists, disable collapsing — there's nothing to collapse into
     if (orderedGroups.length === 1) {
@@ -497,34 +579,35 @@ export function SessionList({
     }
 
     return {
-      rows,
+      // Rows must match the flattened visual order so keyboard nav tracks it.
+      rows: orderedGroups.flatMap(g => g.items),
       groups: orderedGroups,
     }
-  }, [isSearchMode, matchingFilterItems, otherResultItems, flatItems, groupingMode, sessionStatuses, projects, collapsedGroupsMeta, t])
+  }, [isSearchMode, matchingFilterItems, otherResultItems, flatItems, groupingMode, sessionStatuses, projects, collapsedGroupsMeta, collapsedGroups, familyBySessionId, t])
 
   const flatRows = rowData.rows
+  const visibleSessionIds = useMemo(() => flatRows.map(row => row.item.id), [flatRows])
 
   const collapseAllGroups = useCallback(() => {
+    // Collapse All also collapses session families (family:<rootId> keys).
+    const allKeys = new Set(familyCollapseKeys(familyBySessionId))
     if (groupingMode === 'status') {
-      const allKeys = new Set(items.map(item => `status-${getSessionStatus(item)}`))
-      setCollapsedGroups(allKeys)
+      items.forEach(item => allKeys.add(`status-${getSessionStatus(item)}`))
     } else if (groupingMode === 'unread') {
-      const allKeys = new Set(items.map(item => item.hasUnread ? 'unread-yes' : 'unread-no'))
-      setCollapsedGroups(allKeys)
+      items.forEach(item => allKeys.add(item.hasUnread ? 'unread-yes' : 'unread-no'))
     } else if (groupingMode === 'project') {
       const knownProjectIds = new Set((projects ?? []).map(p => p.id))
-      const allKeys = new Set(items.map(item => {
-        const pid = (item as { projectId?: string }).projectId
-        return pid && knownProjectIds.has(pid) ? `project-${pid}` : 'project-__none__'
-      }))
-      setCollapsedGroups(allKeys)
+      items.forEach(item => {
+        const pid = item.projectId
+        allKeys.add(pid && knownProjectIds.has(pid) ? `project-${pid}` : 'project-__none__')
+      })
     } else {
-      const allKeys = new Set(items.map(item =>
+      items.forEach(item => allKeys.add(
         startOfDay(new Date(item.lastMessageAt || 0)).toISOString()
       ))
-      setCollapsedGroups(allKeys)
     }
-  }, [items, groupingMode, projects])
+    setCollapsedGroups(allKeys)
+  }, [items, groupingMode, projects, familyBySessionId])
   const expandAllGroups = useCallback(() => {
     setCollapsedGroups(new Set())
   }, [])
@@ -727,21 +810,17 @@ export function SessionList({
     sessionOptions, contentSearchResults, activeChatMatchInfo, hasPendingPrompt,
   ])
 
-  // --- Empty state (non-search) — render before EntityList ---
+  // --- Empty state (non-search) — keep search bar pinned above empty UI ---
   // Don't show empty state when there are collapsed groups with content
   if (flatRows.length === 0 && rowData.groups.length === 0 && !searchActive) {
-    if (currentFilter?.kind === 'archived') {
-      return (
-        <EntityListEmptyScreen
-          icon={<Archive />}
-          title={t("session.noArchivedSessions")}
-          description={t("session.noArchivedSessionsDesc")}
-          className="h-full"
-        />
-      )
-    }
-
-    return (
+    const emptyBody = currentFilter?.kind === 'archived' ? (
+      <EntityListEmptyScreen
+        icon={<Archive />}
+        title={t("session.noArchivedSessions")}
+        description={t("session.noArchivedSessionsDesc")}
+        className="h-full"
+      />
+    ) : (
       <EntityListEmptyScreen
         icon={<Inbox />}
         title={t("session.noSessionsYet")}
@@ -761,6 +840,27 @@ export function SessionList({
         </button>
       </EntityListEmptyScreen>
     )
+    return (
+      <div className="flex flex-col flex-1 min-h-0">
+        <SessionSearchHeader
+          searchQuery={searchQuery}
+          onSearchChange={onSearchChange}
+          onSearchClose={() => {
+            onSearchChange?.('')
+            onSearchClose?.()
+          }}
+          onKeyDown={handleSearchKeyDown}
+          onFocus={() => setIsSearchInputFocused(true)}
+          onBlur={() => setIsSearchInputFocused(false)}
+          isSearching={isSearchingContent}
+          isUnavailable={isSearchUnavailable}
+          resultCount={0}
+          exceededLimit={false}
+          inputRef={searchInputRef}
+        />
+        <div className="flex-1 min-h-0">{emptyBody}</div>
+      </div>
+    )
   }
 
   // --- Render ---
@@ -773,7 +873,7 @@ export function SessionList({
         renderItem={(row, _indexInGroup, isFirstInGroup) => {
           const flatIndex = rowIndexMap.get(row.item.id) ?? 0
           const rowProps = interactions.getRowProps(row, flatIndex)
-          return (
+          const sessionItem = (
             <SessionItem
               item={row.item}
               index={flatIndex}
@@ -786,24 +886,65 @@ export function SessionList({
               onRangeSelect={() => handleRangeSelect(flatIndex)}
             />
           )
+          // Session family decoration: head rows (family root) get a chevron
+          // toggle in the left gutter; branch rows are indented with a subtle
+          // guide line. Collapsing a family hides branch rows only — the root
+          // row always stays visible.
+          if (row.familyHead) {
+            const head = row.familyHead
+            return (
+              <div className="relative pl-3">
+                <button
+                  type="button"
+                  aria-label={t("sidebar.branchCount", { count: head.branchCount })}
+                  title={t("sidebar.branchCount", { count: head.branchCount })}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleGroupCollapse(head.collapseKey)
+                  }}
+                  className="absolute left-0 top-0 bottom-0 z-10 flex items-center gap-0.5 px-0 text-muted-foreground/60 hover:text-muted-foreground cursor-pointer"
+                >
+                  <ChevronRight
+                    className={cn(
+                      "h-3 w-3 transition-transform",
+                      !head.collapsed && "rotate-90"
+                    )}
+                  />
+                  {head.collapsed && (
+                    <span className="text-[10px] tabular-nums text-muted-foreground/50">{head.branchCount}</span>
+                  )}
+                </button>
+                {sessionItem}
+              </div>
+            )
+          }
+          if (row.isFamilyBranch) {
+            return (
+              <div className="ml-[14px] border-l border-foreground/10">
+                {sessionItem}
+              </div>
+            )
+          }
+          return sessionItem
         }}
         header={
           <>
-            {searchActive && (
-              <SessionSearchHeader
-                searchQuery={searchQuery}
-                onSearchChange={onSearchChange}
-                onSearchClose={onSearchClose}
-                onKeyDown={handleSearchKeyDown}
-                onFocus={() => setIsSearchInputFocused(true)}
-                onBlur={() => setIsSearchInputFocused(false)}
-                isSearching={isSearchingContent}
-                isUnavailable={isSearchUnavailable}
-                resultCount={matchingFilterItems.length + otherResultItems.length}
-                exceededLimit={exceededSearchLimit}
-                inputRef={searchInputRef}
-              />
-            )}
+            <SessionSearchHeader
+              searchQuery={searchQuery}
+              onSearchChange={onSearchChange}
+              onSearchClose={() => {
+                onSearchChange?.('')
+                onSearchClose?.()
+              }}
+              onKeyDown={handleSearchKeyDown}
+              onFocus={() => setIsSearchInputFocused(true)}
+              onBlur={() => setIsSearchInputFocused(false)}
+              isSearching={isSearchingContent}
+              isUnavailable={isSearchUnavailable}
+              resultCount={matchingFilterItems.length + otherResultItems.length}
+              exceededLimit={exceededSearchLimit}
+              inputRef={searchInputRef}
+            />
             {isSearchMode && matchingFilterItems.length === 0 && otherResultItems.length > 0 && (
               <div className="px-4 py-3 text-sm text-muted-foreground">
                 {t("session.noResultsInFilter")}
@@ -849,6 +990,14 @@ export function SessionList({
         onExpandAll={expandAllGroups}
       />
       </SessionListProvider>
+
+      <CollectionBulkBar
+        workspaceId={workspaceId}
+        visibleSessionIds={visibleSessionIds}
+        statuses={sessionStatuses}
+        projects={projects}
+        labels={bulkLabelOptions}
+      />
 
       {/* Rename Dialog */}
       <RenameDialog

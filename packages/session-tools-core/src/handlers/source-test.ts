@@ -10,6 +10,7 @@ import { basename, join } from 'node:path';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult, SourceConfig, ConnectionStatus } from '../types.ts';
 import { errorResponse } from '../response.ts';
+import { resolveStdioConfig } from '@craft-agent/shared/utils';
 import {
   validateJsonFileHasFields,
   validateSourceConfigBasic,
@@ -733,54 +734,67 @@ async function testMcpConnection(
   let error: string | undefined;
 
   if (source.mcp?.transport === 'stdio') {
-    // Stdio MCP - use validateStdioMcpConnection if available
-    if (ctx.validateStdioMcpConnection && source.mcp.command) {
-      lines.push(`ℹ Testing stdio MCP: ${source.mcp.command}`);
-      try {
-        const result = await ctx.validateStdioMcpConnection({
-          command: source.mcp.command,
-          args: source.mcp.args || [],
-          env: source.mcp.env,
-        });
-        if (result.success) {
-          success = true;
-          lines.push(`✓ MCP server started successfully`);
-          if (result.toolCount !== undefined) {
-            lines.push(`  Tools available: ${result.toolCount}`);
-            if (result.toolNames && result.toolNames.length > 0) {
-              const preview = result.toolNames.slice(0, 5).join(', ');
-              if (result.toolNames.length > 5) {
-                lines.push(`  Examples: ${preview}, ...`);
-              } else {
-                lines.push(`  Tools: ${preview}`);
-              }
-            }
-          }
-          if (result.serverName) {
-            lines.push(`  Server: ${result.serverName} v${result.serverVersion || 'unknown'}`);
-          }
-        } else {
-          hasError = true;
-          error = result.error || 'MCP validation failed';
-          lines.push(`✗ ${error}`);
-        }
-      } catch (e) {
-        hasError = true;
-        error = e instanceof Error ? e.message : 'Unknown error';
-        lines.push(`✗ Failed to test MCP server: ${error}`);
-      }
-    } else if (source.mcp?.command) {
-      // Basic check - just report config
-      lines.push(`ℹ Stdio MCP source: ${source.mcp.command}`);
-      if (source.mcp.args?.length) {
-        lines.push(`  Args: ${source.mcp.args.join(' ')}`);
-      }
-      lines.push('  Connection test not available in this context — call the source\'s MCP tools directly to verify');
-      success = true; // Config looks ok
-    } else {
+    // Resolve platform overrides + expand path variables (runtime-only).
+    const resolved = resolveStdioConfig(
+      source.mcp,
+      ctx.workspacePath,
+      getSourcePath(ctx.workspacePath, sourceSlug),
+    );
+    if (!resolved) {
       hasError = true;
       error = 'No command configured';
       lines.push('✗ No command configured for stdio MCP source');
+    } else {
+      const expandedCommand = resolved.command;
+      const expandedArgs = resolved.args;
+      const expandedEnv = resolved.env;
+
+      // Stdio MCP - use validateStdioMcpConnection if available
+      if (ctx.validateStdioMcpConnection && source.mcp.command) {
+        lines.push(`ℹ Testing stdio MCP: ${expandedCommand}`);
+        try {
+          const result = await ctx.validateStdioMcpConnection({
+            command: expandedCommand,
+            args: expandedArgs,
+            env: expandedEnv,
+            cwd: getSourcePath(ctx.workspacePath, sourceSlug),
+          });
+          if (result.success) {
+            success = true;
+            lines.push(`✓ MCP server started successfully`);
+            if (result.toolCount !== undefined) {
+              lines.push(`  Tools available: ${result.toolCount}`);
+              if (result.toolNames && result.toolNames.length > 0) {
+                const preview = result.toolNames.slice(0, 5).join(', ');
+                if (result.toolNames.length > 5) {
+                  lines.push(`  Examples: ${preview}, ...`);
+                } else {
+                  lines.push(`  Tools: ${preview}`);
+                }
+              }
+            }
+            if (result.serverName) {
+              lines.push(`  Server: ${result.serverName} v${result.serverVersion || 'unknown'}`);
+            }
+          } else {
+            hasError = true;
+            error = result.error || 'MCP validation failed';
+            lines.push(`✗ ${error}`);
+          }
+        } catch (e) {
+          hasError = true;
+          error = e instanceof Error ? e.message : 'Unknown error';
+          lines.push(`✗ Failed to test MCP server: ${error}`);
+        }
+      } else {
+        // Basic check - just report config
+        lines.push(`ℹ Stdio MCP source: ${expandedCommand}`);
+        if (expandedArgs.length) {
+          lines.push(`  Args: ${expandedArgs.join(' ')}`);
+        }
+        lines.push('  Connection test not available in this context — call the source\'s MCP tools directly to verify');
+        success = true; // Config looks ok
+      }
     }
   } else if (source.mcp?.url) {
     // HTTP/SSE MCP

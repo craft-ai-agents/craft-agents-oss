@@ -1,4 +1,7 @@
 import { describe, it, expect, mock, beforeEach } from 'bun:test'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 // Stub the preferences module so we can toggle `getCoAuthorPreference` per test
 // without touching disk. `formatPreferencesForPrompt` is stubbed to '' because
@@ -9,7 +12,12 @@ mock.module('../../config/preferences.ts', () => ({
   formatPreferencesForPrompt: () => '',
 }))
 
-import { getSystemPrompt, formatProjectContextForPrompt } from '../system'
+import {
+  findAllProjectContextFiles,
+  formatProjectContextForPrompt,
+  getSystemPrompt,
+  invalidateContextFileCache,
+} from '../system'
 import type { ProjectPromptContext } from '../../projects/types.ts'
 
 const GIT_CONVENTIONS_HEADING = '## Git Conventions'
@@ -224,5 +232,34 @@ describe('formatProjectContextForPrompt', () => {
     expect(block).toContain('&lt;/project_assets&gt;')
     expect(occurrences(block, '</project_context>')).toBe(1)
     expect(occurrences(block, '</project_assets>')).toBe(1)
+  })
+})
+
+describe('findAllProjectContextFiles monorepo glob', () => {
+  it('discovers agents/claude/soul/rules.md across nested packages (case-insensitive)', () => {
+    const root = mkdtempSync(join(tmpdir(), 'ctx-glob-'))
+    try {
+      mkdirSync(join(root, 'apps', 'web'), { recursive: true })
+      mkdirSync(join(root, 'packages', 'core'), { recursive: true })
+      writeFileSync(join(root, 'AGENTS.md'), 'root agents')
+      writeFileSync(join(root, 'apps', 'web', 'CLAUDE.md'), 'web claude')
+      writeFileSync(join(root, 'apps', 'web', 'SOUL.md'), 'web soul')
+      writeFileSync(join(root, 'packages', 'core', 'rules.md'), 'core rules')
+      // Should be ignored (node_modules)
+      mkdirSync(join(root, 'node_modules', 'pkg'), { recursive: true })
+      writeFileSync(join(root, 'node_modules', 'pkg', 'AGENTS.md'), 'nope')
+
+      invalidateContextFileCache(root)
+      const found = findAllProjectContextFiles(root)
+      const lower = found.map((f) => f.toLowerCase().replaceAll('\\', '/'))
+      expect(lower).toContain('agents.md')
+      expect(lower).toContain('apps/web/claude.md')
+      expect(lower).toContain('apps/web/soul.md')
+      expect(lower).toContain('packages/core/rules.md')
+      expect(lower.some((f) => f.includes('node_modules'))).toBe(false)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+      invalidateContextFileCache(root)
+    }
   })
 })

@@ -18,6 +18,7 @@ export type {
   SessionMetadata,
   SessionHeader,
   SessionPersistentField,
+  SessionPriority,
 } from './types.ts';
 
 // Field constants
@@ -127,4 +128,55 @@ export {
   MAX_BUNDLE_SIZE_BYTES,
 } from './bundle.ts';
 
+// LexoRank helpers (manual session ordering)
+export {
+  LEXORANK_MAX_LENGTH,
+  lexorankValidate,
+  lexorankBetween,
+  lexorankN,
+  backfillRanks,
+} from './lexorank.ts';
+
+// Collection display / filter contracts (pure types)
+export type {
+  CollectionViewMode,
+  CollectionGroupBy,
+  CollectionOrderBy,
+  CollectionOrderDir,
+  CollectionProperty,
+  CollectionDisplay,
+  DueRange,
+  CollectionFilters,
+} from './collection-types.ts'
+export {
+  DEFAULT_COLLECTION_DISPLAY,
+  DEFAULT_COLLECTION_FILTERS,
+  COLLECTION_GROUP_BY_VALUES,
+  COLLECTION_ORDER_BY_VALUES,
+  COLLECTION_PROPERTY_VALUES,
+} from './collection-types.ts'
+
+// Collection pure query helpers
+export type {
+  CollectionSessionMeta,
+  FilterSessionMetaOptions,
+  DueBucket,
+} from './collection-query.ts'
+export {
+  priorityWeight,
+  dueBucket,
+  filterSessionMeta,
+  compareSessions,
+  querySessionMetas,
+} from './collection-query.ts'
+
+// Collection display persistence (workspace collection/display.json)
+export {
+  COLLECTION_DISPLAY_RELATIVE_PATH,
+  getCollectionDisplayPath,
+  getDefaultCollectionDisplay,
+  loadCollectionDisplay,
+  normalizeCollectionDisplay,
+  saveCollectionDisplay,
+} from './collection-display-storage.ts'
 

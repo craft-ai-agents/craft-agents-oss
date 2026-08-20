@@ -14,6 +14,7 @@ import {
   ApiKeyInput,
   type ApiKeyStatus,
   type ApiKeySubmitData,
+  type CustomEndpointModelInput,
   OAuthConnect,
   type OAuthStatus,
 } from "../apisetup"
@@ -30,6 +31,7 @@ interface CredentialsStepProps {
   onBack: () => void
   // Two-step OAuth flow
   isWaitingForCode?: boolean
+  isProviderOAuthPending?: boolean
   onSubmitAuthCode?: (code: string) => void
   onCancelOAuth?: () => void
   // Device flow (Copilot)
@@ -40,7 +42,7 @@ interface CredentialsStepProps {
     baseUrl?: string
     connectionDefaultModel?: string
     activePreset?: string
-    models?: string[]
+    models?: CustomEndpointModelInput[]
     customApi?: CustomEndpointApi
   }
 }
@@ -53,6 +55,7 @@ export function CredentialsStep({
   onStartOAuth,
   onBack,
   isWaitingForCode,
+  isProviderOAuthPending,
   onSubmitAuthCode,
   onCancelOAuth,
   copilotDeviceCode,
@@ -98,7 +101,11 @@ export function CredentialsStep({
         description={t("onboarding.credentials.connectChatGPTDesc")}
         actions={
           <>
-            <BackButton onClick={onBack} disabled={status === 'validating'} />
+            {isProviderOAuthPending ? (
+              <BackButton onClick={onCancelOAuth}>{t("common.cancel")}</BackButton>
+            ) : (
+              <BackButton onClick={onBack} disabled={status === 'validating'} />
+            )}
             <ContinueButton
               onClick={() => onStartOAuth?.()}
               className="gap-2"
@@ -138,7 +145,11 @@ export function CredentialsStep({
         description={t("onboarding.credentials.connectGitHubDesc")}
         actions={
           <>
-            <BackButton onClick={onBack} disabled={status === 'validating'} />
+            {isProviderOAuthPending ? (
+              <BackButton onClick={onCancelOAuth}>{t("common.cancel")}</BackButton>
+            ) : (
+              <BackButton onClick={onBack} disabled={status === 'validating'} />
+            )}
             <ContinueButton
               onClick={() => onStartOAuth?.()}
               className="gap-2"

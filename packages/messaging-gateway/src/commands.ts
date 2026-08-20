@@ -14,6 +14,8 @@ import type { ISessionManager } from '@craft-agent/server-core/handlers'
 import {
   evaluatePreBindingAccess,
   executeRejection,
+  PUBLIC_INBOX_REPLY,
+  REJECT_REPLY_COOLDOWN_MS,
   readPlatformAccessMode,
   readPlatformOwners,
   type AccessRejectReason,
@@ -153,8 +155,12 @@ export class Commands {
         msg,
         workspaceConfig: this.access.getWorkspaceConfig(),
       })
-      if (!verdict.allow) {
+      if (verdict.kind === 'reject') {
         await this.sendRejection(adapter, msg, verdict.reason)
+        return
+      }
+      if (verdict.kind === 'public-inbox') {
+        await this.sendPublicInbox(adapter, msg)
         return
       }
     }
@@ -214,8 +220,12 @@ export class Commands {
         msg,
         workspaceConfig: this.access.getWorkspaceConfig(),
       })
-      if (!verdict.allow) {
+      if (verdict.kind === 'reject') {
         await this.sendRejection(adapter, msg, verdict.reason)
+        return true
+      }
+      if (verdict.kind === 'public-inbox') {
+        await this.sendPublicInbox(adapter, msg)
         return true
       }
     }
@@ -251,6 +261,39 @@ export class Commands {
    * Reject reply for pre-binding gating. Delegates to the shared
    * `executeRejection` so text and button paths emit identical output.
    */
+  private async sendPublicInbox(
+    adapter: PlatformAdapter,
+    msg: IncomingMessage,
+  ): Promise<void> {
+    this.access.pendingStore?.recordRejection({
+      platform: msg.platform,
+      senderId: msg.senderId,
+      ...(msg.senderName ? { senderName: msg.senderName } : {}),
+      ...(msg.senderUsername ? { senderUsername: msg.senderUsername } : {}),
+      reason: 'not-owner',
+      ...(msg.channelId ? { channelId: msg.channelId } : {}),
+      ...(msg.threadId !== undefined ? { threadId: msg.threadId } : {}),
+    })
+
+    const key = `${msg.platform}:${msg.senderId}`
+    const last = this.recentRejectReplies.get(key) ?? 0
+    if (Date.now() - last < REJECT_REPLY_COOLDOWN_MS) return
+    this.recentRejectReplies.set(key, Date.now())
+
+    try {
+      await adapter.sendText(msg.channelId, PUBLIC_INBOX_REPLY, {
+        ...(msg.threadId !== undefined ? { threadId: msg.threadId } : {}),
+      })
+    } catch (err) {
+      this.log.warn('failed to send public-inbox reply (non-fatal)', {
+        event: 'public_inbox_reply_failed',
+        platform: msg.platform,
+        channelId: msg.channelId,
+        error: err,
+      })
+    }
+  }
+
   private async sendRejection(
     adapter: PlatformAdapter,
     msg: IncomingMessage,
@@ -440,7 +483,7 @@ export class Commands {
     const wsMode = readPlatformAccessMode(wsConfig, adapter.platform)
     const owners = readPlatformOwners(wsConfig, adapter.platform)
     if (
-      wsMode === 'owner-only' &&
+      wsMode === 'owner-control' &&
       owners.length > 0 &&
       !owners.some((o) => o.userId === msg.senderId)
     ) {

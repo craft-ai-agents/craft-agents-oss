@@ -18,6 +18,7 @@ import ollamaIcon from '@/assets/provider-icons/ollama.svg'
 import openaiIcon from '@/assets/provider-icons/openai.svg'
 import openrouterIcon from '@/assets/provider-icons/openrouter.svg'
 import piIcon from '@/assets/provider-icons/pi.svg'
+import roxIcon from '@/assets/provider-icons/rox.svg'
 import vercelIcon from '@/assets/provider-icons/vercel.svg'
 
 import type { LlmProviderType } from '@craft-agent/shared/config/llm-connections'
@@ -38,7 +39,9 @@ export const providerIcons = {
   ollama: ollamaIcon,
   openai: openaiIcon,
   openrouter: openrouterIcon,
+  omp: roxIcon,
   pi: piIcon,
+  rox: roxIcon,
   vercel: vercelIcon,
 } as const
 
@@ -55,8 +58,10 @@ const providerDisplayNames: Record<string, string> = {
   minimax: 'Minimax',
   ollama: 'Ollama',
   openrouter: 'OpenRouter',
+  omp: 'Rox',
   pi: 'Craft Agents Backend',
   pi_compat: 'Craft Agents Backend',
+  rox: 'Rox',
   vercel: 'Vercel',
 }
 
@@ -71,6 +76,7 @@ export function getProviderDisplayName(providerType: string, baseUrl?: string | 
     if (url.includes('minimax.io') || url.includes('minimaxi.com')) return 'Minimax'
     if (url.includes('v0.dev') || url.includes('vercel')) return 'Vercel'
     if (url.includes('manifest.build')) return 'Manifest'
+    if (url.includes('api.rox.one') || url.includes('rox.one')) return 'Rox'
   }
   return providerDisplayNames[providerType] || providerType
 }
@@ -87,6 +93,7 @@ function detectProviderFromUrl(baseUrl: string): ProviderIconKey | null {
   if (url.includes('api.openai.com')) return 'openai'
   if (url.includes('v0.dev') || url.includes('vercel')) return 'vercel'
   if (url.includes('generativelanguage.googleapis.com') || url.includes('ai.google')) return 'google'
+  if (url.includes('api.rox.one') || url.includes('rox.one')) return 'rox'
   if (url.includes('kimi.com')) return 'kimi'
   if (url.includes('minimax.io') || url.includes('minimaxi.com')) return 'minimax'
   if (url.includes('mistral.ai')) return 'mistral'
@@ -130,6 +137,9 @@ function piAuthProviderToIcon(piAuthProvider: string): ProviderIconKey | null {
       return 'huggingface'
     case 'vercel-ai-gateway':
       return 'vercel'
+    case 'rox':
+    case 'rox-kimi':
+      return 'rox'
     default:
       return null
   }
@@ -149,7 +159,8 @@ const PI_AUTH_PROVIDER_DOMAINS: Record<string, string> = {
 
 /**
  * Get provider icon URL for a given provider type and optional base URL.
- * Base URL detection takes precedence for compatible providers (openai_compat, pi_compat).
+ * Base URL detection takes precedence for compatible providers
+ * (openai_compat, pi_compat, anthropic_compat).
  * For Pi connections, resolves to the upstream provider's icon via piAuthProvider.
  *
  * @param providerType - The LLM provider type
@@ -163,7 +174,7 @@ export function getProviderIcon(
   piAuthProvider?: string | null
 ): string | null {
   // For compatible providers, try to detect from URL first
-  if (baseUrl && (providerType === 'openai_compat' || providerType === 'pi_compat')) {
+  if (baseUrl && (providerType === 'openai_compat' || providerType === 'pi_compat' || providerType === 'anthropic_compat')) {
     const detectedProvider = detectProviderFromUrl(baseUrl)
     if (detectedProvider) {
       return providerIcons[detectedProvider]
@@ -174,15 +185,29 @@ export function getProviderIcon(
     }
   }
 
+  // Rox hosts (api.rox.one) always use the rox mark, regardless of provider type
+  if (baseUrl) {
+    const url = baseUrl.toLowerCase()
+    if (url.includes('api.rox.one') || url.includes('rox.one')) {
+      return providerIcons.rox
+    }
+  }
+
   // Map provider type to icon
   switch (providerType) {
     case 'anthropic':
+    case 'anthropic_compat':
       return providerIcons.anthropic
     case 'openai':
     case 'openai_compat':
       return providerIcons.openai
     case 'copilot':
       return providerIcons.copilot
+    case 'omp':
+    case 'rox':
+    case 'rox-kimi':
+      // OMP / Rox seed connection — show rox brand mark (not Anthropic/Opus fallback)
+      return providerIcons.rox
     case 'pi':
     case 'pi_compat': {
       // Resolve to actual upstream provider icon
@@ -198,6 +223,13 @@ export function getProviderIcon(
       return null  // Unknown/custom Pi provider — caller shows brain icon
     }
     default:
+      // Prefer rox when model/provider id looks like a rox seed (kimi via omp)
+      if (
+        typeof providerType === 'string' &&
+        (providerType.includes('rox') || providerType === 'kimi-K3' || providerType.startsWith('rox-'))
+      ) {
+        return providerIcons.rox
+      }
       // Try URL detection as fallback
       if (baseUrl) {
         const detectedProvider = detectProviderFromUrl(baseUrl)

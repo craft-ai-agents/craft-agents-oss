@@ -14,6 +14,7 @@ import type { AuthResult } from '@craft-agent/shared/agent'
 import type {
   Session,
   SessionStatus,
+  SessionPriority,
   CreateSessionOptions,
   FileAttachment,
   SendMessageOptions,
@@ -22,8 +23,11 @@ import type {
   PermissionModeState,
   UnreadSummary,
   ShareResult,
+  BulkUpdateSessionsInput,
+  BulkUpdateSessionsResult,
 } from '@craft-agent/shared/protocol'
 import type { SessionBundle, DispatchMode } from '@craft-agent/shared/sessions'
+import type { SessionProvenance } from '@craft-agent/shared/memory/types'
 import type { EventSink } from '../transport'
 
 export interface ISessionManager {
@@ -69,6 +73,10 @@ export interface ISessionManager {
   markSessionUnread(sessionId: string): Promise<void>
   markAllSessionsRead(workspaceId: string): Promise<void>
   setActiveViewingSession(sessionId: string | null, workspaceId: string): void
+  bulkUpdateSessions(
+    workspaceId: string,
+    input: Pick<BulkUpdateSessionsInput, 'ids' | 'patch'>,
+  ): Promise<BulkUpdateSessionsResult>
   clearActiveViewingSession(workspaceId: string): void
 
   // ---------------------------------------------------------------------------
@@ -89,7 +97,12 @@ export interface ISessionManager {
   ): Promise<{ labelId: string } | undefined>
   setSessionProjectId(sessionId: string, projectId: string | null): Promise<void>
   setKanbanColumn(sessionId: string, column: string | null): Promise<void>
+  setPriority(sessionId: string, priority: SessionPriority): Promise<void>
+  setDueDate(sessionId: string, dueDate: number | null): Promise<void>
+  setRank(sessionId: string, rank: string): Promise<void>
+  reorderRank(sessionId: string, prevId?: string, nextId?: string): Promise<void>
   setTaskNodeCount(sessionId: string, count: number): Promise<void>
+  setSessionMemoryMode(sessionId: string, mode: import('@craft-agent/core/types').SessionMemoryMode): Promise<void>
   adoptGeneratedTaskOrchestrator(
     sessionId: string,
     taskSlug: string,
@@ -117,6 +130,7 @@ export interface ISessionManager {
     _isAuthRetry?: boolean,
     onAck?: (messageId: string) => void,
     rpcContext?: { callerClientId?: string },
+    _internalRetryKind?: 'auth' | 'failover',
   ): Promise<void>
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
   killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }>
@@ -133,6 +147,7 @@ export interface ISessionManager {
   ): () => void
   /** Read a session's final assistant message text (Conductor output reader). */
   getSessionFinalText(sessionId: string): string | undefined
+  undoLastUserMessage(sessionId: string): Promise<{ success: boolean; userMessage?: string }>
   addMessageAnnotation(sessionId: string, messageId: string, annotation: AnnotationV1): void
   removeMessageAnnotation(sessionId: string, messageId: string, annotationId: string): void
   updateMessageAnnotation(
@@ -229,6 +244,11 @@ export interface ISessionManager {
   // ---------------------------------------------------------------------------
 
   getSessionPath(sessionId: string): string | null
+  /** Memory provenance (spec F4): lessons/skills injected into the session's prompts; null when absent. */
+  getSessionProvenance(sessionId: string): SessionProvenance | null
+  /** One-shot mini completion against the workspace's default connection (self-learning
+   *  spec L2 conflict checks). Resolves the workspace by id — throws when unknown. */
+  runDistillOneShot(workspaceId: string, prompt: string): Promise<string>
   refreshTitle(sessionId: string): Promise<{ success: boolean; title?: string; error?: string }>
   refreshBadge(): void
   getUnreadSummary(): UnreadSummary
@@ -255,6 +275,11 @@ export interface ISessionManager {
   getActiveSessionCount(workspaceId?: string): number
   /** Automation summary for a workspace (count of configured automations + scheduler state). */
   getWorkspaceAutomationSummary(workspaceId: string): { automationCount: number; schedulerRunning: boolean }
+  /**
+   * Emit an AppEvent into the workspace AutomationSystem event bus (P6 knowledge watcher).
+   * No-op when the workspace has no AutomationSystem yet.
+   */
+  emitWorkspaceEvent?(workspaceId: string, event: string, payload: Record<string, unknown>): Promise<void>
   /** Active sessions across all workspaces (sessions with running backend processes). */
   getActiveSessionsInfo(): ActiveSessionInfo[]
 

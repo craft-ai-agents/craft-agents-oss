@@ -196,6 +196,7 @@ export function SessionViewer({
                     turnId={turn.turnId}
                     activities={turn.activities}
                     response={turn.response}
+                    thinking={turn.thinking}
                     intent={turn.intent}
                     isStreaming={turn.isStreaming}
                     isComplete={turn.isComplete}

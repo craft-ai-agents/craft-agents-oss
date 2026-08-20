@@ -1,5 +1,6 @@
 import * as React from 'react'
 import type { CSSProperties } from 'react'
+import type { TFunction } from "i18next"
 import type { StatusConfig } from '@craft-agent/shared/statuses'
 import { isEmoji } from '@craft-agent/shared/utils/icon-constants'
 import { resolveEntityColor, getDefaultStatusColor } from '@craft-agent/shared/colors'
@@ -96,6 +97,96 @@ export function statusConfigsToSessionStatuses(
   isDark: boolean
 ): SessionStatus[] {
   return configs.map(c => statusConfigToSessionStatus(c, workspaceId, isDark))
+}
+
+// ============================================================================
+// Default Status IDs & i18n Display Resolution
+// ============================================================================
+
+/**
+ * IDs of the built-in default statuses that ship with every workspace.
+ * These are the only statuses that receive i18n translation — user-created
+ * or renamed statuses are always displayed as-is.
+ */
+export const DEFAULT_STATUS_IDS = new Set(['backlog', 'todo', 'needs-review', 'done', 'cancelled'])
+
+/**
+ * Default English labels for built-in statuses.
+ * Used to detect whether a persisted status label is still the default
+ * (i.e. the user hasn't customized it) so we can safely apply i18n.
+ */
+const DEFAULT_STATUS_ENGLISH_LABELS: Record<string, string> = {
+  backlog: 'Backlog',
+  todo: 'Todo',
+  'needs-review': 'Needs Review',
+  done: 'Done',
+  cancelled: 'Cancelled',
+}
+
+/**
+ * Resolve the display label for a status, respecting user customizations.
+ *
+ * For built-in default statuses, applies i18n translation when the persisted
+ * label still matches the default English seed. Custom statuses or renamed
+ * defaults are returned as-is.
+ */
+export function resolveStatusDisplayLabel(
+  state: { id: string; label: string },
+  t: TFunction,
+): string {
+  if (DEFAULT_STATUS_IDS.has(state.id)) {
+    const defaultEnglish = DEFAULT_STATUS_ENGLISH_LABELS[state.id]
+    // Only translate when the persisted label matches the default English seed
+    if (state.label === defaultEnglish) {
+      return t(`status.${state.id}`, defaultEnglish)
+    }
+  }
+  return state.label
+}
+
+/**
+ * Default English names for built-in default labels.
+ * Matches the seed labels in labels/storage.ts getDefaultLabelConfig().
+ */
+const DEFAULT_LABEL_ENGLISH_NAMES: Record<string, string> = {
+  development: 'Development',
+  code: 'Code',
+  bug: 'Bug',
+  automation: 'Automation',
+  content: 'Content',
+  writing: 'Writing',
+  research: 'Research',
+  design: 'Design',
+  marketing: 'Marketing',
+  sales: 'Sales',
+  'new-contracts': 'New Contracts',
+  outreach: 'Outreach',
+  responses: 'Responses',
+  product: 'Product',
+  discovery: 'Discovery',
+  specs: 'Specs',
+  launch: 'Launch',
+  feedback: 'Feedback',
+  priority: 'Priority',
+  project: 'Project',
+}
+
+/**
+ * Resolve the display name for a label, respecting user customizations.
+ *
+ * For built-in default labels, applies i18n translation when the persisted
+ * name still matches the default English seed. Custom labels or renamed
+ * defaults are returned as-is.
+ */
+export function resolveLabelDisplayName(
+  label: { id: string; name: string },
+  t: TFunction,
+): string {
+  const defaultEnglish = DEFAULT_LABEL_ENGLISH_NAMES[label.id]
+  if (defaultEnglish && label.name === defaultEnglish) {
+    return t(`label.default.${label.id}`, defaultEnglish)
+  }
+  return label.name
 }
 
 // ============================================================================

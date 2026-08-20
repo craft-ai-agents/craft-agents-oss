@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { useAppShellContext, useSession } from '@/context/AppShellContext'
 import { cn } from '@/lib/utils'
 import { SessionFilesSection } from '../right-sidebar/SessionFilesSection'
+import { SessionPublishedChip } from '@/components/knowledge/SessionPublishedChip'
 
 interface SessionInfoPopoverProps {
   sessionId: string
@@ -135,7 +136,7 @@ function SessionInfoPopoverContent({ sessionId, sessionFolderPath }: { sessionId
 
   return (
     <div className="h-full min-h-0 flex flex-col">
-      <div className="shrink-0 p-3 border-b border-border/50">
+      <div className="shrink-0 p-3 border-b border-border/50 space-y-2">
         <label className="text-xs font-medium text-muted-foreground block mb-1.5 select-none">
           {t("chat.title")}
         </label>
@@ -147,6 +148,7 @@ function SessionInfoPopoverContent({ sessionId, sessionFolderPath }: { sessionId
             className="h-9 py-2 text-sm border-0 shadow-none bg-transparent focus-visible:ring-0"
           />
         </div>
+        <SessionPublishedChip sessionId={sessionId} />
       </div>
       <div className="flex-1 min-h-0 overflow-hidden">
         <SessionFilesSection

@@ -169,6 +169,35 @@ function getTimeInTimezone(date: Date, timezone?: string): { hours: number; minu
 // State Condition
 // ============================================================================
 
+/**
+ * Resolve a payload field that may be a top-level key or a dotted path
+ * (`attribute.name` → payload.attribute.name). Falls back to flat aliases
+ * when the nested path misses (e.g. attributeName when attribute.name is absent).
+ */
+function resolvePayloadField(payload: Record<string, unknown>, field: string): unknown {
+  if (Object.prototype.hasOwnProperty.call(payload, field)) {
+    return payload[field];
+  }
+  if (field.includes('.')) {
+    const parts = field.split('.');
+    let cur: unknown = payload;
+    let ok = true;
+    for (const part of parts) {
+      if (cur === null || cur === undefined || typeof cur !== 'object') {
+        ok = false;
+        break;
+      }
+      cur = (cur as Record<string, unknown>)[part];
+    }
+    if (ok && cur !== undefined) return cur;
+    // Flat aliases for common nested knowledge fields
+    if (field === 'attribute.name' && payload.attributeName !== undefined) {
+      return payload.attributeName;
+    }
+  }
+  return payload[field];
+}
+
 function evaluateStateCondition(condition: StateCondition, context: ConditionContext): boolean {
   const { field } = condition;
   const { payload } = context;
@@ -182,28 +211,28 @@ function evaluateStateCondition(condition: StateCondition, context: ConditionCon
     const toKey = mapping?.to ?? field;
     const fromKey = mapping?.from ?? field;
 
-    if (hasTo && payload[toKey] !== condition.to) return false;
-    if (hasFrom && payload[fromKey] !== condition.from) return false;
+    if (hasTo && resolvePayloadField(payload, toKey) !== condition.to) return false;
+    if (hasFrom && resolvePayloadField(payload, fromKey) !== condition.from) return false;
     return true;
   }
 
   // Handle contains (array membership)
   if (condition.contains !== undefined) {
-    const arr = payload[field];
+    const arr = resolvePayloadField(payload, field);
     if (!Array.isArray(arr)) return false;
     return arr.includes(condition.contains);
   }
 
   // Handle not_value (negation)
   if (condition.not_value !== undefined) {
-    const fieldValue = payload[field];
+    const fieldValue = resolvePayloadField(payload, field);
     if (fieldValue === undefined) return false;
     return fieldValue !== condition.not_value;
   }
 
   // Handle value (exact match)
   if (condition.value !== undefined) {
-    return payload[field] === condition.value;
+    return resolvePayloadField(payload, field) === condition.value;
   }
 
   // No operator specified — fail closed

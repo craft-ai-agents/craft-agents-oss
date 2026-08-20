@@ -11,9 +11,9 @@
  * Instance 2 (-2 suffix): ~/.craft-agent-2/
  */
 
-import { homedir } from 'os';
-import { join } from 'path';
+import { getConfigDir } from './owned-root-policy.ts';
 
-// Allow override via environment variable for multi-instance dev
-// Falls back to default ~/.craft-agent/ for production and non-numbered dev folders
-export const CONFIG_DIR = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.craft-agent');
+export { getConfigDir, setOwnedRootAdapter } from './owned-root-policy.ts';
+
+// Eager snapshot kept for existing importers. New code should call getConfigDir().
+export const CONFIG_DIR = getConfigDir();

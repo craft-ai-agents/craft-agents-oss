@@ -43,6 +43,7 @@ export const KEYS = {
 
   // TurnCard expansion state (persisted across session switches)
   turnCardExpansion: 'turncard-expansion',
+  turnActivitiesExpandedByDefault: 'turn-activities-expanded-by-default',
 
   // Last selected session (workspace-scoped via suffix)
   lastSelectedSessionId: 'last-selected-session-id',
@@ -53,13 +54,37 @@ export const KEYS = {
   // Appearance
   showConnectionIcons: 'show-connection-icons',
   projectColorTreatment: 'project-color-treatment', // 'stripe' | 'stripe-tint'
+  workspaceSelectorRail: 'workspace-selector-rail',
 
   // What's New
+  // What's New — per-version seen list (timeline)
+  whatsNewSeenVersions: 'whats-new-seen-versions',
+  // Workspace icon rail custom links (workspace-scoped via suffix)
+  workspaceRailLinks: 'workspace-rail-links',
+  // Session multi-view tab (session-scoped via suffix) — legacy; prefer entityViewMode
+  sessionViewMode: 'session-view-mode',
+  // Entity multi-view tab (scoped via suffix e.g. session:<id>, note:<id>)
+  entityViewMode: 'entity-view-mode',
   whatsNewLastSeenVersion: 'whats-new-last-seen-version',
+  // Sidebar status filter unseen accent dots (workspace-scoped via suffix)
+  sidebarUnseenStatus: 'sidebar-unseen-status',
+
 
   // Workspace navigation state (workspace-scoped via suffix = workspaceSlug)
   // Stores the full URL search string so switching back restores panels/focus/sidebar
   workspaceUrl: 'workspace-url',
+
+  // Workbench rollout (PR-2)
+  workbenchEnabled: 'workbench-enabled', // Explicit user preference
+  workbenchLegacyEnabled: 'feature-unified-shell', // Bounded compatibility read only
+  surfaceLayout: 'surface-layout', // Surface layout transport (URL search string; derived via platform/layout-snapshot.ts), workspace-scoped
+  activityRailCollapsed: 'activity-rail-collapsed',
+  inspectorVisible: 'inspector-visible',
+  inspectorSection: 'inspector-section',
+} as const
+
+export const EVENTS = {
+  turnActivitiesExpandedByDefaultChanged: 'craft:turn-activities-expanded-by-default-changed',
 } as const
 
 export type StorageKey = typeof KEYS[keyof typeof KEYS]

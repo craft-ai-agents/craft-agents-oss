@@ -39,6 +39,12 @@ export const CHATGPT_OAUTH_CONFIG = {
   CALLBACK_PORT: 1455,
 
   /**
+   * Maximum time to wait for the browser flow to complete before timing out.
+   * Keep this aligned with the server-side pending-flow TTL.
+   */
+  FLOW_TIMEOUT_MS: 5 * 60 * 1000,
+
+  /**
    * OAuth scopes requested during authentication
    * These scopes provide access to ChatGPT Plus features via Codex
    */

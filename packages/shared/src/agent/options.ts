@@ -202,6 +202,11 @@ export function buildClaudeSubprocessEnv(
         const gitBash = getGitBashPath()?.trim();
         if (gitBash) env.CLAUDE_CODE_GIT_BASH_PATH = gitBash;
     }
+    // Strip CLAUDECODE from the subprocess env to prevent nested-session detection.
+    // The Claude Code CLI refuses to start when CLAUDECODE is set, interpreting it as
+    // an attempt to nest sessions. When the host process itself runs inside a Claude
+    // Code session this variable is inherited, so we remove it for standalone use.
+    delete env.CLAUDECODE;
 
     // Bedrock must never be routed through the Claude SDK path.
     // Strip only Claude-specific Bedrock routing vars here; keep generic AWS_*
@@ -209,6 +214,23 @@ export function buildClaudeSubprocessEnv(
     delete env.CLAUDE_CODE_USE_BEDROCK;
     delete env.AWS_BEARER_TOKEN_BEDROCK;
     delete env.ANTHROPIC_BEDROCK_BASE_URL;
+
+    // Pin the spawned CLI to its compiled-in feature-gate defaults so remote
+    // config cannot silently change subprocess behavior between runs. In
+    // particular, whether a Task subagent launches synchronously (blocking) or
+    // asynchronously (fire-and-forget) is gated by a remote GrowthBook flag
+    // (`tengu_amber_heron`, compiled default off). When that gate flips on,
+    // subagents launch async by default even without `run_in_background: true`;
+    // such launches die with the SDK subprocess and are invisible to callers
+    // that track only explicitly-backgrounded tasks. Setting DISABLE_GROWTHBOOK
+    // makes the CLI resolve every gate to its compiled default, so behavior is
+    // reproducible and cannot change mid-flight via remote config. Explicit
+    // `run_in_background: true` still works, unlike the blunter
+    // CLAUDE_CODE_DISABLE_BACKGROUND_TASKS which removes the parameter entirely.
+    // An existing value (from the environment or envOverrides) is respected.
+    if (env.DISABLE_GROWTHBOOK === undefined) {
+        env.DISABLE_GROWTHBOOK = '1';
+    }
 
     return env;
 }

@@ -249,6 +249,11 @@ export class BindingStore {
         const parsed = JSON.parse(raw)
         if (Array.isArray(parsed)) {
           this.bindings = parsed.map(normalizeBinding)
+          const dirty = parsed.some((raw, index) => {
+            const previous = (raw as { config?: { accessMode?: unknown } }).config?.accessMode
+            return this.bindings[index]?.config.accessMode !== previous
+          })
+          if (dirty) this.save()
         }
       }
     } catch (err) {

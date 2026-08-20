@@ -12,13 +12,14 @@ import type { PendingSendersStore } from './pending-senders'
 import type {
   BindingConfig,
   IncomingMessage,
+  MessagingAccessMode,
   MessagingConfig,
   MessagingLogger,
-  PlatformAccessMode,
   PlatformAdapter,
   PlatformOwner,
   PlatformType,
 } from './types'
+import { normalizeMessagingAccessMode } from './types'
 
 /**
  * Cooldown window for friendly rejection replies. A non-owner who pings
@@ -28,17 +29,21 @@ import type {
  */
 export const REJECT_REPLY_COOLDOWN_MS = 60 * 60 * 1000
 
+/** Static pairing copy. Must not imply an agent session or tool run. */
+export const PUBLIC_INBOX_REPLY =
+  'This bot is in public inbox mode. Your message was received but did not start an agent session. Ask the owner to pair your sender id in the Craft Agent app.'
+
 export type AccessDecision =
-  | { allow: true }
-  | { allow: false; reason: AccessRejectReason }
+  | { kind: 'route' }
+  | { kind: 'public-inbox' }
+  | { kind: 'reject'; reason: AccessRejectReason }
 
 export type AccessRejectReason =
-  /** The sender is a bot (Telegram `from.is_bot`). Always silent-drop. */
   | 'bot-sender'
-  /** Workspace mode is `'owner-only'` and sender is not on the owners list. */
   | 'not-owner'
-  /** Binding mode is `'allow-list'` and sender is not on `allowedSenderIds`. */
+  | 'not-allowlisted'
   | 'not-on-binding-allowlist'
+  | 'disabled'
 
 export interface PreBindingAccessInput {
   /** The inbound message about to be handled by Commands. */
@@ -53,21 +58,23 @@ export interface PreBindingAccessInput {
  *
  * Rules:
  *  - Bot senders are always rejected (silent-drop expected upstream).
- *  - When the platform's `accessMode` is missing or `'open'`, allow.
- *  - When `'owner-only'`, allow iff the sender is on `owners`.
+ *  - `public-inbox` (legacy missing/`open`) never grants tool routing.
+ *  - `owner-control` routes only listed owners.
+ *  - `disabled` rejects.
  */
 export function evaluatePreBindingAccess(
   input: PreBindingAccessInput,
 ): AccessDecision {
   const { msg, workspaceConfig } = input
-  if (msg.senderIsBot) return { allow: false, reason: 'bot-sender' }
+  if (msg.senderIsBot) return { kind: 'reject', reason: 'bot-sender' }
 
   const mode = readPlatformAccessMode(workspaceConfig, msg.platform)
-  if (mode === 'open') return { allow: true }
+  if (mode === 'disabled') return { kind: 'reject', reason: 'disabled' }
+  if (mode === 'public-inbox') return { kind: 'public-inbox' }
 
   const owners = readPlatformOwners(workspaceConfig, msg.platform)
-  if (owners.some((o) => o.userId === msg.senderId)) return { allow: true }
-  return { allow: false, reason: 'not-owner' }
+  if (owners.some((o) => o.userId === msg.senderId)) return { kind: 'route' }
+  return { kind: 'reject', reason: 'not-owner' }
 }
 
 export interface BindingAccessInput {
@@ -81,48 +88,39 @@ export interface BindingAccessInput {
  *
  * Resolution order:
  *  1. Bot sender → reject.
- *  2. Binding `accessMode === 'open'` → allow.
- *  3. Binding `accessMode === 'allow-list'` → allow iff sender is in
- *     `allowedSenderIds`.
- *  4. Binding `accessMode === 'inherit'` → defer to workspace policy:
- *     `'open'` allows; `'owner-only'` requires sender on `owners`.
- *
- * Note: a `'open'` workspace + `'inherit'` binding is the legacy/migration
- * path. It deliberately allows traffic so existing prod workspaces don't
- * silently break the day this code ships.
+ *  2. `disabled` → reject.
+ *  3. `public-inbox` (legacy missing/`open`/`inherit`) → non-executing inbox.
+ *  4. `owner-control` routes an allowlisted sender or a workspace owner.
  */
 export function evaluateBindingAccess(input: BindingAccessInput): AccessDecision {
   const { msg, workspaceConfig, binding } = input
-  if (msg.senderIsBot) return { allow: false, reason: 'bot-sender' }
+  if (msg.senderIsBot) return { kind: 'reject', reason: 'bot-sender' }
 
-  const mode = binding.config.accessMode
-  if (mode === 'open') return { allow: true }
+  const mode = normalizeMessagingAccessMode(binding.config.accessMode)
+  if (mode === 'disabled') return { kind: 'reject', reason: 'disabled' }
+  if (mode === 'public-inbox') return { kind: 'public-inbox' }
 
-  if (mode === 'allow-list') {
-    return binding.config.allowedSenderIds.includes(msg.senderId)
-      ? { allow: true }
-      : { allow: false, reason: 'not-on-binding-allowlist' }
-  }
-
-  // mode === 'inherit'
-  const wsMode = readPlatformAccessMode(workspaceConfig, msg.platform)
-  if (wsMode === 'open') return { allow: true }
+  const allowlisted = binding.config.allowedSenderIds.includes(msg.senderId)
   const owners = readPlatformOwners(workspaceConfig, msg.platform)
-  return owners.some((o) => o.userId === msg.senderId)
-    ? { allow: true }
-    : { allow: false, reason: 'not-owner' }
+  if (allowlisted || owners.some((o) => o.userId === msg.senderId)) {
+    return { kind: 'route' }
+  }
+  return {
+    kind: 'reject',
+    reason: binding.config.allowedSenderIds.length > 0 ? 'not-allowlisted' : 'not-owner',
+  }
 }
 
 /**
- * Read the workspace's platform-level access mode, defaulting to `'open'`
- * for back-compat with configs that predate this field.
+ * Read the workspace's platform-level access mode.
+ * Missing/legacy values normalize to `'public-inbox'` on every platform.
  */
 export function readPlatformAccessMode(
   config: MessagingConfig,
   platform: PlatformType,
-): PlatformAccessMode {
-  if (platform !== 'telegram') return 'open'
-  return config.platforms.telegram?.accessMode ?? 'open'
+): MessagingAccessMode {
+  const slice = (config.platforms as Record<string, { accessMode?: unknown } | undefined>)[platform]
+  return normalizeMessagingAccessMode(slice?.accessMode)
 }
 
 /** Read the platform's owners list (empty when not configured). */
@@ -130,8 +128,8 @@ export function readPlatformOwners(
   config: MessagingConfig,
   platform: PlatformType,
 ): PlatformOwner[] {
-  if (platform !== 'telegram') return []
-  return config.platforms.telegram?.owners ?? []
+  const slice = (config.platforms as Record<string, { owners?: PlatformOwner[] } | undefined>)[platform]
+  return slice?.owners ?? []
 }
 
 /**
@@ -187,7 +185,9 @@ export async function executeRejection(
     // store only cares about the two "user-facing" reasons (workspace vs.
     // binding) — bot-sender is silent-dropped before reaching here.
     const pendingReason =
-      reason === 'not-on-binding-allowlist' ? 'not-on-binding-allowlist' : 'not-owner'
+      reason === 'not-on-binding-allowlist' || reason === 'not-allowlisted'
+        ? 'not-on-binding-allowlist'
+        : 'not-owner'
     ctx.pendingStore?.recordRejection({
       platform: sender.platform,
       senderId: sender.senderId,
@@ -233,6 +233,9 @@ export function buildRejectionReply(reason: AccessRejectReason): string | null {
       return null
     case 'not-owner':
       return 'This bot is private. Ask the owner to invite you in the Craft Agent app.'
+    case 'disabled':
+      return 'This bot is disabled.'
+    case 'not-allowlisted':
     case 'not-on-binding-allowlist':
       return "You're not on the allow-list for this conversation. Ask the owner to add you."
   }

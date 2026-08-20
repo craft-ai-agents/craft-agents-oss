@@ -97,20 +97,29 @@ describe('default thinking level storage', () => {
     expect(config.defaultThinkingLevel).toBe('max')
   })
 
-  it('round-trips persisted value across processes', () => {
-    const { configDir } = setupWorkspaceConfigDir()
-    runEval(configDir, "setDefaultThinkingLevel('medium')")
-    const output = runEval(configDir, "console.log(String(getDefaultThinkingLevel()))")
+  // Two sequential Bun.spawnSync under CI load exceeded the default 5s test budget
+  // (each cold import of storage.ts is ~1–3s). One subprocess still proves
+  // set→get persistence within the same CRAFT_CONFIG_DIR.
+  it('round-trips persisted value across get/set in a fresh process', () => {
+    const { configDir, configPath } = setupWorkspaceConfigDir()
+    const output = runEval(
+      configDir,
+      "setDefaultThinkingLevel('medium'); console.log(String(getDefaultThinkingLevel()))",
+    )
     expect(output).toBe('medium')
+    const config = JSON.parse(readFileSync(configPath, 'utf-8'))
+    expect(config.defaultThinkingLevel).toBe('medium')
   })
 
   it('supports every thinking level', () => {
     const { configDir } = setupWorkspaceConfigDir()
-    for (const level of THINKING_LEVEL_IDS) {
-      runEval(configDir, `setDefaultThinkingLevel('${level}')`)
-      const output = runEval(configDir, "console.log(String(getDefaultThinkingLevel()))")
-      expect(output).toBe(level)
-    }
+    // Минимум subprocess-ов (ранее 12 × ~540ms превышало 5s таймаут под нагрузкой).
+    const levels = THINKING_LEVEL_IDS
+    const script = levels
+      .map((level) => `setDefaultThinkingLevel('${level}'); console.log('${level}=' + String(getDefaultThinkingLevel()))`)
+      .join('\n')
+    const output = runEval(configDir, script)
+    expect(output.trim().split('\n')).toEqual(levels.map((level) => `${level}=${level}`))
   })
 
   it('migrates legacy "think" value to "medium"', () => {

@@ -107,6 +107,12 @@ mock.module('@craft-agent/shared/config', () => ({
   touchLlmConnection: async () => {},
   isCompatProvider: () => false,
   isAnthropicProvider: () => true,
+  defaultMidStreamBehavior: (providerType: string) => (providerType === 'anthropic' ? 'queue' : 'steer'),
+  resolveMidStreamBehavior: () => 'queue',
+  resetManagedAnthropicAuthEnvVars: () => {},
+  loadPreferences: () => ({}),
+  modelSupportsImages: () => true,
+  getModelsForProviderType: () => [],
 }))
 
 mock.module('@craft-agent/shared/workspaces', () => ({
@@ -365,5 +371,38 @@ describe('session branch rollback on preflight failure', () => {
     expect(getOrCreateAgentCalled).toBe(true)
     expect(deletedIds).toEqual(['child-1'])
     expect(storedById.has('child-1')).toBe(false)
+  })
+
+  // Regression: the child must be registered in this.sessions BEFORE branch
+  // preflight runs getOrCreateAgent(). Otherwise the browser-pane gate resolves
+  // a remote BrowserPaneManager via this.sessions.get(id), finds nothing, and
+  // throws "Browser pane manager unavailable despite passing the gate" under
+  // rpcServer (remote) deployments. See SessionManager.createSession ordering.
+  it('registers the child session before branch preflight invokes getOrCreateAgent', async () => {
+    const manager = new SessionManager()
+
+    let registeredAtPreflight: boolean | undefined
+
+    ;(manager as any).ensureMessagesLoaded = async (_managed: any) => {}
+    ;(manager as any).getOrCreateAgent = async (managed: any) => {
+      registeredAtPreflight = (manager as any).sessions.has(managed.id)
+      managed.poolServer = { stop: () => {} }
+      managed.agent = {
+        supportsBranching: true,
+        ensureBranchReady: async () => {},
+        destroy: () => {},
+      }
+      return managed.agent
+    }
+
+    const session = await manager.createSession('ws-1', {
+      branchFromSessionId: 'source-1',
+      branchFromMessageId: 'm1',
+    } as any)
+
+    expect(registeredAtPreflight).toBe(true)
+    expect(session.id).toBe('child-1')
+    expect((manager as any).sessions.has('child-1')).toBe(true)
+    expect(deletedIds).toEqual([])
   })
 })

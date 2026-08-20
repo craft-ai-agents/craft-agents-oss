@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'path'
 import { homedir } from 'os'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { addWorkspace, setActiveWorkspace } from '@craft-agent/shared/config'
+import { createAndActivateLocalWorkspace } from '@craft-agent/shared/config'
 import { getDefaultWorkspacesDir, ensureDefaultWorkspacesDir } from '@craft-agent/shared/workspaces'
 import type { ServerStatus, ServerHealth } from '@craft-agent/core/types'
 import type { RpcServer } from '@craft-agent/server-core/transport'
@@ -35,33 +35,70 @@ export function registerServerHandlers(
     return workspaces
   })
 
-  server.handle(RPC_CHANNELS.server.CREATE_WORKSPACE, async (_ctx, name: string) => {
-    if (!name?.trim()) throw new Error('Workspace name is required')
-    const trimmed = name.trim()
+  server.handle(
+    RPC_CHANNELS.server.CREATE_WORKSPACE,
+    async (
+      _ctx,
+      name: string,
+      authority?: { kind?: 'personal' | 'team'; orgId?: string },
+    ) => {
+      if (!name?.trim()) throw new Error('Workspace name is required')
+      if (
+        authority?.kind !== undefined &&
+        authority.kind !== 'personal' &&
+        authority.kind !== 'team'
+      ) {
+        throw new Error('Workspace kind must be personal or team')
+      }
+      if (authority?.orgId !== undefined && typeof authority.orgId !== 'string') {
+        throw new Error('orgId must be a string when provided')
+      }
+      const trimmed = name.trim()
 
-    const slug = trimmed
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      || 'workspace'
+      const slug = trimmed
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        || 'workspace'
 
-    ensureDefaultWorkspacesDir()
-    const baseDir = getDefaultWorkspacesDir()
-    let rootPath = join(baseDir, slug)
-    let uniqueSlug = slug
-    let counter = 1
-    while (existsSync(rootPath)) {
-      uniqueSlug = `${slug}-${counter++}`
-      rootPath = join(baseDir, uniqueSlug)
-    }
+      ensureDefaultWorkspacesDir()
+      const baseDir = getDefaultWorkspacesDir()
+      let rootPath = join(baseDir, slug)
+      let counter = 1
+      while (existsSync(rootPath)) {
+        rootPath = join(baseDir, `${slug}-${counter++}`)
+      }
 
-    const workspace = addWorkspace({ name: trimmed, rootPath })
-    setActiveWorkspace(workspace.id)
-    deps.platform.logger.info(`Created workspace "${trimmed}" at ${rootPath} (server:createWorkspace)`)
+      const activation = await createAndActivateLocalWorkspace({
+        name: trimmed,
+        rootPath,
+        kind: authority?.kind,
+        orgId: authority?.orgId,
+      })
+      sessionManager.setupConfigWatcher(
+        activation.workspace.rootPath,
+        activation.workspace.id,
+      )
+      deps.platform.logger.info(
+        `Created and activated ${activation.workspace.kind} workspace "${trimmed}" at ${rootPath} (server:createWorkspace)`,
+      )
 
-    const { rootPath: _rp, createdAt: _ca, ...info } = workspace
-    return info
-  })
+      const { rootPath: _rootPath, createdAt: _createdAt, ...info } = activation.workspace
+      return {
+        ...info,
+        activation: {
+          workspaceId: activation.workspace.id,
+          activeWorkspaceId: activation.activeWorkspaceId,
+          session: {
+            id: activation.session.id,
+            name: activation.session.name,
+            createdAt: activation.session.createdAt,
+            lastUsedAt: activation.session.lastUsedAt,
+          },
+        },
+      }
+    },
+  )
 
   // -----------------------------------------------------------------------
   // Server Status

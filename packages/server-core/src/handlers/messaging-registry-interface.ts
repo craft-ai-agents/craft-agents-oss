@@ -20,7 +20,7 @@ export interface MessagingBindingInfo {
    * Per-binding access policy. Optional for back-compat with legacy clients
    * that don't yet display this field. Phase 3 wires the renderer.
    */
-  accessMode?: 'inherit' | 'allow-list' | 'open'
+  accessMode?: 'public-inbox' | 'owner-control' | 'disabled'
   allowedSenderIds?: string[]
 }
 
@@ -84,9 +84,9 @@ export interface MessagingPendingSenderInfo {
   threadId?: number
 }
 
-export type MessagingPlatformAccessMode = 'open' | 'owner-only'
+export type MessagingPlatformAccessMode = 'public-inbox' | 'owner-control' | 'disabled'
 
-export type MessagingBindingAccessMode = 'inherit' | 'allow-list' | 'open'
+export type MessagingBindingAccessMode = 'public-inbox' | 'owner-control' | 'disabled'
 
 export interface MessagingConfigInfo {
   enabled: boolean
@@ -191,6 +191,19 @@ export interface IMessagingGatewayRegistry {
     domain: 'lark' | 'feishu'
   }): Promise<void>
 
+  /**
+   * Test a Discord bot token by calling `GET /users/@me`. Returns the bot
+   * username on success.
+   */
+  testDiscordCredentials(creds: {
+    token: string
+  }): Promise<{ success: boolean; botName?: string; error?: string }>
+
+  /** Save Discord credentials and (re)initialize the adapter. */
+  saveDiscordCredentials(workspaceId: string, creds: {
+    token: string
+  }): Promise<void>
+
   /** Disable a platform for a workspace, preserving WhatsApp auth state unless forgotten separately. */
   disconnectPlatform(workspaceId: string, platform: string): Promise<void>
 
@@ -208,6 +221,15 @@ export interface IMessagingGatewayRegistry {
    * code. Must be called after startWhatsAppConnect.
    */
   submitWhatsAppPhone(workspaceId: string, phoneNumber: string): Promise<void>
+
+  /**
+   * Start the WeChat (微信) connect flow: fetches an iLink QR and emits
+   * qr / scanned / need_verifycode / connected / error via WECHAT_UI_EVENT.
+   */
+  startWeChatConnect(workspaceId: string): Promise<void>
+
+  /** Submit a verify code from the UI for an in-progress WeChat QR login. */
+  submitWeChatVerifyCode(workspaceId: string, code: string): void
 
   // -------------------------------------------------------------------------
   // Access control (Phase 2/3)
@@ -266,4 +288,19 @@ export interface IMessagingGatewayRegistry {
     bindingId: string,
     access: { mode: MessagingBindingAccessMode; allowedSenderIds?: string[] },
   ): void
+  /**
+   * Start the WeChat QR-login flow. Fetches a QR image from Tencent's iLink
+   * endpoint and long-polls the status endpoint; emits `qr` / `scaned` /
+   * `confirmed` / `expired` / `error` events via `WC_UI_EVENT`. On
+   * `confirmed`, persists credentials and connects the adapter automatically.
+   * Idempotent: a second call while a login is in flight cancels and replaces
+   * the previous attempt.
+   */
+  startWeChatConnect(workspaceId: string): Promise<void>
+
+  /**
+   * Cancel an in-flight WeChat login. No-op when nothing is running. Emits
+   * a final `cancelled` event so dialog UIs can reset.
+   */
+  cancelWeChatConnect(workspaceId: string): Promise<void>
 }

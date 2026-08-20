@@ -1,0 +1,36 @@
+# Container image for craft-cloud-gateway RunAgent — F21 (omp baked in).
+#
+# Used by the CI job craft-gateway-deploy (built on real amd64 Linux, no
+# Mac QEMU): bun + @oh-my-pi/pi-coding-agent installed at image time so
+# agenticMode='omp' needs no runtime npm install (~500MB). The default
+# runtime runner stays runner.mjs; opts per-run via spec.agenticMode.
+FROM ghcr.io/cloudflare/computer-computerd-linux-x64:0.1.0-alpha.1 AS computerd
+FROM debian:bookworm-slim
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      fuse3 libfuse2 ca-certificates curl gnupg git unzip \
+ && mkdir -p /etc/apt/keyrings \
+ && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+      | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+ && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" \
+      > /etc/apt/sources.list.d/nodesource.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends nodejs \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=computerd /usr/local/bin/computerd /usr/local/bin/computerd
+COPY src/runner.mjs /opt/craft-runner/runner.mjs
+COPY src/runner-omp.mjs /opt/craft-runner/runner-omp.mjs
+# bun: required by the omp CLI shebang (/usr/bin/env bun).
+RUN curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v1.1.42/bun-linux-x64.zip" -o /tmp/bun.zip \
+ && python3 -m zipfile -e /tmp/bun.zip /tmp/ \
+ && mv /tmp/bun-linux-x64/bun /usr/local/bin/bun \
+ && chmod +x /usr/local/bin/bun \
+ && rm -rf /tmp/bun.zip /tmp/bun-linux-x64 \
+ && bun --version
+RUN npm install -g @marp-team/marp-cli@^4
+RUN npm install -g @oh-my-pi/pi-coding-agent@17.2.9 && omp --version
+ENV PORT=8080
+ENV MOUNT_POINT=/workspace
+ENV FUSE_MOUNT=auto
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/computerd"]

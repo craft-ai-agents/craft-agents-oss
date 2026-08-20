@@ -24,9 +24,28 @@ export type {
   WebhookHttpMethod,
   WebhookBodyFormat,
   WebhookAuth,
+  KnowledgeAutomationOp,
+  KnowledgeActionRef,
+  CraftActionRef,
+  KnowledgeAutomationAction,
+  CloudRunSubmitAction,
   AutomationAction,
   AutomationMatcher,
   AutomationsConfig,
+  AutomationGraphNodeKind,
+  AutomationGraphEdgeKind,
+  AutomationGraphPosition,
+  AutomationGraphMatcherData,
+  AutomationGraphTriggerNode,
+  AutomationGraphMatcherNode,
+  AutomationGraphPromptNode,
+  AutomationGraphWebhookNode,
+  AutomationGraphAnnotationNode,
+  AutomationGraphGroupNode,
+  AutomationGraphDecisionNode,
+  AutomationGraphNode,
+  AutomationGraphEdge,
+  AutomationGraph,
   PromptReferences,
   PromptActionResult,
   WebhookActionResult,
@@ -44,7 +63,7 @@ export type {
   AutomationCondition,
 } from './types.ts';
 
-export { APP_EVENTS, AGENT_EVENTS } from './types.ts';
+export { APP_EVENTS, AGENT_EVENTS, AUTOMATION_GRAPH_VERSION } from './types.ts';
 
 // ============================================================================
 // Validation
@@ -76,7 +95,24 @@ export { parsePromptReferences } from './utils.ts';
 export { AutomationEventLogger, type LoggedAutomationEvent, type LoggedAutomationEventInput } from './event-logger.ts';
 
 // Schemas
-export { AutomationsConfigSchema, AutomationConditionSchema, TimeConditionSchema, StateConditionSchema, zodErrorToIssues, VALID_EVENTS } from './schemas.ts';
+export {
+  AutomationsConfigSchema,
+  AutomationConditionSchema,
+  TimeConditionSchema,
+  StateConditionSchema,
+  KnowledgeAutomationActionSchema,
+  CloudRunSubmitActionSchema,
+  KnowledgeAutomationOpSchema,
+  ActionDefinitionSchema,
+  PromptActionSchema,
+  WebhookActionSchema,
+  AutomationGraphNodeSchema,
+  AutomationGraphEdgeSchema,
+  AutomationGraphSchema,
+  SaveAutomationGraphPayloadSchema,
+  zodErrorToIssues,
+  VALID_EVENTS,
+} from './schemas.ts';
 
 // Condition evaluator
 export { evaluateConditions, type ConditionContext } from './conditions.ts';
@@ -102,6 +138,31 @@ export { resolveAutomationsConfigPath, generateShortId } from './resolve-config-
 // Cron matching
 export { matchesCron } from './cron-matcher.ts';
 
+// Graph authoring projection
+export {
+  AutomationGraphError,
+  automationGraphRevision,
+  createDefaultAutomationGraph,
+  compileAutomationGraph,
+  projectAutomationsToGraph,
+  getAutomationGraphProjection,
+  buildAutomationGraphSave,
+  parseSaveAutomationGraphPayload,
+  type SaveAutomationGraphPayload,
+  type CompiledAutomationGraph,
+  type AutomationGraphProjection,
+  type SavedAutomationGraph,
+} from './graph.ts';
+
+
+// Default seeds
+export {
+  CRAFT_AUTOMATION_SEED_VERSION,
+  buildDefaultAutomationSeeds,
+  ensureDefaultAutomations,
+  type SeededAutomationsFile,
+  type EnsureDefaultAutomationsResult,
+} from './default-seeds.ts';
 // Event Bus
 export {
   WorkspaceEventBus,
@@ -115,6 +176,10 @@ export {
   type SchedulerTickPayload,
   type LabelConfigChangePayload,
   type GenericEventPayload,
+  type KnowledgeDocumentEventPayload,
+  type KnowledgeAttributeChangedPayload,
+  type KnowledgeDatabaseRowChangedPayload,
+  type CloudRunCompletedPayload,
   type EventHandler,
   type AnyEventHandler,
 } from './event-bus.ts';
@@ -131,9 +196,17 @@ export {
   PromptHandler,
   EventLogHandler,
   WebhookHandler,
+  KnowledgeHandler,
   type AutomationHandler,
   type PromptHandlerOptions,
   type EventLogHandlerOptions,
   type WebhookHandlerOptions,
+  type KnowledgeHandlerOptions,
+  type KnowledgeActionExecutor,
+  type KnowledgeActionExecutorContext,
+  type KnowledgeActionExecutorResult,
+  type CloudRunSubmitExecutor,
+  type CloudRunSubmitExecutorContext,
+  type CloudRunSubmitExecutorResult,
   type AutomationsConfigProvider,
 } from './handlers/index.ts';

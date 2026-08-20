@@ -10,14 +10,23 @@ import { AddWorkspaceStep_Choice } from "./AddWorkspaceStep_Choice"
 import { AddWorkspaceStep_CreateNew } from "./AddWorkspaceStep_CreateNew"
 import { AddWorkspaceStep_OpenFolder } from "./AddWorkspaceStep_OpenFolder"
 import { AddWorkspaceStep_ConnectRemote } from "./AddWorkspaceStep_ConnectRemote"
+import { AddWorkspaceStep_Ssh } from "./AddWorkspaceStep_Ssh"
 import type { Workspace } from "../../../shared/types"
 import { toast } from "sonner"
+import {
+  buildTeamSpaceCreateArguments,
+  resolveWorkspaceCreation,
+  type WorkspaceCreationSuccess,
+} from "./workspace-creation-contract"
 
-type CreationStep = 'choice' | 'create' | 'open' | 'remote'
+export type { WorkspaceCreationSuccess } from "./workspace-creation-contract"
+
+
+type CreationStep = 'choice' | 'create' | 'open' | 'remote' | 'ssh'
 
 interface WorkspaceCreationScreenProps {
   /** Callback when a workspace is created successfully */
-  onWorkspaceCreated: (workspace: Workspace) => void
+  onWorkspaceCreated: (result: WorkspaceCreationSuccess) => void
   /** Callback when the screen is dismissed */
   onClose: () => void
   className?: string
@@ -66,11 +75,11 @@ export function WorkspaceCreationScreen({
     }
   }, [isCreating, onClose])
 
-  const handleCreateWorkspace = useCallback(async (folderPath: string, name: string, remoteServer?: { url: string; token: string; remoteWorkspaceId: string }) => {
+  const handleCreateWorkspace = useCallback(async (folderPath: string, name: string, remoteServer?: { url: string; token: string; remoteWorkspaceId: string; sshHostId?: string }) => {
     setIsCreating(true)
     try {
-      const workspace = await window.electronAPI.createWorkspace(folderPath, name, remoteServer)
-      onWorkspaceCreated(workspace)
+      const result = await window.electronAPI.createWorkspace(folderPath, name, remoteServer)
+      onWorkspaceCreated(resolveWorkspaceCreation(result, !remoteServer))
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
       toast.error(t('toast.failedToCreateWorkspace'), {
@@ -79,7 +88,33 @@ export function WorkspaceCreationScreen({
     } finally {
       setIsCreating(false)
     }
-  }, [onWorkspaceCreated])
+  }, [onWorkspaceCreated, t])
+
+  const handleCreateTeamSpace = useCallback(async (
+    folderPath: string,
+    name: string,
+    orgId: string,
+  ) => {
+    setIsCreating(true)
+    try {
+      const [teamFolderPath, teamName, remoteServer, authority] =
+        buildTeamSpaceCreateArguments(folderPath, name, orgId)
+      const result = await window.electronAPI.createWorkspace(
+        teamFolderPath,
+        teamName,
+        remoteServer,
+        authority,
+      )
+      onWorkspaceCreated(resolveWorkspaceCreation(result, true))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      toast.error(t('toast.failedToCreateWorkspace'), {
+        description: message,
+      })
+    } finally {
+      setIsCreating(false)
+    }
+  }, [onWorkspaceCreated, t])
 
   const handleReconnectWorkspace = useCallback(async (workspaceId: string, remoteServer: { url: string; token: string; remoteWorkspaceId: string }) => {
     if (!onReconnectWorkspace) {
@@ -102,6 +137,7 @@ export function WorkspaceCreationScreen({
             onCreateNew={() => setStep('create')}
             onOpenFolder={() => setStep('open')}
             onConnectRemote={() => setStep('remote')}
+            onConnectSsh={() => setStep('ssh')}
           />
         )
 
@@ -109,7 +145,7 @@ export function WorkspaceCreationScreen({
         return (
           <AddWorkspaceStep_CreateNew
             onBack={() => setStep('choice')}
-            onCreate={handleCreateWorkspace}
+            onCreate={handleCreateTeamSpace}
             isCreating={isCreating}
           />
         )
@@ -123,6 +159,14 @@ export function WorkspaceCreationScreen({
           />
         )
 
+      case 'ssh':
+        return (
+          <AddWorkspaceStep_Ssh
+            onBack={() => setStep('choice')}
+            onCreate={handleCreateWorkspace}
+          />
+        )
+
       case 'remote':
         return (
           <AddWorkspaceStep_ConnectRemote
@@ -131,6 +175,7 @@ export function WorkspaceCreationScreen({
             isCreating={isCreating}
             initialUrl={reconnectWorkspace?.remoteServer?.url}
             initialToken={reconnectWorkspace?.remoteServer?.token}
+            sshHostId={reconnectWorkspace?.remoteServer?.sshHostId}
             reconnectWorkspace={reconnectWorkspace?.remoteServer ? {
               id: reconnectWorkspace.id,
               name: reconnectWorkspace.name,
@@ -161,7 +206,7 @@ export function WorkspaceCreationScreen({
     <FullscreenOverlayBase
       isOpen={true}
       onClose={handleClose}
-      className={cn("z-splash flex flex-col bg-background", className)}
+      className={cn("z-splash flex flex-col bg-background/95", className)}
     >
       <motion.div
         initial={{ opacity: 0 }}

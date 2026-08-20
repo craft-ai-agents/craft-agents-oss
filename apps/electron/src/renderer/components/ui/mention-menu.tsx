@@ -11,7 +11,7 @@ import { AGENTS_PLUGIN_NAME } from '@craft-agent/shared/skills/types'
 // Types
 // ============================================================================
 
-export type MentionItemType = 'skill' | 'source' | 'file' | 'folder'
+export type MentionItemType = 'skill' | 'source' | 'file' | 'folder' | 'knowledge'
 
 export interface MentionItem {
   id: string
@@ -22,6 +22,11 @@ export interface MentionItem {
   skill?: LoadedSkill
   source?: LoadedSource
   file?: { path: string; type: 'file' | 'directory'; relativePath: string }
+  /**
+   * Knowledge (SiYuan) search-hit data. `ref` is the serialized 'siyuan/<kind>/<id>'
+   * string mirrored by ParsedMentions.knowledge and the [knowledge:...] token grammar.
+   */
+  knowledge?: { ref: string; provider: string; kind: string; id: string; path?: string }
 }
 
 export interface MentionSection {
@@ -138,9 +143,13 @@ function filterSections(sections: MentionSection[], filter: string): MentionSect
   const lowerFilter = filter.trimEnd().toLowerCase()
   if (!lowerFilter) return sections
 
-  // Collect all matching items across sections
+  // Collect all matching items across sections.
+  // Knowledge items are already query-filtered server-side by the knowledge:search
+  // RPC (full-text), so a literal client-side substring filter on the label would
+  // wrongly drop hits whose title doesn't contain the query — they always match.
   const allItems = sections.flatMap(section => section.items)
   const matchingItems = allItems.filter(item =>
+    item.type === 'knowledge' ||
     item.label?.toLowerCase().includes(lowerFilter) ||
     item.id?.toLowerCase().includes(lowerFilter) ||
     item.description?.toLowerCase().includes(lowerFilter)
@@ -198,6 +207,19 @@ export function isValidMentionTrigger(textBeforeCursor: string, atPosition: numb
 // ============================================================================
 // InlineMentionMenu Component
 // ============================================================================
+
+/**
+ * KnowledgeAvatar - Static book glyph for knowledge (SiYuan) search hits.
+ * There is no icon service for knowledge refs, so this mirrors the folder icon approach.
+ */
+function KnowledgeAvatar() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+    </svg>
+  )
+}
 
 export function InlineMentionMenu({
   open,
@@ -332,6 +354,9 @@ export function InlineMentionMenu({
                 {item.type === 'source' && item.source && (
                   <SourceAvatar source={item.source} size="sm" />
                 )}
+                {item.type === 'knowledge' && (
+                  <KnowledgeAvatar />
+                )}
                 {item.type === 'folder' && (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" className="text-muted-foreground">
                     <path d="M20.5 10C20.5 9.07003 20.5 8.60504 20.3978 8.22354C20.1204 7.18827 19.3117 6.37962 18.2765 6.10222C17.895 6 17.43 6 16.5 6H13.1008C12.4742 6 12.1609 6 11.8739 5.91181C11.6824 5.85298 11.5009 5.76572 11.3353 5.65295C11.0871 5.48389 10.8914 5.23926 10.5 4.75L10.4095 4.63693C10.107 4.25881 9.9558 4.06975 9.7736 3.92674C9.54464 3.74703 9.27921 3.61946 8.99585 3.55294C8.77037 3.5 8.52825 3.5 8.04402 3.5C6.60485 3.5 5.88527 3.5 5.32008 3.74178C4.61056 4.0453 4.0453 4.61056 3.74178 5.32008C3.5 5.88527 3.5 6.60485 3.5 8.04402V10M9.46502 20.5H14.535C16.9102 20.5 18.0978 20.5 18.9301 19.8113C19.7624 19.1226 19.9846 17.9559 20.429 15.6227L20.8217 13.5613C21.1358 11.9121 21.2929 11.0874 20.843 10.5437C20.393 10 19.5536 10 17.8746 10H6.12537C4.44643 10 3.60696 10 3.15704 10.5437C2.70713 11.0874 2.8642 11.9121 3.17835 13.5613L3.57099 15.6227C4.01541 17.9559 4.23763 19.1226 5.06992 19.8113C5.90221 20.5 7.08981 20.5 9.46502 20.5Z"/>
@@ -360,7 +385,7 @@ export function InlineMentionMenu({
                     <span className="truncate block">{item.label}</span>
                   </div>
                   <span className={MENU_TYPE_BADGE}>
-                    {item.type === 'skill' ? t('common.skill') : t('common.source')}
+                    {item.type === 'skill' ? t('common.skill') : item.type === 'knowledge' ? (item.knowledge?.provider ?? 'knowledge') : t('common.source')}
                   </span>
                 </>
               )}
@@ -450,6 +475,12 @@ export interface UseInlineMentionOptions {
   inputRef: React.RefObject<MentionInputElement | null>
   skills: LoadedSkill[]
   sources: LoadedSource[]
+  /**
+   * Knowledge search results (from the debounced knowledge:search RPC in the
+   * consuming input). Empty/absent when no connection is configured — the
+   * Knowledge section is then hidden.
+   */
+  knowledge?: MentionItem[]
   /** Base path for file search (working directory) */
   basePath?: string
   onSelect: (item: MentionItem) => void
@@ -473,6 +504,7 @@ export function useInlineMention({
   inputRef,
   skills,
   sources,
+  knowledge = [],
   basePath,
   onSelect,
   workspaceId,
@@ -548,8 +580,18 @@ export function useInlineMention({
       })
     }
 
+    // Knowledge section (debounced knowledge:search results; hidden when there is
+    // no configured connection or an empty result set — the feature stays inert)
+    if (knowledge.length > 0) {
+      result.push({
+        id: 'knowledge',
+        label: 'Knowledge',
+        items: knowledge,
+      })
+    }
+
     return result
-  }, [skills, sources, fileResults])
+  }, [skills, sources, fileResults, knowledge])
 
   const handleInputChange = React.useCallback((value: string, cursorPosition: number) => {
     // Store current state for handleSelect
@@ -684,7 +726,7 @@ export function useInlineMention({
       const before = currentValue.slice(0, atStart)
       const after = currentValue.slice(cursorPosition)
 
-      const buildMentionText = (kind: 'skill' | 'source' | 'file' | 'folder', value: string): string =>
+      const buildMentionText = (kind: MentionItemType, value: string): string =>
         '[' + kind + ':' + value + '] '
 
       // Build the mention text based on type using bracket syntax.
@@ -704,6 +746,11 @@ export function useInlineMention({
         mentionText = buildMentionText('file', item.file?.relativePath || item.id)
       } else if (item.type === 'folder') {
         mentionText = buildMentionText('folder', item.file?.relativePath || item.id)
+      } else if (item.type === 'knowledge') {
+        // Grammar (spec K-03 §3.5.2): [knowledge:siyuan/<kind>/<id>].
+        // item.id is the serialized ref by construction — valid fallback when
+        // the knowledge payload is absent (never emit a [skill:...] token here).
+        mentionText = buildMentionText('knowledge', item.knowledge?.ref ?? item.id)
       } else {
         mentionText = buildMentionText('skill', item.id)
       }

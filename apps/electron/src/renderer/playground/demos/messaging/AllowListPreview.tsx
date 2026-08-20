@@ -36,9 +36,9 @@ import {
 } from '@/components/messaging/access'
 import { playgroundAllowListHandle } from '../../mock-utils'
 
-type AccessModePreset = 'open' | 'owner-only-empty' | 'owner-only-with-owner'
+type AccessModePreset = 'public-inbox' | 'owner-control-empty' | 'owner-control-with-owner'
 type PendingPreset = 'none' | 'one' | 'three'
-type BindingPreset = 'inherit' | 'allow-list' | 'open'
+type BindingPreset = 'public-inbox' | 'owner-control' | 'disabled'
 
 const ROW_ICON_SIZE = 22
 
@@ -79,10 +79,10 @@ const SAMPLE_PENDING: PendingSender[] = [
 
 function buildOwners(preset: AccessModePreset): PlatformOwner[] {
   switch (preset) {
-    case 'open':
-    case 'owner-only-empty':
+    case 'public-inbox':
+    case 'owner-control-empty':
       return []
-    case 'owner-only-with-owner':
+    case 'owner-control-with-owner':
       return [PRIMARY_OWNER]
   }
 }
@@ -100,17 +100,17 @@ function buildPending(preset: PendingPreset): PendingSender[] {
 
 function buildBindingAccess(preset: BindingPreset): BindingAccess {
   switch (preset) {
-    case 'inherit':
-      return { mode: 'inherit', allowedSenderIds: [] }
-    case 'allow-list':
-      return { mode: 'allow-list', allowedSenderIds: [PRIMARY_OWNER.userId] }
-    case 'open':
-      return { mode: 'open', allowedSenderIds: [] }
+    case 'public-inbox':
+      return { mode: 'public-inbox', allowedSenderIds: [] }
+    case 'owner-control':
+      return { mode: 'owner-control', allowedSenderIds: [PRIMARY_OWNER.userId] }
+    case 'disabled':
+      return { mode: 'disabled', allowedSenderIds: [] }
   }
 }
 
 function presetToAccessMode(preset: AccessModePreset): PlatformAccessMode {
-  return preset === 'open' ? 'open' : 'owner-only'
+  return preset === 'public-inbox' ? 'public-inbox' : 'owner-control'
 }
 
 export interface AllowListPreviewProps {
@@ -166,7 +166,7 @@ export function AllowListPreview({
   }, [mode])
 
   const handleLockDown = () => {
-    setMode('owner-only')
+    setMode('owner-control')
     if (owners.length === 0) {
       // Best-effort seed with the current user (the most common case).
       setOwners([PRIMARY_OWNER])
@@ -212,7 +212,7 @@ export function AllowListPreview({
         <SettingsCard>
           <BotHeader />
 
-          {mode === 'open' && <AccessModeBanner onLockDown={handleLockDown} />}
+          {mode === 'public-inbox' && <AccessModeBanner onLockDown={handleLockDown} />}
 
           <CardSeparator />
           <AllowedUsersCollapsible
@@ -342,8 +342,8 @@ function AllowedUsersCollapsible({
   const [isExpanded, setIsExpanded] = React.useState(owners.length > 0)
 
   const subtitle =
-    mode === 'open'
-      ? 'Not enforced — bot is publicly accessible.'
+    mode === 'public-inbox'
+      ? 'Public inbox — messages do not start an agent session.'
       : owners.length === 0
         ? 'No one can use this bot yet — pair from Telegram or accept a pending request.'
         : `${owners.length} ${owners.length === 1 ? 'user' : 'users'} allowed`
@@ -384,7 +384,7 @@ function AllowedUsersCollapsible({
             <div className="border-t border-border/50">
               <OwnersListEditor
                 owners={owners}
-                enforced={mode === 'owner-only'}
+                enforced={mode === 'owner-control'}
                 currentUserId={currentUserId}
                 onRemove={onRemove}
               />

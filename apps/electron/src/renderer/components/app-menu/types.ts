@@ -12,7 +12,6 @@ export interface AppMenuProps {
   onOpenSettings: () => void
   /** Navigate to a specific settings subpage */
   onOpenSettingsSubpage: (subpage: SettingsMenuItem['id']) => void
-  onOpenKeyboardShortcuts: () => void
   onOpenStoredUserPreferences: () => void
   onToggleSidebar?: () => void
   onToggleFocusMode?: () => void

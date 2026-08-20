@@ -1,0 +1,6 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Rox</title>
+  <rect width="32" height="32" rx="8" fill="#0A377B"/>
+  <path d="M9 23V9h7.2c2.95 0 4.85 1.55 4.85 3.95 0 1.7-.95 2.95-2.55 3.5L22.1 23h-3.35l-3.2-5.85H12.2V23H9zm3.2-8.55h3.7c1.35 0 2.15-.7 2.15-1.8s-.8-1.75-2.15-1.75H12.2v3.55z" fill="#FFFFFF"/>
+  <circle cx="24.5" cy="8.5" r="2.5" fill="#FF51FF"/>
+</svg>

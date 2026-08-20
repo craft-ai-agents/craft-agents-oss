@@ -3,9 +3,35 @@ import {
   resolveSlugForMethod,
   apiSetupMethodToConnectionSetup,
   BASE_SLUG_FOR_METHOD,
+  shouldApplyOnboardingLaunchGate,
 } from '../useOnboarding'
 import type { ApiSetupMethod } from '@/components/onboarding'
 
+
+// ============================================================
+// Startup launch policy
+// ============================================================
+
+describe('shouldApplyOnboardingLaunchGate', () => {
+  it('keeps fresh incomplete setup non-blocking', () => {
+    expect(shouldApplyOnboardingLaunchGate('startup', {
+      shouldShowOnboardingOnLaunch: false,
+    })).toBe(false)
+  })
+
+  it('requires both an explicit startup caller and a server launch gate', () => {
+    expect(shouldApplyOnboardingLaunchGate('explicit', {
+      shouldShowOnboardingOnLaunch: true,
+    })).toBe(false)
+    expect(shouldApplyOnboardingLaunchGate('startup', {
+      shouldShowOnboardingOnLaunch: true,
+    })).toBe(true)
+  })
+
+  it('treats older setup payloads without the new flag as non-blocking', () => {
+    expect(shouldApplyOnboardingLaunchGate('startup', {})).toBe(false)
+  })
+})
 // ============================================================
 // resolveSlugForMethod
 // ============================================================
@@ -161,6 +187,17 @@ describe('reauth slug resolution', () => {
       existingSlugs,
     )
     expect(setup.slug).toBe('chatgpt-plus-2')
+  })
+
+  it('copilot new connection flow generates unique slugs when base is taken', () => {
+    const existingSlugs = new Set(['github-copilot'])
+    const setup = apiSetupMethodToConnectionSetup(
+      'pi_copilot_oauth',
+      {},
+      null,
+      existingSlugs,
+    )
+    expect(setup.slug).toBe('github-copilot-2')
   })
 
   it('copilot reauth uses override slug', () => {

@@ -62,7 +62,10 @@ export function BrowserTabStrip({
   const updateInstance = useSetAtom(updateBrowserInstanceAtom)
   const removeInstance = useSetAtom(removeBrowserInstanceAtom)
   const [activeInstanceId, setActiveInstanceId] = useAtom(activeBrowserInstanceIdAtom)
-  const effectiveInstances = instancesOverride ?? instances
+  const effectiveInstances = useMemo(
+    () => (instancesOverride ?? instances).filter((instance) => !instance.embedded),
+    [instancesOverride, instances],
+  )
   const instancesRef = useRef(effectiveInstances)
   const removeReconcileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 

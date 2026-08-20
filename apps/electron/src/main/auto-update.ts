@@ -160,6 +160,23 @@ autoUpdater.autoDownload = true
 // Install on app quit (if update is downloaded but user hasn't clicked "Restart")
 autoUpdater.autoInstallOnAppQuit = true
 
+// Release-channel override without rebuilding electron-builder.yml. Production
+// keeps the build-baked publish config (agents.craft.do); for forks/OSS builds
+// point this at any generic-updater host that serves latest-*.yml (e.g. a
+// GitHub release URL), e.g.:
+//   CRAFT_UPDATER_URL=https://<host>/path/to/channel
+//   CRAFT_UPDATER_URL=github://<owner>/<repo>  (uses the GitHub provider)
+const updaterUrlOverride = process.env.CRAFT_UPDATER_URL
+if (updaterUrlOverride) {
+  const githubMatch = updaterUrlOverride.match(/^github:\/\/([^/]+)\/([^/]+)$/)
+  if (githubMatch) {
+    autoUpdater.setFeedURL({ provider: 'github', owner: githubMatch[1]!, repo: githubMatch[2]! })
+  } else {
+    autoUpdater.setFeedURL({ provider: 'generic', url: updaterUrlOverride })
+  }
+  mainLog.info('[auto-update] Using overridden feed provider')
+}
+
 // Use the logger for electron-updater internal logging
 autoUpdater.logger = {
   info: (msg: unknown) => mainLog.info('[electron-updater]', msg),

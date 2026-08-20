@@ -4,6 +4,12 @@
  * Handles workspace setup and configuration persistence.
  */
 import { getAuthState, getSetupNeeds } from '@craft-agent/shared/auth'
+import {
+  getRoxAuthBaseUrl,
+  isRoxCloudRequired,
+  startRoxDeviceFlow,
+  waitForRoxDeviceApproval,
+} from '@craft-agent/shared/auth/rox-cloud'
 import { isSetupDeferred, setSetupDeferred } from '@craft-agent/shared/config/storage'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { prepareClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState, prepareMcpOAuth } from '@craft-agent/shared/auth'
@@ -25,6 +31,9 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.onboarding.HAS_CLAUDE_OAUTH_STATE,
   RPC_CHANNELS.onboarding.CLEAR_CLAUDE_OAUTH_STATE,
   RPC_CHANNELS.onboarding.DEFER_SETUP,
+  RPC_CHANNELS.onboarding.START_ROX_CONNECT,
+  RPC_CHANNELS.onboarding.GET_ROX_CLOUD_STATE,
+  RPC_CHANNELS.onboarding.CLEAR_ROX_CLOUD,
 ] as const
 
 export function registerOnboardingHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -34,6 +43,10 @@ export function registerOnboardingHandlers(server: RpcServer, deps: HandlerDeps)
   server.handle(RPC_CHANNELS.onboarding.GET_AUTH_STATE, async () => {
     const authState = await getAuthState()
     const setupNeeds = getSetupNeeds(authState, isSetupDeferred())
+    const manager = getCredentialManager()
+    const roxSession = await manager.getRoxCloudSession()
+    const roxCloudRequired = isRoxCloudRequired()
+    const hasRoxCloud = await manager.hasRoxCloudSession()
     // Redact raw credentials — renderer only needs boolean flags (hasCredentials, setupNeeds)
     return {
       authState: {
@@ -44,7 +57,19 @@ export function registerOnboardingHandlers(server: RpcServer, deps: HandlerDeps)
           claudeOAuthToken: authState.billing.claudeOAuthToken ? '••••' : null,
         },
       },
-      setupNeeds,
+      setupNeeds: {
+        ...setupNeeds,
+        needsRoxCloud: roxCloudRequired && !hasRoxCloud,
+        isFullyConfigured: setupNeeds.isFullyConfigured && (!roxCloudRequired || hasRoxCloud),
+      },
+      roxCloud: {
+        required: roxCloudRequired,
+        connected: hasRoxCloud,
+        authBaseUrl: getRoxAuthBaseUrl(),
+        user: roxSession
+          ? { id: roxSession.userId, email: roxSession.email, name: roxSession.name }
+          : null,
+      },
     }
   })
 
@@ -164,8 +189,81 @@ export function registerOnboardingHandlers(server: RpcServer, deps: HandlerDeps)
   // User chose "Setup later" — persist so onboarding doesn't re-show on next launch.
   // Cleared automatically when user configures a provider from Settings.
   server.handle(RPC_CHANNELS.onboarding.DEFER_SETUP, async () => {
+    // LLM provider setup can be deferred; Rox cloud Connect cannot when required.
     setSetupDeferred(true)
-    log.info('[Onboarding] User deferred setup')
+    log.info('[Onboarding] User deferred LLM setup')
     return { success: true }
+  })
+
+  server.handle(RPC_CHANNELS.onboarding.GET_ROX_CLOUD_STATE, async () => {
+    const manager = getCredentialManager()
+    const session = await manager.getRoxCloudSession()
+    return {
+      required: isRoxCloudRequired(),
+      connected: await manager.hasRoxCloudSession(),
+      authBaseUrl: getRoxAuthBaseUrl(),
+      user: session
+        ? { id: session.userId, email: session.email, name: session.name }
+        : null,
+    }
+  })
+
+  server.handle(RPC_CHANNELS.onboarding.CLEAR_ROX_CLOUD, async () => {
+    await getCredentialManager().clearRoxCloudSession()
+    return { success: true }
+  })
+
+  // Active device flows: deviceCode -> abort controller / in-flight promise
+  const roxConnectInFlight = new Map<string, Promise<unknown>>()
+
+  /**
+   * Start Rox Connect: create device grant, return user-facing codes.
+   * Spawns background poll; renderer opens browser + watches GET_ROX_CLOUD_STATE.
+   */
+  server.handle(RPC_CHANNELS.onboarding.START_ROX_CONNECT, async () => {
+    log.info('[Onboarding] Starting Rox cloud Connect device flow')
+    try {
+      const started = await startRoxDeviceFlow('craft-agents-desktop')
+      const key = started.deviceCode
+      if (!roxConnectInFlight.has(key)) {
+        const p = waitForRoxDeviceApproval(started.deviceCode, {
+          timeoutMs: Math.max(started.expiresIn, 60) * 1000,
+        })
+          .then(async (approved) => {
+            const expiresAt = Date.now() + Math.max(approved.expiresIn, 60) * 1000
+            await getCredentialManager().setRoxCloudSession({
+              accessToken: approved.accessToken,
+              expiresAt,
+              userId: approved.user.id,
+              email: approved.user.email,
+              name: approved.user.name,
+              authBaseUrl: getRoxAuthBaseUrl(),
+            })
+            log.info('[Onboarding] Rox Connect succeeded for', approved.user.email)
+          })
+          .catch((err) => {
+            log.error(
+              '[Onboarding] Rox Connect poll failed:',
+              err instanceof Error ? err.message : String(err),
+            )
+          })
+          .finally(() => {
+            roxConnectInFlight.delete(key)
+          })
+        roxConnectInFlight.set(key, p)
+      }
+
+      return {
+        success: true as const,
+        userCode: started.userCode,
+        verificationUri: started.verificationUri,
+        verificationUriComplete: started.verificationUriComplete,
+        expiresIn: started.expiresIn,
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      log.error('[Onboarding] Rox Connect start failed:', message)
+      return { success: false as const, error: message }
+    }
   })
 }

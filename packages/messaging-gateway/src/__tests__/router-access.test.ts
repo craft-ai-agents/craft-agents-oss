@@ -89,7 +89,7 @@ interface Harness {
 
 function makeHarness(args: {
   workspaceConfig: MessagingConfig
-  bindingConfig?: Partial<{ accessMode: 'inherit' | 'allow-list' | 'open'; allowedSenderIds: string[] }>
+  bindingConfig?: Partial<{ accessMode: 'inherit' | 'allow-list' | 'open' | 'owner-control' | 'public-inbox'; allowedSenderIds: string[] }>
 }): Harness {
   const store = new BindingStore(storeDir)
   store.bind(
@@ -121,7 +121,7 @@ function makeHarness(args: {
 }
 
 describe('Router access control', () => {
-  it('routes when binding is open', async () => {
+  it('does not route unknown senders on a legacy open binding', async () => {
     const harness = makeHarness({
       workspaceConfig: {
         enabled: true,
@@ -131,8 +131,13 @@ describe('Router access control', () => {
     })
     const adapter = makeFakeAdapter()
     await harness.router.route(adapter, baseMsg({ senderId: 'anyone' }))
-    expect(harness.sessionManager.sendMessage).toHaveBeenCalledTimes(1)
-    expect(adapter.sent.length).toBe(0)
+    expect(harness.sessionManager.sendMessage).not.toHaveBeenCalled()
+    expect(harness.commands.handle).not.toHaveBeenCalled()
+    expect(adapter.sent).toHaveLength(1)
+    expect(adapter.sent[0]).toMatch(/pair|access|inbox/i)
+    const pending = harness.pendingStore.list('telegram')
+    expect(pending).toHaveLength(1)
+    expect(pending[0]!.userId).toBe('anyone')
   })
 
   it('rejects on inherited owner-only when sender is not an owner', async () => {
@@ -147,7 +152,7 @@ describe('Router access control', () => {
           },
         },
       },
-      bindingConfig: { accessMode: 'inherit' },
+      bindingConfig: { accessMode: 'owner-control' },
     })
     const adapter = makeFakeAdapter()
     await harness.router.route(adapter, baseMsg({ senderId: 'stranger' }))
@@ -219,7 +224,7 @@ describe('Router access control', () => {
           },
         },
       },
-      bindingConfig: { accessMode: 'inherit' },
+      bindingConfig: { accessMode: 'owner-control' },
     })
     const adapter = makeFakeAdapter()
     await harness.router.route(adapter, baseMsg({ senderId: 'stranger' }))

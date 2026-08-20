@@ -5,8 +5,9 @@
  * Format: Line 1 = SessionHeader, Lines 2+ = StoredMessage (one per line)
  */
 
-import { openSync, readSync, closeSync, readFileSync, writeFileSync, renameSync, unlinkSync } from 'fs';
-import { open, readFile } from 'fs/promises';
+import { createReadStream, createWriteStream, openSync, readSync, closeSync, readFileSync, writeFileSync, renameSync, unlinkSync } from 'fs';
+import { open, readFile, rename, stat, unlink, writeFile } from 'fs/promises';
+import { pipeline } from 'node:stream/promises';
 import { dirname } from 'path';
 import type { SessionHeader, StoredSession, StoredMessage, SessionTokenUsage } from './types.ts';
 import type { PermissionMode } from '../agent/mode-types.ts';
@@ -57,6 +58,10 @@ function normalizePermissionMode(value: unknown): PermissionMode | undefined {
 function normalizeHeaderPermissionModes<T extends SessionHeader>(header: T): T {
   const permissionMode = normalizePermissionMode(header.permissionMode);
   const previousPermissionMode = normalizePermissionMode(header.previousPermissionMode);
+
+  if (header.memoryMode && !['persistent', 'incognito', 'temporary'].includes(header.memoryMode)) {
+    delete (header as Partial<SessionHeader>).memoryMode;
+  }
 
   if (permissionMode) {
     header.permissionMode = permissionMode;
@@ -258,6 +263,68 @@ export async function readSessionHeaderAsync(sessionFile: string): Promise<Sessi
   } catch (error) {
     debug('[jsonl] Failed to read session header async:', sessionFile, error);
     return null;
+  }
+}
+
+/**
+ * Atomically replace a JSONL session header while copying every message line
+ * verbatim. Metadata-only mutations therefore never materialize a transcript.
+ */
+export async function rewriteSessionJsonlHeader(
+  sessionFile: string,
+  updateHeader: (header: SessionHeader) => SessionHeader,
+  onBeforeCommit?: (header: SessionHeader) => void,
+): Promise<SessionHeader> {
+  const handle = await open(sessionFile, 'r');
+  let bodyOffset: number;
+  let nextHeader: SessionHeader;
+
+  try {
+    const buffer = Buffer.alloc(8192);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const firstNewline = buffer.indexOf(0x0a, 0);
+
+    if (firstNewline === -1 && bytesRead === buffer.length) {
+      throw new Error(`Session header exceeds ${buffer.length} bytes: ${sessionFile}`);
+    }
+
+    const headerEnd = firstNewline === -1 ? bytesRead : firstNewline;
+    bodyOffset = firstNewline === -1 ? bytesRead : firstNewline + 1;
+    const headerLine = buffer.subarray(0, headerEnd).toString('utf-8');
+    const header = normalizeHeaderPermissionModes(
+      safeJsonParse(expandSessionPath(headerLine, dirname(sessionFile))) as SessionHeader,
+    );
+    nextHeader = updateHeader({ ...header });
+  } finally {
+    await handle.close();
+  }
+
+  const tmpFile = `${sessionFile}.tmp`;
+  try {
+    const sessionDir = dirname(sessionFile);
+    await writeFile(
+      tmpFile,
+      `${makeSessionPathPortable(JSON.stringify(nextHeader), sessionDir)}\n`,
+      'utf-8',
+    );
+
+    const { size } = await stat(sessionFile);
+    if (bodyOffset < size) {
+      await pipeline(
+        createReadStream(sessionFile, { start: bodyOffset }),
+        createWriteStream(tmpFile, { flags: 'a' }),
+      );
+    }
+
+    // Set the self-write signature before unlink/rename can notify watchers.
+    onBeforeCommit?.(nextHeader);
+    // Windows cannot replace an existing destination with rename().
+    try { await unlink(sessionFile); } catch { /* ignore if the file disappeared */ }
+    await rename(tmpFile, sessionFile);
+    return nextHeader;
+  } catch (error) {
+    try { await unlink(tmpFile); } catch { /* best-effort temp cleanup */ }
+    throw error;
   }
 }
 

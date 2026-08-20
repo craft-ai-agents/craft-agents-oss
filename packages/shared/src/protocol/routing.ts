@@ -24,6 +24,36 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.workspaces.CHECK_SLUG,
   RPC_CHANNELS.workspaces.UPDATE_REMOTE,
 
+  // workgraph — app-owned local database, never remote/headless.
+  RPC_CHANNELS.workgraph.GET_HEALTH,
+  RPC_CHANNELS.workgraph.GET_VERSION,
+  RPC_CHANNELS.workgraph.LIST_CONNECTIONS,
+  RPC_CHANNELS.workgraph.LIST_CONNECTION_AUDIT,
+  RPC_CHANNELS.workgraph.LIST_CONNECTION_BINDINGS,
+  RPC_CHANNELS.workgraph.CONVERT_CONNECTION,
+  RPC_CHANNELS.workgraph.REVOKE_CONNECTION_BINDING,
+  RPC_CHANNELS.workgraph.GET_CONNECTION,
+  RPC_CHANNELS.workgraph.CREATE_CONNECTION,
+  RPC_CHANNELS.workgraph.GRANT_CONNECTION,
+  RPC_CHANNELS.workgraph.PREVIEW_GITHUB_ENV,
+  RPC_CHANNELS.workgraph.IMPORT_GITHUB_ENV,
+  RPC_CHANNELS.workgraph.PREVIEW_GIT_HELPER,
+  RPC_CHANNELS.workgraph.IMPORT_GIT_HELPER,
+  RPC_CHANNELS.workgraph.REVOKE_CONNECTION,
+  RPC_CHANNELS.workgraph.REPAIR_CONNECTION,
+  RPC_CHANNELS.workgraph.ROTATE_CONNECTION,
+  RPC_CHANNELS.workgraph.TEST_CONNECTION,
+  RPC_CHANNELS.workgraph.PREVIEW_DOCKER_HELPER,
+  RPC_CHANNELS.workgraph.IMPORT_DOCKER_HELPER,
+  RPC_CHANNELS.workgraph.PREVIEW_AWS_PROFILES,
+  RPC_CHANNELS.workgraph.IMPORT_AWS_PROFILE,
+  RPC_CHANNELS.workgraph.PREVIEW_KEYCHAIN,
+  RPC_CHANNELS.workgraph.IMPORT_KEYCHAIN,
+  RPC_CHANNELS.workgraph.PREVIEW_ADC,
+  RPC_CHANNELS.workgraph.IMPORT_ADC,
+  RPC_CHANNELS.workgraph.PREVIEW_SSH_AGENT,
+  RPC_CHANNELS.workgraph.IMPORT_SSH_AGENT,
+
   // window — Electron window management
   RPC_CHANNELS.window.GET_WORKSPACE,
   RPC_CHANNELS.window.GET_MODE,
@@ -53,6 +83,7 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.auth.LOGOUT,
   RPC_CHANNELS.auth.SHOW_LOGOUT_CONFIRMATION,
   RPC_CHANNELS.auth.SHOW_DELETE_SESSION_CONFIRMATION,
+  RPC_CHANNELS.auth.SHOW_DELETE_WORKSPACE_CONFIRMATION,
 
   // shell — local OS shell (openFile/showInFolder guarded for remote)
   RPC_CHANNELS.shell.OPEN_URL,
@@ -67,6 +98,13 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.system.VERSIONS,
   RPC_CHANNELS.system.HOME_DIR,
   RPC_CHANNELS.system.IS_DEBUG_MODE,
+
+  // toolchain — local config-dir downloads/install state
+  RPC_CHANNELS.toolchain.STATUS,
+  RPC_CHANNELS.toolchain.STATUS_CHANGED,
+  RPC_CHANNELS.toolchain.UPDATE,
+  RPC_CHANNELS.toolchain.GET_DISABLED,
+  RPC_CHANNELS.toolchain.SET_DISABLED,
 
   // theme — app/OS-level preferences, not workspace content
   RPC_CHANNELS.theme.GET_SYSTEM_PREFERENCE,
@@ -149,6 +187,8 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   // appearance — local UI preferences
   RPC_CHANNELS.appearance.GET_RICH_TOOL_DESCRIPTIONS,
   RPC_CHANNELS.appearance.SET_RICH_TOOL_DESCRIPTIONS,
+  RPC_CHANNELS.appearance.GET_DEFAULT_ZOOM_LEVEL,
+  RPC_CHANNELS.appearance.SET_DEFAULT_ZOOM_LEVEL,
 
   // caching — prompt cache and context settings
   RPC_CHANNELS.caching.GET_EXTENDED_PROMPT_CACHE,
@@ -176,6 +216,7 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.browserPane.RELOAD,
   RPC_CHANNELS.browserPane.STOP,
   RPC_CHANNELS.browserPane.FOCUS,
+  RPC_CHANNELS.browserPane.RESIZE,
   RPC_CHANNELS.browserPane.SNAPSHOT,
   RPC_CHANNELS.browserPane.CLICK,
   RPC_CHANNELS.browserPane.FILL,
@@ -187,6 +228,11 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.browserPane.STATE_CHANGED,
   RPC_CHANNELS.browserPane.REMOVED,
   RPC_CHANNELS.browserPane.INTERACTED,
+  RPC_CHANNELS.browserPane.CREATE_EMBEDDED,
+  RPC_CHANNELS.browserPane.SYNC_BOUNDS,
+  RPC_CHANNELS.browserPane.CLICK_AT,
+  RPC_CHANNELS.browserPane.TYPE,
+  RPC_CHANNELS.browserPane.KEY,
 
   // gitbash — Windows-specific local
   RPC_CHANNELS.gitbash.CHECK,
@@ -201,13 +247,131 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.onboarding.VALIDATE_MCP,
   RPC_CHANNELS.onboarding.START_MCP_OAUTH,
   RPC_CHANNELS.onboarding.DEFER_SETUP,
+  RPC_CHANNELS.onboarding.START_ROX_CONNECT,
+  RPC_CHANNELS.onboarding.GET_ROX_CLOUD_STATE,
+  RPC_CHANNELS.onboarding.CLEAR_ROX_CLOUD,
   RPC_CHANNELS.settings.GET_NETWORK_PROXY,
   RPC_CHANNELS.settings.SET_NETWORK_PROXY,
+
+  // env overrides — local config.json runtime.envOverrides applied to spawned agents
+  RPC_CHANNELS.settings.GET_ENV_OVERRIDES,
+  RPC_CHANNELS.settings.SET_ENV_OVERRIDES,
 
   // server config — local embedded server settings
   RPC_CHANNELS.settings.GET_SERVER_CONFIG,
   RPC_CHANNELS.settings.SET_SERVER_CONFIG,
   RPC_CHANNELS.settings.GET_SERVER_STATUS,
+
+  // contextDocs — local config-dir documents (runtime context/*.md, not workspace content)
+  RPC_CHANNELS.contextDocs.LIST,
+  RPC_CHANNELS.contextDocs.READ,
+  RPC_CHANNELS.contextDocs.WRITE,
+  RPC_CHANNELS.contextDocs.DELETE,
+  RPC_CHANNELS.contextDocs.READ_TEMPLATE,
+  RPC_CHANNELS.contextDocs.ACCEPT_TEMPLATE,
+  RPC_CHANNELS.contextDocs.KEEP_MINE_TEMPLATE,
+  RPC_CHANNELS.contextDocs.CHANGED,
+
+  // bundled skill packs — local config + ~/.agents/skills
+  RPC_CHANNELS.bundledSkills.LIST,
+  RPC_CHANNELS.bundledSkills.GET_DISABLED,
+  RPC_CHANNELS.bundledSkills.SET_DISABLED,
+  RPC_CHANNELS.bundledSkills.CHANGED,
+
+  // marketplace — curated installs into the local config dir (skills/context/toolchain deferral)
+  RPC_CHANNELS.marketplace.CATALOG,
+  RPC_CHANNELS.marketplace.STATS,
+  RPC_CHANNELS.marketplace.INSTALL,
+  RPC_CHANNELS.marketplace.REMOVE,
+  RPC_CHANNELS.marketplace.UPDATE,
+  RPC_CHANNELS.marketplace.REFRESH,
+  RPC_CHANNELS.marketplace.PROGRESS,
+  RPC_CHANNELS.marketplace.CHANGED,
+
+  // extensions — Extension Center catalog/state (local config dir + projections; same host as marketplace)
+  RPC_CHANNELS.extensions.LIST_CATALOG,
+  RPC_CHANNELS.extensions.LIST_INSTALLED,
+  RPC_CHANNELS.extensions.SET_ENABLED,
+  RPC_CHANNELS.extensions.GET_STATE,
+  RPC_CHANNELS.extensions.CHANGED,
+
+  // pluginBridge — SiYuan plugin bridge (local fixtures / residual kernel; never proxied)
+  RPC_CHANNELS.pluginBridge.LIST_PLUGINS,
+  RPC_CHANNELS.pluginBridge.GET_PROJECTIONS,
+  RPC_CHANNELS.pluginBridge.SET_ENABLED,
+  RPC_CHANNELS.pluginBridge.OPEN_COMPAT,
+  RPC_CHANNELS.pluginBridge.INSTALL_BAZAAR,
+  RPC_CHANNELS.pluginBridge.UNINSTALL_BAZAAR,
+
+  // extensionHost — Craft Extension Host lifecycle (local process only; does not run SiYuan plugins)
+  RPC_CHANNELS.extensionHost.STATUS,
+  RPC_CHANNELS.extensionHost.STATUS_ALL,
+  RPC_CHANNELS.extensionHost.START,
+  RPC_CHANNELS.extensionHost.STOP,
+  RPC_CHANNELS.extensionHost.RESTART,
+  RPC_CHANNELS.extensionHost.LOAD,
+  RPC_CHANNELS.extensionHost.CALL,
+  RPC_CHANNELS.extensionHost.LIST_COMMANDS,
+  RPC_CHANNELS.extensionHost.MINT_CAPABILITY,
+  RPC_CHANNELS.extensionHost.REVOKE_CAPABILITY,
+  RPC_CHANNELS.extensionHost.PROXY_FETCH,
+  RPC_CHANNELS.extensionHost.GET_URL_ALLOWLIST,
+  RPC_CHANNELS.extensionHost.SET_URL_ALLOWLIST,
+
+  // extensionSurface — sandboxed extension UI BrowserViews (partition persist:ext-*)
+  RPC_CHANNELS.extensionSurface.CREATE_EMBEDDED,
+  RPC_CHANNELS.extensionSurface.DESTROY,
+  RPC_CHANNELS.extensionSurface.LIST,
+  RPC_CHANNELS.extensionSurface.SYNC_BOUNDS,
+  RPC_CHANNELS.extensionSurface.FOCUS,
+  RPC_CHANNELS.extensionSurface.STATE_CHANGED,
+  RPC_CHANNELS.extensionSurface.REMOVED,
+
+
+  // knowledge — engine status/start + install detect reflect the answering host, never proxied
+  RPC_CHANNELS.knowledge.ENGINE_STATUS,
+  RPC_CHANNELS.knowledge.DETECT_ENGINE,
+  RPC_CHANNELS.knowledge.ENGINE_START,
+  // Local vault/kernel import: remote clients must not drive host filesystem paths.
+  RPC_CHANNELS.knowledge.MIGRATE_NOTES,
+  RPC_CHANNELS.mindmap.ENRICH,
+  RPC_CHANNELS.mindmap.PIN_LOAD,
+  RPC_CHANNELS.mindmap.PIN_SAVE,
+  RPC_CHANNELS.mindmap.PIN_CLEAR,
+
+  // siyuan — embedded SiYuan surface lifecycle drives local Electron BrowserViews
+  RPC_CHANNELS.siyuan.CREATE_EMBEDDED,
+  RPC_CHANNELS.siyuan.DESTROY,
+  RPC_CHANNELS.siyuan.LIST,
+  RPC_CHANNELS.siyuan.SYNC_BOUNDS,
+  RPC_CHANNELS.siyuan.FOCUS,
+  RPC_CHANNELS.siyuan.EVALUATE,
+  RPC_CHANNELS.siyuan.STATE_CHANGED,
+  RPC_CHANNELS.siyuan.REMOVED,
+
+  // gamification — user XP lives in local CONFIG_DIR
+  RPC_CHANNELS.gamification.GET,
+  RPC_CHANNELS.gamification.AWARD,
+  RPC_CHANNELS.gamification.CHANGED,
+
+  // orgs — local-only identity/membership bookkeeping (CONFIG_DIR)
+  RPC_CHANNELS.orgs.LIST,
+  RPC_CHANNELS.orgs.CREATE,
+  RPC_CHANNELS.orgs.INVITE,
+  RPC_CHANNELS.orgs.ACCEPT,
+  RPC_CHANNELS.orgs.LIST_MEMBERS,
+  RPC_CHANNELS.orgs.GET_IDENTITY,
+  RPC_CHANNELS.orgs.UPDATE_IDENTITY,
+  RPC_CHANNELS.orgs.SET_WORKSPACE_ORG,
+
+  // identity — profile + service connections (Identity Center, S-07)
+  RPC_CHANNELS.identity.GET_STATE,
+  RPC_CHANNELS.identity.UPDATE_PROFILE,
+  RPC_CHANNELS.identity.CONNECT,
+  RPC_CHANNELS.identity.DISCONNECT,
+  RPC_CHANNELS.identity.REFRESH_STATUS,
+  RPC_CHANNELS.identity.CHANGED,
+
 ])
 
 // ---------------------------------------------------------------------------
@@ -232,6 +396,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.sessions.UNREAD_SUMMARY_CHANGED,
   RPC_CHANNELS.sessions.CREATE,
   RPC_CHANNELS.sessions.DELETE,
+  RPC_CHANNELS.sessions.SET_MEMORY_MODE,
+  RPC_CHANNELS.sessions.GET_PROVENANCE,
   RPC_CHANNELS.sessions.GET_MESSAGES,
   RPC_CHANNELS.sessions.SEND_MESSAGE,
   RPC_CHANNELS.sessions.CANCEL,
@@ -239,8 +405,12 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.sessions.RESPOND_TO_PERMISSION,
   RPC_CHANNELS.sessions.RESPOND_TO_CREDENTIAL,
   RPC_CHANNELS.sessions.COMMAND,
+  RPC_CHANNELS.sessions.BULK_UPDATE,
+  RPC_CHANNELS.sessions.BULK_CHANGED,
   RPC_CHANNELS.sessions.GET_PENDING_PLAN_EXECUTION,
   RPC_CHANNELS.sessions.GET_PERMISSION_MODE_STATE,
+  RPC_CHANNELS.sessions.SET_MEMORY_MODE,
+  RPC_CHANNELS.sessions.GET_PROVENANCE,
   RPC_CHANNELS.sessions.EVENT,
   RPC_CHANNELS.sessions.GET_MODEL,
   RPC_CHANNELS.sessions.SET_MODEL,
@@ -288,6 +458,98 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // fs — workspace filesystem
   RPC_CHANNELS.fs.SEARCH,
   RPC_CHANNELS.fs.LIST_DIRECTORY,
+
+  // notes — workspace note vault
+  RPC_CHANNELS.notes.LIST,
+  RPC_CHANNELS.notes.READ,
+  RPC_CHANNELS.notes.SAVE,
+  RPC_CHANNELS.notes.CREATE,
+  RPC_CHANNELS.notes.RENAME,
+  RPC_CHANNELS.notes.DELETE,
+  RPC_CHANNELS.notes.SEARCH,
+  RPC_CHANNELS.notes.GET_BACKLINKS,
+  RPC_CHANNELS.notes.GET_RENAME_IMPACT,
+  RPC_CHANNELS.notes.GET_DAILY_NOTE,
+  RPC_CHANNELS.notes.IMPORT_ASSET,
+  RPC_CHANNELS.notes.LIST_ASSETS,
+  RPC_CHANNELS.notes.DELETE_ASSET,
+  RPC_CHANNELS.notes.RENAME_ASSET,
+  RPC_CHANNELS.notes.UPDATE_PROPERTIES,
+  RPC_CHANNELS.notes.WATCH,
+  RPC_CHANNELS.notes.UNWATCH,
+  RPC_CHANNELS.notes.CHANGED,
+  RPC_CHANNELS.notes.RENAME_FOLDER,
+  RPC_CHANNELS.notes.DELETE_FOLDER,
+
+  // knowledge — P1 read-only knowledge provider (workspace-data read ops +
+  // change broadcast, proxied to the workspace-owning server)
+  RPC_CHANNELS.knowledge.LIST_CONNECTIONS,
+  RPC_CHANNELS.knowledge.CAPABILITIES,
+  RPC_CHANNELS.knowledge.SEARCH,
+  RPC_CHANNELS.knowledge.GET,
+  RPC_CHANNELS.knowledge.GET_CONTEXT,
+  RPC_CHANNELS.knowledge.GET_BACKLINKS,
+  RPC_CHANNELS.knowledge.GET_EXPORT_PAYLOAD,
+  RPC_CHANNELS.knowledge.SNAPSHOT_CREATE,
+  RPC_CHANNELS.knowledge.SNAPSHOT_GET,
+  RPC_CHANNELS.knowledge.CHANGED,
+
+  // knowledge — P3 write-back (spec 05): mutation-proposal lifecycle operates
+  // on workspace data, so all seven are proxied to the workspace-owning server.
+  RPC_CHANNELS.knowledge.PROPOSE_MUTATION,
+  RPC_CHANNELS.knowledge.APPROVE_PROPOSAL,
+  RPC_CHANNELS.knowledge.REJECT_PROPOSAL,
+  RPC_CHANNELS.knowledge.APPLY_PROPOSAL,
+  RPC_CHANNELS.knowledge.ROLLBACK_PROPOSAL,
+  RPC_CHANNELS.knowledge.GET_PROPOSAL,
+  RPC_CHANNELS.knowledge.LIST_PROPOSALS,
+
+  // knowledge — P4 publication pipeline (spec 06): drafts/publications/links
+  // are workspace data under {workspaceRoot}/knowledge/.
+  RPC_CHANNELS.knowledge.PUBLISH_DISTILL,
+  RPC_CHANNELS.knowledge.PUBLISH_GET_DRAFT,
+  RPC_CHANNELS.knowledge.PUBLISH_UPDATE_DRAFT,
+  RPC_CHANNELS.knowledge.PUBLISH_PREPARE,
+  RPC_CHANNELS.knowledge.PUBLISH_APPLY,
+  RPC_CHANNELS.knowledge.PUBLISH_FINALIZE,
+  RPC_CHANNELS.knowledge.PUBLISH_LIST,
+  RPC_CHANNELS.knowledge.LIST_LINKS,
+
+  // knowledge — P5 saved views + work envelopes (K-09 / S-08): views.json and
+  // work-envelopes.jsonl are workspace data on the workspace-owning server.
+  RPC_CHANNELS.knowledge.ENVELOPE_GET,
+  RPC_CHANNELS.knowledge.ENVELOPE_UPSERT,
+  RPC_CHANNELS.knowledge.ENVELOPE_LIST,
+  RPC_CHANNELS.knowledge.VIEWS_LIST,
+  RPC_CHANNELS.knowledge.VIEW_RUN,
+  RPC_CHANNELS.knowledge.VIEW_SET_ATTRIBUTE,
+  RPC_CHANNELS.knowledge.WATCH,
+  RPC_CHANNELS.knowledge.UNWATCH,
+  RPC_CHANNELS.knowledge.METRICS_GET,
+
+  // memory — lesson/context data served by workspace host
+  RPC_CHANNELS.memory.LIST_LESSONS,
+  RPC_CHANNELS.memory.ADD_LESSON,
+  RPC_CHANNELS.memory.UPDATE_LESSON,
+  RPC_CHANNELS.memory.DELETE_LESSON,
+  RPC_CHANNELS.memory.GET_CONTEXT,
+  RPC_CHANNELS.memory.UPDATE_CONTEXT,
+  RPC_CHANNELS.memory.LIST_HISTORY,
+  RPC_CHANNELS.memory.PROMOTION_CANDIDATES,
+  RPC_CHANNELS.memory.PROMOTE_LESSON,
+  RPC_CHANNELS.memory.EXPORT,
+  RPC_CHANNELS.memory.IMPORT,
+  RPC_CHANNELS.memory.CHANGED,
+  RPC_CHANNELS.memory.GET_PROJECT_MEMORY,
+  RPC_CHANNELS.memory.INSIGHTS,
+  RPC_CHANNELS.memory.MARK_ONBOARDED,
+
+  // skillsPending — pending skill approvals per workspace
+  RPC_CHANNELS.skillsPending.LIST,
+  RPC_CHANNELS.skillsPending.APPROVE,
+  RPC_CHANNELS.skillsPending.DISMISS,
+  RPC_CHANNELS.skillsPending.CHANGED,
+  RPC_CHANNELS.skillsPending.DIFF,
 
   // credentials — remote server's credential state
   RPC_CHANNELS.credentials.HEALTH_CHECK,
@@ -342,6 +604,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.preferences.READ,
   RPC_CHANNELS.preferences.WRITE,
 
+
   // drafts — workspace content
   RPC_CHANNELS.drafts.GET,
   RPC_CHANNELS.drafts.SET,
@@ -351,12 +614,15 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // sources — source config per-workspace
   RPC_CHANNELS.sources.GET,
   RPC_CHANNELS.sources.CREATE,
+  RPC_CHANNELS.sources.UPDATE,
   RPC_CHANNELS.sources.DELETE,
   RPC_CHANNELS.sources.START_OAUTH,
   RPC_CHANNELS.sources.SAVE_CREDENTIALS,
   RPC_CHANNELS.sources.CHANGED,
   RPC_CHANNELS.sources.GET_PERMISSIONS,
   RPC_CHANNELS.sources.GET_MCP_TOOLS,
+  RPC_CHANNELS.sources.REINDEX,
+  RPC_CHANNELS.sources.SEARCH,
 
   // oauth — OAuth state management
   RPC_CHANNELS.oauth.START,
@@ -378,7 +644,12 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // skills — skill content per-workspace (not openEditor/openFinder which are local OS)
   RPC_CHANNELS.skills.GET,
   RPC_CHANNELS.skills.GET_FILES,
+  RPC_CHANNELS.skills.UPDATE,
   RPC_CHANNELS.skills.DELETE,
+  RPC_CHANNELS.skills.IMPORT_OMP,
+  RPC_CHANNELS.skills.GET_USAGE,
+  RPC_CHANNELS.skills.PRUNE_UNUSED,
+  RPC_CHANNELS.skills.EXPORT_TO_PROJECT,
   RPC_CHANNELS.skills.CHANGED,
 
   // statuses — workspace metadata
@@ -386,9 +657,22 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.statuses.REORDER,
   RPC_CHANNELS.statuses.CHANGED,
 
+  // OpenClaw — safe runtime/audit data for the workspace owner. Host control
+  // remains direct Electron IPC and is intentionally absent from this table.
+  RPC_CHANNELS.openclawRuntime.GET_STATUS,
+  RPC_CHANNELS.openclawRuntime.INSTALL,
+  RPC_CHANNELS.openclawRuntime.PROVISION,
+  RPC_CHANNELS.openclawRuntime.START,
+  RPC_CHANNELS.openclawRuntime.STOP,
+  RPC_CHANNELS.securityAudit.RUN,
+  RPC_CHANNELS.securityAudit.GET_LATEST,
+  RPC_CHANNELS.securityAudit.ACCEPT_RISK,
+  RPC_CHANNELS.securityAudit.REVOKE_RISK_ACCEPTANCE,
+
   // labels — workspace metadata
   RPC_CHANNELS.labels.LIST,
   RPC_CHANNELS.labels.CREATE,
+  RPC_CHANNELS.labels.UPDATE,
   RPC_CHANNELS.labels.DELETE,
   RPC_CHANNELS.labels.CHANGED,
 
@@ -404,6 +688,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
 
   // automations — workspace automations
   RPC_CHANNELS.automations.GET,
+  RPC_CHANNELS.automations.GET_GRAPH,
+  RPC_CHANNELS.automations.SAVE_GRAPH,
   RPC_CHANNELS.automations.TEST,
   RPC_CHANNELS.automations.SET_ENABLED,
   RPC_CHANNELS.automations.DUPLICATE,
@@ -424,12 +710,42 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.projects.DELETE_ASSET,
   RPC_CHANNELS.projects.CHANGED,
 
+  // kanban — workspace board config
+  RPC_CHANNELS.kanban.GET_CONFIG,
+  RPC_CHANNELS.kanban.SET_CONFIG,
+  RPC_CHANNELS.kanban.CHANGED,
+
+  // collection — workspace sessions collection display prefs
+  RPC_CHANNELS.collection.GET_DISPLAY,
+  RPC_CHANNELS.collection.SET_DISPLAY,
+  RPC_CHANNELS.collection.CHANGED,
+
   // git — workspace filesystem
   RPC_CHANNELS.git.GET_BRANCH,
 
   // resources — workspace resource export/import
   RPC_CHANNELS.resources.EXPORT,
   RPC_CHANNELS.resources.IMPORT,
+
+  // cloudRuns — background research runs execute on the workspace-owning server
+  RPC_CHANNELS.cloudRuns.GET_CONFIG,
+  RPC_CHANNELS.cloudRuns.SET_CONFIG,
+  RPC_CHANNELS.cloudRuns.SUBMIT,
+  RPC_CHANNELS.cloudRuns.RESUME,
+  RPC_CHANNELS.cloudRuns.SESSION_TOPIC,
+  RPC_CHANNELS.cloudRuns.READ_ARTIFACT,
+  RPC_CHANNELS.cloudRuns.LIST,
+  RPC_CHANNELS.cloudRuns.GET_STATUS,
+  RPC_CHANNELS.cloudRuns.CANCEL,
+  RPC_CHANNELS.cloudRuns.LIST_ARTIFACTS,
+  RPC_CHANNELS.cloudRuns.IMPORT,
+  RPC_CHANNELS.cloudRuns.AGGREGATE,
+  RPC_CHANNELS.cloudRuns.LIST_SCHEDULES,
+  RPC_CHANNELS.cloudRuns.SAVE_SCHEDULE,
+  RPC_CHANNELS.cloudRuns.DELETE_SCHEDULE,
+  RPC_CHANNELS.cloudRuns.GET_EVENTS,
+  RPC_CHANNELS.cloudRuns.SHARE,
+  RPC_CHANNELS.cloudRuns.REVOKE_SHARE,
 
   // messaging — gateway channels run on workspace server
   RPC_CHANNELS.messaging.WA_REGISTER,
@@ -452,6 +768,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.messaging.SAVE_TELEGRAM,
   RPC_CHANNELS.messaging.TEST_LARK,
   RPC_CHANNELS.messaging.SAVE_LARK,
+  RPC_CHANNELS.messaging.TEST_DISCORD,
+  RPC_CHANNELS.messaging.SAVE_DISCORD,
   RPC_CHANNELS.messaging.DISCONNECT,
   RPC_CHANNELS.messaging.FORGET,
   RPC_CHANNELS.messaging.GET_BINDINGS,
@@ -464,6 +782,12 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.messaging.WA_START_CONNECT,
   RPC_CHANNELS.messaging.WA_SUBMIT_PHONE,
   RPC_CHANNELS.messaging.WA_UI_EVENT,
+  RPC_CHANNELS.messaging.WECHAT_START_CONNECT,
+  RPC_CHANNELS.messaging.WECHAT_SUBMIT_CODE,
+  RPC_CHANNELS.messaging.WECHAT_UI_EVENT,
+  RPC_CHANNELS.messaging.WC_START_CONNECT,
+  RPC_CHANNELS.messaging.WC_CANCEL_CONNECT,
+  RPC_CHANNELS.messaging.WC_UI_EVENT,
   // messaging access control — UI ↔ Server, per-platform owners + per-binding allow-list
   RPC_CHANNELS.messaging.GET_PLATFORM_OWNERS,
   RPC_CHANNELS.messaging.SET_PLATFORM_OWNERS,

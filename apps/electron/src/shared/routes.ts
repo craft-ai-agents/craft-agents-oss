@@ -17,6 +17,7 @@
 
 import type { SettingsSubpage } from './settings-registry'
 import type { PermissionMode } from '@craft-agent/shared/agent/mode-types'
+import type { KnowledgeRefKind } from './types'
 
 // Helper to build query strings from params
 function toQueryString(params?: Record<string, string | undefined>): string {
@@ -28,6 +29,11 @@ function toQueryString(params?: Record<string, string | undefined>): string {
   )
   return `?${searchParams.toString()}`
 }
+function buildNotesRoute(noteId?: string) {
+  if (!noteId) return 'notes' as const
+  return `notes/note/${encodeURIComponent(noteId)}` as const
+}
+
 
 /**
  * Route definitions with type-safe builders
@@ -157,6 +163,15 @@ export const routes = {
       if (!skillSlug) return 'skills' as const
       return `skills/skill/${skillSlug}` as const
     },
+    /** Memory view (memory navigator — self-learning panel) */
+    memory: () => 'memory' as const,
+
+    /** Connections view (native Workbench Connections surface) */
+    connections: () => 'connections' as const,
+
+    /** Canonical local Markdown Notes route. */
+    notes: buildNotesRoute,
+
 
     /** Automations view (automations navigator) - supports type filtering */
     automations: (params?: { automationId?: string; type?: 'scheduled' | 'event' | 'agentic' }) => {
@@ -190,8 +205,53 @@ export const routes = {
         ? `projects/project/${projectSlug}` as const
         : 'projects' as const,
 
+    /** Embedded browser instance view (browser navigator) */
+    browser: (instanceId: string) =>
+      `browser/instance/${encodeURIComponent(instanceId)}` as const,
+
     /** Kanban board view (sessions navigator, board view mode, all sessions) */
     board: () => 'board' as const,
+
+    /** Dense table collection view (sessions navigator, table view mode, all sessions) */
+    table: () => 'table' as const,
+
+    // ----------------------------------------------------------------
+    // Unified shell surface routes (W1 scaffolding, spec S-02 §3.5/§3.6).
+    // These parse back through route-parser; rendering degrades to the
+    // nearest existing view until their hosts land (W2/W5).
+    // ----------------------------------------------------------------
+
+    /**
+     * Knowledge home (knowledge navigator root, no document focused) — `knowledge`.
+     * Pairs with the bare-'knowledge' key in `parseNavigationState` (W1).
+     */
+    knowledge: () => 'knowledge' as const,
+
+    /**
+     * Saved knowledge view (P5) — `knowledge/view/{viewId}`.
+     * KnowledgeHome reads the viewId and runs viewRun.
+     */
+    knowledgeView: (viewId: string) =>
+      `knowledge/view/${encodeURIComponent(viewId)}` as const,
+
+    /**
+     * Knowledge surface (SiYuan ref) — `knowledge/{kind}/{id}`.
+     * Serves both SurfaceTab kinds `knowledge` and `database` (kind:'database').
+     */
+    siyuan: (ref: { kind: KnowledgeRefKind; id: string }) =>
+      `knowledge/${ref.kind}/${encodeURIComponent(ref.id)}` as const,
+
+    /** Cloud run surface — `cloud-run/{runId}` */
+    cloudRun: (runId: string) =>
+      `cloud-run/${encodeURIComponent(runId)}` as const,
+
+    /** Extension sandbox view — `extension/{extensionId}/{viewId}` */
+    extension: (extensionId: string, viewId: string) =>
+      `extension/${encodeURIComponent(extensionId)}/${encodeURIComponent(viewId)}` as const,
+
+    /** Write-proposal diff surface — `diff/{proposalId}` (spec K-05 contour) */
+    proposal: (proposalId: string) =>
+      `diff/${encodeURIComponent(proposalId)}` as const,
   },
 } as const
 

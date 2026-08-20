@@ -15,8 +15,23 @@ import { AGENTS_PLUGIN_NAME } from '@craft-agent/shared/skills/types'
 import { getSourceIconSync, getSkillIconSync } from './icon-cache'
 
 // Import and re-export parsing functions from shared (pure string operations, no renderer deps)
-import { parseMentions, stripAllMentions, resolveSkillMentions, resolveSourceMentions, type ParsedMentions } from '@craft-agent/shared/mentions'
-export { parseMentions, stripAllMentions, resolveSkillMentions, resolveSourceMentions, type ParsedMentions }
+import { parseMentions, stripAllMentions, resolveSkillMentions, resolveSourceMentions, resolveKnowledgeMentions, serializeKnowledgeRef, KNOWLEDGE_MENTION_PATTERN, DEFAULT_KNOWLEDGE_PROVIDER, type ParsedMentions } from '@craft-agent/shared/mentions'
+export { parseMentions, stripAllMentions, resolveSkillMentions, resolveSourceMentions, resolveKnowledgeMentions, serializeKnowledgeRef, KNOWLEDGE_MENTION_PATTERN, DEFAULT_KNOWLEDGE_PROVIDER, type ParsedMentions }
+
+/**
+ * Build the '@siyuan/<kind>/<short-id>' chip label for a serialized knowledge ref
+ * ('siyuan/<kind>/<id>'). Long SiYuan ids ('20240101120000-abcde') shorten to their
+ * random suffix ('abcde'); short ids pass through unchanged.
+ */
+export function formatKnowledgeBadgeLabel(serializedRef: string): string {
+  const [provider = DEFAULT_KNOWLEDGE_PROVIDER, kind = '', ...idParts] = serializedRef.split('/')
+  const id = idParts.join('/')
+  let shortId = id
+  if (id.length > 12) {
+    shortId = id.includes('-') ? id.slice(id.lastIndexOf('-') + 1) || id.slice(0, 12) : id.slice(0, 12)
+  }
+  return `@${provider}/${kind}/${shortId}`
+}
 
 // ============================================================================
 // Constants
@@ -111,6 +126,18 @@ export function findMentionMatches(
     })
   }
 
+  // Match knowledge mentions: [knowledge:siyuan/kind/id] or compact [knowledge:kind/id].
+  // id is the serialized 'siyuan/<kind>/<id>' ref (default provider for compact form).
+  const knowledgePattern = new RegExp(KNOWLEDGE_MENTION_PATTERN.source, 'g')
+  while ((match = knowledgePattern.exec(text)) !== null) {
+    matches.push({
+      type: 'knowledge',
+      id: serializeKnowledgeRef(match[1], match[2]!, match[3]!),
+      fullMatch: match[0],
+      startIndex: match.index,
+    })
+  }
+
   // Sort by position
   return matches.sort((a, b) => a.startIndex - b.startIndex)
 }
@@ -136,6 +163,26 @@ export function removeMention(text: string, type: MentionItemType, id: string): 
     case 'folder':
       pattern = new RegExp(`\\[folder:${escapeRegExp(id)}\\]`, 'g')
       break
+    case 'knowledge': {
+      // id is the serialized '<provider>/<kind>/<id>' ref. The token grammar
+      // (spec K-03 §3.5.2) also permits the compact form `[knowledge:<kind>/<id>]`,
+      // where the provider segment is absent and defaults to siyuan — hand-typed
+      // compact tokens must be removable as well as picker-inserted full-form ones.
+      // A non-default provider keeps the exact full-form match (its compact token
+      // would resolve to the default provider, which is a different badge).
+      const segments = id.split('/')
+      if (segments.length < 2) {
+        pattern = new RegExp(`\\[knowledge:${escapeRegExp(id)}\\]`, 'g')
+      } else {
+        const [provider = DEFAULT_KNOWLEDGE_PROVIDER, ...rest] = segments
+        const kindAndId = rest.map(escapeRegExp).join('/')
+        pattern =
+          provider === DEFAULT_KNOWLEDGE_PROVIDER
+            ? new RegExp(`\\[knowledge:(?:${escapeRegExp(provider)}/)?${kindAndId}\\]`, 'g')
+            : new RegExp(`\\[knowledge:${escapeRegExp(provider)}/${kindAndId}\\]`, 'g')
+      }
+      break
+    }
     case 'skill':
     default:
       // Match both [skill:slug] and [skill:workspaceId:slug]
@@ -159,7 +206,7 @@ export function hasMentions(
   availableSourceSlugs: string[]
 ): boolean {
   const mentions = parseMentions(text, availableSkillSlugs, availableSourceSlugs)
-  return mentions.skills.length > 0 || mentions.sources.length > 0 || mentions.files.length > 0 || mentions.folders.length > 0
+  return mentions.skills.length > 0 || mentions.sources.length > 0 || mentions.files.length > 0 || mentions.folders.length > 0 || mentions.knowledge.length > 0
 }
 
 // ============================================================================
@@ -239,6 +286,9 @@ export function extractBadges(
       // Show folder name as label, full relative path stored for tooltip
       label = match.id.split('/').pop() || match.id
       filePath = match.id
+    } else if (match.type === 'knowledge') {
+      // '@siyuan/<kind>/<short-id>' chip label; rawText keeps the original token
+      label = formatKnowledgeBadgeLabel(match.id)
     }
 
     // For skills, create fully-qualified rawText (pluginName:slug) so the agent
@@ -252,7 +302,7 @@ export function extractBadges(
     }
 
     return {
-      type: match.type as 'source' | 'skill' | 'file' | 'folder',
+      type: match.type as 'source' | 'skill' | 'file' | 'folder' | 'knowledge',
       label,
       rawText,
       iconDataUrl,

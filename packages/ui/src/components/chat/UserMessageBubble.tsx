@@ -27,6 +27,7 @@ const SKILL_ICON_TEXT = '✦'
 const SOURCE_ICON_TEXT = '⊕'
 const CONTEXT_ICON_TEXT = '⚙'
 const COMMAND_ICON_TEXT = '/'
+const KNOWLEDGE_ICON_TEXT = '@'
 
 /**
  * Check if a badge is an edit_request badge (identified by XML tag in rawText)
@@ -66,7 +67,7 @@ function InlineBadge({ badge }: { badge: ContentBadge }) {
         />
       ) : (
         <span className="h-[12px] w-[12px] rounded-[2px] bg-foreground/5 flex items-center justify-center text-foreground/50 shrink-0 text-[8px]">
-          {badge.type === 'skill' ? SKILL_ICON_TEXT : badge.type === 'context' ? CONTEXT_ICON_TEXT : SOURCE_ICON_TEXT}
+          {badge.type === 'skill' ? SKILL_ICON_TEXT : badge.type === 'context' ? CONTEXT_ICON_TEXT : badge.type === 'knowledge' ? KNOWLEDGE_ICON_TEXT : SOURCE_ICON_TEXT}
         </span>
       )}
       <span className="truncate max-w-[200px]">{badge.label}</span>

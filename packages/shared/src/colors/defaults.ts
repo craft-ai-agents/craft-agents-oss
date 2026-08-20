@@ -8,23 +8,31 @@
  * backend validation and frontend rendering use the same defaults.
  */
 
-import type { EntityColor } from './types.ts'
+import type { CustomColor, EntityColor } from './types.ts'
 
 // ============================================================================
 // Status Defaults
 // ============================================================================
 
 /**
- * Default colors for built-in statuses.
- * Uses system colors with opacity modifiers for muted states.
+ * Canonical palette for built-in Kanban-backed statuses.
+ *
+ * This is intentionally independent of semantic system tokens such as `info`.
+ * Board columns use the light variants while status rendering resolves the
+ * appropriate theme variant from the same definitions.
  */
+export const DEFAULT_BUILTIN_STATUS_PALETTE = {
+  backlog: { light: '#94a3b8', dark: '#cbd5e1' },
+  todo: { light: '#3b82f6', dark: '#60a5fa' },
+  'in-progress': { light: '#3b82f6', dark: '#60a5fa' },
+  'needs-review': { light: '#f59e0b', dark: '#fbbf24' },
+  done: { light: '#10b981', dark: '#34d399' },
+} as const satisfies Record<string, CustomColor>
+
+/** Default colors for all built-in statuses. */
 export const DEFAULT_STATUS_COLORS: Record<string, EntityColor> = {
-  'backlog': 'foreground/50',       // Muted — not yet planned
-  'todo': 'foreground/50',          // Muted — ready to work on
-  'in-progress': 'success',         // Green — active work
-  'needs-review': 'info',           // Amber — attention needed
-  'done': 'accent',                 // Purple — completed
-  'cancelled': 'foreground/50',     // Muted — inactive
+  ...DEFAULT_BUILTIN_STATUS_PALETTE,
+  cancelled: 'foreground/50',
 }
 
 /** Fallback color for statuses without explicit color or known default */

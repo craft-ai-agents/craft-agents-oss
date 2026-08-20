@@ -1,10 +1,20 @@
-import { readFile, writeFile } from 'fs/promises'
+import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { appendAutomationHistoryEntry } from '@craft-agent/shared/automations/history-store'
+import { awardXpSafe } from '@craft-agent/shared/gamification'
 import { AUTOMATION_HISTORY_MAX_RUNS_PER_MATCHER } from '@craft-agent/shared/automations/constants'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import { atomicWriteFileSync } from '@craft-agent/shared/utils/files'
+import {
+  buildAutomationGraphSave,
+  getAutomationGraphProjection,
+  parseSaveAutomationGraphPayload,
+} from '@craft-agent/shared/automations/graph'
+import { resolveAutomationsConfigPath, generateShortId } from '@craft-agent/shared/automations/resolve-config-path'
+import { ensureDefaultAutomations } from '@craft-agent/shared/automations/default-seeds'
+import { validateAutomationsConfig } from '@craft-agent/shared/automations/validation'
+import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
 // History file name — matches AUTOMATIONS_HISTORY_FILE from @craft-agent/shared/automations/constants
@@ -28,7 +38,6 @@ async function withAutomationMatcher(workspaceId: string, eventName: string, mat
   if (!workspace) throw new Error('Workspace not found')
 
   await withConfigMutex(workspace.rootPath, async () => {
-    const { resolveAutomationsConfigPath, generateShortId } = await import('@craft-agent/shared/automations/resolve-config-path')
     const configPath = resolveAutomationsConfigPath(workspace.rootPath)
 
     const raw = await readFile(configPath, 'utf-8')
@@ -50,12 +59,13 @@ async function withAutomationMatcher(workspaceId: string, eventName: string, mat
       }
     }
 
-    await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+    atomicWriteFileSync(configPath, JSON.stringify(config, null, 2) + '\n')
   })
 }
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.automations.GET,
+  RPC_CHANNELS.automations.GET_GRAPH,
   RPC_CHANNELS.automations.TEST,
   RPC_CHANNELS.automations.SET_ENABLED,
   RPC_CHANNELS.automations.DUPLICATE,
@@ -63,6 +73,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.automations.GET_HISTORY,
   RPC_CHANNELS.automations.GET_LAST_EXECUTED,
   RPC_CHANNELS.automations.REPLAY,
+  RPC_CHANNELS.automations.SAVE_GRAPH,
 ] as const
 
 export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -77,14 +88,18 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
       return null
     }
     try {
-      const { resolveAutomationsConfigPath } = await import('@craft-agent/shared/automations/resolve-config-path')
-      const configPath = resolveAutomationsConfigPath(workspace.rootPath)
-      log.info(`AUTOMATIONS_GET: Reading config from: ${configPath}`)
-      const content = await readFile(configPath, 'utf-8')
-      const parsed = JSON.parse(content)
-      const eventCount = parsed?.automations ? Object.keys(parsed.automations).length : 0
-      log.info(`AUTOMATIONS_GET: Loaded ${eventCount} event type(s) from ${configPath}`)
-      return parsed
+      return await withConfigMutex(workspace.rootPath, async () => {
+        // Existing seed lifecycle stays serialized with graph saves. The graph
+        // projection itself never calls this writer.
+        ensureDefaultAutomations(workspace.rootPath)
+        const configPath = resolveAutomationsConfigPath(workspace.rootPath)
+        log.info(`AUTOMATIONS_GET: Reading config from: ${configPath}`)
+        const content = await readFile(configPath, 'utf-8')
+        const parsed = JSON.parse(content)
+        const eventCount = parsed?.automations ? Object.keys(parsed.automations).length : 0
+        log.info(`AUTOMATIONS_GET: Loaded ${eventCount} event type(s) from ${configPath}`)
+        return parsed
+      })
     } catch (error) {
       if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
         log.info(`AUTOMATIONS_GET: No automations.json found for workspace ${workspaceId}`)
@@ -93,6 +108,62 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
       log.error(`AUTOMATIONS_GET: Error loading automations:`, error)
       throw error
     }
+  })
+  // Keep graph authoring read-only until its explicit save action. In
+  // particular, do not call ensureDefaultAutomations here: an absent document
+  // projects a default graph without creating a config file.
+  server.handle(RPC_CHANNELS.automations.GET_GRAPH, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    return withConfigMutex(workspace.rootPath, async () => {
+      const configPath = resolveAutomationsConfigPath(workspace.rootPath)
+      try {
+        return getAutomationGraphProjection(JSON.parse(await readFile(configPath, 'utf-8')))
+      } catch (error) {
+        if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+          return getAutomationGraphProjection(null)
+        }
+        throw error
+      }
+    })
+  })
+
+
+  // Compile graph metadata into canonical matchers/actions, then atomically
+  // replace automations.json while holding the same mutex as legacy mutations.
+  server.handle(RPC_CHANNELS.automations.SAVE_GRAPH, async (_ctx, rawPayload: unknown) => {
+    const payload = parseSaveAutomationGraphPayload(rawPayload)
+    const workspace = getWorkspaceByNameOrId(payload.workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    return withConfigMutex(workspace.rootPath, async () => {
+      const configPath = resolveAutomationsConfigPath(workspace.rootPath)
+      let currentConfig: unknown
+
+      try {
+        currentConfig = JSON.parse(await readFile(configPath, 'utf-8'))
+      } catch (error) {
+        if (!(error instanceof Error) || !('code' in error) || (error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          throw error
+        }
+        // A first graph save is a direct config creation, not a request to add
+        // the unrelated default seed set.
+        currentConfig = { version: 2, automations: {} }
+      }
+
+      const saved = buildAutomationGraphSave(currentConfig, payload)
+      const validation = validateAutomationsConfig(saved.config)
+      if (!validation.valid) throw new Error(`Compiled automation configuration is invalid: ${validation.errors.join('; ')}`)
+      atomicWriteFileSync(configPath, JSON.stringify(saved.config, null, 2) + '\n')
+      pushTyped(
+        server,
+        RPC_CHANNELS.automations.CHANGED,
+        { to: 'workspace', workspaceId: payload.workspaceId },
+        payload.workspaceId,
+      )
+      return saved
+    })
   })
 
   server.handle(RPC_CHANNELS.automations.TEST, async (_ctx, payload: import('@craft-agent/shared/protocol').TestAutomationPayload) => {
@@ -130,6 +201,7 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
           })
           try {
             await appendAutomationHistoryEntry(workspace.rootPath, entry)
+            awardXpSafe('automation_ran')
           } catch (e) {
             log.warn('[Automations] Failed to write history:', e)
           }
@@ -171,6 +243,7 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
           const entry = createPromptHistoryEntry({ matcherId: payload.automationId, ok: true, sessionId, prompt: action.prompt })
           try {
             await appendAutomationHistoryEntry(workspace.rootPath, entry)
+            awardXpSafe('automation_ran')
           } catch (e) {
             log.warn('[Automations] Failed to write history:', e)
           }
@@ -188,6 +261,7 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
           const entry = createPromptHistoryEntry({ matcherId: payload.automationId, ok: false, error: (err as Error).message, prompt: action.prompt })
           try {
             await appendAutomationHistoryEntry(workspace.rootPath, entry)
+            awardXpSafe('automation_ran')
           } catch (e) {
             log.warn('[Automations] Failed to write history:', e)
           }
@@ -288,6 +362,7 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
       })
       try {
         await appendAutomationHistoryEntry(workspace.rootPath, entry)
+            awardXpSafe('automation_ran')
       } catch (e) {
         log.warn('[Automations] Failed to write replay history:', e)
       }

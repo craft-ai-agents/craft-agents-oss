@@ -4,6 +4,7 @@ import { debug } from '../utils/debug.ts';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join, relative, basename } from 'path';
 import { DOC_REFS, APP_ROOT } from '../docs/index.ts';
+import { getContextDocsPromptBlock } from '../context-docs/index.ts';
 import { PERMISSION_MODE_CONFIG } from '../agent/mode-types.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
 import { APP_VERSION } from '../version/index.ts';
@@ -12,6 +13,7 @@ import { formatBytes } from '../utils/binary-detection.ts';
 import { globSync } from 'glob';
 import os from 'os';
 import type { ProjectPromptContext } from '../projects/types.ts';
+import type { Lesson, WorkspaceMemory, MemoryPromptBlocks } from '../memory/types.ts';
 
 /** Maximum size of CLAUDE.md file to include (10KB) */
 const MAX_CONTEXT_FILE_SIZE = 10 * 1024;
@@ -40,8 +42,12 @@ const EXCLUDED_DIRECTORIES = [
 /**
  * Context file patterns to look for in working directory (in priority order).
  * Matching is case-insensitive to support AGENTS.md, Agents.md, agents.md, etc.
+ * Includes soul.md/rules.md so monorepo package roots can ship the same project
+ * overrides that findProjectContextFile / getContextDocsPromptBlock honour
+ * (project soul.md/rules.md override same-named global runtime context docs
+ * under <CONFIG_DIR>/context/*.md).
  */
-const CONTEXT_FILE_PATTERNS = ['agents.md', 'claude.md'];
+const CONTEXT_FILE_PATTERNS = ['agents.md', 'claude.md', 'soul.md', 'rules.md'];
 
 /**
  * Find a file in directory matching the pattern case-insensitively.
@@ -94,9 +100,11 @@ export function invalidateContextFileCache(directory?: string): void {
 }
 
 /**
- * Find all project context files (AGENTS.md or CLAUDE.md) recursively in a directory.
+ * Find all project context files recursively in a directory.
  * Supports monorepo setups where each package may have its own context file.
- * Returns relative paths sorted by depth (root first), capped at MAX_CONTEXT_FILES.
+ * Matches AGENTS.md, CLAUDE.md, SOUL.md, and RULES.md (case-insensitive via
+ * glob nocase), returns relative paths sorted by depth (root first), capped
+ * at MAX_CONTEXT_FILES.
  *
  * Results are cached per directory. Call invalidateContextFileCache() on working
  * directory changes. A 5-minute TTL acts as a safety net for cache staleness.
@@ -114,8 +122,9 @@ export function findAllProjectContextFiles(directory: string): string[] {
     // Build glob ignore patterns from excluded directories
     const ignorePatterns = EXCLUDED_DIRECTORIES.map((dir) => `**/${dir}/**`);
 
-    // Search for all context files (case-insensitive via nocase option)
-    const pattern = '**/{agents,claude}.md';
+    // Search for all context files (case-insensitive via nocase option).
+    // Brace set must stay in sync with CONTEXT_FILE_PATTERNS (agents/claude/soul/rules).
+    const pattern = '**/{agents,claude,soul,rules}.md';
     const matches = globSync(pattern, {
       cwd: directory,
       nocase: true,
@@ -186,7 +195,7 @@ export function readProjectContextFile(directory: string): { filename: string; c
  * Includes the working directory path and context about what it represents.
  * Returns empty string if no working directory is set.
  *
- * Note: Project context files (CLAUDE.md, AGENTS.md) are now listed in the system prompt
+ * Note: Project context files (CLAUDE.md, AGENTS.md, SOUL.md, RULES.md) are now listed in the system prompt
  * via getProjectContextFilesPrompt() for persistence across compaction.
  *
  * @param workingDirectory - The effective working directory path (where user wants to work)
@@ -354,6 +363,7 @@ export function getSystemPrompt(
   backendName?: string,
   includeCoAuthoredBy?: boolean,
   projectContext?: ProjectPromptContext,
+  memoryBlocks?: MemoryPromptBlocks,
 ): string {
   // Use mini agent prompt for quick edits (pass workspace root for config paths)
   if (preset === 'mini') {
@@ -371,6 +381,16 @@ export function getSystemPrompt(
   // Optional workspace-project context (injected after preferences, before debug+context-files)
   const projectBlock = projectContext ? formatProjectContextForPrompt(projectContext) : '';
 
+  // Runtime context documents — soul.md / rules.md / user *.md from
+  // <CONFIG_DIR>/context/ (injected after projectBlock, before memory;
+  // mirrors buildCraftContextPrompt() ordering in omp-agent.ts).
+  // A project-level soul.md/rules.md overrides the same-named global doc.
+  const contextDocsBlock = getContextDocsPromptBlock({ workingDirectory });
+
+  // Optional self-learning memory (injected directly after the project memory block):
+  // pre-formatted lesson corrections, workspace memory, and retrieved source docs.
+  const memoryInjection = `${memoryBlocks?.lessonsBlock ?? ''}${memoryBlocks?.memoryBlock ?? ''}${memoryBlocks?.sourcesBlock ?? ''}`;
+
   // Fall back to the user's current preference when callers don't pin/pass a value,
   // so forgetting the argument can't silently re-enable the co-author trailer (see #576).
   const resolvedIncludeCoAuthoredBy = includeCoAuthoredBy ?? getCoAuthorPreference();
@@ -379,7 +399,7 @@ export function getSystemPrompt(
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
   const basePrompt = getCraftAssistantPrompt(workspaceRootPath, backendName, resolvedIncludeCoAuthoredBy);
-  const fullPrompt = `${basePrompt}${preferences}${projectBlock}${debugContext}${projectContextFiles}`;
+  const fullPrompt = `${basePrompt}${preferences}${projectBlock}${contextDocsBlock}${memoryInjection}${debugContext}${projectContextFiles}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
 
@@ -485,6 +505,82 @@ export function formatProjectContextForPrompt(ctx: ProjectPromptContext): string
   lines.push(`</project_context>`);
   lines.push('');
   return lines.join('\n');
+}
+
+/**
+ * Format durable user-taught lessons for injection into the system prompt.
+ * Returns an empty string when there are no lessons so callers can append
+ * unconditionally. Negative lessons (anti-rules) are rendered as their own
+ * `MUST NOT` lines. Input order is preserved — the caller composes global
+ * lessons first, then workspace lessons.
+ */
+export function formatLessonsForPrompt(lessons: Lesson[]): string {
+  if (lessons.length === 0) {
+    return '';
+  }
+
+  const lines: string[] = [''];
+  lines.push('[Learned corrections — user-taught rules. ALWAYS follow these. They override default behavior.]');
+  for (const lesson of lessons) {
+    lines.push(lesson.negative ? `- MUST NOT: ${lesson.rule}` : `- ${lesson.rule}`);
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+/**
+ * Format workspace memory (context / preferences / recent history from the
+ * workspace's memory/ directory) for injection into the system prompt.
+ * Returns an empty string when every section is empty.
+ */
+export function formatWorkspaceMemoryForPrompt(memory: Partial<WorkspaceMemory>): string {
+  const context = memory.context?.trim();
+  const preferences = memory.preferences?.trim();
+  const recentHistory = memory.recentHistory?.trim();
+  if (!context && !preferences && !recentHistory) {
+    return '';
+  }
+
+  const lines: string[] = [''];
+  lines.push('[Workspace memory]');
+  if (context) {
+    lines.push('', '## Context', context);
+  }
+  if (preferences) {
+    lines.push('', '## Preferences', preferences);
+  }
+  if (recentHistory) {
+    lines.push('', '## Recent history', recentHistory);
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+/** One retrieved source doc ready for prompt injection (path + excerpt). */
+export interface SourceRetrieveHit {
+  path: string
+  /** Snippet or short body excerpt already budgeted by the retriever. */
+  excerpt: string
+}
+
+/**
+ * Format FTS-retrieved source docs for system-prompt injection.
+ * Returns an empty string when there are no hits so callers can append
+ * unconditionally. Ordering is caller-provided (rank order from retrieve).
+ */
+export function formatSourceRetrieveForPrompt(hits: SourceRetrieveHit[]): string {
+  if (!hits.length) return ''
+  const lines: string[] = ['', '[Retrieved source docs]']
+  for (const hit of hits) {
+    const path = hit.path?.trim()
+    const excerpt = hit.excerpt?.trim()
+    if (!path || !excerpt) continue
+    lines.push(`### ${path}`, excerpt, '')
+  }
+  // Only the header was written (every hit lacked path/excerpt) → omit block.
+  if (lines.length <= 2) return ''
+  // Trailing blank already added per hit; ensure a single trailing newline via join.
+  return lines.join('\n')
 }
 
 /**
@@ -672,7 +768,7 @@ Skills are stored at three levels (checked in order):
 
 ## Project Context
 
-When \`<project_context_files>\` appears in the system prompt, it lists all discovered context files (CLAUDE.md, AGENTS.md) in the working directory and its subdirectories. This supports monorepos where each package may have its own context file.
+When \`<project_context_files>\` appears in the system prompt, it lists all discovered context files (CLAUDE.md, AGENTS.md, SOUL.md, RULES.md) in the working directory and its subdirectories. This supports monorepos where each package may have its own context file.
 
 Read relevant context files using the Read tool - they contain architecture info, conventions, and project-specific guidance. For monorepos, read the root context file first, then package-specific files as needed based on what you're working on.
 

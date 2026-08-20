@@ -48,7 +48,7 @@ function createMockCredentialManager(initialCreds?: {
 
 describe('getSetupNeeds', () => {
   describe('billing configuration', () => {
-    it('should need billing config when type is null', () => {
+    it('keeps a fresh local install launch-ready while recommending billing setup', () => {
       const state: AuthState = {
         billing: {
           type: null,
@@ -63,7 +63,9 @@ describe('getSetupNeeds', () => {
 
       expect(needs.needsBillingConfig).toBe(true);
       expect(needs.needsCredentials).toBe(false);
-      expect(needs.isFullyConfigured).toBe(false);
+      expect(needs.isFullyConfigured).toBe(true);
+      expect(needs.shouldShowOnboardingOnLaunch).toBe(false);
+      expect(needs.isSetupDeferred).toBe(false);
     });
 
     it('should not need billing config when type is set', () => {
@@ -84,7 +86,7 @@ describe('getSetupNeeds', () => {
   });
 
   describe('credentials', () => {
-    it('should need credentials when type is set but hasCredentials is false', () => {
+    it('keeps missing credentials optional at launch', () => {
       const state: AuthState = {
         billing: {
           type: 'oauth_token',
@@ -99,7 +101,9 @@ describe('getSetupNeeds', () => {
 
       expect(needs.needsBillingConfig).toBe(false);
       expect(needs.needsCredentials).toBe(true);
-      expect(needs.isFullyConfigured).toBe(false);
+      expect(needs.isFullyConfigured).toBe(true);
+      expect(needs.shouldShowOnboardingOnLaunch).toBe(false);
+      expect(needs.isSetupDeferred).toBe(false);
     });
 
     it('should not need credentials when hasCredentials is true', () => {
@@ -178,6 +182,28 @@ describe('getSetupNeeds', () => {
       expect(needs.isFullyConfigured).toBe(true);
       expect(needs.needsBillingConfig).toBe(false);
       expect(needs.needsCredentials).toBe(false);
+      expect(needs.shouldShowOnboardingOnLaunch).toBe(false);
+    });
+  });
+
+  describe('launch policy', () => {
+    it('keeps persisted setup deferral compatible without forcing the wizard', () => {
+      const state: AuthState = {
+        billing: {
+          type: null,
+          hasCredentials: false,
+          apiKey: null,
+          claudeOAuthToken: null,
+        },
+        workspace: { hasWorkspace: false, active: null },
+      };
+
+      const needs = getSetupNeeds(state, true);
+
+      expect(needs.needsBillingConfig).toBe(true);
+      expect(needs.isFullyConfigured).toBe(true);
+      expect(needs.shouldShowOnboardingOnLaunch).toBe(false);
+      expect(needs.isSetupDeferred).toBe(true);
     });
   });
 });
@@ -324,7 +350,7 @@ describe('migration info flow', () => {
     expect(setupNeeds.needsMigration).toBeDefined();
     expect(setupNeeds.needsMigration?.reason).toBe('legacy_token');
     expect(setupNeeds.needsCredentials).toBe(true);
-    expect(setupNeeds.isFullyConfigured).toBe(false);
+    expect(setupNeeds.isFullyConfigured).toBe(true);
   });
 
   it('should not have migration info when token refresh succeeds', () => {

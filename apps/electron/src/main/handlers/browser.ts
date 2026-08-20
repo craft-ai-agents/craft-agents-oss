@@ -5,6 +5,8 @@ import type { HandlerDeps } from './handler-deps'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.browserPane.CREATE,
+  RPC_CHANNELS.browserPane.CREATE_EMBEDDED,
+  RPC_CHANNELS.browserPane.SYNC_BOUNDS,
   RPC_CHANNELS.browserPane.DESTROY,
   RPC_CHANNELS.browserPane.LIST,
   RPC_CHANNELS.browserPane.NAVIGATE,
@@ -13,10 +15,14 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.browserPane.RELOAD,
   RPC_CHANNELS.browserPane.STOP,
   RPC_CHANNELS.browserPane.FOCUS,
+  RPC_CHANNELS.browserPane.RESIZE,
   RPC_CHANNELS.browserPane.LAUNCH,
   RPC_CHANNELS.browserPane.SNAPSHOT,
   RPC_CHANNELS.browserPane.CLICK,
+  RPC_CHANNELS.browserPane.CLICK_AT,
   RPC_CHANNELS.browserPane.FILL,
+  RPC_CHANNELS.browserPane.TYPE,
+  RPC_CHANNELS.browserPane.KEY,
   RPC_CHANNELS.browserPane.SELECT,
   RPC_CHANNELS.browserPane.SCREENSHOT,
   RPC_CHANNELS.browserPane.EVALUATE,
@@ -46,6 +52,17 @@ export function registerBrowserHandlers(server: RpcServer, deps: HandlerDeps): v
     }
 
     return browserPaneManager.createInstance(input?.id, { show: input?.show, workspaceId })
+  })
+
+  server.handle(RPC_CHANNELS.browserPane.CREATE_EMBEDDED, (ctx, input?: { url?: string }) => {
+    return browserPaneManager.createEmbeddedInstance({
+      url: input?.url,
+      workspaceId: ctx.workspaceId ?? null,
+    })
+  })
+
+  server.handle(RPC_CHANNELS.browserPane.SYNC_BOUNDS, (_ctx, id: string, rect: { x: number; y: number; width: number; height: number } | null) => {
+    browserPaneManager.syncEmbeddedBounds(id, rect)
   })
 
   server.handle(RPC_CHANNELS.browserPane.DESTROY, (_ctx, id: string) => {
@@ -100,6 +117,10 @@ export function registerBrowserHandlers(server: RpcServer, deps: HandlerDeps): v
     browserPaneManager.focus(id)
   })
 
+  server.handle(RPC_CHANNELS.browserPane.RESIZE, (_ctx, id: string, width: number, height: number) => {
+    return browserPaneManager.windowResize(id, width, height)
+  })
+
   server.handle(RPC_CHANNELS.browserPane.LAUNCH, async (ctx, payload: BrowserEmptyStateLaunchPayload) => {
     try {
       return await browserPaneManager.handleEmptyStateLaunchFromRenderer(ctx.webContentsId!, payload)
@@ -127,11 +148,38 @@ export function registerBrowserHandlers(server: RpcServer, deps: HandlerDeps): v
     }
   })
 
+  server.handle(RPC_CHANNELS.browserPane.CLICK_AT, async (_ctx, id: string, x: number, y: number) => {
+    try {
+      return await browserPaneManager.clickAtCoordinates(id, x, y)
+    } catch (err) {
+      platform.logger.error(`[browser-pane] click-at failed for ${id} (${x},${y}):`, err)
+      throw err
+    }
+  })
+
   server.handle(RPC_CHANNELS.browserPane.FILL, async (_ctx, id: string, ref: string, value: string) => {
     try {
       return await browserPaneManager.fillElement(id, ref, value)
     } catch (err) {
       platform.logger.error(`[browser-pane] fill failed for ${id} ref=${ref}:`, err)
+      throw err
+    }
+  })
+
+  server.handle(RPC_CHANNELS.browserPane.TYPE, async (_ctx, id: string, value: string) => {
+    try {
+      return await browserPaneManager.typeText(id, value)
+    } catch (err) {
+      platform.logger.error(`[browser-pane] type failed for ${id}:`, err)
+      throw err
+    }
+  })
+
+  server.handle(RPC_CHANNELS.browserPane.KEY, async (_ctx, id: string, args: { key: string; modifiers?: Array<'shift' | 'control' | 'alt' | 'meta'> }) => {
+    try {
+      return await browserPaneManager.sendKey(id, args)
+    } catch (err) {
+      platform.logger.error(`[browser-pane] key failed for ${id}:`, err)
       throw err
     }
   })

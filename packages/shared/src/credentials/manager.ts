@@ -5,11 +5,28 @@
  * for cross-platform compatibility without OS keychain prompts.
  */
 
-import type { CredentialBackend } from './backends/types.ts';
+import {
+  isCredentialMigrationBackend,
+  type CredentialBackend,
+  type CredentialMigrationBackend,
+} from './backends/types.ts';
 import type { CredentialId, CredentialType, StoredCredential, CredentialHealthStatus, CredentialHealthIssue } from './types.ts';
 import type { LlmAuthType, LlmProviderType } from '../config/llm-connections.ts';
 import { SecureStorageBackend } from './backends/secure-storage.ts';
-import { debug } from '../utils/debug.ts';
+import { debug, isDebugEnabled } from '../utils/debug.ts';
+import {
+  CREDENTIAL_ENVELOPE_CODEC,
+  decodeCredentialEnvelope,
+  decodeCredentialEnvelopeOrLegacy,
+} from './envelope.ts';
+import type { CredentialKind } from '@craft-agent/core/platform';
+
+export interface CredentialReadResult {
+  readonly credential: StoredCredential;
+  readonly encoding: 'envelope-v1' | 'legacy-object';
+  readonly fingerprint?: string;
+  readonly codec?: typeof CREDENTIAL_ENVELOPE_CODEC;
+}
 
 export class CredentialManager {
   private backends: CredentialBackend[] = [];
@@ -17,6 +34,13 @@ export class CredentialManager {
   private initialized = false;
   private initPromise: Promise<void> | null = null;
 
+  constructor(options?: { backends?: CredentialBackend[] }) {
+    if (options?.backends) {
+      this.backends = options.backends;
+      this.writeBackend = options.backends[0] ?? null;
+      this.initialized = true;
+    }
+  }
   /**
    * Explicitly initialize the credential manager.
    * This is optional - methods auto-initialize via ensureInitialized().
@@ -104,22 +128,43 @@ export class CredentialManager {
     return this.writeBackend?.name || null;
   }
 
+  async getMigrationBackend(): Promise<CredentialMigrationBackend> {
+    await this.ensureInitialized();
+    if (
+      !this.writeBackend ||
+      this.backends.length !== 1 ||
+      this.backends[0] !== this.writeBackend ||
+      !isCredentialMigrationBackend(this.writeBackend)
+    ) {
+      throw new Error('Controlled credential migration is unavailable');
+    }
+    return this.writeBackend;
+  }
+
   /**
    * Get a credential by ID, trying all backends.
    * Automatically initializes if needed.
    */
   async get(id: CredentialId): Promise<StoredCredential | null> {
+    const classified = await this.inspect(id);
+    return classified?.credential ?? null;
+  }
+
+  /**
+   * Classify a stored record as envelope-v1 or legacy-object.
+   * Same payload as get(); does not write.
+   */
+  async inspect(id: CredentialId): Promise<CredentialReadResult | null> {
     await this.ensureInitialized();
 
     for (const backend of this.backends) {
       try {
         const cred = await backend.get(id);
-        if (cred) {
-          debug(`[CredentialManager] Found ${id.type} in ${backend.name}`);
-          return cred;
-        }
-      } catch (err) {
-        debug(`[CredentialManager] Error reading from ${backend.name}:`, err);
+        if (!cred) continue;
+        if (isDebugEnabled()) debug(`[CredentialManager] Found ${id.type} in ${backend.name}`);
+        return classifyStoredCredential(id.type, cred);
+      } catch {
+        if (isDebugEnabled()) debug(`[CredentialManager] Error reading ${id.type} from ${backend.name}`);
       }
     }
 
@@ -315,6 +360,24 @@ export class CredentialManager {
   }
 
   // Note: OpenAI API key methods removed - Codex uses native ChatGPT OAuth flow
+
+  // SSH managed server credentials (keyed by host id)
+
+  /** Get the managed craft-agent server auth token for an SSH host (null if none). */
+  async getSshManagedToken(hostId: string): Promise<string | null> {
+    const cred = await this.get({ type: 'ssh_managed_token', hostId });
+    return cred?.value || null;
+  }
+
+  /** Set the managed craft-agent server auth token for an SSH host. */
+  async setSshManagedToken(hostId: string, token: string): Promise<void> {
+    await this.set({ type: 'ssh_managed_token', hostId }, { value: token });
+  }
+
+  /** Delete the managed craft-agent server auth token for an SSH host. */
+  async deleteSshManagedToken(hostId: string): Promise<boolean> {
+    return this.delete({ type: 'ssh_managed_token', hostId });
+  }
 
   // ============================================================
   // LLM Connection Credentials
@@ -697,6 +760,145 @@ export class CredentialManager {
       issues,
     };
   }
+
+  // ============================================
+  // Rox cloud session (identity on rox.one)
+  // ============================================
+
+  private roxCloudId() {
+    return {
+      type: 'service_oauth' as const,
+      workspaceId: 'global',
+      name: 'rox-cloud',
+    }
+  }
+
+  async getRoxCloudSession(): Promise<{
+    accessToken: string
+    expiresAt?: number
+    userId?: string
+    email?: string
+    name?: string
+    authBaseUrl?: string
+  } | null> {
+    const cred = await this.get(this.roxCloudId())
+    if (!cred?.value) return null
+    let meta: { userId?: string; email?: string; name?: string } = {}
+    if (cred.idToken) {
+      try {
+        meta = JSON.parse(cred.idToken) as typeof meta
+      } catch {
+        meta = {}
+      }
+    }
+    return {
+      accessToken: cred.value,
+      expiresAt: cred.expiresAt,
+      userId: meta.userId,
+      email: meta.email,
+      name: meta.name,
+      authBaseUrl: cred.clientId,
+    }
+  }
+
+  async setRoxCloudSession(session: {
+    accessToken: string
+    expiresAt?: number
+    userId: string
+    email?: string
+    name?: string
+    authBaseUrl?: string
+  }): Promise<void> {
+    await this.set(this.roxCloudId(), {
+      value: session.accessToken,
+      expiresAt: session.expiresAt,
+      clientId: session.authBaseUrl,
+      idToken: JSON.stringify({
+        userId: session.userId,
+        email: session.email,
+        name: session.name,
+      }),
+      source: 'native',
+    })
+  }
+
+  async clearRoxCloudSession(): Promise<void> {
+    await this.delete(this.roxCloudId())
+  }
+
+  async hasRoxCloudSession(): Promise<boolean> {
+    const s = await this.getRoxCloudSession()
+    if (!s?.accessToken) return false
+    if (s.expiresAt && s.expiresAt < Date.now()) return false
+    return true
+  }
+
+}
+
+export function credentialKindForType(type: CredentialType): CredentialKind {
+  switch (type) {
+    case 'claude_oauth':
+    case 'llm_oauth':
+    case 'source_oauth':
+    case 'workspace_oauth':
+    case 'service_oauth':
+      return 'oauth2_token_set';
+    case 'source_bearer':
+    case 'messaging_bearer':
+      return 'bearer_token';
+    case 'anthropic_api_key':
+    case 'llm_api_key':
+    case 'source_apikey':
+      return 'api_key';
+    case 'llm_iam':
+      return 'aws_credential_source';
+    case 'llm_service_account':
+      return 'gcp_adc';
+    case 'source_basic':
+      return 'basic_auth';
+    case 'ssh_managed_token':
+      return 'opaque_bundle';
+    default:
+      return 'opaque_bundle';
+  }
+}
+
+function looksLikeSerializedObject(value: string): boolean {
+  return value.trimStart().startsWith('{');
+}
+
+function classifyStoredCredential(type: CredentialType, raw: unknown): CredentialReadResult | null {
+  if (typeof raw === 'string') {
+    const decoded = decodeCredentialEnvelope(raw);
+    if (!decoded) return null;
+    return {
+      credential: decoded.payload,
+      encoding: 'envelope-v1',
+      fingerprint: decoded.fingerprint,
+      codec: decoded.codec,
+    };
+  }
+  if (raw && typeof raw === 'object' && 'value' in raw && typeof (raw as StoredCredential).value === 'string') {
+    const serialized = (raw as StoredCredential).value;
+    const asEnvelope = decodeCredentialEnvelope(serialized);
+    if (asEnvelope) {
+      return {
+        credential: asEnvelope.payload,
+        encoding: 'envelope-v1',
+        fingerprint: asEnvelope.fingerprint,
+        codec: asEnvelope.codec,
+      };
+    }
+    if (looksLikeSerializedObject(serialized)) return null;
+  }
+  const wrapped = decodeCredentialEnvelopeOrLegacy(raw, credentialKindForType(type));
+  if (!wrapped) return null;
+  return {
+    credential: wrapped.payload,
+    encoding: 'legacy-object',
+    fingerprint: wrapped.fingerprint,
+    codec: wrapped.codec,
+  };
 }
 
 // Singleton instance

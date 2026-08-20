@@ -4,6 +4,26 @@
  * Key paths are internal and may be reorganized freely.
  */
 export const RPC_CHANNELS = {
+  cloudRuns: {
+    GET_CONFIG: 'cloudRuns:getConfig',
+    SET_CONFIG: 'cloudRuns:setConfig',
+    SUBMIT: 'cloudRuns:submit',
+    RESUME: 'cloudRuns:resume',
+    SESSION_TOPIC: 'cloudRuns:sessionTopic',
+    LIST_SCHEDULES: 'cloudRuns:listSchedules',
+    SAVE_SCHEDULE: 'cloudRuns:saveSchedule',
+    DELETE_SCHEDULE: 'cloudRuns:deleteSchedule',
+    READ_ARTIFACT: 'cloudRuns:readArtifact',
+    GET_EVENTS: 'cloudRuns:getEvents',
+    SHARE: 'cloudRuns:share',
+    REVOKE_SHARE: 'cloudRuns:revokeShare',
+    LIST: 'cloudRuns:list',
+    GET_STATUS: 'cloudRuns:getStatus',
+    CANCEL: 'cloudRuns:cancel',
+    LIST_ARTIFACTS: 'cloudRuns:listArtifacts',
+    IMPORT: 'cloudRuns:import',
+    AGGREGATE: 'cloudRuns:aggregate',
+  },
   remote: {
     TEST_CONNECTION: 'remote:testConnection',
   },
@@ -31,8 +51,12 @@ export const RPC_CHANNELS = {
     RESPOND_TO_PERMISSION: 'sessions:respondToPermission',
     RESPOND_TO_CREDENTIAL: 'sessions:respondToCredential',
     COMMAND: 'sessions:command',
+    BULK_UPDATE: 'sessions:bulkUpdate',
+    BULK_CHANGED: 'sessions:bulkChanged',
     GET_PENDING_PLAN_EXECUTION: 'sessions:getPendingPlanExecution',
     GET_PERMISSION_MODE_STATE: 'sessions:getPermissionModeState',
+    SET_MEMORY_MODE: 'sessions:setMemoryMode',
+    GET_PROVENANCE: 'sessions:getProvenance',
     EVENT: 'session:event',
     GET_MODEL: 'session:getModel',
     SET_MODEL: 'session:setModel',
@@ -78,6 +102,36 @@ export const RPC_CHANNELS = {
     CHECK_SLUG: 'workspaces:checkSlug',
     UPDATE_REMOTE: 'workspaces:updateRemote',
   },
+  workgraph: {
+    GET_HEALTH: 'workgraph:getHealth',
+    GET_VERSION: 'workgraph:getVersion',
+    LIST_CONNECTIONS: 'workgraph:listConnections',
+    LIST_CONNECTION_AUDIT: 'workgraph:listConnectionAudit',
+    LIST_CONNECTION_BINDINGS: 'workgraph:listConnectionBindings',
+    CONVERT_CONNECTION: 'workgraph:convertConnection',
+    REVOKE_CONNECTION_BINDING: 'workgraph:revokeConnectionBinding',
+    GET_CONNECTION: 'workgraph:getConnection',
+    CREATE_CONNECTION: 'workgraph:createConnection',
+    GRANT_CONNECTION: 'workgraph:grantConnection',
+    PREVIEW_GITHUB_ENV: 'workgraph:previewGithubEnv',
+    IMPORT_GITHUB_ENV: 'workgraph:importGithubEnv',
+    PREVIEW_GIT_HELPER: 'workgraph:previewGitHelper',
+    IMPORT_GIT_HELPER: 'workgraph:importGitHelper',
+    REVOKE_CONNECTION: 'workgraph:revokeConnection',
+    REPAIR_CONNECTION: 'workgraph:repairConnection',
+    ROTATE_CONNECTION: 'workgraph:rotateConnection',
+    TEST_CONNECTION: 'workgraph:testConnection',
+    PREVIEW_DOCKER_HELPER: 'workgraph:previewDockerHelper',
+    IMPORT_DOCKER_HELPER: 'workgraph:importDockerHelper',
+    PREVIEW_AWS_PROFILES: 'workgraph:previewAwsProfiles',
+    IMPORT_AWS_PROFILE: 'workgraph:importAwsProfile',
+    PREVIEW_KEYCHAIN: 'workgraph:previewKeychain',
+    IMPORT_KEYCHAIN: 'workgraph:importKeychain',
+    PREVIEW_ADC: 'workgraph:previewAdc',
+    IMPORT_ADC: 'workgraph:importAdc',
+    PREVIEW_SSH_AGENT: 'workgraph:previewSshAgent',
+    IMPORT_SSH_AGENT: 'workgraph:importSshAgent',
+  },
   window: {
     GET_WORKSPACE: 'window:getWorkspace',
     GET_MODE: 'window:getMode',
@@ -106,6 +160,102 @@ export const RPC_CHANNELS = {
   fs: {
     SEARCH: 'fs:search',
     LIST_DIRECTORY: 'fs:listDirectory',
+  },
+  notes: {
+    LIST: 'notes:list',
+    READ: 'notes:read',
+    SAVE: 'notes:save',
+    CREATE: 'notes:create',
+    RENAME: 'notes:rename',
+    DELETE: 'notes:delete',
+    RENAME_FOLDER: 'notes:renameFolder',
+    DELETE_FOLDER: 'notes:deleteFolder',
+    SEARCH: 'notes:search',
+    GET_BACKLINKS: 'notes:getBacklinks',
+    GET_RENAME_IMPACT: 'notes:getRenameImpact',
+    GET_DAILY_NOTE: 'notes:getDailyNote',
+    IMPORT_ASSET: 'notes:importAsset',
+    LIST_ASSETS: 'notes:listAssets',
+    DELETE_ASSET: 'notes:deleteAsset',
+    RENAME_ASSET: 'notes:renameAsset',
+    UPDATE_PROPERTIES: 'notes:updateProperties',
+    WATCH: 'notes:watch',
+    UNWATCH: 'notes:unwatch',
+    CHANGED: 'notes:changed',
+  },
+  // knowledge — P1 read-only knowledge provider (spec 03) plus P3 write-back
+  // mutation-proposal channels (spec 05) plus P4 Session→Knowledge publication
+  // pipeline (spec 06). ENGINE_START is local bootstrap (detect/open/spawn);
+  // full managed lifecycle (stop/pin) remains out of scope.
+  knowledge: {
+    LIST_CONNECTIONS: 'knowledge:listConnections',
+    CAPABILITIES: 'knowledge:capabilities',
+    SEARCH: 'knowledge:search',
+    GET: 'knowledge:get',
+    GET_CONTEXT: 'knowledge:getContext',
+    GET_BACKLINKS: 'knowledge:getBacklinks',
+    /** P4.3 Craft chrome copy/export payload (read-only; REMOTE_ELIGIBLE). */
+    GET_EXPORT_PAYLOAD: 'knowledge:getExportPayload',
+    SNAPSHOT_CREATE: 'knowledge:snapshotCreate',
+    SNAPSHOT_GET: 'knowledge:snapshotGet',
+    ENGINE_STATUS: 'knowledge:engineStatus',
+    /** LOCAL_ONLY: detect user-installed SiYuan + default port (never downloads). */
+    DETECT_ENGINE: 'knowledge:detectEngine',
+    /** G1 metrics snapshot (REMOTE_ELIGIBLE workspace data). */
+    METRICS_GET: 'knowledge:metricsGet',
+    /** LOCAL_ONLY: ensure default connection + start local SiYuan if installed. */
+    ENGINE_START: 'knowledge:engineStart',
+    /** P4.4 user-initiated Craft notes vault → SiYuan notebook. */
+    MIGRATE_NOTES: 'knowledge:migrateNotes',
+    CHANGED: 'knowledge:changed',
+    // P3 write-back, spec 05 — safe mutation-proposal lifecycle. All seven are
+    // REMOTE_ELIGIBLE (workspace data lives on the workspace-owning server);
+    // proposals broadcast via CHANGED (ref of target + change:'updated').
+    PROPOSE_MUTATION: 'knowledge:proposeMutation',
+    APPROVE_PROPOSAL: 'knowledge:approveProposal',
+    REJECT_PROPOSAL: 'knowledge:rejectProposal',
+    APPLY_PROPOSAL: 'knowledge:applyProposal',
+    ROLLBACK_PROPOSAL: 'knowledge:rollbackProposal',
+    GET_PROPOSAL: 'knowledge:getProposal',
+    LIST_PROPOSALS: 'knowledge:listProposals',
+    // P4 publication pipeline, spec 06 — Session→Knowledge distill/prepare/
+    // apply/finalize. All eight are REMOTE_ELIGIBLE (drafts/publications/links
+    // live under {workspaceRoot}/knowledge/).
+    PUBLISH_DISTILL: 'knowledge:publishDistill',
+    PUBLISH_GET_DRAFT: 'knowledge:publishGetDraft',
+    PUBLISH_UPDATE_DRAFT: 'knowledge:publishUpdateDraft',
+    PUBLISH_PREPARE: 'knowledge:publishPrepare',
+    PUBLISH_APPLY: 'knowledge:publishApply',
+    PUBLISH_FINALIZE: 'knowledge:publishFinalize',
+    PUBLISH_LIST: 'knowledge:publishList',
+    LIST_LINKS: 'knowledge:listLinks',
+    // P5 saved knowledge views + work envelopes (spec K-09 §3.5 / S-08).
+    // All six are REMOTE_ELIGIBLE (views.json + work-envelopes.jsonl live under
+    // the workspace root on the workspace-owning server).
+    ENVELOPE_GET: 'knowledge:envelopeGet',
+    ENVELOPE_UPSERT: 'knowledge:envelopeUpsert',
+    ENVELOPE_LIST: 'knowledge:envelopeList',
+    VIEWS_LIST: 'knowledge:viewsList',
+    VIEW_RUN: 'knowledge:viewRun',
+    VIEW_SET_ATTRIBUTE: 'knowledge:viewSetAttribute',
+    // P6 knowledge change watcher (poll) — start/stop per connection; emits into AutomationSystem.
+    WATCH: 'knowledge:watch',
+    UNWATCH: 'knowledge:unwatch',
+  },
+  // siyuan — P2 native knowledge surface (spec 03/P2): embedded SiYuan desktop
+  // hosted in a browser pane, keyed by durable document keys (`siyuan:{kind}:{id}`)
+  // for dedup + restore. Surface lifecycle manages local BrowserView compositing —
+  // all channels are LOCAL_ONLY (browserPane precedent), never proxied.
+  siyuan: {
+    CREATE_EMBEDDED: 'siyuan:createEmbedded',
+    DESTROY: 'siyuan:destroy',
+    LIST: 'siyuan:list',
+    SYNC_BOUNDS: 'siyuan:syncBounds',
+    FOCUS: 'siyuan:focus',
+    /** Run JS in an embedded SiYuan surface (LOCAL_ONLY; dock open / mode switch). */
+    EVALUATE: 'siyuan:evaluate',
+    STATE_CHANGED: 'siyuan:stateChanged',
+    REMOVED: 'siyuan:removed',
   },
   debug: {
     LOG: 'debug:log',
@@ -174,10 +324,70 @@ export const RPC_CHANNELS = {
     LOGOUT: 'auth:logout',
     SHOW_LOGOUT_CONFIRMATION: 'auth:showLogoutConfirmation',
     SHOW_DELETE_SESSION_CONFIRMATION: 'auth:showDeleteSessionConfirmation',
+    SHOW_DELETE_WORKSPACE_CONFIRMATION: 'auth:showDeleteWorkspaceConfirmation',
   },
   credentials: {
     HEALTH_CHECK: 'credentials:healthCheck',
   },
+  identity: {
+    GET_STATE: 'identity:getState',
+    UPDATE_PROFILE: 'identity:updateProfile',
+    CONNECT: 'identity:connect',
+    DISCONNECT: 'identity:disconnect',
+    REFRESH_STATUS: 'identity:refreshStatus',
+    CHANGED: 'identity:changed',
+  },
+  extensions: {
+    LIST_CATALOG: 'extensions:listCatalog',
+    LIST_INSTALLED: 'extensions:listInstalled',
+    SET_ENABLED: 'extensions:setEnabled',
+    GET_STATE: 'extensions:getState',
+    CHANGED: 'extensions:changed',
+  },
+
+  // pluginBridge — SiYuan plugin bridge projections (W6). LOCAL_ONLY.
+  // Kernel plugin list is residual; handlers fail-soft / fixture-backed.
+  // install/uninstall delegate to kernel bazaar APIs (G2: no Craft-side zip).
+  pluginBridge: {
+    LIST_PLUGINS: 'pluginBridge:listPlugins',
+    GET_PROJECTIONS: 'pluginBridge:getProjections',
+    SET_ENABLED: 'pluginBridge:setEnabled',
+    OPEN_COMPAT: 'pluginBridge:openCompat', // returns route descriptor only
+    INSTALL_BAZAAR: 'pluginBridge:installBazaar',
+    UNINSTALL_BAZAAR: 'pluginBridge:uninstallBazaar',
+  },
+
+  // extensionHost — Craft Extension Host lifecycle (S-05 §3.5).
+  // craft-sandbox utilityProcess only. Does NOT execute SiYuan plugins.
+  // Capability broker: mint/revoke/proxyFetch stay LOCAL_ONLY in main.
+  extensionHost: {
+    STATUS: 'extensionHost:status',
+    STATUS_ALL: 'extensionHost:statusAll',
+    START: 'extensionHost:start',
+    STOP: 'extensionHost:stop',
+    RESTART: 'extensionHost:restart',
+    LOAD: 'extensionHost:load',
+    CALL: 'extensionHost:call',
+    LIST_COMMANDS: 'extensionHost:listCommands',
+    MINT_CAPABILITY: 'extensionHost:mintCapability',
+    REVOKE_CAPABILITY: 'extensionHost:revokeCapability',
+    PROXY_FETCH: 'extensionHost:proxyFetch',
+    GET_URL_ALLOWLIST: 'extensionHost:getUrlAllowlist',
+    SET_URL_ALLOWLIST: 'extensionHost:setUrlAllowlist',
+  },
+
+  // extensionSurface — sandboxed embedded BrowserView for extension UI
+  // (partition persist:ext-${extensionId}). LOCAL_ONLY.
+  extensionSurface: {
+    CREATE_EMBEDDED: 'extensionSurface:createEmbedded',
+    DESTROY: 'extensionSurface:destroy',
+    LIST: 'extensionSurface:list',
+    SYNC_BOUNDS: 'extensionSurface:syncBounds',
+    FOCUS: 'extensionSurface:focus',
+    STATE_CHANGED: 'extensionSurface:stateChanged',
+    REMOVED: 'extensionSurface:removed',
+  },
+
   onboarding: {
     GET_AUTH_STATE: 'onboarding:getAuthState',
     VALIDATE_MCP: 'onboarding:validateMcp',
@@ -187,6 +397,9 @@ export const RPC_CHANNELS = {
     HAS_CLAUDE_OAUTH_STATE: 'onboarding:hasClaudeOAuthState',
     CLEAR_CLAUDE_OAUTH_STATE: 'onboarding:clearClaudeOAuthState',
     DEFER_SETUP: 'onboarding:deferSetup',
+    START_ROX_CONNECT: 'onboarding:startRoxConnect',
+    GET_ROX_CLOUD_STATE: 'onboarding:getRoxCloudState',
+    CLEAR_ROX_CLOUD: 'onboarding:clearRoxCloud',
   },
   llmConnections: {
     LIST: 'LLM_Connection:list',
@@ -225,6 +438,8 @@ export const RPC_CHANNELS = {
     GET_SERVER_CONFIG: 'settings:getServerConfig',
     SET_SERVER_CONFIG: 'settings:setServerConfig',
     GET_SERVER_STATUS: 'settings:getServerStatus',
+    GET_ENV_OVERRIDES: 'settings:getEnvOverrides',
+    SET_ENV_OVERRIDES: 'settings:setEnvOverrides',
   },
   pi: {
     GET_API_KEY_PROVIDERS: 'pi:getApiKeyProviders',
@@ -238,6 +453,11 @@ export const RPC_CHANNELS = {
     READ: 'preferences:read',
     WRITE: 'preferences:write',
   },
+  gamification: {
+    GET: 'gamification:get',
+    AWARD: 'gamification:award',
+    CHANGED: 'gamification:changed',
+  },
   drafts: {
     GET: 'drafts:get',
     SET: 'drafts:set',
@@ -247,12 +467,15 @@ export const RPC_CHANNELS = {
   sources: {
     GET: 'sources:get',
     CREATE: 'sources:create',
+    UPDATE: 'sources:update',
     DELETE: 'sources:delete',
     START_OAUTH: 'sources:startOAuth',
     SAVE_CREDENTIALS: 'sources:saveCredentials',
     CHANGED: 'sources:changed',
     GET_PERMISSIONS: 'sources:getPermissions',
     GET_MCP_TOOLS: 'sources:getMcpTools',
+    REINDEX: 'sources:reindex',
+    SEARCH: 'sources:search',
   },
   oauth: {
     START: 'oauth:start',
@@ -274,21 +497,85 @@ export const RPC_CHANNELS = {
   skills: {
     GET: 'skills:get',
     GET_FILES: 'skills:getFiles',
+    UPDATE: 'skills:update',
     DELETE: 'skills:delete',
     OPEN_EDITOR: 'skills:openEditor',
     OPEN_FINDER: 'skills:openFinder',
+    IMPORT_OMP: 'skills:importOmp',
+    // S4: usage metrics from {workspace}/skills/.usage.jsonl + prune (archive, never delete)
+    GET_USAGE: 'skills:getUsage',
+    PRUNE_UNUSED: 'skills:pruneUnused',
+    // T1: copy a workspace skill into {projectRoot}/.agents/skills/<slug>
+    EXPORT_TO_PROJECT: 'skills:exportToProject',
     CHANGED: 'skills:changed',
+  },
+  skillsPending: {
+    LIST: 'skillsPending:list',
+    APPROVE: 'skillsPending:approve',
+    DISMISS: 'skillsPending:dismiss',
+    DIFF: 'skillsPending:diff',
+    CHANGED: 'skillsPending:changed',
+  },
+  memory: {
+    LIST_LESSONS: 'memory:listLessons',
+    ADD_LESSON: 'memory:addLesson',
+    UPDATE_LESSON: 'memory:updateLesson',
+    DELETE_LESSON: 'memory:deleteLesson',
+    GET_CONTEXT: 'memory:getContext',
+    GET_PROJECT_MEMORY: 'memory:getProjectMemory',
+    UPDATE_CONTEXT: 'memory:updateContext',
+    LIST_HISTORY: 'memory:listHistory',
+    PROMOTION_CANDIDATES: 'memory:promotionCandidates',
+    PROMOTE_LESSON: 'memory:promoteLesson',
+    EXPORT: 'memory:export',
+    IMPORT: 'memory:import',
+    // Y1: 7-day dashboard counters aggregated from both audit.jsonl files,
+    // plus the Y4 onboarding marker state.
+    INSIGHTS: 'memory:insights',
+    MARK_ONBOARDED: 'memory:markOnboarded',
+    CHANGED: 'memory:changed',
   },
   statuses: {
     LIST: 'statuses:list',
     REORDER: 'statuses:reorder',
     CHANGED: 'statuses:changed',
   },
+  toolchain: {
+    STATUS: 'toolchain:status',
+    STATUS_CHANGED: 'toolchain:statusChanged',
+    UPDATE: 'toolchain:update',
+    GET_DISABLED: 'toolchain:getDisabled',
+    SET_DISABLED: 'toolchain:setDisabled',
+  },
+  openclawRuntime: {
+    GET_STATUS: 'openclawRuntime:getStatus',
+    INSTALL: 'openclawRuntime:install',
+    PROVISION: 'openclawRuntime:provision',
+    START: 'openclawRuntime:start',
+    STOP: 'openclawRuntime:stop',
+  },
+  securityAudit: {
+    RUN: 'securityAudit:run',
+    GET_LATEST: 'securityAudit:getLatest',
+    ACCEPT_RISK: 'securityAudit:acceptRisk',
+    REVOKE_RISK_ACCEPTANCE: 'securityAudit:revokeRiskAcceptance',
+  },
   labels: {
     LIST: 'labels:list',
     CREATE: 'labels:create',
+    UPDATE: 'labels:update',
     DELETE: 'labels:delete',
     CHANGED: 'labels:changed',
+  },
+  orgs: {
+    LIST: 'orgs:list',
+    CREATE: 'orgs:create',
+    INVITE: 'orgs:invite',
+    ACCEPT: 'orgs:accept',
+    LIST_MEMBERS: 'orgs:listMembers',
+    GET_IDENTITY: 'orgs:getIdentity',
+    UPDATE_IDENTITY: 'orgs:updateIdentity',
+    SET_WORKSPACE_ORG: 'orgs:setWorkspaceOrg',
   },
   views: {
     LIST: 'views:list',
@@ -321,6 +608,8 @@ export const RPC_CHANNELS = {
   appearance: {
     GET_RICH_TOOL_DESCRIPTIONS: 'appearance:getRichToolDescriptions',
     SET_RICH_TOOL_DESCRIPTIONS: 'appearance:setRichToolDescriptions',
+    GET_DEFAULT_ZOOM_LEVEL: 'appearance:getDefaultZoomLevel',
+    SET_DEFAULT_ZOOM_LEVEL: 'appearance:setDefaultZoomLevel',
   },
   tools: {
     GET_BROWSER_TOOL_ENABLED: 'tools:getBrowserToolEnabled',
@@ -358,6 +647,8 @@ export const RPC_CHANNELS = {
   },
   browserPane: {
     CREATE: 'browser-pane:create',
+    CREATE_EMBEDDED: 'browser-pane:create-embedded',
+    SYNC_BOUNDS: 'browser-pane:sync-bounds',
     DESTROY: 'browser-pane:destroy',
     LIST: 'browser-pane:list',
     NAVIGATE: 'browser-pane:navigate',
@@ -366,9 +657,13 @@ export const RPC_CHANNELS = {
     RELOAD: 'browser-pane:reload',
     STOP: 'browser-pane:stop',
     FOCUS: 'browser-pane:focus',
+    RESIZE: 'browser-pane:resize',
     SNAPSHOT: 'browser-pane:snapshot',
     CLICK: 'browser-pane:click',
+    CLICK_AT: 'browser-pane:click-at',
     FILL: 'browser-pane:fill',
+    TYPE: 'browser-pane:type',
+    KEY: 'browser-pane:key',
     SELECT: 'browser-pane:select',
     SCREENSHOT: 'browser-pane:screenshot',
     EVALUATE: 'browser-pane:evaluate',
@@ -380,6 +675,8 @@ export const RPC_CHANNELS = {
   },
   automations: {
     GET: 'automations:get',
+    GET_GRAPH: 'automations:getGraph',
+    SAVE_GRAPH: 'automations:saveGraph',
     TEST: 'automations:test',
     SET_ENABLED: 'automations:setEnabled',
     DUPLICATE: 'automations:duplicate',
@@ -404,6 +701,25 @@ export const RPC_CHANNELS = {
     DELETE_ASSET: 'projects:deleteAsset',
     CHANGED: 'projects:changed',
   },
+  kanban: {
+    GET_CONFIG: 'kanban:getConfig',
+    SET_CONFIG: 'kanban:setConfig',
+    CHANGED: 'kanban:changed',
+  },
+  collection: {
+    GET_DISPLAY: 'collection:getDisplay',
+    SET_DISPLAY: 'collection:setDisplay',
+    CHANGED: 'collection:changed',
+  },
+
+  mindmap: {
+    /** One-shot LLM outline improve → enriched MindMapGraph (LOCAL_ONLY). */
+    ENRICH: 'mindmap:enrich',
+    PIN_LOAD: 'mindmap:pinLoad',
+    PIN_SAVE: 'mindmap:pinSave',
+    PIN_CLEAR: 'mindmap:pinClear',
+  },
+
   messaging: {
     // WhatsApp subprocess → Gateway (subprocess invokes on server)
     WA_REGISTER: 'messaging:wa:register',
@@ -430,6 +746,12 @@ export const RPC_CHANNELS = {
     SAVE_TELEGRAM: 'messaging:saveTelegram',
     TEST_LARK: 'messaging:testLark',
     SAVE_LARK: 'messaging:saveLark',
+    TEST_DISCORD: 'messaging:testDiscord',
+    SAVE_DISCORD: 'messaging:saveDiscord',
+    // UI ↔ Server — WeChat (微信) iLink QR login flow
+    WECHAT_START_CONNECT: 'messaging:wechat:startConnect',
+    WECHAT_SUBMIT_CODE: 'messaging:wechat:submitCode',
+    WECHAT_UI_EVENT: 'messaging:wechat:uiEvent',
     DISCONNECT: 'messaging:disconnect',
     FORGET: 'messaging:forget',
     GET_BINDINGS: 'messaging:getBindings',
@@ -454,6 +776,38 @@ export const RPC_CHANNELS = {
     DISMISS_PENDING_SENDER: 'messaging:access:dismissPending',
     ALLOW_PENDING_SENDER: 'messaging:access:allowPending',
     SET_BINDING_ACCESS: 'messaging:access:setBindingAccess',
+    // UI ↔ Server — WeChat QR-login flow (in-process, iLink long-poll)
+    WC_START_CONNECT: 'messaging:wc:startConnect',
+    WC_CANCEL_CONNECT: 'messaging:wc:cancelConnect',
+    /** Broadcast to UI clients: QR image url, scaned, confirmed, expired, error. */
+    WC_UI_EVENT: 'messaging:wc:uiEvent',
+  },
+  contextDocs: {
+    LIST: 'contextDocs:list',
+    READ: 'contextDocs:read',
+    WRITE: 'contextDocs:write',
+    DELETE: 'contextDocs:delete',
+    READ_TEMPLATE: 'contextDocs:readTemplate',
+    ACCEPT_TEMPLATE: 'contextDocs:acceptTemplate',
+    KEEP_MINE_TEMPLATE: 'contextDocs:keepMineTemplate',
+    CHANGED: 'contextDocs:CHANGED',
+  },
+  bundledSkills: {
+    LIST: 'bundledSkills:list',
+    GET_DISABLED: 'bundledSkills:getDisabled',
+    SET_DISABLED: 'bundledSkills:setDisabled',
+    CHANGED: 'bundledSkills:CHANGED',
+  },
+  marketplace: {
+    CATALOG: 'marketplace:catalog',
+    STATS: 'marketplace:stats',
+    INSTALL: 'marketplace:install',
+    REMOVE: 'marketplace:remove',
+    UPDATE: 'marketplace:update',
+    REFRESH: 'marketplace:refresh',
+    /** Progress push during install/update (clone/verify/install/fetch). */
+    PROGRESS: 'marketplace:progress',
+    CHANGED: 'marketplace:CHANGED',
   },
 } as const
 

@@ -85,6 +85,11 @@ describe('getDefaultModelForConnection', () => {
     const defaultModel = getDefaultModelForConnection('pi_compat')
     expect(defaultModel).toBe('')
   })
+
+  it('returns empty string for anthropic_compat (dynamic provider)', () => {
+    const defaultModel = getDefaultModelForConnection('anthropic_compat')
+    expect(defaultModel).toBe('')
+  })
 })
 
 // ============================================================
@@ -94,6 +99,10 @@ describe('getDefaultModelForConnection', () => {
 describe('isCompatProvider', () => {
   it('returns true for pi_compat', () => {
     expect(isCompatProvider('pi_compat')).toBe(true)
+  })
+
+  it('returns true for anthropic_compat', () => {
+    expect(isCompatProvider('anthropic_compat')).toBe(true)
   })
 
   it('returns false for anthropic', () => {
@@ -110,6 +119,10 @@ describe('isAnthropicProvider', () => {
     expect(isAnthropicProvider('anthropic')).toBe(true)
   })
 
+  it('returns true for anthropic_compat', () => {
+    expect(isAnthropicProvider('anthropic_compat')).toBe(true)
+  })
+
   it('returns false for pi', () => {
     expect(isAnthropicProvider('pi')).toBe(false)
   })
@@ -122,6 +135,10 @@ describe('isPiProvider', () => {
 
   it('returns true for pi_compat', () => {
     expect(isPiProvider('pi_compat')).toBe(true)
+  })
+
+  it('returns false for anthropic_compat', () => {
+    expect(isPiProvider('anthropic_compat')).toBe(false)
   })
 
   it('returns false for anthropic', () => {
@@ -218,6 +235,16 @@ describe('Bedrock preferred defaults ordering', () => {
     const firstId = typeof models[0] === 'string' ? models[0] : (models[0] as any).id
     // First model should be a preferred model (claude-opus or claude-sonnet), not a deprecated one
     expect(firstId).toMatch(/claude-(opus|sonnet)-4/)
+  })
+})
+
+describe('Kimi preferred defaults ordering', () => {
+  it('uses Kimi K3 as the default Kimi Code model', () => {
+    const models = getDefaultModelsForConnection('pi', 'kimi-coding')
+    if (models.length === 0) return // Pi resolver not registered in test env
+    const first = models[0]!
+    const firstId = typeof first === 'string' ? first : first.id
+    expect(firstId).toBe('pi/k3')
   })
 })
 

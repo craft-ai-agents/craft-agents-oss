@@ -7,19 +7,13 @@
  */
 
 import type {
-  MessagingBindingAccessMode,
   MessagingPendingSenderInfo,
-  MessagingPlatformAccessMode,
   MessagingPlatformOwnerInfo,
 } from '../../../../shared/types'
+import type { BindingAccess, UiMessagingAccessMode } from './access-mode'
 
-export type PlatformAccessMode = MessagingPlatformAccessMode
-export type BindingAccessMode = MessagingBindingAccessMode
+export type PlatformAccessMode = UiMessagingAccessMode
+export type BindingAccessMode = UiMessagingAccessMode
 export type PlatformOwner = MessagingPlatformOwnerInfo
 export type PendingSender = MessagingPendingSenderInfo
-
-export interface BindingAccess {
-  mode: BindingAccessMode
-  /** Only meaningful when `mode === 'allow-list'`. */
-  allowedSenderIds: string[]
-}
+export type { BindingAccess }

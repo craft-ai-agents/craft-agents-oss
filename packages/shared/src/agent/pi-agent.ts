@@ -18,6 +18,7 @@ import { createInterface, type Interface as ReadlineInterface } from 'node:readl
 import type { AgentEvent } from '@craft-agent/core/types';
 import type { FileAttachment } from '../utils/files.ts';
 import { getProxyEnvVars } from '../config/proxy-env.ts';
+import { withToolchainPathPrefix } from '../toolchain-runtime.ts';
 
 import type {
   BackendConfig,
@@ -34,6 +35,7 @@ import type { ThinkingLevel } from './thinking-levels.ts';
 
 // Import models from centralized registry
 import { getModelById } from '../config/models.ts';
+import { getAllPiModels } from '../config/models-pi.ts';
 
 // BaseAgent provides common functionality
 import { BaseAgent } from './base-agent.ts';
@@ -66,7 +68,8 @@ import {
 import { attachSessionSelfManagementBindings } from './session-self-management-bindings.ts';
 
 // Session tool proxy definitions (for registering with subprocess)
-import { getSessionToolProxyDefs, SESSION_TOOL_NAMES } from './backend/pi/session-tool-defs.ts';
+import { SESSION_TOOL_NAMES } from './backend/pi/session-tool-defs.ts';
+import { buildSessionToolDefs } from './session-tool-defs.ts';
 
 // Session tool registry (for executing proxy tool calls)
 import {
@@ -95,7 +98,7 @@ import { parseError, type AgentError } from './errors.ts';
 // Centralized PreToolUse pipeline
 import { runPreToolUseChecks, type PreToolUseCheckResult } from './core/pre-tool-use.ts';
 import { getRtkPath } from './core/rtk-detector.ts';
-import { getRtkEnabled, getBrowserToolEnabled } from '../config/storage.ts';
+import { getRtkEnabled } from '../config/storage.ts';
 import type { RtkContext } from './core/rtk-rewrite.ts';
 
 // Workspace slug extraction for skill qualification
@@ -104,6 +107,7 @@ import { extractWorkspaceSlug } from '../utils/workspace.ts';
 // LLM tool types
 import { LLM_QUERY_TIMEOUT_MS, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
 import { executeBrowserToolCommand } from './browser-tool-runtime.ts';
+import { executeGithubUserTool } from '../connections/github-user-tool.ts';
 import { saveBinaryResponse } from '../utils/binary-detection.ts';
 
 // ============================================================
@@ -114,6 +118,7 @@ import { saveBinaryResponse } from '../utils/binary-detection.ts';
 export const PI_BACKEND_SESSION_TOOL_NAMES = new Set<string>([
   'call_llm',
   'spawn_session',
+  'github_user',
   'browser_tool',
 ]);
 
@@ -352,14 +357,23 @@ export class PiAgent extends BaseAgent {
   constructor(config: BackendConfig) {
     const resolvedModel = config.model || '';
     const modelDef = getModelById(resolvedModel);
-    super(config, resolvedModel, modelDef?.contextWindow);
+    // Fall back to Pi SDK model catalog for non-Claude models (DeepSeek, Gemini, etc.)
+    // that are not in the static MODEL_REGISTRY.
+    const contextWindow = modelDef?.contextWindow
+      ?? (() => {
+        try {
+          const bareId = resolvedModel.startsWith('pi/') ? resolvedModel.slice(3) : resolvedModel;
+          return getAllPiModels().find(m => m.id === `pi/${bareId}` || m.id === bareId)?.contextWindow;
+        } catch { return undefined; }
+      })();
+    super(config, resolvedModel, contextWindow);
 
     this._supportsBranching = true;
 
     this.piSessionId = config.session?.sdkSessionId || null;
     this.adapter = new PiEventAdapter();
-    if (modelDef?.contextWindow) {
-      this.adapter.setContextWindow(modelDef.contextWindow);
+    if (contextWindow) {
+      this.adapter.setContextWindow(contextWindow);
     }
     if (config.miniModel) {
       this.adapter.setMiniModel(config.miniModel);
@@ -482,11 +496,11 @@ export class PiAgent extends BaseAgent {
     // Derive AWS env vars from the piAuth credential (single fetch, no race).
     const awsEnv = this.buildAwsEnv(piAuth, runtime);
 
-    // Spawn the subprocess
+    // Spawn the subprocess (env prefixed with toolchain bin-dirs for gh/jq/node/etc.)
     const child = spawn(nodePath, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
+      env: await withToolchainPathPrefix({
         ...process.env,
         ...getProxyEnvVars(),
         ...this.config.envOverrides,
@@ -495,7 +509,7 @@ export class PiAgent extends BaseAgent {
         ...(sessionDir ? { CRAFT_SESSION_DIR: sessionDir } : {}),
         // Propagate debug mode
         CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
-      },
+      }),
     });
 
     this.subprocess = child;
@@ -583,23 +597,10 @@ export class PiAgent extends BaseAgent {
     // These tools (SubmitPlan, config_validate, source auth, call_llm, etc.)
     // are executed in the main process when the LLM calls them.
     this.assertBackendSessionToolParity();
-    let sessionToolDefs = getSessionToolProxyDefs();
-
-    // Mirror Claude's gate: hide `browser_tool` when the user has disabled
-    // the built-in browser tool. Without this filter, Pi would still advertise
-    // `mcp__session__browser_tool` while Claude doesn't — sessions would behave
-    // inconsistently depending on backend.
-    if (!getBrowserToolEnabled()) {
-      sessionToolDefs = sessionToolDefs.filter(d => d.name !== 'mcp__session__browser_tool');
-    }
-
-    // Patch call_llm description with provider-specific model hint
-    if (this.config.miniModel) {
-      const callLlmDef = sessionToolDefs.find(d => d.name === 'mcp__session__call_llm');
-      if (callLlmDef) {
-        callLlmDef.description += `\n\nDefault fast model for this session: ${this.config.miniModel}. Omit the model parameter to use it automatically.`;
-      }
-    }
+    // Shared builder applies the browser_tool gate + call_llm mini-model hint.
+    // Pool proxy defs stay in their own register_tools frame below (OMP merges
+    // them via includePoolProxyDefs; Pi's protocol sends them separately).
+    const sessionToolDefs = buildSessionToolDefs({ miniModel: this.config.miniModel });
 
     this.send({
       type: 'register_tools',
@@ -1533,6 +1534,21 @@ export class PiAgent extends BaseAgent {
         }
       }
 
+      // github_user — brokered GitHub /user (token stays inside broker.perform)
+      if (toolName === 'github_user') {
+        try {
+          const result = await executeGithubUserTool({
+            workspaceId: String(args.workspaceId ?? ''),
+            connectionId: String(args.connectionId ?? ''),
+            consumerId: typeof args.consumerId === 'string' ? args.consumerId : undefined,
+          });
+          return { content: JSON.stringify(result), isError: false };
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return { content: `github_user failed: ${msg}`, isError: true };
+        }
+      }
+
       // browser_tool — single CLI-like tool for all browser actions
       if (toolName === 'browser_tool') {
         const callbacks = getSessionScopedToolCallbacks(this._sessionId);
@@ -2037,6 +2053,7 @@ export class PiAgent extends BaseAgent {
         'Craft Agents Backend', // backendName
         getCoAuthorPreference(), // respect user's includeCoAuthoredBy preference (#576)
         projectContext ?? undefined,
+        this.config.memoryBlocks, // self-learning memory (lessons + workspace memory)
       );
 
       // Build context from sources

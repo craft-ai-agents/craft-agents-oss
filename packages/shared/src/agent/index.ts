@@ -4,6 +4,9 @@ export * from './conversation-summary.ts';
 
 // Export PiAgent for direct use
 export { PiAgent, PiBackend } from './pi-agent.ts';
+
+// Export OmpAgent for direct use
+export { OmpAgent, OmpBackend } from './omp-agent.ts';
 export * from './errors.ts';
 export * from './options.ts';
 

@@ -25,7 +25,6 @@ import {
   ChevronDown,
   ChevronRight,
   Hash,
-  LockOpen,
   MessageSquare,
   MessagesSquare,
   MoreHorizontal,
@@ -51,11 +50,16 @@ import { SettingsSection, SettingsCard } from '@/components/settings'
 import { MessagingPlatformIcon } from '@/components/messaging/MessagingPlatformIcon'
 import { TelegramConnectDialog } from '@/components/messaging/TelegramConnectDialog'
 import { LarkConnectDialog } from '@/components/messaging/LarkConnectDialog'
+import { DiscordConnectDialog } from '@/components/messaging/DiscordConnectDialog'
 import { TelegramSupergroupPairingDialog } from '@/components/messaging/TelegramSupergroupPairingDialog'
 import { WhatsAppConnectDialog } from '@/components/messaging/WhatsAppConnectDialog'
+import { WeChatConnectDialog } from '@/components/messaging/WeChatConnectDialog'
 import {
   BindingAllowListPopover,
   TelegramAccessSection,
+  canCommitOwnerControl,
+  normalizeUiAccessMode,
+  toBindingAccess,
   type BindingAccess,
   type BindingAccessMode,
   type PlatformAccessMode,
@@ -124,6 +128,12 @@ export default function MessagingSettingsPage() {
             <SettingsCard>
               <PlatformRow platform="lark" workspaceId={activeWorkspace.id} />
             </SettingsCard>
+            <SettingsCard>
+              <PlatformRow platform="discord" workspaceId={activeWorkspace.id} />
+            </SettingsCard>
+            <SettingsCard>
+              <PlatformRow platform="wechat" workspaceId={activeWorkspace.id} />
+            </SettingsCard>
           </SettingsSection>
         </div>
       </ScrollArea>
@@ -135,13 +145,16 @@ export default function MessagingSettingsPage() {
 // Platform row
 // ---------------------------------------------------------------------------
 
-type Platform = 'telegram' | 'whatsapp' | 'lark'
+type Platform = 'telegram' | 'whatsapp' | 'lark' | 'discord' | 'wechat'
 
 const PLATFORM_LABEL_KEYS: Record<Platform, string> = {
   telegram: 'settings.messaging.telegram.title',
   whatsapp: 'settings.messaging.whatsapp.title',
   lark: 'settings.messaging.lark.title',
+  discord: 'settings.messaging.discord.title',
+  wechat: 'settings.messaging.wechat.title',
 }
+
 
 // Row column geometry shared across the bot header and all child rows.
 // 16px outer padding (`px-4`) + 22px icon slot + 12px gap (`gap-3`).
@@ -204,11 +217,8 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
   const [supergroup, setSupergroup] = React.useState<{ chatId: string; title: string } | null>(null)
   const [supergroupDialogOpen, setSupergroupDialogOpen] = React.useState(false)
 
-  // Telegram workspace access mode — telegram only. Lifted up so the
-  // dropdown can decide whether to show "Unlock", and TelegramAccessSection
-  // receives it as a controlled prop. Symmetric with `supergroup` state.
   const [telegramAccessMode, setTelegramAccessMode] =
-    React.useState<PlatformAccessMode>('open')
+    React.useState<PlatformAccessMode>('public-inbox')
 
   const refreshSupergroup = React.useCallback(async () => {
     if (platform !== 'telegram') return
@@ -224,9 +234,9 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
     if (platform !== 'telegram') return
     try {
       const mode = await window.electronAPI.getMessagingPlatformAccessMode('telegram')
-      setTelegramAccessMode(mode as PlatformAccessMode)
+      setTelegramAccessMode(normalizeUiAccessMode(mode))
     } catch {
-      // silent — default 'open' covers fresh / disconnected state
+      // silent — default public-inbox covers fresh / disconnected state
     }
   }, [platform])
 
@@ -237,10 +247,9 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
   React.useEffect(() => {
     if (platform !== 'telegram') return
     void refreshTelegramAccessMode()
-    // Lock-down migrates open bindings → inherit, which fires
-    // onMessagingBindingChanged. Unlock doesn't migrate, but PlatformRow
-    // and TelegramAccessSection both call setTelegramAccessMode after the
-    // API write, so the prop stays in sync without an extra event.
+    // Lock-down migrates public-inbox bindings to owner-control and fires
+    // onMessagingBindingChanged. PlatformRow and TelegramAccessSection
+    // both refresh after the API write.
     const off = window.electronAPI.onMessagingBindingChanged((wsId) => {
       if (wsId === workspaceId) void refreshTelegramAccessMode()
     })
@@ -253,6 +262,43 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
         .filter((b) => b.platform === platform)
         .sort((a, b) => b.createdAt - a.createdAt),
     [allBindings, platform],
+  )
+
+  // Workspace owners + per-binding access control (allow-list popover on rows).
+  const [workspaceOwners, setWorkspaceOwners] = React.useState<PlatformOwner[]>([])
+
+  React.useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const owners = await window.electronAPI.getMessagingPlatformOwners(platform)
+        if (!cancelled) setWorkspaceOwners(owners)
+      } catch {
+        // Silent — BindingAllowListPopover handles the empty list gracefully.
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [platform, platformBindings])
+
+  const handleAccessChange = React.useCallback(
+    async (bindingId: string, next: BindingAccess) => {
+      if (next.mode === 'owner-control' && !canCommitOwnerControl(next.allowedSenderIds)) {
+        toast.error('Select at least one allowed sender before saving owner control.')
+        return
+      }
+      try {
+        await window.electronAPI.setMessagingBindingAccess(bindingId, {
+          mode: next.mode as BindingAccessMode,
+          allowedSenderIds: next.allowedSenderIds,
+        })
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to update access')
+      }
+    },
+    [],
   )
 
   React.useEffect(() => {
@@ -287,16 +333,6 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
   const handleReconfigure = () => {
     setReconfigure(true)
     setConnectOpen(true)
-  }
-
-  const handleUnlock = async () => {
-    try {
-      await window.electronAPI.setMessagingPlatformAccessMode('telegram', 'open')
-      toast.success(t('toast.messagingTelegramUnlocked'))
-      setTelegramAccessMode('open')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('common.error'))
-    }
   }
 
   const handleDisconnect = async () => {
@@ -366,12 +402,6 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
                       <Settings2 className="h-3.5 w-3.5" />
                       <span>{t('common.reconfigure')}</span>
                     </StyledDropdownMenuItem>
-                    {telegramAccessMode === 'owner-only' && (
-                      <StyledDropdownMenuItem onClick={() => runAfterMenuClose(handleUnlock)}>
-                        <LockOpen className="h-3.5 w-3.5" />
-                        <span>{t('settings.messaging.telegram.unlock')}</span>
-                      </StyledDropdownMenuItem>
-                    )}
                     <StyledDropdownMenuSeparator />
                     <StyledDropdownMenuItem onClick={handleDisconnect} variant="destructive">
                       <PowerOff className="h-3.5 w-3.5" />
@@ -434,6 +464,28 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
               onUnbind={handleUnbind}
             />
           </>
+        ) : platform === 'wechat' && platformBindings.length > 0 ? (
+          // WeChat is also a 1:1 DM bot — render with the same icon + subtitle
+          // treatment as Telegram DMs so the two sections look uniform.
+          <>
+            <CardSeparator />
+            <div className="divide-y divide-border/50">
+              {platformBindings.map((binding) => (
+                <DirectSessionRow
+                  key={binding.id}
+                  binding={binding}
+                  sessionMetaMap={sessionMetaMap}
+                  workspaceOwners={workspaceOwners}
+                  subtitle={t('settings.messaging.wechat.directSessionSubtitle', {
+                    defaultValue: 'Direct message session',
+                  })}
+                  onOpen={() => navigateToSession(binding.sessionId)}
+                  onUnbind={() => handleUnbind(binding)}
+                  onAccessChange={(next) => handleAccessChange(binding.id, next)}
+                />
+              ))}
+            </div>
+          </>
         ) : platformBindings.length > 0 ? (
           <>
             <CardSeparator />
@@ -473,6 +525,12 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
       {platform === 'lark' && (
         <LarkConnectDialog open={connectOpen} onOpenChange={setConnectOpen} reconfigure={reconfigure} />
       )}
+      {platform === 'discord' && (
+        <DiscordConnectDialog open={connectOpen} onOpenChange={setConnectOpen} reconfigure={reconfigure} />
+      )}
+      {platform === 'wechat' && (
+        <WeChatConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />
+      )}
     </>
   )
 }
@@ -491,12 +549,7 @@ interface TelegramBindingsBodyProps {
   onUnbind: (binding: MessagingBinding) => void
 }
 
-function bindingToAccess(binding: MessagingBinding): BindingAccess {
-  return {
-    mode: binding.accessMode ?? 'open',
-    allowedSenderIds: binding.allowedSenderIds ?? [],
-  }
-}
+
 
 function TelegramBindingsBody({
   bindings,
@@ -528,10 +581,14 @@ function TelegramBindingsBody({
 
   const handleAccessChange = React.useCallback(
     async (bindingId: string, next: BindingAccess) => {
+      if (next.mode === 'owner-control' && !canCommitOwnerControl(next.allowedSenderIds)) {
+        toast.error('Select at least one allowed sender before saving owner control.')
+        return
+      }
       try {
         await window.electronAPI.setMessagingBindingAccess(bindingId, {
           mode: next.mode as BindingAccessMode,
-          ...(next.mode === 'allow-list' ? { allowedSenderIds: next.allowedSenderIds } : {}),
+          allowedSenderIds: next.allowedSenderIds,
         })
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to update access')
@@ -539,11 +596,15 @@ function TelegramBindingsBody({
     },
     [],
   )
+  const { t } = useTranslation()
   // Telegram bindings split cleanly on `threadId`:
   //   - undefined: DM ("direct session") — at most one per workspace
   //   - number:    topic in the paired supergroup
   const directBindings = React.useMemo(() => bindings.filter((b) => b.threadId === undefined), [bindings])
   const topicBindings = React.useMemo(() => bindings.filter((b) => b.threadId !== undefined), [bindings])
+  const directSubtitle = t('settings.messaging.telegram.directSessionSubtitle', {
+    defaultValue: 'Direct message session',
+  })
 
   return (
     <>
@@ -557,6 +618,7 @@ function TelegramBindingsBody({
                 binding={binding}
                 sessionMetaMap={sessionMetaMap}
                 workspaceOwners={workspaceOwners}
+                subtitle={directSubtitle}
                 onOpen={() => onOpenSession(binding)}
                 onUnbind={() => onUnbind(binding)}
                 onAccessChange={(next) => handleAccessChange(binding.id, next)}
@@ -589,6 +651,7 @@ function DirectSessionRow({
   binding,
   sessionMetaMap,
   workspaceOwners,
+  subtitle,
   onOpen,
   onUnbind,
   onAccessChange,
@@ -596,11 +659,13 @@ function DirectSessionRow({
   binding: MessagingBinding
   sessionMetaMap: TelegramBindingsBodyProps['sessionMetaMap']
   workspaceOwners: PlatformOwner[]
+  /** Pre-translated row subtitle. Decoupled from any specific i18n key so the
+   *  same row component can serve Telegram DMs, WeChat DMs, etc. */
+  subtitle: string
   onOpen: () => void
   onUnbind: () => void
   onAccessChange: (next: BindingAccess) => void
 }) {
-  const { t } = useTranslation()
   const meta = sessionMetaMap.get(binding.sessionId)
   const sessionLabel = meta ? getSessionTitle(meta) : binding.channelName || binding.channelId
   // Layout convention here matches the Supergroup row: the binding *type*
@@ -610,15 +675,11 @@ function DirectSessionRow({
     <div className="flex items-center gap-3 px-4 py-2.5">
       <SubRowIcon icon={MessageSquare} />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm">
-          {t('settings.messaging.telegram.directSessionSubtitle', {
-            defaultValue: 'Direct message session',
-          })}
-        </div>
-        <div className="mt-0.5 truncate text-xs text-foreground/50">{sessionLabel}</div>
+        <div className="truncate text-sm">{sessionLabel}</div>
+        <div className="mt-0.5 truncate text-xs text-foreground/50">{subtitle}</div>
       </div>
       <BindingAllowListPopover
-        access={bindingToAccess(binding)}
+        access={toBindingAccess(binding)}
         workspaceOwners={workspaceOwners}
         onChange={onAccessChange}
       />
@@ -790,7 +851,7 @@ function TopicBindingRow({
         </div>
       </div>
       <BindingAllowListPopover
-        access={bindingToAccess(binding)}
+        access={toBindingAccess(binding)}
         workspaceOwners={workspaceOwners}
         onChange={onAccessChange}
       />

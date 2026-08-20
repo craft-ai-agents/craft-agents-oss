@@ -83,6 +83,8 @@ export interface LinkItem {
   sortable?: SortableConfig
   // Optional element rendered after the title (e.g., label type icon), revealed on hover
   afterTitle?: React.ReactNode
+  /** Accent unseen dot (same treatment as What's New badge) */
+  hasUnseen?: boolean
 }
 
 export interface SeparatorItem {
@@ -534,13 +536,23 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
         {link.title}
         {/* After-title element: type indicator icon, right-aligned before count badge, revealed on hover */}
         {link.afterTitle && (
-          <span data-touch-reveal="true" className="ml-auto opacity-0 group-hover/section:opacity-100 group-data-[state=open]:opacity-100 group-data-[edit-active=true]:opacity-100 transition-opacity">
+          <span data-touch-reveal="true" className="ml-auto opacity-100">
             {link.afterTitle}
           </span>
         )}
-        {/* Label Badge: Shows count or status on the right, revealed on section hover */}
+        {/* Unseen accent — same treatment as What's New top-bar badge. */}
+        {link.hasUnseen && (
+          <span
+            className={cn(
+              'h-1.5 w-1.5 shrink-0 rounded-full bg-accent',
+              !link.afterTitle && !link.label && 'ml-auto'
+            )}
+            aria-hidden
+          />
+        )}
+        {/* Label Badge: count/status always visible (muted) */}
         {link.label && (
-          <span data-touch-reveal="true" className={cn(link.afterTitle ? 'ml-0' : 'ml-auto', 'text-xs text-foreground/30 opacity-0 group-hover/section:opacity-100 group-data-[state=open]:opacity-100 group-data-[edit-active=true]:opacity-100 transition-opacity')}>
+          <span data-touch-reveal="true" className={cn(link.afterTitle || link.hasUnseen ? 'ml-0' : 'ml-auto', 'text-xs text-foreground/30 opacity-100')}>
             {link.label}
           </span>
         )}

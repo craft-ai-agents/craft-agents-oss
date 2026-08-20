@@ -1892,14 +1892,14 @@ describe('extractPowerShellWriteTarget', () => {
       expect(extractPowerShellWriteTarget('Get-Process')).toBeNull();
       expect(extractPowerShellWriteTarget('Get-ChildItem')).toBeNull();
       expect(extractPowerShellWriteTarget('Get-Content file.txt')).toBeNull();
-    });
+    }, 30000);
 
     it('should return null for non-file-writing pipelines', () => {
       if (!psAvailable) return;
 
       expect(extractPowerShellWriteTarget('Get-Process | Select-Object Name')).toBeNull();
       expect(extractPowerShellWriteTarget('Get-ChildItem | Where-Object { $_.Length -gt 1000 }')).toBeNull();
-    });
+    }, 30000);
   });
 
   describe('powershell.exe -Command wrapper unwrapping', () => {

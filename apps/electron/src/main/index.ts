@@ -3,7 +3,7 @@
 import { loadShellEnv } from './shell-env'
 loadShellEnv()
 
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, nativeTheme, session, shell, type BrowserWindowConstructorOptions } from 'electron'
 import { createHash, randomUUID } from 'crypto'
 import { hostname, homedir } from 'os'
 import * as Sentry from '@sentry/electron/main'
@@ -82,11 +82,12 @@ const machineId = createHash('sha256').update(hostname() + homedir()).digest('he
 Sentry.setUser({ id: machineId })
 
 import { join, delimiter } from 'path'
-import { existsSync, readFileSync } from 'fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'fs'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
 import { registerAllRpcHandlers } from './handlers/index'
-import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
+import { registerCoreRpcHandlers, cleanupCoreClientResources } from '@craft-agent/server-core/handlers/rpc'
+import { createWorkGraphKernel, type WorkGraphKernel } from '@craft-agent/server-core/workgraph'
 import type { PlatformServices } from '../runtime/platform'
 import { createElectronPlatform } from './platform'
 import type { HandlerDeps } from './handlers/handler-deps'
@@ -97,10 +98,14 @@ import { initModelRefreshService, getModelRefreshService, setFetcherPlatform } f
 import { setSearchPlatform, setImageProcessor } from '@craft-agent/server-core/services'
 import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
+import { stopAllExtensionHosts } from './extension-host-manager'
 import { loadWindowState, saveWindowState } from './window-state'
 import { getWorkspaces, getWorkspaceByNameOrId, loadStoredConfig, addWorkspace, saveConfig } from '@craft-agent/shared/config'
+import { CONFIG_DIR } from '@craft-agent/shared/config/paths'
 import { getDefaultWorkspacesDir } from '@craft-agent/shared/workspaces'
+import { resolveUserDisplayName } from '@craft-agent/shared/os/user-display-name'
 import { initializeDocs } from '@craft-agent/shared/docs'
+import { ensureBundledSkills } from '@craft-agent/shared/skills'
 import { initializeReleaseNotes } from '@craft-agent/shared/release-notes'
 import { ensureDefaultPermissions } from '@craft-agent/shared/agent/permissions-config'
 import { ensureToolIcons, ensurePresetThemes } from '@craft-agent/shared/config'
@@ -119,6 +124,10 @@ import { initNotificationService, initBadgeIcon, initInstanceBadge, updateBadgeC
 import { checkForUpdatesOnLaunch, setAutoUpdateEventSink, isUpdating, setBeforeUpdateQuitHook, setBeforeUpdateInstallHook, setInstallQuitFailedHook } from './auto-update'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import { validateGitBashPath, checkVCRedistInstalled } from '@craft-agent/server-core/services'
+import { createOpenClawSecurityComposition } from './openclaw-security'
+import { createOpenClawHostControlConfirmation, registerOpenClawHostControlIpc } from './openclaw-host-control'
+import { createLocalClientBindingRegistry } from './local-client-binding'
+import type { OpenClawRuntimeManager, OpenClawSecurityAuditService } from '@craft-agent/server-core/openclaw'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -213,6 +222,10 @@ let browserPaneManager: BrowserPaneManager | null = null
 let oauthFlowStore: OAuthFlowStore | null = null
 let moduleSink: EventSink | null = null
 let moduleClientResolver: ((webContentsId: number) => string | undefined) | null = null
+let openClawRuntimeManager: OpenClawRuntimeManager | null = null
+let openClawSecurityAuditService: OpenClawSecurityAuditService | null = null
+let workGraphKernel: WorkGraphKernel | null = null
+const localClientBindingRegistry = createLocalClientBindingRegistry()
 
 // Messaging gateway: the bootstrap handle is created once sessionManager is
 // available (inside createHandlerDeps) and populated with the WS publisher
@@ -243,43 +256,6 @@ if (process.defaultApp) {
 // Apply network proxy settings early (Node-level only — Electron sessions require app.whenReady)
 import { applyConfiguredProxySettings } from './network-proxy'
 void applyConfiguredProxySettings()
-
-// Accept self-signed / untrusted certificates when connecting to a user-configured remote server.
-// Only bypasses cert validation for the exact CRAFT_SERVER_URL origin — all other connections
-// use standard certificate verification. Without this, wss:// to self-signed servers fails with
-// ERR_CERT_AUTHORITY_INVALID because Chromium's WebSocket rejects untrusted certs.
-//
-// Electron's certificate-error always reports URLs with https:// scheme, so we normalize
-// wss:// → https:// (and ws:// → http://) to ensure origins compare correctly.
-function normalizeOriginForCert(urlStr: string): string {
-  const u = new URL(urlStr)
-  if (u.protocol === 'wss:') u.protocol = 'https:'
-  else if (u.protocol === 'ws:') u.protocol = 'http:'
-  return u.origin
-}
-
-if (process.env.CRAFT_SERVER_URL) {
-  let serverOrigin: string | undefined
-  try {
-    serverOrigin = normalizeOriginForCert(process.env.CRAFT_SERVER_URL)
-  } catch {
-    // Invalid URL — will fail later during connection, no need to handle here
-  }
-  if (serverOrigin) {
-    app.on('certificate-error', (event, _webContents, url, _error, _certificate, callback) => {
-      try {
-        if (normalizeOriginForCert(url) === serverOrigin) {
-          event.preventDefault()
-          callback(true)
-          return
-        }
-      } catch {
-        // URL parse failure — fall through to default rejection
-      }
-      callback(false)
-    })
-  }
-}
 
 // Register thumbnail:// custom protocol for file preview thumbnails in the sidebar.
 // Must happen before app.whenReady() — Electron requires early scheme registration.
@@ -334,16 +310,32 @@ async function createInitialWindows(): Promise<void> {
   const savedState = loadWindowState()
   let workspaces = getWorkspaces()
 
-  // If no workspaces exist, create default "My Workspace" on first run
+  // If no workspaces exist, create a default workspace named after the OS user
   if (workspaces.length === 0) {
     // Ensure config file exists (addWorkspace requires it)
     if (!loadStoredConfig()) {
       saveConfig({ workspaces: [], activeWorkspaceId: null, activeSessionId: null })
     }
     const defaultPath = join(getDefaultWorkspacesDir(), 'my-workspace')
-    addWorkspace({ rootPath: defaultPath, name: 'My Workspace' })
+    const displayName = resolveUserDisplayName()
+    // Seed workspace icon from the app mark when available (discovered via icon.png)
+    const appIconPath = [
+      join(__dirname, 'resources/icon.png'),
+      join(__dirname, '../resources/icon.png'),
+      join(process.resourcesPath ?? '', 'app/resources/icon.png'),
+      join(process.resourcesPath ?? '', 'icon.png'),
+    ].find((p) => p && existsSync(p))
+    if (appIconPath) {
+      try {
+        mkdirSync(defaultPath, { recursive: true })
+        copyFileSync(appIconPath, join(defaultPath, 'icon.png'))
+      } catch (err) {
+        mainLog.warn('Failed to seed default workspace icon', err)
+      }
+    }
+    addWorkspace({ rootPath: defaultPath, name: displayName })
     workspaces = getWorkspaces() // Refresh after creation
-    mainLog.info('Created default workspace on first run')
+    mainLog.info(`Created default workspace on first run (name=${displayName})`)
   }
 
   const validWorkspaceIds = workspaces.map(ws => ws.id)
@@ -403,6 +395,10 @@ app.whenReady().then(async () => {
   // Initialize bundled docs
   initializeDocs()
 
+  // Sync bundled skill packs into ~/.agents/skills/ (fire-and-forget: the call
+  // never throws; user edits inside installed skills survive via hash-merge)
+  ensureBundledSkills()
+
   // Initialize bundled release notes
   initializeReleaseNotes()
 
@@ -436,7 +432,9 @@ app.whenReady().then(async () => {
     ].find(p => existsSync(p))
 
     if (dockIconPath) {
-      app.dock.setIcon(dockIconPath)
+      if (!app.isPackaged) {
+        app.dock.setIcon(dockIconPath)
+      }
       // Initialize badge icon for canvas-based badge overlay
       initBadgeIcon(dockIconPath)
     }
@@ -497,6 +495,12 @@ app.whenReady().then(async () => {
     ipcMain.on('__get-workspace-id', (e) => {
       e.returnValue = windowManager?.getWorkspaceForWindow(e.sender.id) ?? ''
     })
+    ipcMain.on('__get-local-client-proof', (e) => {
+      const owner = windowManager?.getWindowByWebContentsId(e.sender.id)
+      e.returnValue = owner && !owner.isDestroyed() && owner.webContents === e.sender
+        ? localClientBindingRegistry.issue(e.sender)
+        : ''
+    })
 
     // Transport diagnostics bridge — preload reports remote WS connection state changes
     // so failures are visible in terminal/main.log (not only renderer console).
@@ -549,6 +553,46 @@ app.whenReady().then(async () => {
       const result = await dialog.showOpenDialog(win, spec)
       return { canceled: result.canceled, filePaths: result.filePaths }
     })
+    ipcMain.handle('notes:exportPdf', async (event, opts: { html: string; defaultPath: string }) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+        || BrowserWindow.getFocusedWindow()
+        || BrowserWindow.getAllWindows()[0]
+      if (!win) return { canceled: true }
+      const result = await dialog.showSaveDialog(win, {
+        defaultPath: opts.defaultPath,
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      })
+      if (result.canceled || !result.filePath) return { canceled: true }
+      const hidden = new BrowserWindow({ show: false, webPreferences: { nodeIntegration: false, contextIsolation: true } })
+      await hidden.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(opts.html)}`)
+      const pdfBuffer = await hidden.webContents.printToPDF({ printBackground: true })
+      hidden.destroy()
+      const { writeFile } = await import('fs/promises')
+      await writeFile(result.filePath, pdfBuffer)
+      return { canceled: false, filePath: result.filePath }
+    })
+    // Generic text save dialog (knowledge surface markdown export, etc.)
+    ipcMain.handle(
+      'file:saveText',
+      async (
+        event,
+        opts: { content: string; defaultPath: string; filters?: Array<{ name: string; extensions: string[] }> },
+      ) => {
+        const win =
+          BrowserWindow.fromWebContents(event.sender) ||
+          BrowserWindow.getFocusedWindow() ||
+          BrowserWindow.getAllWindows()[0]
+        if (!win) return { canceled: true as const }
+        const result = await dialog.showSaveDialog(win, {
+          defaultPath: opts.defaultPath,
+          filters: opts.filters ?? [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+        })
+        if (result.canceled || !result.filePath) return { canceled: true as const }
+        const { writeFile } = await import('fs/promises')
+        await writeFile(result.filePath, opts.content, 'utf-8')
+        return { canceled: false as const, filePath: result.filePath }
+      },
+    )
 
     if (!isClientOnly) {
       // Restore persisted Git Bash path on Windows (must happen before any SDK subprocess spawn)
@@ -589,6 +633,44 @@ app.whenReady().then(async () => {
       // Client ID tracking for Electron IPC bridge (webContentsId → clientId)
       const clientMap = new Map<number, string>()
       const resolveClientId = (wcId: number) => clientMap.get(wcId)
+
+      // WorkGraph is an Electron-main capability. Constructor work is inert;
+      // native database provisioning remains lazy behind its local-only RPCs.
+      workGraphKernel = isHeadless ? null : createWorkGraphKernel({ configDir: CONFIG_DIR })
+
+      // Native Electron is the only host that composes a managed runtime.
+      // Headless and thin-client paths intentionally leave the optional core
+      // service absent, so they return its controlled unsupported response.
+      const openClawSecurity = isHeadless ? null : createOpenClawSecurityComposition()
+      if (openClawSecurity) {
+        openClawSecurityAuditService = openClawSecurity.auditService
+        openClawRuntimeManager = openClawSecurity.runtimeManager
+        if (windowManager) {
+          const confirmOpenClawHostControl = createOpenClawHostControlConfirmation({
+            translate: (key, interpolation) => i18n.t(key, interpolation),
+            showMessageBox: (owner, options) => dialog.showMessageBox(owner as BrowserWindow, options),
+          })
+          registerOpenClawHostControlIpc({
+            ipcMain,
+            windowManager,
+            runtimeManager: openClawSecurity.runtimeManager,
+            clipboard,
+            createEphemeralSession: partition => session.fromPartition(partition),
+            createControlUiWindow: options => {
+              // This object is built solely by the host-control module, not
+              // from IPC input. Electron's richer structural type is required
+              // only at this main-process construction boundary.
+              const browserWindowOptions = options as unknown as BrowserWindowConstructorOptions
+              return new BrowserWindow(browserWindowOptions)
+            },
+            confirm: async ({ action, workspaceId, owner }) => {
+              const ownerWindow = windowManager?.getWindowByWebContentsId(owner.webContents.id)
+              if (!ownerWindow) return false
+              return confirmOpenClawHostControl({ action, workspaceId, owner: ownerWindow })
+            },
+          })
+        }
+      }
 
       // Read embedded server config (Server settings page)
       const { getServerConfig } = await import('@craft-agent/shared/config')
@@ -666,7 +748,7 @@ app.whenReady().then(async () => {
             sessionManager: sm,
             credentialManager: getCredentialManager(),
             getMessagingDir: (wsId: string) =>
-              join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
+              join(CONFIG_DIR, 'workspaces', wsId, 'messaging'),
             getLegacyMessagingDir: (wsId: string) => {
               const ws = getWorkspaces().find((w) => w.id === wsId)
               return ws ? join(ws.rootPath, 'messaging') : undefined
@@ -685,6 +767,14 @@ app.whenReady().then(async () => {
                 : join(process.cwd(), 'packages', 'messaging-whatsapp-worker', 'dist', 'worker.cjs'),
               pairingMode: 'qr',
             },
+            // Discord worker: same embedded-Node spawn model as WhatsApp.
+            // Dev resolves worker.cjs from the monorepo; packaged builds ship
+            // it via extraResources (see apps/electron/electron-builder.yml).
+            discord: {
+              workerEntry: app.isPackaged
+                ? join(process.resourcesPath, 'messaging-discord-worker', 'worker.cjs')
+                : join(process.cwd(), 'packages', 'messaging-discord-worker', 'dist', 'worker.cjs'),
+            },
           })
           return {
             sessionManager: sm,
@@ -693,13 +783,19 @@ app.whenReady().then(async () => {
             browserPaneManager: browserPaneManager ?? undefined,
             oauthFlowStore: ofs,
             messagingRegistry: messagingHandle.registry,
+            ...(openClawSecurity ? { openClawSecurity: openClawSecurity.service } : {}),
           }
         },
         // Headless: register only core handlers (no GUI handlers for browser, settings, etc.)
-        // GUI: register all handlers (core + GUI)
+        // GUI: register all handlers plus the main-process-owned WorkGraph profile.
         registerAllRpcHandlers: isHeadless
           ? (server, deps, serverCtx) => registerCoreRpcHandlers(server, deps, serverCtx)
-          : registerAllRpcHandlers,
+          : (server, deps, serverCtx) => registerAllRpcHandlers(
+              server,
+              deps,
+              serverCtx,
+              workGraphKernel ?? undefined,
+            ),
         setSessionEventSink: (sm, sink) => sm.setEventSink(sink),
         initializeSessionManager: (sm) => sm.initialize(),
         initModelRefreshService: () => initModelRefreshService(async (slug: string) => {
@@ -716,14 +812,24 @@ app.whenReady().then(async () => {
             oauthIdToken: oauth?.idToken,
           }
         }),
-        onClientConnected: ({ clientId, webContentsId }) => {
-          if (webContentsId != null) clientMap.set(webContentsId, clientId)
+        resolveLocalClientBinding: candidate => localClientBindingRegistry.resolve(candidate, webContentsId => {
+          const owner = windowManager?.getWindowByWebContentsId(webContentsId)
+          const workspaceId = windowManager?.getWorkspaceForWindow(webContentsId)
+          if (!owner || owner.isDestroyed() || !workspaceId) return null
+          return {
+            webContentsId: owner.webContents.id,
+            renderer: owner.webContents,
+            workspaceId,
+          }
+        }),
+        onClientConnected: ({ clientId, webContentsId, isLocalElectronClient }) => {
+          if (isLocalElectronClient && webContentsId != null) clientMap.set(webContentsId, clientId)
         },
         cleanupClientResources: (clientId) => {
           for (const [wcId, cId] of clientMap) {
             if (cId === clientId) { clientMap.delete(wcId); break }
           }
-          cleanupSessionFileWatchForClient(clientId)
+          cleanupCoreClientResources(clientId)
         },
       })
 
@@ -771,6 +877,10 @@ app.whenReady().then(async () => {
         return remove(workspaceId)
       })
 
+      // SSH remote hosts + tunnels (Remote-SSH style bootstrap to a remote server)
+      const { registerSshTunnelIpc } = await import('./ssh-tunnel/ipc')
+      registerSshTunnelIpc()
+
       // Cross-server RPC — invoke a channel on an arbitrary remote server
       ipcMain.handle('server:invokeOnServer', async (_event, url: string, token: string, channel: string, ...args: unknown[]) => {
         const { connectToRemote } = await import('./handlers/workspace')
@@ -804,6 +914,12 @@ app.whenReady().then(async () => {
         if (!targetWorkspace) throw new Error(`Workspace ${targetWorkspaceId} not found`)
         if (!sessionManager) throw new Error('Session manager not initialized')
 
+        // SSH-backed configs persist a stale forwarded port — resolve a live
+        // { url, token } through the tunnel/bootstrap machinery before dialing.
+        const { resolveRemoteConnection } = await import('./ssh-tunnel/connection-resolver')
+        const { getSshTunnelManager } = await import('./ssh-tunnel/ssh-tunnel-manager')
+        const resolverDeps = getSshTunnelManager().connectionResolverDeps()
+
         const sourceWorkspaceLocalId = windowManager?.getWorkspaceForWindow(_event.sender.id)
         if (!sourceWorkspaceLocalId) throw new Error('Unable to resolve source workspace for transfer')
 
@@ -813,7 +929,8 @@ app.whenReady().then(async () => {
         let bundle: any = null
 
         if (sourceWorkspace.remoteServer) {
-          const { url: sourceUrl, token: sourceToken, remoteWorkspaceId: sourceRemoteWorkspaceId } = sourceWorkspace.remoteServer
+          const { url: sourceUrl, token: sourceToken, remoteWorkspaceId: sourceRemoteWorkspaceId } =
+            await resolveRemoteConnection(sourceWorkspace.remoteServer, resolverDeps)
           console.log(`[Transfer] Exporting remote-owned session ${sessionId} from workspace ${sourceRemoteWorkspaceId}...`)
           const { client: sourceClient, error: sourceError } = await connectToRemote(sourceUrl, sourceToken, sourceRemoteWorkspaceId, { requestTimeout: TRANSFER_REQUEST_TIMEOUT_MS })
           if (!sourceClient) throw new Error(sourceError ?? 'Connection failed to source remote server')
@@ -871,7 +988,8 @@ app.whenReady().then(async () => {
           return result
         }
 
-        const { url, token, remoteWorkspaceId } = targetWorkspace.remoteServer
+        const { url, token, remoteWorkspaceId } =
+          await resolveRemoteConnection(targetWorkspace.remoteServer, resolverDeps)
         console.log(`[Transfer] Connecting to target remote server: ${url}`)
         const { client, error } = await connectToRemote(url, token, remoteWorkspaceId, { requestTimeout: TRANSFER_REQUEST_TIMEOUT_MS })
         if (!client) throw new Error(error ?? 'Connection failed to target remote server')
@@ -948,6 +1066,34 @@ app.whenReady().then(async () => {
         if (!wsId) { e.returnValue = null; return }
         const ws = getWorkspaceByNameOrId(wsId)
         e.returnValue = ws?.remoteServer ?? null
+      })
+
+      ipcMain.handle('remoteTls:inspect', async (_event, url: string) => {
+        const { inspectRemoteTlsPeer, beginEnrollment } = await import('./remote-tls-enrollment')
+        const result = await inspectRemoteTlsPeer(url)
+        return { nonce: beginEnrollment(result), result }
+      })
+      ipcMain.handle('remoteTls:decide', async (_event, payload: {
+        nonce: string
+        action: 'accept' | 'reject' | 'confirm-rollover'
+        workspaceId?: string
+      }) => {
+        const { applyEnrollmentDecision } = await import('./remote-tls-enrollment')
+        const { updateWorkspaceRemoteServer } = await import('@craft-agent/shared/config')
+        const ws = payload.workspaceId ? getWorkspaceByNameOrId(payload.workspaceId) : null
+        const stored = ws?.remoteServer?.tlsTrust
+        const storedPin = stored?.mode === 'spki-pin'
+          ? { origin: stored.origin, spkiSha256: stored.spkiSha256 }
+          : undefined
+        const decision = applyEnrollmentDecision({
+          nonce: payload.nonce,
+          action: payload.action,
+          storedPin,
+        })
+        if (decision.persist && ws?.remoteServer) {
+          updateWorkspaceRemoteServer(ws.id, { ...ws.remoteServer, tlsTrust: decision.persist })
+        }
+        return decision
       })
 
       // Server config RPC handlers (LOCAL_ONLY — Electron-specific)
@@ -1238,6 +1384,13 @@ async function performQuitCleanup(): Promise<void> {
     browserPaneManager.destroyAll()
   }
 
+  // Stop all per-workspace Extension Hosts (utilityProcess children) cleanly.
+  try {
+    await stopAllExtensionHosts()
+  } catch (err) {
+    mainLog.warn('[extension-host] stopAll on quit failed:', err)
+  }
+
   // Clean up OAuth flow store (stop periodic cleanup timer)
   if (oauthFlowStore) {
     oauthFlowStore.dispose()
@@ -1252,6 +1405,35 @@ async function performQuitCleanup(): Promise<void> {
       await messagingHandle.dispose()
     } catch (err) {
       mainLog.error('[messaging] dispose failed:', err)
+    }
+  }
+
+  // Stop and await in-flight managed audits before their runtime disappears.
+  if (openClawSecurityAuditService) {
+    try {
+      await openClawSecurityAuditService.dispose()
+    } catch {
+      mainLog.warn('[openclaw] security audit disposal failed')
+    }
+  }
+
+  // Stop only manager-owned OpenClaw children; never inspect or affect a
+  // user-managed OpenClaw process outside this runtime manager.
+  if (openClawRuntimeManager) {
+    try {
+      await openClawRuntimeManager.shutdown()
+    } catch {
+      mainLog.warn('[openclaw] managed runtime shutdown failed')
+    }
+  }
+
+  if (workGraphKernel) {
+    try {
+      await workGraphKernel.close()
+    } catch {
+      mainLog.warn('[workgraph] local database close failed')
+    } finally {
+      workGraphKernel = null
     }
   }
 

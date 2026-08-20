@@ -25,6 +25,11 @@ import { CHANNEL_MAP } from '../transport/channel-map'
 import { createCallbackServer } from '@craft-agent/shared/auth/callback-server'
 import { CHATGPT_OAUTH_CONFIG } from '@craft-agent/shared/auth/chatgpt-oauth-config'
 import {
+  isOAuthFlowCancelledError,
+  OAuthFlowTimedOutError,
+  waitForOAuthCallback,
+} from './oauth-wait'
+import {
   CLIENT_OPEN_EXTERNAL,
   CLIENT_OPEN_PATH,
   CLIENT_SHOW_IN_FOLDER,
@@ -36,7 +41,10 @@ import {
 import type { ConfirmDialogSpec, FileDialogSpec, BrowserCapabilityRequest } from '@craft-agent/server-core/transport'
 import type { RpcClient } from '@craft-agent/server-core/transport'
 import type { RemoteServerConfig } from '@craft-agent/core/types'
-import type { ElectronAPI } from '../shared/types'
+import type { ElectronAPI, SshBootstrapProgress, SshConnectionStatus } from '../shared/types'
+import { isSshBacked } from '../shared/ssh'
+import { peerTrustOptionsForRemote } from '../shared/remote-tls-client-options.ts'
+import { createOpenClawHostControlBridge } from './openclaw-host-control'
 
 // ---------------------------------------------------------------------------
 // Client interface — common surface for both RoutedClient and WsRpcClient
@@ -55,6 +63,10 @@ interface TransportClient extends RpcClient {
 
 const webContentsId: number = ipcRenderer.sendSync('__get-web-contents-id')
 const isClientOnly = !!process.env.CRAFT_SERVER_URL
+const openClawHostControl = createOpenClawHostControlBridge({
+  isClientOnly,
+  invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
+})
 
 let client: TransportClient
 
@@ -87,6 +99,11 @@ if (isClientOnly) {
     autoReconnect: true,
     mode: 'remote',
     clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
+    ...peerTrustOptionsForRemote({
+      url: wsUrl,
+      token: wsToken,
+      remoteWorkspaceId: workspaceId ?? '',
+    }),
   })
   wsClient.connect()
   client = wsClient
@@ -99,31 +116,46 @@ if (isClientOnly) {
   const wsPort: number = ipcRenderer.sendSync('__get-ws-port')
   const wsToken: string = ipcRenderer.sendSync('__get-ws-token')
   const workspaceId: string = ipcRenderer.sendSync('__get-workspace-id')
+  const localClientProof: string = ipcRenderer.sendSync('__get-local-client-proof')
 
   const localClient = new WsRpcClient(`ws://127.0.0.1:${wsPort}`, {
     token: wsToken,
     workspaceId,
     webContentsId,
+    localClientProof,
     autoReconnect: true,
     mode: 'local',
     clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
   })
+
+  // Build a workspace client for a RemoteServerConfig. SSH-backed configs get a
+  // `resolveTarget` hook that re-establishes the tunnel + a fresh url/token per connect.
+  const makeRemoteClient = (rc: RemoteServerConfig): WsRpcClient =>
+    new WsRpcClient(rc.url, {
+      token: rc.token,
+      workspaceId: rc.remoteWorkspaceId,
+      webContentsId,
+      autoReconnect: true,
+      mode: 'remote',
+      clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
+      ...peerTrustOptionsForRemote(rc),
+      ...(isSshBacked(rc)
+        ? {
+            resolveTarget: async () => {
+              const resolved = await ipcRenderer.invoke('ssh:resolveWorkspaceConnection', rc)
+              return { url: resolved.url, token: resolved.token }
+            },
+          }
+        : {}),
+    })
 
   // Check if the current workspace is remote (synchronous IPC during preload eval)
   const remoteConfig: RemoteServerConfig | null = ipcRenderer.sendSync('__get-workspace-remote-config')
 
   let initialWorkspaceClient: WsRpcClient
   if (remoteConfig && typeof remoteConfig.url === 'string') {
-    // Workspace is remote — create a direct connection to the remote server
-    initialWorkspaceClient = new WsRpcClient(remoteConfig.url, {
-      token: remoteConfig.token,
-      workspaceId: remoteConfig.remoteWorkspaceId,
-      webContentsId,
-      autoReconnect: true,
-      mode: 'remote',
-      clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
-      tlsRejectUnauthorized: false,
-    })
+    // Workspace is remote — create a connection (SSH-backed resolves a fresh port).
+    initialWorkspaceClient = makeRemoteClient(remoteConfig)
     initialWorkspaceClient.connect()
   } else {
     // Workspace is local — workspace client IS the local client
@@ -137,18 +169,9 @@ if (isClientOnly) {
     routedClient.setWorkspaceMapping(workspaceId, remoteConfig.remoteWorkspaceId)
   }
 
-  // Factory for creating remote workspace clients on switch
-  routedClient.setClientFactory((remoteServer: RemoteServerConfig) => {
-    return new WsRpcClient(remoteServer.url, {
-      token: remoteServer.token,
-      workspaceId: remoteServer.remoteWorkspaceId,
-      webContentsId,
-      autoReconnect: true,
-      mode: 'remote',
-      clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
-      tlsRejectUnauthorized: false,
-    })
-  })
+  // Factory for creating remote workspace clients on switch (SSH-backed configs
+  // resolve a fresh forwarded port on connect via makeRemoteClient's hook).
+  routedClient.setClientFactory((remoteServer: RemoteServerConfig) => makeRemoteClient(remoteServer))
 
   localClient.connect()
   client = routedClient
@@ -190,6 +213,9 @@ client.handleCapability(CLIENT_BROWSER_INVOKE, async (req: BrowserCapabilityRequ
 // ---------------------------------------------------------------------------
 
 const api = buildClientApi(client, CHANNEL_MAP, (ch) => client.isChannelAvailable(ch))
+
+let cancelPendingChatGptOAuth: (() => void) | null = null
+let pendingChatGptOAuthState: string | undefined
 
 ;(api as any).getRuntimeEnvironment = (): 'electron' | 'web' => 'electron'
 
@@ -359,10 +385,15 @@ client.onConnectionStateChanged((state) => {
   connectionSlug: string,
 ): Promise<{ success: boolean; error?: string }> => {
   let callbackServer: Awaited<ReturnType<typeof createCallbackServer>> | null = null
+  const abortController = new AbortController()
   let flowId: string | undefined
   let state: string | undefined
 
   try {
+    cancelPendingChatGptOAuth = () => {
+      abortController.abort()
+    }
+
     // 1. Start callback server on ChatGPT's fixed port with /auth/callback path
     callbackServer = await createCallbackServer({
       appType: 'electron',
@@ -374,12 +405,23 @@ client.onConnectionStateChanged((state) => {
     const startResult = await client.invoke('chatgpt:startOAuth', connectionSlug)
     flowId = startResult.flowId
     state = startResult.state
+    pendingChatGptOAuthState = state
+
+    if (abortController.signal.aborted) {
+      await client.invoke('chatgpt:cancelOAuth', { state })
+      throw new Error('ChatGPT authentication cancelled')
+    }
 
     // 3. Open browser for user consent
     await shell.openExternal(startResult.authUrl)
 
     // 4. Wait for OpenAI to redirect to our callback server
-    const callback = await callbackServer.promise
+    const callback = await waitForOAuthCallback(callbackServer.promise, {
+      timeoutMs: CHATGPT_OAUTH_CONFIG.FLOW_TIMEOUT_MS,
+      signal: abortController.signal,
+      timeoutMessage: 'ChatGPT authentication timed out. Please try again.',
+      cancelMessage: 'ChatGPT authentication cancelled',
+    })
 
     // 5. Check for errors from the provider
     if (callback.query.error) {
@@ -401,13 +443,31 @@ client.onConnectionStateChanged((state) => {
     if (state) {
       client.invoke('chatgpt:cancelOAuth', { state }).catch(() => {})
     }
+    if (isOAuthFlowCancelledError(err) || (err instanceof Error && err.message === 'ChatGPT authentication cancelled')) {
+      return { success: false, error: 'ChatGPT authentication cancelled' }
+    }
+    if (err instanceof OAuthFlowTimedOutError) {
+      return { success: false, error: err.message }
+    }
     return {
       success: false,
       error: err instanceof Error ? err.message : 'ChatGPT OAuth flow failed',
     }
   } finally {
+    cancelPendingChatGptOAuth = null
+    pendingChatGptOAuthState = undefined
     callbackServer?.close()
   }
+}
+
+;(api as any).cancelChatGptOAuth = async (): Promise<{ success: boolean }> => {
+  cancelPendingChatGptOAuth?.()
+
+  if (pendingChatGptOAuthState) {
+    return client.invoke('chatgpt:cancelOAuth', { state: pendingChatGptOAuthState })
+  }
+
+  return { success: true }
 }
 
 // App lifecycle — direct IPC (not WS RPC) since it restarts the server itself
@@ -423,6 +483,36 @@ client.onConnectionStateChanged((state) => {
   return () => { ipcRenderer.removeListener('transfer:progress', handler) }
 }
 
+// SSH remote hosts + tunnels — direct IPC (Electron-only, not WS RPC)
+;(api as ElectronAPI).sshListHosts = () => ipcRenderer.invoke('ssh:listHosts')
+;(api as ElectronAPI).sshAddHost = (input) => ipcRenderer.invoke('ssh:addHost', input)
+;(api as ElectronAPI).sshUpdateHost = (id: string, updates) =>
+  ipcRenderer.invoke('ssh:updateHost', id, updates)
+;(api as ElectronAPI).sshDeleteHost = (id: string) => ipcRenderer.invoke('ssh:deleteHost', id)
+;(api as ElectronAPI).sshImportFromConfig = () => ipcRenderer.invoke('ssh:importFromConfig')
+;(api as ElectronAPI).sshConnect = (hostId: string) => ipcRenderer.invoke('ssh:connect', hostId)
+;(api as ElectronAPI).sshBootstrapConnect = (hostId: string) =>
+  ipcRenderer.invoke('ssh:bootstrapConnect', hostId)
+;(api as ElectronAPI).sshResolveWorkspaceConnection = (remoteServer) =>
+  ipcRenderer.invoke('ssh:resolveWorkspaceConnection', remoteServer)
+;(api as ElectronAPI).onSshBootstrapProgress = (cb) => {
+  const handler = (_e: unknown, progress: SshBootstrapProgress) => cb(progress)
+  ipcRenderer.on('ssh:bootstrapProgress', handler)
+  return () => { ipcRenderer.removeListener('ssh:bootstrapProgress', handler) }
+}
+;(api as ElectronAPI).onSshConnectionStatus = (cb) => {
+  const handler = (_e: unknown, status: SshConnectionStatus) => cb(status)
+  ipcRenderer.on('ssh:connectionStatus', handler)
+  return () => { ipcRenderer.removeListener('ssh:connectionStatus', handler) }
+}
+
+// Omnibox open from main when ⌘K hits embedded BrowserView page webContents
+;(api as ElectronAPI).onOmniboxOpen = (cb) => {
+  const handler = () => cb()
+  ipcRenderer.on('omnibox:open', handler)
+  return () => { ipcRenderer.removeListener('omnibox:open', handler) }
+}
+
 // System warnings — expose env-based flags set during main process startup
 // (preload-only: reads env var directly, no IPC round-trip needed)
 ;(api as ElectronAPI).getSystemWarnings = async () => ({
@@ -432,6 +522,15 @@ client.onConnectionStateChanged((state) => {
 
 // i18n: sync language changes to main process (for native menus/dialogs)
 ;(api as ElectronAPI).changeLanguage = (lang: string) => ipcRenderer.invoke('i18n:changeLanguage', lang)
+
+// Notes PDF export — direct ipcMain.handle (needs BrowserWindow.printToPDF, not WS RPC)
+;(api as ElectronAPI).exportNotePdf = (opts: { html: string; defaultPath: string }) =>
+  ipcRenderer.invoke('notes:exportPdf', opts)
+;(api as ElectronAPI).saveTextFile = (opts: {
+  content: string
+  defaultPath: string
+  filters?: Array<{ name: string; extensions: string[] }>
+}) => ipcRenderer.invoke('file:saveText', opts)
 
 // webUtils.getPathForFile: returns the absolute OS path of a File object obtained
 // from <input type="file"> or OS drag-drop. Returns null for Files fabricated from
@@ -445,3 +544,6 @@ client.onConnectionStateChanged((state) => {
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
+if (openClawHostControl) {
+  contextBridge.exposeInMainWorld('openClawHostControl', openClawHostControl)
+}

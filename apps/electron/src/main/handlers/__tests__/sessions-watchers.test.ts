@@ -140,4 +140,69 @@ describe('sessions file watchers', () => {
 
     expect(pushed.length).toBe(0)
   })
+
+  it('rejects mixed valid and missing bulk targets before any setter or change event', async () => {
+    const priorityUpdates: string[] = []
+    const bulkHandlers = new Map<string, HandlerFn>()
+    const bulkServer: RpcServer = {
+      handle(channel, handler) {
+        bulkHandlers.set(channel, handler as HandlerFn)
+      },
+      push(channel, target, ...args) {
+        pushed.push({ channel, target, args })
+      },
+      async invokeClient() {
+        return null
+      },
+      hasClientCapability() { return false },
+      findClientsWithCapability() { return [] },
+    }
+    const deps: HandlerDeps = {
+      sessionManager: {
+        getSession: async (sessionId: string) => sessionId === 'valid'
+          ? { id: 'valid', workspaceId: 'ws', isProcessing: false, labels: [] }
+          : null,
+        setPriority: async (sessionId: string) => { priorityUpdates.push(sessionId) },
+      } as unknown as HandlerDeps['sessionManager'],
+      platform: {
+        appRootPath: '',
+        resourcesPath: '',
+        isPackaged: false,
+        appVersion: '0.0.0-test',
+        isDebugMode: true,
+        imageProcessor: {
+          getMetadata: async () => null,
+          process: async () => Buffer.from(''),
+        },
+        logger: {
+          info: () => {},
+          warn: () => {},
+          error: () => {},
+          debug: () => {},
+        },
+      },
+      oauthFlowStore: {
+        store: () => {},
+        getByState: () => null,
+        remove: () => {},
+        cleanup: () => {},
+        dispose: () => {},
+        get size() { return 0 },
+      } as unknown as HandlerDeps['oauthFlowStore'],
+    }
+
+    registerSessionsHandlers(bulkServer, deps)
+    const bulkUpdate = bulkHandlers.get(RPC_CHANNELS.sessions.BULK_UPDATE)
+    expect(bulkUpdate).toBeTruthy()
+
+    const result = await bulkUpdate!({ clientId: 'client-a' }, {
+      workspaceId: 'ws',
+      ids: ['valid', 'missing'],
+      patch: { priority: 'high' },
+    })
+
+    expect(result).toEqual({ ok: [], failed: [{ id: 'missing', error: 'not_found' }] })
+    expect(priorityUpdates).toEqual([])
+    expect(pushed.filter((event) => event.channel === RPC_CHANNELS.sessions.BULK_CHANGED)).toEqual([])
+  })
 })

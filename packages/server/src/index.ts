@@ -21,12 +21,15 @@
  *   CRAFT_WEBUI_PASSWORD       — optional shorter password for web login (falls back to CRAFT_SERVER_TOKEN)
  *   CRAFT_WEBUI_SECURE_COOKIE  — optional true/false override for the session cookie Secure flag
  *   CRAFT_WEBUI_WS_URL         — optional browser-facing ws:// or wss:// URL returned by /api/config
+ *   CRAFT_BROWSER_BACKEND       — headless browser backend (agent-browser, none; default: agent-browser)
+ *   CRAFT_BROWSER_PROFILE       — persistent Chrome profile directory
+ *   CRAFT_AGENT_BROWSER_BIN     — agent-browser executable path (default: agent-browser)
  *   CRAFT_MESSAGING_WA_WORKER  — absolute path to worker.cjs (default: packages/messaging-whatsapp-worker/dist/worker.cjs)
- *   CRAFT_MESSAGING_NODE_BIN   — Node binary used to spawn the WhatsApp worker (default: node)
+ *   CRAFT_MESSAGING_DISCORD_WORKER — absolute path to worker.cjs (default: packages/messaging-discord-worker/dist/worker.cjs)
+ *   CRAFT_MESSAGING_NODE_BIN   — Node binary used to spawn the WhatsApp/Discord workers (default: node)
  */
 
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { readFileSync, existsSync } from 'node:fs'
 import { version as packageVersion } from '../package.json'
 import { enableDebug } from '@craft-agent/shared/utils/debug'
@@ -35,7 +38,9 @@ import { validateSession, createWebuiHandler, nodeHttpAdapter } from '@craft-age
 import type { WebuiHandler } from '@craft-agent/server-core/webui'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { getWorkspaces } from '@craft-agent/shared/config'
+import { CONFIG_DIR } from '@craft-agent/shared/config/paths'
 import { createMessagingBootstrap, type MessagingBootstrapHandle } from '@craft-agent/messaging-gateway'
+import { VpsBrowserPaneManager } from './vps-browser-pane-manager'
 
 // --generate-token: print a crypto-random token and exit
 if (process.argv.includes('--generate-token')) {
@@ -43,7 +48,7 @@ if (process.argv.includes('--generate-token')) {
   process.exit(0)
 }
 import type { WsRpcTlsOptions } from '@craft-agent/server-core/transport'
-import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
+import { registerCoreRpcHandlers, cleanupCoreClientResources } from '@craft-agent/server-core/handlers/rpc'
 import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
 import { initModelRefreshService, setFetcherPlatform } from '@craft-agent/server-core/model-fetchers'
 import { setSearchPlatform, setImageProcessor } from '@craft-agent/server-core/services'
@@ -117,6 +122,8 @@ const webuiEnabled = webuiDir && existsSync(webuiDir)
 const webuiSecureCookies = parseOptionalBooleanEnv('CRAFT_WEBUI_SECURE_COOKIE', process.env.CRAFT_WEBUI_SECURE_COOKIE)
 const webuiWsUrl = parseOptionalWebSocketUrl('CRAFT_WEBUI_WS_URL', process.env.CRAFT_WEBUI_WS_URL)
 const serverToken = process.env.CRAFT_SERVER_TOKEN
+const browserBackend = (process.env.CRAFT_BROWSER_BACKEND ?? 'agent-browser').trim().toLowerCase()
+const vpsBrowserManager = browserBackend === 'none' ? null : new VpsBrowserPaneManager()
 
 // ---------------------------------------------------------------------------
 // Create WebUI handler early so it can be embedded in the WsRpcServer.
@@ -158,6 +165,8 @@ if (webuiEnabled && serverToken) {
 const waWorkerEntry = process.env.CRAFT_MESSAGING_WA_WORKER
   ?? join(bundledAssetsRoot, 'packages', 'messaging-whatsapp-worker', 'dist', 'worker.cjs')
 const waNodeBin = process.env.CRAFT_MESSAGING_NODE_BIN ?? 'node'
+const discordWorkerEntry = process.env.CRAFT_MESSAGING_DISCORD_WORKER
+  ?? join(bundledAssetsRoot, 'packages', 'messaging-discord-worker', 'dist', 'worker.cjs')
 
 // Built inside createHandlerDeps (needs sessionManager), populated with the WS
 // publisher after bootstrapServer resolves.
@@ -207,22 +216,28 @@ const instance = await (async () => {
       createSessionManager: () => new SessionManager(),
       bindRpcServer: (sm, server) => sm.setRpcServer(server),
       createHandlerDeps: ({ sessionManager, platform, oauthFlowStore }) => {
+        if (vpsBrowserManager) sessionManager.setBrowserPaneManager(vpsBrowserManager)
         messagingHandle = createMessagingBootstrap({
           sessionManager,
           credentialManager: getCredentialManager(),
           getMessagingDir: (wsId: string) =>
-            join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
+            join(CONFIG_DIR, 'workspaces', wsId, 'messaging'),
           // Headless has no legacy messaging dir — workspaces start clean.
           whatsapp: {
             workerEntry: waWorkerEntry,
             nodeBin: waNodeBin,
             pairingMode: 'qr',
           },
+          discord: {
+            workerEntry: discordWorkerEntry,
+            nodeBin: waNodeBin,
+          },
         })
         return {
           sessionManager,
           platform,
           oauthFlowStore,
+          browserPaneManager: vpsBrowserManager ?? undefined,
           messagingRegistry: messagingHandle.registry,
         }
       },
@@ -246,7 +261,7 @@ const instance = await (async () => {
           sessionManager.cleanup()
         }
       },
-      cleanupClientResources: cleanupSessionFileWatchForClient,
+      cleanupClientResources: cleanupCoreClientResources,
     })
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error))

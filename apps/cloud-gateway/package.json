@@ -1,0 +1,21 @@
+{
+  "name": "@craft-agent/cloud-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker + RunDO + container runner for craft-agents Cloud Runs (PRD docs/cloud-runs-prd.md, phase G2)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/computer": "0.1.0-alpha.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260702.1",
+    "typescript": "^5.9.0",
+    "wrangler": "^4.115.0"
+  }
+}

@@ -25,6 +25,7 @@ import { useCollapsibleMarkdown } from './CollapsibleMarkdownContext'
 import { wrapWithSafeProxy } from './safe-components'
 import { MARKDOWN_MATH_OPTIONS } from './math-options'
 import { markdownUrlTransform } from './url-transform'
+import { usePlatform } from '../../context/PlatformContext'
 
 /**
  * Names of preview-block code-fence types that recursive `Markdown` callers
@@ -123,6 +124,65 @@ function stableHash(input: string): string {
     hash = Math.imul(hash, 16777619)
   }
   return (hash >>> 0).toString(36)
+}
+
+/**
+ * Render markdown images backed by local files through the platform adapter.
+ * A browser cannot use a server-side filesystem path as an <img src>; the
+ * adapter reads it and returns a data URL instead. Remote URLs remain native.
+ */
+function MarkdownImage({
+  src,
+  alt,
+  title,
+  className,
+  ...props
+}: React.ImgHTMLAttributes<HTMLImageElement>) {
+  const { onReadFileDataUrl } = usePlatform()
+  const target = React.useMemo(
+    () => (src ? resolveMarkdownLinkTarget(src) : null),
+    [src],
+  )
+  const [dataUrl, setDataUrl] = React.useState<string | null>(null)
+  const [loadError, setLoadError] = React.useState(false)
+
+  React.useEffect(() => {
+    setDataUrl(null)
+    setLoadError(false)
+
+    if (!src || target?.kind !== 'file' || !onReadFileDataUrl) return
+
+    let cancelled = false
+    void onReadFileDataUrl(target.path)
+      .then((nextDataUrl) => {
+        if (!cancelled) setDataUrl(nextDataUrl)
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [onReadFileDataUrl, src, target])
+
+  if (!src) return null
+
+  // No file adapter means this is either a remote image or a platform that
+  // intentionally does not support local-file previews.
+  if (target?.kind !== 'file' || !onReadFileDataUrl) {
+    return <img src={src} alt={alt} title={title} className={cn('max-w-full h-auto rounded-md', className)} {...props} />
+  }
+
+  if (loadError) {
+    return <span className="text-muted-foreground text-sm">无法加载图片：{alt || target.path}</span>
+  }
+
+  if (!dataUrl) {
+    return <span className="text-muted-foreground text-sm">正在加载图片…</span>
+  }
+
+  return <img src={dataUrl} alt={alt} title={title} className={cn('max-w-full h-auto rounded-md', className)} {...props} />
 }
 
 function createComponents(
@@ -234,6 +294,15 @@ function createComponents(
         </a>
       )
     },
+    img: ({ src, alt, title, className, ...props }) => (
+      <MarkdownImage
+        src={src}
+        alt={alt}
+        title={title}
+        className={className}
+        {...props}
+      />
+    ),
   }
 
   // Terminal mode: minimal formatting

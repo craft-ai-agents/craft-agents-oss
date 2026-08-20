@@ -16,24 +16,67 @@ import {
   statSync,
 } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
 import { randomUUID } from 'crypto';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { atomicWriteFileSync, readJsonFileSync } from '../utils/files.ts';
 import { getDefaultStatusConfig, saveStatusConfig, ensureDefaultIconFiles } from '../statuses/storage.ts';
 import { getDefaultLabelConfig, saveLabelConfig } from '../labels/storage.ts';
+import { ensureDefaultAutomations } from '../automations/default-seeds.ts';
+import {
+  DEFAULT_ENABLED_LOCAL_SOURCE_SLUGS,
+  ensureBuiltinSources,
+  ensureLocalNotesSource,
+} from '../sources/builtin-sources.ts';
 import { loadConfigDefaults } from '../config/storage.ts';
+import { CONFIG_DIR } from '../config/paths.ts';
+import { generateSlug } from '../utils/slug.ts';
 import { parsePermissionMode, PERMISSION_MODE_ORDER } from '../agent/mode-types.ts';
 import { normalizeThinkingLevel } from '../agent/thinking-levels.ts';
 import type {
   WorkspaceConfig,
-  CreateWorkspaceInput,
   LoadedWorkspace,
   WorkspaceSummary,
+  WorkspaceKind,
 } from './types.ts';
 
-const CONFIG_DIR = join(homedir(), '.craft-agent');
 const DEFAULT_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces');
+
+/**
+ * Canonical identity supplied by the global registry when it creates or
+ * repairs a local workspace folder.
+ */
+export interface WorkspaceCreationIdentity {
+  id?: string;
+  slug?: string;
+  kind?: WorkspaceKind;
+  orgId?: string;
+}
+
+type WorkspaceAuthorityRecord = Pick<WorkspaceConfig, 'kind' | 'orgId'>;
+
+/**
+ * Normalize persisted authority metadata in place.
+ *
+ * A missing discriminator is always legacy personal data. An old `orgId`
+ * without `kind: 'team'` was never an authorized TeamSpace binding and is
+ * deliberately dropped; the user must rebind through the membership gate.
+ */
+export function normalizeWorkspaceAuthority<T extends WorkspaceAuthorityRecord>(
+  record: T,
+): T & { kind: WorkspaceKind } {
+  const orgId = typeof record.orgId === 'string' ? record.orgId.trim() : '';
+  const kind: WorkspaceKind = record.kind === 'team' ? 'team' : 'personal';
+
+  if (kind === 'team' && orgId) {
+    record.kind = 'team';
+    record.orgId = orgId;
+  } else {
+    record.kind = 'personal';
+    delete record.orgId;
+  }
+
+  return record as T & { kind: WorkspaceKind };
+}
 
 // ============================================================
 // Path Utilities
@@ -103,6 +146,11 @@ export function loadWorkspaceConfig(rootPath: string): WorkspaceConfig | null {
   try {
     const config = readJsonFileSync<WorkspaceConfig>(configPath);
 
+    // Persisted folders created before TeamSpace had no authority metadata.
+    // Normalize in memory; the next canonical save writes the discriminator.
+    normalizeWorkspaceAuthority(config);
+
+
     // Expand path variables in defaults for portability
     if (config.defaults?.workingDirectory) {
       config.defaults.workingDirectory = expandPath(config.defaults.workingDirectory);
@@ -151,6 +199,8 @@ export function saveWorkspaceConfig(rootPath: string, config: WorkspaceConfig): 
     ...config,
     updatedAt: Date.now(),
   };
+
+  normalizeWorkspaceAuthority(storageConfig);
 
   if (storageConfig.defaults?.workingDirectory) {
     storageConfig.defaults = {
@@ -239,22 +289,8 @@ export function getWorkspaceSummary(rootPath: string): WorkspaceSummary | null {
 // Create/Delete Operations
 // ============================================================
 
-/**
- * Generate URL-safe slug from name
- */
-export function generateSlug(name: string): string {
-  let slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .substring(0, 50);
-
-  if (!slug) {
-    slug = 'workspace';
-  }
-
-  return slug;
-}
+/** Generate a URL-safe slug (shared impl in ../utils/slug.ts; re-exported for compat). */
+export { generateSlug } from '../utils/slug.ts';
 
 /**
  * Generate a unique folder path for a workspace by appending a numeric suffix
@@ -283,19 +319,25 @@ export function generateUniqueWorkspacePath(name: string, baseDir: string): stri
 }
 
 /**
- * Create workspace folder structure at a given path
+ * Create workspace folder structure at a given path.
+ *
+ * When `identity` is supplied by the global registry, the folder config uses
+ * the exact same id/name/kind/orgId instead of inventing a second identity.
+ *
  * @param rootPath - Absolute path where workspace folder will be created
  * @param name - Display name for the workspace
  * @param defaults - Optional default settings for new sessions
+ * @param identity - Canonical identity supplied by the registry lifecycle
  * @returns The created WorkspaceConfig
  */
 export function createWorkspaceAtPath(
   rootPath: string,
   name: string,
-  defaults?: WorkspaceConfig['defaults']
+  defaults?: WorkspaceConfig['defaults'],
+  identity?: WorkspaceCreationIdentity,
 ): WorkspaceConfig {
   const now = Date.now();
-  const slug = generateSlug(name);
+  const slug = identity?.slug ?? generateSlug(name);
 
   // Load global defaults from config-defaults.json
   const globalDefaults = loadConfigDefaults();
@@ -309,20 +351,27 @@ export function createWorkspaceAtPath(
     // defaultLlmConnection: undefined - falls back to app default
     permissionMode: globalDefaults.workspaceDefaults.permissionMode,
     cyclablePermissionModes: globalDefaults.workspaceDefaults.cyclablePermissionModes,
-    enabledSourceSlugs: [],
+    enabledSourceSlugs: [...DEFAULT_ENABLED_LOCAL_SOURCE_SLUGS],
     workingDirectory: undefined,
     ...defaults, // User-provided defaults override global defaults
   };
 
   const config: WorkspaceConfig = {
-    id: `ws_${randomUUID().slice(0, 8)}`,
+    id: identity?.id ?? `ws_${randomUUID().slice(0, 8)}`,
     name,
     slug,
+    kind: identity?.kind,
+    orgId: identity?.orgId,
     defaults: workspaceDefaults,
     localMcpServers: globalDefaults.workspaceDefaults.localMcpServers,
     createdAt: now,
     updatedAt: now,
   };
+
+  normalizeWorkspaceAuthority(config);
+  if (identity?.kind === 'team' && config.kind !== 'team') {
+    throw new Error('Team workspace requires a non-empty orgId');
+  }
 
   // Create workspace directory structure
   mkdirSync(rootPath, { recursive: true });
@@ -339,6 +388,15 @@ export function createWorkspaceAtPath(
 
   // Initialize label configuration with defaults (two nested groups + valued labels)
   saveLabelConfig(rootPath, getDefaultLabelConfig());
+
+  // Seed default automations (30 templates, mostly disabled)
+  ensureDefaultAutomations(rootPath);
+
+  // Seed credentialed API templates as disabled; they are never workspace defaults.
+  ensureBuiltinSources(rootPath);
+
+  // The default Notes source must exist before a session resolves these defaults.
+  ensureLocalNotesSource(rootPath, join(DEFAULT_WORKSPACES_DIR, config.id, 'notes'));
 
   // Initialize plugin manifest for SDK integration (enables skills, commands, agents)
   ensurePluginManifest(rootPath, name);

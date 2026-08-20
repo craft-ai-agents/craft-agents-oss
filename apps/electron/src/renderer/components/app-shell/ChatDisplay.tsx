@@ -65,6 +65,7 @@ import {
 } from "@craft-agent/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
 import { ChatInputZone, type StructuredInputState, type StructuredResponse, type PermissionResponse, type AdminApprovalResponse } from "./input"
+import { MemoryProvenanceStrip } from "./MemoryProvenanceStrip"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
 import { useTurnCardExpansion } from "@/hooks/useTurnCardExpansion"
@@ -75,6 +76,7 @@ import { CHAT_LAYOUT } from "@/config/layout"
 import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } from "@/lib/file-changes"
 import { resolveBranchNewPanelOption } from "./branching"
 import { handleErrorMessageAction } from "./error-message-actions"
+import * as storage from "@/lib/local-storage"
 
 // ============================================================================
 // CSS Custom Highlight API helper
@@ -108,6 +110,30 @@ interface MarkdownOverlayState {
   title: string
   /** When true, show raw markdown source in code viewer instead of rendered preview */
   forceCodeView?: boolean
+}
+
+function encodeNoteTarget(target: string): string {
+  return encodeURIComponent(target.trim().replace(/\.md$/i, ''))
+}
+
+function linkifyNoteReferenceText(content: string): string {
+  let next = content.replace(/\[\[([^\]|#]+)(#[^\]|]*)?(?:\|([^\]]+))?\]\]/g, (_match, target: string, heading = '', alias?: string) => {
+    const label = alias?.trim() || `${target.trim()}${heading || ''}`
+    return `[${label}](craft-note:${encodeNoteTarget(target)})`
+  })
+
+  next = next.replace(/(^|[\s(])((?:\.\/)?notes\/[^\s)\]]+?\.md)(?=$|[\s).,;:!?])/g, (_match, prefix: string, path: string) => {
+    return `${prefix}[${path}](craft-note:${encodeNoteTarget(path.replace(/^\.\//, '').replace(/^notes\//, ''))})`
+  })
+
+  return next
+}
+
+function linkifyNoteReferences(content: string): string {
+  return content
+    .split(/(```[\s\S]*?```|`[^`\n]+`)/g)
+    .map((segment) => segment.startsWith('`') ? segment : linkifyNoteReferenceText(segment))
+    .join('')
 }
 
 /** Union of all overlay states, or null for no overlay */
@@ -194,8 +220,11 @@ interface ChatDisplayProps {
   // State/status selection (for # menu and ActiveOptionBadges)
   /** Available workflow states */
   sessionStatuses?: import('@/config/session-status-config').SessionStatus[]
-  /** Callback when session state changes */
   onSessionStatusChange?: (stateId: string) => void
+  /** Workspace projects for main-session Projects chip */
+  projects?: Array<{ id: string; slug: string; name: string; color?: string }>
+  /** Bind/unbind session project */
+  onSetProjectId?: (projectId: string | null) => void
   /** Workspace ID for loading skill icons */
   workspaceId?: string
   // Working directory (per session)
@@ -257,6 +286,8 @@ export interface ChatDisplayHandle {
   matchCount: number
   currentMatchIndex: number
   isHighlighting: boolean
+  /** Scroll chat to a message/turn by message id (mindmap click-through). */
+  scrollToMessage: (messageId: string) => void
 }
 
 /**
@@ -472,6 +503,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // States (for # menu and badge)
   sessionStatuses,
   onSessionStatusChange,
+  projects,
+  onSetProjectId,
   workspaceId,
   // Working directory
   workingDirectory,
@@ -543,6 +576,28 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // This accounts for scenic themes (like Haze) that force dark mode
   const { isDark } = useTheme()
 
+  const [turnActivitiesExpandedByDefault, setTurnActivitiesExpandedByDefault] = useState(() =>
+    storage.get(storage.KEYS.turnActivitiesExpandedByDefault, false)
+  )
+  useEffect(() => {
+    const settingKey = storage.getKeyString(storage.KEYS.turnActivitiesExpandedByDefault)
+    const syncValue = () => {
+      setTurnActivitiesExpandedByDefault(storage.get(storage.KEYS.turnActivitiesExpandedByDefault, false))
+    }
+    const handleChange = () => syncValue()
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === settingKey || event.key === null) {
+        syncValue()
+      }
+    }
+    window.addEventListener(storage.EVENTS.turnActivitiesExpandedByDefaultChanged, handleChange)
+    window.addEventListener('storage', handleStorage)
+    return () => {
+      window.removeEventListener(storage.EVENTS.turnActivitiesExpandedByDefaultChanged, handleChange)
+      window.removeEventListener('storage', handleStorage)
+    }
+  }, [])
+
   // Register as focus zone - when zone gains focus, focus the textarea
   // Guard with isFocusedPanelRef so only the focused panel responds in multi-panel layouts
   const { zoneRef, isFocused } = useFocusZone({
@@ -562,11 +617,13 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
   // TurnCard expansion state — persisted to localStorage across session switches
   const {
-    expandedTurns,
+    isTurnExpanded,
     toggleTurn,
     expandedActivityGroups,
     setExpandedActivityGroups,
-  } = useTurnCardExpansion(session?.id)
+    collapsedActivityGroups,
+    setCollapsedActivityGroups,
+  } = useTurnCardExpansion(session?.id, turnActivitiesExpandedByDefault)
 
 
   // ============================================================================
@@ -949,14 +1006,6 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // With CSS Highlight API, highlighting is instant — no settling phase
   const isHighlighting = false
 
-  // Expose navigation via imperative handle (for session list navigation controls)
-  React.useImperativeHandle(ref, () => ({
-    goToNextMatch,
-    goToPrevMatch,
-    matchCount: validMatches.length,
-    currentMatchIndex,
-    isHighlighting,
-  }), [goToNextMatch, goToPrevMatch, validMatches.length, currentMatchIndex])
 
   // Notify parent when match info (count, index, highlighting state) changes
   useEffect(() => {
@@ -1282,7 +1331,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
     if (isInputDisabled || disableSend || connectionUnavailable) {
       toast.error(t('toast.cannotSendRightNow'), {
-        description: 'Sending is currently disabled for this session.',
+        description: t('toast.sendDisabledForSession'),
       })
       return
     }
@@ -1449,7 +1498,72 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     }
   }, [assistantTurnIndexByMessageId, allTurns, visibleTurnCount])
 
-  const handleFollowUpChipClick = useCallback((item: {
+  const scrollToMessage = useCallback((messageId: string) => {
+    if (!messageId) return
+
+    // Prefer exact turn keyed by user/system message id.
+    let targetTurnIndex = allTurns.findIndex((turn) => {
+      if (turn.type === 'user' || turn.type === 'system' || turn.type === 'auth-request') {
+        return turn.message.id === messageId
+      }
+      if (turn.type === 'assistant') {
+        if (turn.response?.messageId === messageId) return true
+        return turn.activities?.some((a) => a.messageId === messageId || a.id === messageId) ?? false
+      }
+      return false
+    })
+
+    // Fallback: assistant map
+    if (targetTurnIndex < 0) {
+      const mapped = assistantTurnIndexByMessageId.get(messageId)
+      if (mapped != null) targetTurnIndex = mapped
+    }
+    if (targetTurnIndex < 0) return
+
+    const ensureVisibleCount = allTurns.length - targetTurnIndex
+    const scrollToTurn = () => {
+      const targetTurn = allTurns[targetTurnIndex]
+      if (!targetTurn) return false
+      const turnKey = getTurnKey(targetTurn)
+      const turnContainer = turnRefs.current.get(turnKey)
+      if (!turnContainer) {
+        // Last resort: element with message id (assistant markdown)
+        const byId = document.getElementById(messageId)
+        if (byId) {
+          byId.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          return true
+        }
+        return false
+      }
+      turnContainer.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return true
+    }
+
+    if (ensureVisibleCount > visibleTurnCount) {
+      setVisibleTurnCount(ensureVisibleCount)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!scrollToTurn()) setTimeout(() => { void scrollToTurn() }, 80)
+        })
+      })
+      return
+    }
+    if (!scrollToTurn()) {
+      requestAnimationFrame(() => { void scrollToTurn() })
+    }
+  }, [allTurns, assistantTurnIndexByMessageId, visibleTurnCount])
+
+    // Expose navigation via imperative handle (for session list + mindmap click-through)
+  React.useImperativeHandle(ref, () => ({
+    goToNextMatch,
+    goToPrevMatch,
+    matchCount: validMatches.length,
+    currentMatchIndex,
+    isHighlighting,
+    scrollToMessage,
+  }), [goToNextMatch, goToPrevMatch, validMatches.length, currentMatchIndex, scrollToMessage])
+
+const handleFollowUpChipClick = useCallback((item: {
     messageId: string
     annotationId: string
   }, anchor?: { x: number; y: number }) => {
@@ -1693,6 +1807,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
                     // Check if this is the last response (for Accept Plan button visibility)
                     const isLastResponse = index === turns.length - 1 || !turns.slice(index + 1).some(t => t.type === 'user')
+                    // Memory provenance strip (Y2/Y3) renders under the newest assistant turn only
+                    const isLatestAssistantTurn = !turns.slice(index + 1).some(t => t.type === 'assistant')
 
                     // Assistant turns - render with TurnCard (buffered streaming)
                     const assistantUiKey = getAssistantTurnUiKey(turn, index)
@@ -1714,13 +1830,17 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         turnId={turn.turnId}
                         activities={turn.activities}
                         response={turn.response}
+                        thinking={turn.thinking}
                         intent={turn.intent}
                         isStreaming={turn.isStreaming}
                         isComplete={turn.isComplete}
-                        isExpanded={expandedTurns.has(assistantUiKey)}
+                        isExpanded={isTurnExpanded(assistantUiKey)}
                         onExpandedChange={(expanded) => toggleTurn(assistantUiKey, expanded)}
                         expandedActivityGroups={expandedActivityGroups}
                         onExpandedActivityGroupsChange={setExpandedActivityGroups}
+                        activityGroupsExpandedByDefault={turnActivitiesExpandedByDefault}
+                        collapsedActivityGroups={collapsedActivityGroups}
+                        onCollapsedActivityGroupsChange={setCollapsedActivityGroups}
                         todos={turn.todos}
                         onOpenFile={onOpenFile}
                         onOpenUrl={onOpenUrl}
@@ -1886,6 +2006,13 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                           }
                         }}
                       />
+                      {session.memoryMode !== 'temporary' && (
+                        <MemoryProvenanceStrip
+                          sessionId={session.id}
+                          isLatestAssistant={isLatestAssistantTurn}
+                          messageText={turn.response?.text ?? ''}
+                        />
+                      )}
                       </div>
                     )
                   })}
@@ -1928,6 +2055,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             sessionStatuses={sessionStatuses}
             currentSessionStatus={session.sessionStatus || 'todo'}
             onSessionStatusChange={onSessionStatusChange}
+            projects={projects}
+            projectId={session.projectId}
+            onSetProjectId={onSetProjectId}
             inputProps={{
               placeholder,
               disabled: isInputDisabled,
@@ -2229,12 +2359,13 @@ function MessageBubble({
   onRetry,
 }: MessageBubbleProps) {
   const { t } = useTranslation()
+  const messageContent = useMemo(() => linkifyNoteReferences(message.content), [message.content])
 
   // === USER MESSAGE: Right-aligned bubble with attachments above ===
   if (message.role === 'user') {
     return (
       <UserMessageBubble
-        content={message.content}
+        content={messageContent}
         attachments={message.attachments}
         badges={message.badges}
         isPending={message.isPending}
@@ -2265,7 +2396,7 @@ function MessageBubble({
           {/* Use StreamingMarkdown for block-level memoization during streaming */}
           {message.isStreaming ? (
             <StreamingMarkdown
-              content={message.content}
+              content={messageContent}
               isStreaming={true}
               mode={renderMode}
               onUrlClick={onOpenUrl}
@@ -2281,7 +2412,7 @@ function MessageBubble({
                 className="text-sm"
                 collapsible
               >
-                {message.content}
+                {messageContent}
               </Markdown>
             </CollapsibleMarkdownProvider>
           )}

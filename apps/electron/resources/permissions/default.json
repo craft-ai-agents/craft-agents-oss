@@ -1,5 +1,5 @@
 {
-  "version": "2026-03-07",
+  "version": "2026-08-07-p3",
   "allowedBashPatterns": [
     {
       "pattern": "^ls\\b",
@@ -942,6 +942,30 @@
     {
       "pattern": "fetch",
       "comment": "Fetch/retrieve data"
+    }
+  ],
+  "allowedKnowledgePatterns": [
+    {
+      "pattern": "^knowledge:(listConnections|capabilities|search|get|getContext|getBacklinks|snapshotCreate|snapshotGet|engineStatus)$",
+      "comment": "Knowledge provider READ operations (P1 read-only per spec 03 — mutation ops proposeMutation/applyMutation/discardMutation do not exist in P1 and must never be allowlisted). Read in Explore mode without prompting."
+    }
+  ],
+  "blockedTools": [
+    {
+      "pattern": "knowledge.propose_update",
+      "comment": "P3 knowledge WRITE capability (spec 05 §3.6): blocked in Explore. All SiYuan writes still flow through the approved MutationProposal pipeline even in Ask/Auto — no auto-approve."
+    },
+    {
+      "pattern": "knowledge.create_document",
+      "comment": "P3 knowledge WRITE capability (spec 05 §3.6): proposal-creation tool, blocked in Explore mode."
+    },
+    {
+      "pattern": "knowledge.append_block",
+      "comment": "P3 knowledge WRITE capability (spec 05 §3.6): proposal-creation tool, blocked in Explore mode."
+    },
+    {
+      "pattern": "knowledge.set_attribute",
+      "comment": "P3 knowledge WRITE capability (spec 05 §3.6): proposal-creation tool, blocked in Explore mode."
     }
   ],
   "allowedApiEndpoints": [],

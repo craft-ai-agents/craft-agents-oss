@@ -11,7 +11,9 @@
 import { atom } from 'jotai'
 import type { Getter, Setter } from 'jotai/vanilla'
 import { atomFamily } from 'jotai-family'
-import type { Session, Message } from '../../shared/types'
+import type { Session, Message, SessionPriority } from '../../shared/types'
+
+import { markStatusUnseen } from '@/lib/sidebar-unseen-status'
 
 /**
  * Session metadata for list display (lightweight, no messages)
@@ -81,6 +83,12 @@ export interface SessionMeta {
   parentSessionId?: string
   /** Kanban board column id ('todo' | 'in-progress' | 'done'); independent of sessionStatus */
   kanbanColumn?: string
+  /** LexoRank string for stable manual ordering within a collection view */
+  rank?: string
+  /** Collection priority; default coerce to 'none' on read when absent */
+  priority?: SessionPriority
+  /** Due date as epoch ms (UTC noon when set from date pickers); null clears */
+  dueDate?: number | null
   /** Tasks Conductor: slug of the task spec this session belongs to (orchestrator + child nodes) */
   taskSlug?: string
   /** Tasks Conductor: id of the run that spawned this child session (Conductor-owned children only) */
@@ -89,6 +97,8 @@ export interface SessionMeta {
   taskNodeId?: string
   /** Tasks Conductor: total DAG node count (orchestrator only) — stable board progress denominator while children spawn lazily */
   taskNodeCount?: number
+  /** Parent session id this session was branched from — UI lineage; roots session families in the sidebar (undefined = not a branch or legacy branch) */
+  branchFromSessionId?: string
   /** Tasks Conductor: a generate-time draft orchestrator, hidden from the board until adopted by createTask. */
   taskDraft?: boolean
 }
@@ -216,8 +226,18 @@ export const updateSessionMetaAtom = atom(
     const existing = metaMap.get(sessionId)
     if (existing) {
       const newMetaMap = new Map(metaMap)
-      newMetaMap.set(sessionId, { ...existing, ...updates })
+      const next = { ...existing, ...updates }
+      newMetaMap.set(sessionId, next)
       set(sessionMetaMapAtom, newMetaMap)
+
+      // Sidebar unseen accent: session landed in a different status bucket.
+      if (
+        updates.sessionStatus !== undefined &&
+        updates.sessionStatus !== existing.sessionStatus &&
+        existing.workspaceId
+      ) {
+        markStatusUnseen(existing.workspaceId, updates.sessionStatus)
+      }
     }
   }
 )

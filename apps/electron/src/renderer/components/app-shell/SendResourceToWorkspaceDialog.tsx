@@ -13,6 +13,7 @@ import * as React from 'react'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { Cloud, CloudOff, Monitor, Send } from 'lucide-react'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,7 @@ import { Button } from '@/components/ui/button'
 import { WorkspaceAvatar } from '@/components/ui/workspace-avatar'
 import { useWorkspaceIcons } from '@/hooks/useWorkspaceIcon'
 import { cn } from '@/lib/utils'
+import { isSshBackedWorkspace } from '../../../shared/ssh'
 import type { Workspace, ExportResourcesOptions, ResourceImportMode } from '../../../shared/types'
 
 export type SendResourceType = 'source' | 'skill' | 'automation'
@@ -46,10 +48,10 @@ export interface SendResourceToWorkspaceDialogProps {
   onTransferComplete?: () => void
 }
 
-const RESOURCE_TYPE_LABELS: Record<SendResourceType, { singular: string; plural: string }> = {
-  source: { singular: 'source', plural: 'sources' },
-  skill: { singular: 'skill', plural: 'skills' },
-  automation: { singular: 'automation', plural: 'automations' },
+const RESOURCE_TYPE_KEYS: Record<SendResourceType, { singular: string; plural: string }> = {
+  source: { singular: 'sendToWorkspace.resourceSingular.source', plural: 'sendToWorkspace.resourcePlural.source' },
+  skill: { singular: 'sendToWorkspace.resourceSingular.skill', plural: 'sendToWorkspace.resourcePlural.skill' },
+  automation: { singular: 'sendToWorkspace.resourceSingular.automation', plural: 'sendToWorkspace.resourcePlural.automation' },
 }
 
 export function SendResourceToWorkspaceDialog({
@@ -96,6 +98,12 @@ export function SendResourceToWorkspaceDialog({
 
     // Fire parallel checks
     for (const ws of remoteTargets) {
+      // SSH-backed workspaces: the persisted url is a stale port (a fresh tunnel is
+      // resolved at send time), so report ok instead of probing a dead port.
+      if (isSshBackedWorkspace(ws)) {
+        setRemoteHealthMap(prev => new Map(prev).set(ws.id, 'ok'))
+        continue
+      }
       window.electronAPI.testRemoteConnection(ws.remoteServer!.url, ws.remoteServer!.token)
         .then(result => {
           if (abort.signal.aborted) return
@@ -110,6 +118,7 @@ export function SendResourceToWorkspaceDialog({
     return () => abort.abort()
   }, [open, targetWorkspaces.map(w => w.id).join(',')])
 
+  const { t } = useTranslation()
   const handleSend = useCallback(async () => {
     if (!selectedWorkspaceId || !activeWorkspaceId || resourceIds.length === 0) return
 
@@ -118,12 +127,12 @@ export function SendResourceToWorkspaceDialog({
 
     setIsSending(true)
     const targetName = targetWorkspace.name
-    const { singular, plural } = RESOURCE_TYPE_LABELS[resourceType]
+    const { singular, plural } = RESOURCE_TYPE_KEYS[resourceType]
     const count = resourceIds.length
-    const label = count === 1 ? singular : plural
+    const label = count === 1 ? t(singular) : t(plural)
     const mode: ResourceImportMode = 'skip'
 
-    const toastId = toast.loading(`Sending ${resourceLabel} to ${targetName}...`)
+    const toastId = toast.loading(t('sendToWorkspace.sendingResource', { resourceLabel, targetName }))
 
     try {
       // 1. Export the selected resource(s) from current workspace
@@ -162,13 +171,13 @@ export function SendResourceToWorkspaceDialog({
       const skipped = bucket?.skipped?.length ?? 0
 
       if (imported > 0 && skipped === 0) {
-        toast.success(`Sent ${resourceLabel} to ${targetName}`, { id: toastId })
+        toast.success(t('sendToWorkspace.sentResource', { resourceLabel, targetName }), { id: toastId })
       } else if (imported > 0 && skipped > 0) {
-        toast.success(`Sent ${imported} ${label}, ${skipped} already existed`, { id: toastId })
+        toast.success(t('sendToWorkspace.sentPartial', { imported, label, skipped }), { id: toastId })
       } else if (skipped > 0) {
-        toast.info(`${resourceLabel} already exists in ${targetName}`, { id: toastId })
+        toast.info(t('sendToWorkspace.alreadyExists', { resourceLabel, targetName }), { id: toastId })
       } else {
-        toast.warning(`Nothing was sent to ${targetName}`, { id: toastId })
+        toast.warning(t('sendToWorkspace.nothingSent', { targetName }), { id: toastId })
       }
 
       if (exportWarnings.length > 0) {
@@ -182,15 +191,13 @@ export function SendResourceToWorkspaceDialog({
       const isUnsupported = error?.code === 'CHANNEL_NOT_FOUND' ||
         (error?.message ?? '').includes('No handler for')
       const message = isUnsupported
-        ? `${targetName} is running an older version that doesn't support resource import. Update the remote server and try again.`
-        : error instanceof Error ? error.message : 'Unknown error'
-      toast.error(`Failed to send ${label}`, { id: toastId, description: message })
+        ? t('sendToWorkspace.unsupportedVersion', { targetName })
+        : error instanceof Error ? error.message : t('toast.unknownError')
+      toast.error(t('sendToWorkspace.failedToSendResource', { label }), { id: toastId, description: message })
     } finally {
       setIsSending(false)
     }
-  }, [selectedWorkspaceId, activeWorkspaceId, resourceIds, resourceType, resourceLabel, workspaces, onOpenChange, onTransferComplete])
-
-  const { singular, plural } = RESOURCE_TYPE_LABELS[resourceType]
+  }, [selectedWorkspaceId, activeWorkspaceId, resourceIds, resourceType, resourceLabel, workspaces, onOpenChange, onTransferComplete, t])
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
@@ -203,10 +210,10 @@ export function SendResourceToWorkspaceDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Send className="h-4 w-4" />
-            Send to Workspace
+            {t('sendToWorkspace.dialogTitle')}
           </DialogTitle>
           <DialogDescription>
-            Send {resourceLabel} to another workspace.
+            {t('sendToWorkspace.dialogDescription', { resourceLabel })}
           </DialogDescription>
         </DialogHeader>
 
@@ -214,7 +221,7 @@ export function SendResourceToWorkspaceDialog({
         <div className="flex flex-col gap-1 max-h-64 overflow-y-auto py-1">
           {targetWorkspaces.length === 0 ? (
             <p className="text-sm text-muted-foreground px-2 py-4 text-center">
-              No other workspaces available.
+              {t('sendToWorkspace.noRemoteWorkspaces')}
             </p>
           ) : (
             targetWorkspaces.map(workspace => {
@@ -269,13 +276,13 @@ export function SendResourceToWorkspaceDialog({
             onClick={() => onOpenChange(false)}
             disabled={isSending}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             onClick={handleSend}
             disabled={!selectedWorkspaceId || isSending}
           >
-            {isSending ? 'Sending...' : 'Send'}
+            {isSending ? t('sendToWorkspace.sendingButton') : t('sendToWorkspace.sendButton')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -5,10 +5,10 @@
  * board unmounts when the user flips to the list view), so a filter the user set
  * stays applied when they return.
  *
- * Column colors and the live-pulse toggle are appearance *preferences*, so they
- * persist to localStorage via `atomWithStorage` (same pattern as
- * `workspaceAvatarColorsAtom`) — reactive, multi-window, no RPC/disk-config. They
- * are per-machine, not workspace-synced.
+ * Board column layout (labels, colors, collapsed, prompts, groupBy) lives in
+ * `{workspace}/kanban/config.json` via kanban RPC — see KanbanBoardContainer.
+ * The color/status atoms below remain as legacy localStorage mirrors consumed by
+ * Appearance settings and as a one-time migration source into the workspace file.
  */
 
 import { atom } from 'jotai'
@@ -27,9 +27,10 @@ export const kanbanProjectFilterAtom = atom<string[]>([])
 export const kanbanEditorTargetAtom = atom<TaskEditorTarget | null>(null)
 
 /**
- * Per-column color overrides (hex). A column absent from the map falls back to
- * `DEFAULT_KANBAN_COLUMN_COLORS` (see `kanban/kanban-colors.ts`). Resetting a
- * column in Settings deletes its key here.
+ * Per-column color overrides (hex) — legacy localStorage mirror.
+ * Board UI prefers `{workspace}/kanban/config.json`; this atom is still written on
+ * color change so Appearance settings stay coherent, and is read once to migrate
+ * into the workspace file on first board load.
  */
 export const kanbanColumnColorsAtom = atomWithStorage<Partial<Record<KanbanColumnId, string>>>(
   'craft-kanban-column-colors',
@@ -40,11 +41,12 @@ export const kanbanColumnColorsAtom = atomWithStorage<Partial<Record<KanbanColum
 export const kanbanLivePulseAtom = atomWithStorage<boolean>('craft-kanban-live-pulse', true)
 
 /**
- * Per-column status auto-applied when a task is dropped into that column. A
- * column absent from the map (or mapped to a status that no longer exists)
- * leaves the task's status untouched on move.
+ * Per-column status auto-applied when a task is dropped into that column.
+ * Prefer column.dropStatusId from workspace kanban config; this atom is the
+ * legacy fallback / Appearance settings mirror.
  */
 export const kanbanColumnStatusAtom = atomWithStorage<Partial<Record<KanbanColumnId, string>>>(
   'craft-kanban-column-status',
   {}
 )
+

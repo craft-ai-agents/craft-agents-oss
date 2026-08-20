@@ -79,6 +79,7 @@ export {
   type MarkdownProps,
   type RenderMode,
   TiptapMarkdownEditor,
+  type TiptapEditorHandle,
   type TiptapMarkdownEditorProps,
   type MarkdownEngine,
   type MarkdownDatatableBlockProps,

@@ -8,8 +8,14 @@
  * - Non-read commands return null
  */
 import { describe, it, expect } from 'bun:test';
+import { join } from 'node:path';
 import { parseReadCommand } from '../read-patterns.ts';
-import { looksLikePowerShell, isPowerShellAvailable } from '../../powershell-validator.ts';
+import { looksLikePowerShell, isPowerShellAvailable, setPowerShellValidatorRoot } from '../../powershell-validator.ts';
+
+// Global parser bootstrap: раньше проходили по милости чужого сеттера, что
+// ломалось при любой перестановке порядка файлов в сьютe (пойман пост-мердж).
+// Тест сам ставит root на директорию с powershell-parser.ps1.
+setPowerShellValidatorRoot(join(import.meta.dir, '..', '..'));
 
 // ============================================================
 // Bash Read Commands

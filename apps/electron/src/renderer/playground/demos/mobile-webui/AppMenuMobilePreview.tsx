@@ -32,7 +32,6 @@ export function AppMenuMobilePreview({
               onNewWindow={log('onNewWindow')}
               onOpenSettings={log('onOpenSettings')}
               onOpenSettingsSubpage={(id) => console.log('[Mobile AppMenu] onOpenSettingsSubpage', id)}
-              onOpenKeyboardShortcuts={log('onOpenKeyboardShortcuts')}
               onOpenStoredUserPreferences={log('onOpenStoredUserPreferences')}
               onToggleSidebar={log('onToggleSidebar')}
               onToggleFocusMode={log('onToggleFocusMode')}

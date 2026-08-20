@@ -9,18 +9,28 @@
     "light": "github-light",
     "dark": "github-dark"
   },
-  "background": "#ffffff",
+  "background": "#f6f8fa",
   "foreground": "#24292f",
-  "accent": "#009fff",
-  "info": "#fe8c2c",
-  "success": "#0dbe4e",
-  "destructive": "#fc2b73",
+  "paper": "#fbfcfd",
+  "navigator": "#eef1f5",
+  "input": "#fbfcfd",
+  "popover": "#fbfcfd",
+  "popoverSolid": "#fbfcfd",
+  "accent": "#0969da",
+  "info": "#bc4c00",
+  "success": "#1a7f37",
+  "destructive": "#cf222e",
   "dark": {
     "background": "#0d1117",
     "foreground": "#c9d1d9",
+    "paper": "#161b22",
+    "navigator": "#090d13",
+    "input": "#0d1117",
+    "popover": "#1c2128",
+    "popoverSolid": "#1c2128",
     "accent": "#69b1ff",
     "info": "#ffa359",
     "success": "#5ecc71",
-    "destructive": "#ff678d"
+    "destructive": "#ff7b72"
   }
 }

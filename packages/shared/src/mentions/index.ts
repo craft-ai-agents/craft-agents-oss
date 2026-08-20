@@ -9,6 +9,7 @@
  * - Sources: [source:slug]
  * - Files:   [file:path]
  * - Folders: [folder:path]
+ * - Knowledge: [knowledge:siyuan/block/<id>] (compact: [knowledge:block/<id>])
  */
 
 // Simple path join that works in both Node and browser contexts.
@@ -27,6 +28,36 @@ function joinPath(base: string, relative: string): string {
 export const WS_ID_CHARS = '[\\w .-]'
 
 // ============================================================================
+// Knowledge mentions (spec K-03 §3.1/§3.5.2)
+// ============================================================================
+
+/**
+ * Default provider scheme assumed by the compact form [knowledge:block/<id>].
+ * MVP: exactly one connection (SiYuan), so the compact form resolves here.
+ */
+export const DEFAULT_KNOWLEDGE_PROVIDER = 'siyuan'
+
+/**
+ * Grammar for knowledge mention tokens:
+ *   [knowledge:siyuan/block/<id>] — full form (provider/kind/id)
+ *   [knowledge:block/<id>]        — compact form, provider defaults to DEFAULT_KNOWLEDGE_PROVIDER
+ * Capture groups: 1 = provider (optional), 2 = kind, 3 = id.
+ *
+ * The /g flag makes instances stateful (lastIndex) — never exec/test with this
+ * const directly; construct a fresh RegExp per use, as the other matchers do.
+ */
+export const KNOWLEDGE_MENTION_PATTERN =
+  /\[knowledge:(?:([a-z][a-z0-9-]*)\/)?(notebook|document|block|database|asset)\/([^\]\s]+)\]/g
+
+/**
+ * Serialize parsed knowledge mention parts to canonical provider form 'siyuan/<kind>/<id>'
+ * (the string stored in ParsedMentions.knowledge).
+ */
+export function serializeKnowledgeRef(provider: string | undefined, kind: string, id: string): string {
+  return `${provider || DEFAULT_KNOWLEDGE_PROVIDER}/${kind}/${id}`
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -41,6 +72,8 @@ export interface ParsedMentions {
   files: string[]
   /** Folder paths mentioned via [folder:path] */
   folders: string[]
+  /** Serialized knowledge refs ('siyuan/<kind>/<id>') mentioned via [knowledge:...] */
+  knowledge: string[]
 }
 
 // ============================================================================
@@ -70,6 +103,7 @@ export function parseMentions(
     sources: [],
     files: [],
     folders: [],
+    knowledge: [],
   }
 
   // Match source mentions: [source:slug]
@@ -117,6 +151,16 @@ export function parseMentions(
     }
   }
 
+  // Match knowledge mentions: [knowledge:siyuan/kind/id] or compact [knowledge:kind/id].
+  // No available-list validation — knowledge tokens are self-contained refs.
+  const knowledgePattern = new RegExp(KNOWLEDGE_MENTION_PATTERN.source, 'g')
+  while ((match = knowledgePattern.exec(text)) !== null) {
+    const serialized = serializeKnowledgeRef(match[1], match[2]!, match[3]!)
+    if (!result.knowledge.includes(serialized)) {
+      result.knowledge.push(serialized)
+    }
+  }
+
   return result
 }
 
@@ -134,6 +178,9 @@ export function stripAllMentions(text: string): string {
     .replace(/\[source:([\w-]+)\]/g, '$1')
     // Replace [skill:slug] or [skill:workspaceId:slug] with just the slug
     .replace(new RegExp(`\\[skill:(?:${WS_ID_CHARS}+:)?([\\w-]+)\\]`, 'g'), '$1')
+    // Replace [knowledge:...] with the serialized 'siyuan/<kind>/<id>' ref
+    .replace(new RegExp(KNOWLEDGE_MENTION_PATTERN.source, 'g'),
+      (_match, provider: string | undefined, kind: string, id: string) => serializeKnowledgeRef(provider, kind, id))
     // Note: [file:...] and [folder:...] are NOT stripped — they are content
     // that gets resolved to absolute paths by resolveFileMentions().
     .replace(/\s+/g, ' ')
@@ -175,6 +222,21 @@ export function resolveSourceMentions(text: string): string {
   return text.replace(
     /\[source:([\w-]+)\]/g,
     (_match, slug: string) => `[Mentioned source: ${slug}]`
+  )
+}
+
+/**
+ * Resolve knowledge mentions to semantic markers.
+ *
+ * [knowledge:siyuan/block/20240101120000-abcde] → [Knowledge: block 20240101120000-abcde]
+ * [knowledge:block/20240101120000-abcde]        → [Knowledge: block 20240101120000-abcde] (compact form, default provider)
+ *
+ * @param text - The message text with knowledge mentions
+ */
+export function resolveKnowledgeMentions(text: string): string {
+  return text.replace(
+    new RegExp(KNOWLEDGE_MENTION_PATTERN.source, 'g'),
+    (_match, _provider: string | undefined, kind: string, id: string) => `[Knowledge: ${kind} ${id}]`
   )
 }
 

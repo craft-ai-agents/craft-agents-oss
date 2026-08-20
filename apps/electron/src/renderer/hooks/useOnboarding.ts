@@ -9,23 +9,49 @@
  * 4. Credentials (API Key or Claude OAuth)
  * 5. Complete
  */
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import type {
   OnboardingState,
   OnboardingStep,
   ApiSetupMethod,
+  RoxConnectCodes,
 } from '@/components/onboarding'
 import type { ProviderChoice } from '@/components/onboarding/ProviderSelectStep'
 import type { LocalModelSubmitData } from '@/components/onboarding/LocalModelStep'
-import type { ApiKeySubmitData } from '@/components/apisetup'
+import type { ApiKeySubmitData, CustomEndpointModelInput } from '@/components/apisetup'
 import type { CustomEndpointConfig } from '@config/llm-connections'
 import type { SetupNeeds, LlmConnectionSetup, ClaudeOAuthIdentityDto } from '../../shared/types'
+import { cancelOnboardingOAuth, isProviderManagedOAuthMethod } from './oauth-cancel'
+
+/**
+ * Identifies how the setup surface was opened. Existing callers are explicit
+ * user actions by default; startup code must opt in before it can honor a
+ * server-requested launch gate.
+ */
+export type OnboardingEntryPoint = 'explicit' | 'startup'
+
+/**
+ * A setup recommendation must never become a startup gate by itself.
+ *
+ * Older server payloads omit the flag, which intentionally remains non-blocking.
+ */
+export function shouldApplyOnboardingLaunchGate(
+  entryPoint: OnboardingEntryPoint,
+  setupNeeds?: Pick<SetupNeeds, 'shouldShowOnboardingOnLaunch'>,
+): boolean {
+  return entryPoint === 'startup' && setupNeeds?.shouldShowOnboardingOnLaunch === true
+}
 
 interface UseOnboardingOptions {
   /** Called when onboarding is complete */
   onComplete: () => void
   /** Initial setup needs from auth state check */
   initialSetupNeeds?: SetupNeeds
+  /**
+   * Where the wizard was opened. Defaults to an explicit user action, so
+   * setup state alone cannot begin a credential, billing, or OAuth flow.
+   */
+  entryPoint?: OnboardingEntryPoint
   /** Start the wizard at a specific step (default: 'welcome') */
   initialStep?: OnboardingStep
   /** Pre-select an API setup method (useful when editing an existing connection) */
@@ -64,11 +90,20 @@ interface UseOnboardingReturn {
 
   // Claude OAuth (two-step flow)
   isWaitingForCode: boolean
+  isProviderOAuthPending: boolean
   handleSubmitAuthCode: (code: string) => void
   handleCancelOAuth: () => void
 
   // Copilot device code (displayed during device flow)
   copilotDeviceCode?: { userCode: string; verificationUri: string }
+
+  // Rox cloud Connect
+  roxConnectCodes: RoxConnectCodes | null
+  roxConnectStatus: 'idle' | 'starting' | 'waiting' | 'success' | 'error'
+  roxConnectError?: string
+  roxAuthBaseUrl: string
+  handleStartRoxConnect: () => void
+  handleOpenRoxConnectBrowser: () => void
 
   // Git Bash (Windows)
   handleBrowseGitBash: () => Promise<string | null>
@@ -140,7 +175,7 @@ export function apiSetupMethodToConnectionSetup(
     credential?: string
     baseUrl?: string
     connectionDefaultModel?: string
-    models?: string[]
+    models?: CustomEndpointModelInput[]
     piAuthProvider?: string
     modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
     customEndpoint?: CustomEndpointConfig
@@ -196,6 +231,7 @@ export function apiSetupMethodToConnectionSetup(
 export function useOnboarding({
   onComplete,
   initialSetupNeeds,
+  entryPoint = 'explicit',
   initialStep = 'provider-select',
   initialApiSetupMethod,
   onDismiss,
@@ -203,6 +239,8 @@ export function useOnboarding({
   editingSlug = null,
   existingSlugs = new Set(),
 }: UseOnboardingOptions): UseOnboardingReturn {
+  const shouldApplyStartupGate = shouldApplyOnboardingLaunchGate(entryPoint, initialSetupNeeds)
+
   // Main wizard state
   const [state, setState] = useState<OnboardingState>({
     step: initialStep,
@@ -215,6 +253,14 @@ export function useOnboarding({
     isRecheckingGitBash: false,
     isCheckingGitBash: true, // Start as true until check completes
   })
+
+  // A cloud connection is optional unless the startup caller and server both
+  // explicitly request a launch gate.
+  useEffect(() => {
+    if (shouldApplyStartupGate && initialSetupNeeds?.needsRoxCloud) {
+      setState(s => (s.step === 'rox-connect' ? s : { ...s, step: 'rox-connect' }))
+    }
+  }, [initialSetupNeeds?.needsRoxCloud, shouldApplyStartupGate])
 
   // Check Git Bash on Windows at mount. If missing, redirect to git-bash step
   // regardless of the initial step (provider-select skips the welcome gate).
@@ -247,7 +293,7 @@ export function useOnboarding({
     options?: {
       baseUrl?: string
       connectionDefaultModel?: string
-      models?: string[]
+      models?: CustomEndpointModelInput[]
       piAuthProvider?: string
       modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
       customEndpoint?: CustomEndpointConfig
@@ -319,12 +365,19 @@ export function useOnboarding({
         break
 
       case 'welcome':
-        // On Windows, check if Git Bash is needed
-        if (state.gitBashStatus?.platform === 'win32' && !state.gitBashStatus?.found) {
+        // A cloud connection only gates a startup flow when the server has
+        // explicitly requested it. Direct settings/onboarding actions stay optional.
+        if (shouldApplyStartupGate && initialSetupNeeds?.needsRoxCloud) {
+          setState(s => ({ ...s, step: 'rox-connect' }))
+        } else if (state.gitBashStatus?.platform === 'win32' && !state.gitBashStatus?.found) {
           setState(s => ({ ...s, step: 'git-bash' }))
         } else {
           setState(s => ({ ...s, step: 'provider-select' }))
         }
+        break
+
+      case 'rox-connect':
+        // Advancement handled by poll success in handleStartRoxConnect
         break
 
       case 'git-bash':
@@ -343,7 +396,7 @@ export function useOnboarding({
         onComplete()
         break
     }
-  }, [state.step, state.gitBashStatus, state.apiSetupMethod, onComplete])
+  }, [state.step, state.gitBashStatus, state.apiSetupMethod, onComplete, initialSetupNeeds?.needsRoxCloud, shouldApplyStartupGate])
 
   // Go back to previous step. If at the initial step, call onDismiss instead.
   const handleBack = useCallback(() => {
@@ -456,7 +509,7 @@ export function useOnboarding({
         provider: setupTestProvider,
         apiKey: data.apiKey,
         baseUrl: data.baseUrl,
-        model: data.models?.[0],
+        model: data.models?.[0] ? (typeof data.models[0] === 'string' ? data.models[0] : data.models[0].id) : undefined,
         piAuthProvider: data.piAuthProvider,
         customEndpoint: data.customEndpoint,
       })
@@ -521,9 +574,93 @@ export function useOnboarding({
 
   // Two-step OAuth flow state
   const [isWaitingForCode, setIsWaitingForCode] = useState(false)
+  const [activeProviderOAuthMethod, setActiveProviderOAuthMethod] = useState<ApiSetupMethod | null>(null)
+  const oauthAttemptIdRef = useRef(0)
+  const cancelledOAuthAttemptIdRef = useRef<number | null>(null)
 
   // Copilot device code (displayed during device flow)
   const [copilotDeviceCode, setCopilotDeviceCode] = useState<{ userCode: string; verificationUri: string } | undefined>()
+
+  // Rox cloud Connect (rox.one device flow)
+  const [roxConnectCodes, setRoxConnectCodes] = useState<RoxConnectCodes | null>(null)
+  const [roxConnectStatus, setRoxConnectStatus] = useState<'idle' | 'starting' | 'waiting' | 'success' | 'error'>('idle')
+  const [roxConnectError, setRoxConnectError] = useState<string | undefined>()
+  const [roxAuthBaseUrl, setRoxAuthBaseUrl] = useState('https://rox.one')
+  const roxPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (roxPollRef.current) clearInterval(roxPollRef.current)
+    }
+  }, [])
+
+  const handleStartRoxConnect = useCallback(async () => {
+    setRoxConnectStatus('starting')
+    setRoxConnectError(undefined)
+    try {
+      const result = await window.electronAPI.startRoxConnect()
+      if (!result?.success || !result.userCode || !result.verificationUri || !result.verificationUriComplete) {
+        setRoxConnectStatus('error')
+        setRoxConnectError(result?.error || 'Failed to start Rox Connect')
+        return
+      }
+      const userCode = result.userCode
+      const verificationUri = result.verificationUri
+      const verificationUriComplete = result.verificationUriComplete
+      if (!userCode || !verificationUri || !verificationUriComplete) {
+        setRoxConnectStatus('error')
+        setRoxConnectError('Rox Connect returned an incomplete device payload')
+        return
+      }
+      setRoxConnectCodes({
+        userCode,
+        verificationUri,
+        verificationUriComplete,
+      })
+      try {
+        const st = await window.electronAPI.getRoxCloudState()
+        if (st?.authBaseUrl) setRoxAuthBaseUrl(st.authBaseUrl)
+      } catch { /* ignore */ }
+      setRoxConnectStatus('waiting')
+      // open browser
+      if (result.verificationUriComplete) {
+        await window.electronAPI.openUrl(result.verificationUriComplete)
+      }
+      // poll cloud state until connected
+      if (roxPollRef.current) clearInterval(roxPollRef.current)
+      roxPollRef.current = setInterval(async () => {
+        try {
+          const st = await window.electronAPI.getRoxCloudState()
+          if (st?.connected) {
+            if (roxPollRef.current) clearInterval(roxPollRef.current)
+            setRoxConnectStatus('success')
+            // advance to provider setup
+            setTimeout(() => {
+              setState(s => {
+                if (s.gitBashStatus?.platform === 'win32' && !s.gitBashStatus?.found) {
+                  return { ...s, step: 'git-bash' }
+                }
+                return { ...s, step: 'provider-select' }
+              })
+            }, 400)
+          }
+        } catch {
+          // keep waiting
+        }
+      }, 2000)
+    } catch (err) {
+      setRoxConnectStatus('error')
+      setRoxConnectError(err instanceof Error ? err.message : 'Connect failed')
+    }
+  }, [])
+
+  const handleOpenRoxConnectBrowser = useCallback(async () => {
+    const uri = roxConnectCodes?.verificationUriComplete
+    if (uri) {
+      await window.electronAPI.openUrl(uri)
+    }
+  }, [roxConnectCodes])
+
 
   // Start OAuth flow (Claude or ChatGPT depending on selected method)
   const handleStartOAuth = useCallback(async (methodOverride?: ApiSetupMethod, connectionSlugOverride?: string) => {
@@ -553,25 +690,36 @@ export function useOnboarding({
     try {
       // ChatGPT OAuth (single-step flow - opens browser, captures tokens automatically)
       if (effectiveMethod === 'pi_chatgpt_oauth') {
+        const attemptId = ++oauthAttemptIdRef.current
+        cancelledOAuthAttemptIdRef.current = null
+        setActiveProviderOAuthMethod(effectiveMethod)
         const effectiveEditingSlug = connectionSlugOverride ?? editingSlug
         const isReauth = !!effectiveEditingSlug
         const connectionSlug = apiSetupMethodToConnectionSetup(effectiveMethod, {}, effectiveEditingSlug, existingSlugs).slug
-        const result = await window.electronAPI.startChatGptOAuth(connectionSlug)
+        try {
+          const result = await window.electronAPI.startChatGptOAuth(connectionSlug)
+          if (attemptId !== oauthAttemptIdRef.current || cancelledOAuthAttemptIdRef.current === attemptId) return
 
-        if (result.success) {
-          await saveAndValidateConnection(connectionSlug, effectiveMethod, undefined, isReauth)
-        } else {
-          setState(s => ({
-            ...s,
-            credentialStatus: 'error',
-            errorMessage: result.error || 'ChatGPT authentication failed',
-          }))
+          if (result.success) {
+            await saveAndValidateConnection(connectionSlug, effectiveMethod, undefined, isReauth)
+          } else {
+            setState(s => ({
+              ...s,
+              credentialStatus: 'error',
+              errorMessage: result.error || 'ChatGPT authentication failed',
+            }))
+          }
+        } finally {
+          setActiveProviderOAuthMethod(current => current === effectiveMethod ? null : current)
         }
         return
       }
 
       // Copilot OAuth (device flow — polls for token after user enters code on GitHub)
       if (effectiveMethod === 'pi_copilot_oauth') {
+        const attemptId = ++oauthAttemptIdRef.current
+        cancelledOAuthAttemptIdRef.current = null
+        setActiveProviderOAuthMethod(effectiveMethod)
         const effectiveEditingSlug = connectionSlugOverride ?? editingSlug
         const isReauth = !!effectiveEditingSlug
         const connectionSlug = apiSetupMethodToConnectionSetup(effectiveMethod, {}, effectiveEditingSlug, existingSlugs).slug
@@ -583,6 +731,7 @@ export function useOnboarding({
 
         try {
           const result = await window.electronAPI.startCopilotOAuth(connectionSlug)
+          if (attemptId !== oauthAttemptIdRef.current || cancelledOAuthAttemptIdRef.current === attemptId) return
 
           if (result.success) {
             await saveAndValidateConnection(connectionSlug, effectiveMethod, undefined, isReauth)
@@ -594,6 +743,7 @@ export function useOnboarding({
             }))
           }
         } finally {
+          setActiveProviderOAuthMethod(current => current === effectiveMethod ? null : current)
           cleanup()
           setCopilotDeviceCode(undefined)
         }
@@ -635,7 +785,7 @@ export function useOnboarding({
 
   // Map ProviderChoice → ApiSetupMethod and navigate to the right step
   const handleSelectProvider = useCallback((choice: ProviderChoice) => {
-    const CHOICE_TO_METHOD: Record<Exclude<ProviderChoice, 'local'>, ApiSetupMethod> = {
+    const CHOICE_TO_METHOD: Record<Exclude<ProviderChoice, 'local' | 'omp'>, ApiSetupMethod> = {
       claude: 'claude_oauth',
       chatgpt: 'pi_chatgpt_oauth',
       copilot: 'pi_copilot_oauth',
@@ -645,6 +795,38 @@ export function useOnboarding({
     if (choice === 'local') {
       // Local uses anthropic_api_key with custom endpoint (Ollama doesn't need an API key)
       setState(s => ({ ...s, step: 'local-model', apiSetupMethod: 'anthropic_api_key', credentialStatus: 'idle', errorMessage: undefined }))
+      return
+    }
+
+    if (choice === 'omp') {
+      // OMP (oh-my-pi) backend runs via the local `omp` CLI and reads its own
+      // auth from ~/.omp/agent — no craft-side credentials needed. Create the
+      // connection directly and go straight to completion.
+      void (async () => {
+        setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined, completionStatus: 'saving' }))
+        let slug = 'omp'
+        let n = 2
+        while (existingSlugs.has(slug)) slug = `omp-${n++}`
+        const result = await window.electronAPI.setupLlmConnection({
+          slug,
+          name: 'OMP (oh-my-pi)',
+          providerType: 'omp',
+        })
+        if (!result.success) {
+          setState(s => ({ ...s, credentialStatus: 'error', errorMessage: result.error || 'Failed to create OMP connection' }))
+          return
+        }
+        const testResult = await window.electronAPI.testLlmConnection(slug)
+        if (testResult.success) {
+          setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
+        } else {
+          setState(s => ({
+            ...s,
+            credentialStatus: 'error',
+            errorMessage: testResult.error || 'OMP connection test failed — check `omp` CLI and its model config',
+          }))
+        }
+      })()
       return
     }
 
@@ -729,11 +911,15 @@ export function useOnboarding({
 
   // Cancel OAuth flow
   const handleCancelOAuth = useCallback(async () => {
+    cancelledOAuthAttemptIdRef.current = oauthAttemptIdRef.current
+    const methodToCancel = isWaitingForCode ? 'claude_oauth' : activeProviderOAuthMethod
+
     setIsWaitingForCode(false)
+    setActiveProviderOAuthMethod(null)
+    setCopilotDeviceCode(undefined)
     setState(s => ({ ...s, credentialStatus: 'idle', errorMessage: undefined }))
-    // Clear OAuth state on backend
-    await window.electronAPI.clearClaudeOAuthState()
-  }, [])
+    await cancelOnboardingOAuth(methodToCancel, window.electronAPI)
+  }, [activeProviderOAuthMethod, isWaitingForCode])
 
   // Git Bash handlers (Windows only)
   const handleBrowseGitBash = useCallback(async () => {
@@ -795,6 +981,9 @@ export function useOnboarding({
 
   // Cancel onboarding
   const handleCancel = useCallback(() => {
+    setActiveProviderOAuthMethod(null)
+    setIsWaitingForCode(false)
+    setCopilotDeviceCode(undefined)
     setState(s => ({ ...s, step: 'welcome' }))
   }, [])
 
@@ -811,6 +1000,10 @@ export function useOnboarding({
 
   // Reset onboarding to initial state (used after logout or modal close)
   const reset = useCallback(() => {
+    const methodToCancel = isWaitingForCode ? 'claude_oauth' : activeProviderOAuthMethod
+    cancelOnboardingOAuth(methodToCancel, window.electronAPI).catch(() => {
+      // Ignore cleanup errors during reset.
+    })
     setState({
       step: initialStep,
       loginStatus: 'idle',
@@ -821,11 +1014,13 @@ export function useOnboarding({
       errorMessage: undefined,
     })
     setIsWaitingForCode(false)
+    setActiveProviderOAuthMethod(null)
+    setCopilotDeviceCode(undefined)
     // Clean up any pending OAuth state
     window.electronAPI.clearClaudeOAuthState().catch(() => {
       // Ignore errors - state may not exist
     })
-  }, [initialStep, initialApiSetupMethod])
+  }, [activeProviderOAuthMethod, initialStep, initialApiSetupMethod, isWaitingForCode])
 
   return {
     state,
@@ -838,10 +1033,17 @@ export function useOnboarding({
     handleStartOAuth,
     // Two-step OAuth flow
     isWaitingForCode,
+    isProviderOAuthPending: isProviderManagedOAuthMethod(activeProviderOAuthMethod),
     handleSubmitAuthCode,
     handleCancelOAuth,
     // Copilot device code
     copilotDeviceCode,
+    roxConnectCodes,
+    roxConnectStatus,
+    roxConnectError,
+    roxAuthBaseUrl,
+    handleStartRoxConnect,
+    handleOpenRoxConnectBrowser,
     // Git Bash (Windows)
     handleBrowseGitBash,
     handleUseGitBashPath,

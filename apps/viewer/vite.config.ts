@@ -15,6 +15,11 @@ export default defineConfig({
       // Ensure all React imports resolve to the hoisted root node_modules
       'react': resolve(__dirname, '../../node_modules/react'),
       'react-dom': resolve(__dirname, '../../node_modules/react-dom'),
+      // Viewer is browser-only; core identity store pulls node:os via ui deps.
+      'node:fs': resolve(__dirname, './src/shims/empty-node.ts'),
+      'node:path': resolve(__dirname, './src/shims/empty-node.ts'),
+      'node:os': resolve(__dirname, './src/shims/empty-node.ts'),
+      'node:crypto': resolve(__dirname, './src/shims/empty-node.ts'),
     },
     dedupe: ['react', 'react-dom'],
   },

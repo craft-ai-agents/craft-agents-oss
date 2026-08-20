@@ -2,51 +2,29 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { ArrowLeft, CheckCircle, XCircle, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { slugify } from "@/lib/slugify"
+import { prepareRemoteWorkspace } from "./remote-workspace-create"
 import { Input } from "../ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
 import { AddWorkspaceContainer, AddWorkspaceStepHeader, AddWorkspacePrimaryButton, AddWorkspaceSecondaryButton } from "./primitives"
 
 const CREATE_NEW_VALUE = '__create_new__'
 
+
 interface AddWorkspaceStep_ConnectRemoteProps {
   onBack: () => void
-  onCreate: (folderPath: string, name: string, remoteServer: { url: string; token: string; remoteWorkspaceId: string }) => Promise<void>
+  onCreate: (folderPath: string, name: string, remoteServer: { url: string; token: string; remoteWorkspaceId: string; sshHostId?: string }) => Promise<void>
   isCreating: boolean
   /** Pre-fill the server URL (for reconnect flow) */
   initialUrl?: string
   /** Pre-fill the token (for reconnect flow) */
   initialToken?: string
+  /** Durable SSH host id, set when reconnecting an SSH-backed workspace (persisted
+   * so restarts resolve a fresh tunnel instead of dialing the ephemeral url). */
+  sshHostId?: string
   /** When set, updating an existing workspace's remote config instead of creating */
   reconnectWorkspace?: { id: string; name: string; remoteWorkspaceId: string }
   /** Called when reconnect updates the remote server config */
   onUpdate?: (workspaceId: string, remoteServer: { url: string; token: string; remoteWorkspaceId: string }) => Promise<void>
-}
-
-/**
- * Resolve a unique local workspace slug by appending suffixes if needed.
- * Tries: baseName → baseName-remote → baseName-2 → baseName-3 → ...
- */
-async function resolveUniqueSlug(baseName: string): Promise<{ slug: string; path: string }> {
-  const baseSlug = slugify(baseName)
-  if (!baseSlug) return { slug: 'remote', path: '' }
-
-  let slug = baseSlug
-  let attempt = 0
-
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const result = await window.electronAPI.checkWorkspaceSlug(slug)
-    if (!result.exists) {
-      return { slug, path: result.path }
-    }
-    attempt++
-    slug = attempt === 1 ? `${baseSlug}-remote` : `${baseSlug}-${attempt}`
-    if (attempt > 20) {
-      // Safety valve — shouldn't happen in practice
-      return { slug: `${baseSlug}-${Date.now()}`, path: result.path.replace(baseSlug, `${baseSlug}-${Date.now()}`) }
-    }
-  }
 }
 
 /**
@@ -62,6 +40,7 @@ export function AddWorkspaceStep_ConnectRemote({
   isCreating,
   initialUrl,
   initialToken,
+  sshHostId,
   reconnectWorkspace,
   onUpdate,
 }: AddWorkspaceStep_ConnectRemoteProps) {
@@ -147,7 +126,6 @@ export function AddWorkspaceStep_ConnectRemote({
     }
 
     if (!homeDir) return
-    const defaultBasePath = `${homeDir}/.craft-agent/workspaces`
 
     if (isCreateNew || isFreshServer) {
       // Create new workspace on remote server via direct RPC, then connect locally
@@ -155,13 +133,8 @@ export function AddWorkspaceStep_ConnectRemote({
       if (!name) return
 
       try {
-        const created = await window.electronAPI.invokeOnServer(
-          serverUrl, token, 'server:createWorkspace', name
-        ) as { id: string; name: string }
-
-        const { slug, path } = await resolveUniqueSlug(name)
-        const finalPath = path || `${defaultBasePath}/${slug}`
-        await onCreate(finalPath, name, { url: serverUrl, token, remoteWorkspaceId: created.id })
+        const prepared = await prepareRemoteWorkspace({ url: serverUrl, token, name, homeDir, sshHostId })
+        await onCreate(prepared.folderPath, prepared.name, prepared.remoteServer)
       } catch (err) {
         setTestState('error')
         setTestError(err instanceof Error ? err.message : 'Failed to create workspace on remote server')
@@ -169,11 +142,17 @@ export function AddWorkspaceStep_ConnectRemote({
       }
     } else if (selectedWorkspace) {
       // Connect to existing workspace — auto-resolve local slug
-      const { slug, path } = await resolveUniqueSlug(selectedWorkspace.name)
-      const finalPath = path || `${defaultBasePath}/${slug}`
-      await onCreate(finalPath, selectedWorkspace.name, { url: serverUrl, token, remoteWorkspaceId: selectedWorkspace.id })
+      const prepared = await prepareRemoteWorkspace({
+        url: serverUrl,
+        token,
+        name: selectedWorkspace.name,
+        homeDir,
+        remoteWorkspaceId: selectedWorkspace.id,
+        sshHostId,
+      })
+      await onCreate(prepared.folderPath, prepared.name, prepared.remoteServer)
     }
-  }, [serverUrl, token, homeDir, isCreateNew, isFreshServer, newWorkspaceName, selectedWorkspace, onCreate, isReconnectMode, onUpdate, reconnectWorkspace])
+  }, [serverUrl, token, homeDir, isCreateNew, isFreshServer, newWorkspaceName, selectedWorkspace, onCreate, isReconnectMode, onUpdate, reconnectWorkspace, sshHostId])
 
   const canConnect = testState === 'ok' && !isCreating && (
     isReconnectMode ? true :

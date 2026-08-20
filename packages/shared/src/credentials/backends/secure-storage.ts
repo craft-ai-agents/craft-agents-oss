@@ -28,21 +28,36 @@ import {
   createCipheriv,
   createDecipheriv,
   randomBytes,
+  randomUUID,
   pbkdf2Sync,
   createHash,
 } from 'crypto';
 import { execSync } from 'child_process';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from 'fs';
 import { hostname, userInfo, homedir } from 'os';
 import { join, dirname } from 'path';
 
-import type { CredentialBackend } from './types.ts';
+import type {
+  CredentialBackend,
+  CredentialMigrationBackend,
+  CredentialMigrationRecord,
+  CredentialMigrationSnapshot,
+} from './types.ts';
 import type { CredentialId, StoredCredential } from '../types.ts';
 import { credentialIdToAccount, accountToCredentialId } from '../types.ts';
+import { CONFIG_DIR } from '../../config/paths.ts';
 
-// File location
-const CREDENTIALS_DIR = join(homedir(), '.craft-agent');
-const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.enc');
+const CREDENTIALS_FILE_NAME = 'credentials.enc';
 
 // File format constants
 const MAGIC_BYTES = Buffer.from('CRAFT01\0');
@@ -108,13 +123,47 @@ interface CredentialStore {
   };
 }
 
-export class SecureStorageBackend implements CredentialBackend {
+interface CredentialMigrationManifest {
+  migrationId: string;
+  createdAt: number;
+  sourceChecksum: string;
+  state: 'snapshot' | 'applied' | 'rolled_back';
+  appliedChecksum?: string;
+}
+
+function isCredentialMigrationManifest(value: unknown): value is CredentialMigrationManifest {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  if (!('migrationId' in value) || !('createdAt' in value) || !('sourceChecksum' in value) || !('state' in value)) {
+    return false;
+  }
+  return (
+    typeof value.migrationId === 'string' &&
+    typeof value.createdAt === 'number' &&
+    typeof value.sourceChecksum === 'string' &&
+    (value.state === 'snapshot' || value.state === 'applied' || value.state === 'rolled_back') &&
+    (!('appliedChecksum' in value) || typeof value.appliedChecksum === 'string')
+  );
+}
+
+
+export class SecureStorageBackend implements CredentialMigrationBackend {
   readonly name = 'secure-storage';
   readonly priority = 100;
 
+  private readonly credentialsDir: string;
+  private readonly credentialsFile: string;
+  private readonly migrationsDir: string;
+  private readonly quarantineDir: string;
   private cachedStore: CredentialStore | null = null;
   private encryptionKey: Buffer | null = null;
   private salt: Buffer | null = null;
+
+  constructor(configDir = CONFIG_DIR) {
+    this.credentialsDir = configDir;
+    this.credentialsFile = join(configDir, CREDENTIALS_FILE_NAME);
+    this.migrationsDir = join(configDir, 'credential-migrations');
+    this.quarantineDir = join(configDir, 'credential-quarantine');
+  }
 
   async isAvailable(): Promise<boolean> {
     // File backend is always available - we can always write to filesystem
@@ -187,6 +236,77 @@ export class SecureStorageBackend implements CredentialBackend {
     });
   }
 
+  async createMigrationSnapshot(): Promise<CredentialMigrationSnapshot> {
+    if (!existsSync(this.credentialsFile)) {
+      throw new Error('Credential migration source is unavailable');
+    }
+
+    const source = readFileSync(this.credentialsFile);
+    const snapshot: CredentialMigrationSnapshot = {
+      migrationId: `credential-migration-${randomUUID()}`,
+      createdAt: Date.now(),
+      sourceChecksum: this.checksum(source),
+    };
+    const snapshotDir = this.snapshotDir(snapshot.migrationId);
+    mkdirSync(this.migrationsDir, { recursive: true, mode: 0o700 });
+    chmodSync(this.migrationsDir, 0o700);
+    mkdirSync(snapshotDir, { mode: 0o700 });
+    this.writePrivateFile(join(snapshotDir, CREDENTIALS_FILE_NAME), source);
+    this.writeManifest(snapshotDir, {
+      migrationId: snapshot.migrationId,
+      createdAt: snapshot.createdAt,
+      sourceChecksum: snapshot.sourceChecksum,
+      state: 'snapshot',
+    });
+    return snapshot;
+  }
+
+  async applyMigration(
+    snapshot: CredentialMigrationSnapshot,
+    replacements: readonly CredentialMigrationRecord[],
+  ): Promise<void> {
+    this.readSnapshot(snapshot);
+    if (this.checksum(readFileSync(this.credentialsFile)) !== snapshot.sourceChecksum) {
+      throw new Error('Credential migration source changed');
+    }
+
+    this.clearCache();
+    const store = this.loadStoreSync();
+    if (!store) throw new Error('Credential migration source is unavailable');
+
+    const keys = new Set<string>();
+    for (const replacement of replacements) {
+      const key = credentialIdToAccount(replacement.id);
+      if (keys.has(key) || !(key in store.credentials)) {
+        throw new Error('Credential migration replacement is invalid');
+      }
+      keys.add(key);
+    }
+    if (keys.size === 0) return;
+
+    for (const replacement of replacements) {
+      store.credentials[credentialIdToAccount(replacement.id)] = replacement.credential;
+    }
+    store.metadata.updatedAt = Date.now();
+    this.saveStoreSync(store);
+    this.setSnapshotState(snapshot, 'applied', this.checksum(readFileSync(this.credentialsFile)));
+  }
+
+  async rollbackMigration(snapshot: CredentialMigrationSnapshot): Promise<void> {
+    const { backup, manifest } = this.readSnapshot(snapshot);
+    if (
+      manifest.state !== 'applied' ||
+      !manifest.appliedChecksum ||
+      !existsSync(this.credentialsFile) ||
+      this.checksum(readFileSync(this.credentialsFile)) !== manifest.appliedChecksum
+    ) {
+      throw new Error('Credential migration source changed');
+    }
+    this.writePrivateFile(this.credentialsFile, backup);
+    this.clearCache();
+    this.setSnapshotState(snapshot, 'rolled_back');
+  }
+
   // ============================================================
   // Private Methods
   // ============================================================
@@ -199,18 +319,16 @@ export class SecureStorageBackend implements CredentialBackend {
     // Return cached store if available
     if (this.cachedStore) return this.cachedStore;
 
-    if (!existsSync(CREDENTIALS_FILE)) return null;
+    if (!existsSync(this.credentialsFile)) return null;
 
     let fileData: Buffer;
     try {
-      fileData = readFileSync(CREDENTIALS_FILE);
+      fileData = readFileSync(this.credentialsFile);
     } catch {
       return null;
     }
 
-    // Validate minimum size
     if (fileData.length < HEADER_SIZE + IV_SIZE + AUTH_TAG_SIZE) {
-      // File is corrupted, delete and return null
       this.handleCorruptedFile();
       return null;
     }
@@ -279,9 +397,8 @@ export class SecureStorageBackend implements CredentialBackend {
   }
 
   private saveStoreSync(store: CredentialStore): void {
-    // Ensure directory exists
-    if (!existsSync(CREDENTIALS_DIR)) {
-      mkdirSync(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });
+    if (!existsSync(this.credentialsDir)) {
+      mkdirSync(this.credentialsDir, { recursive: true, mode: 0o700 });
     }
 
     // Use existing salt or generate new one
@@ -311,9 +428,93 @@ export class SecureStorageBackend implements CredentialBackend {
     // Combine all parts
     const fileData = Buffer.concat([header, iv, authTag, ciphertext]);
 
-    // Write with restrictive permissions (owner read/write only)
-    writeFileSync(CREDENTIALS_FILE, fileData, { mode: 0o600 });
+    this.writePrivateFile(this.credentialsFile, fileData);
     this.cachedStore = store;
+  }
+
+  private checksum(value: Buffer): string {
+    return createHash('sha256').update(value).digest('hex');
+  }
+
+  private snapshotDir(migrationId: string): string {
+    if (!/^credential-migration-[0-9a-f-]{36}$/i.test(migrationId)) {
+      throw new Error('Credential migration snapshot is invalid');
+    }
+    return join(this.migrationsDir, migrationId);
+  }
+
+  private readSnapshot(snapshot: CredentialMigrationSnapshot): {
+    backup: Buffer;
+    manifest: CredentialMigrationManifest;
+  } {
+    const snapshotDir = this.snapshotDir(snapshot.migrationId);
+    const manifestPath = join(snapshotDir, 'manifest.json');
+    const backupPath = join(snapshotDir, CREDENTIALS_FILE_NAME);
+    let manifest: CredentialMigrationManifest;
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
+      if (!isCredentialMigrationManifest(parsed)) throw new Error('invalid manifest');
+      manifest = parsed;
+    } catch {
+      throw new Error('Credential migration snapshot is unavailable');
+    }
+    if (
+      manifest.migrationId !== snapshot.migrationId ||
+      manifest.createdAt !== snapshot.createdAt ||
+      manifest.sourceChecksum !== snapshot.sourceChecksum
+    ) {
+      throw new Error('Credential migration snapshot is invalid');
+    }
+    let backup: Buffer;
+    try {
+      backup = readFileSync(backupPath);
+    } catch {
+      throw new Error('Credential migration snapshot is unavailable');
+    }
+    if (this.checksum(backup) !== snapshot.sourceChecksum) {
+      throw new Error('Credential migration snapshot is invalid');
+    }
+    return { backup, manifest };
+  }
+
+  private setSnapshotState(
+    snapshot: CredentialMigrationSnapshot,
+    state: CredentialMigrationManifest['state'],
+    appliedChecksum?: string,
+  ): void {
+    const { manifest } = this.readSnapshot(snapshot);
+    this.writeManifest(this.snapshotDir(snapshot.migrationId), {
+      migrationId: snapshot.migrationId,
+      createdAt: snapshot.createdAt,
+      sourceChecksum: snapshot.sourceChecksum,
+      state,
+      appliedChecksum: appliedChecksum ?? manifest.appliedChecksum,
+    });
+  }
+
+  private writeManifest(snapshotDir: string, manifest: CredentialMigrationManifest): void {
+    this.writePrivateFile(join(snapshotDir, 'manifest.json'), Buffer.from(JSON.stringify(manifest), 'utf8'));
+  }
+
+  private writePrivateFile(path: string, data: Buffer): void {
+    const parent = dirname(path);
+    mkdirSync(parent, { recursive: true, mode: 0o700 });
+    chmodSync(parent, 0o700);
+    const temporary = join(parent, `.${randomUUID()}.tmp`);
+    const fd = openSync(temporary, 'wx', 0o600);
+    try {
+      writeFileSync(fd, data);
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    renameSync(temporary, path);
+    const directoryFd = openSync(parent, 'r');
+    try {
+      fsyncSync(directoryFd);
+    } finally {
+      closeSync(directoryFd);
+    }
   }
 
   private getEncryptionKey(salt: Buffer): Buffer {
@@ -348,13 +549,17 @@ export class SecureStorageBackend implements CredentialBackend {
   }
 
   private handleCorruptedFile(): void {
-    // Delete corrupted file - user will need to re-enter credentials
     try {
-      if (existsSync(CREDENTIALS_FILE)) {
-        unlinkSync(CREDENTIALS_FILE);
+      if (existsSync(this.credentialsFile)) {
+        mkdirSync(this.quarantineDir, { recursive: true, mode: 0o700 });
+        chmodSync(this.quarantineDir, 0o700);
+        renameSync(
+          this.credentialsFile,
+          join(this.quarantineDir, `credentials-${Date.now()}-${randomUUID()}.enc`),
+        );
       }
     } catch {
-      // Ignore deletion errors
+      // Preserve the original file when quarantine cannot be completed.
     }
     this.cachedStore = null;
     this.encryptionKey = null;

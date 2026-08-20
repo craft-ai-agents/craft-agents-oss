@@ -18,8 +18,10 @@ import type { ModelDefinition } from '../config/models.ts';
 import { Cron } from 'croner';
 import type { ValidationResult, ValidationIssue } from '../config/validators.ts';
 import type { AutomationsConfig, AutomationsValidationResult } from './types.ts';
+import type { z } from 'zod';
 import { MAX_CONDITION_DEPTH_EXCLUSIVE, CONDITION_DEPTH_WARNING_THRESHOLD } from './conditions-constants.ts';
 
+type ParsedAutomationsConfig = z.output<typeof AutomationsConfigSchema>;
 /**
  * Validate automations config (internal - returns parsed config)
  */
@@ -36,7 +38,7 @@ export function validateAutomationsConfig(content: unknown): AutomationsValidati
 
   const schemaConfig = result.data as AutomationsConfig;
   const semanticErrors: ValidationIssue[] = [];
-  runMatcherSemanticValidations(schemaConfig, AUTOMATIONS_CONFIG_FILE, semanticErrors, []);
+  runMatcherSemanticValidations(result.data, AUTOMATIONS_CONFIG_FILE, semanticErrors, []);
 
   if (semanticErrors.length > 0) {
     const errors = semanticErrors.map((issue) => issue.path ? `${issue.path}: ${issue.message}` : issue.message);
@@ -51,7 +53,7 @@ export function validateAutomationsConfig(content: unknown): AutomationsValidati
  * Shared by both object-based runtime validation and JSON-content validation.
  */
 function runMatcherSemanticValidations(
-  config: AutomationsConfig,
+  config: ParsedAutomationsConfig,
   file: string,
   errors: ValidationIssue[],
   warnings: ValidationIssue[],

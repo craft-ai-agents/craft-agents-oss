@@ -1,30 +1,45 @@
 import * as React from 'react'
+import { useRef } from 'react'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { useTranslation } from 'react-i18next'
+import type { KanbanBoardConfig, KanbanGroupBy } from '@craft-agent/shared/kanban'
+import type { SessionPriority } from '@craft-agent/shared/protocol/dto'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { sessionMetaMapAtom, updateSessionMetaAtom, type SessionMeta } from '@/atoms/sessions'
+import { collectionDisplayAtom } from '@/atoms/collection-display'
+import { collectionFiltersAtom } from '@/atoms/collection-filters'
+import { filterSessionMeta, compareSessions } from '@craft-agent/shared/sessions/collection'
 import { projectsAtom } from '@/atoms/projects'
-import { kanbanProjectFilterAtom, kanbanColumnStatusAtom, kanbanEditorTargetAtom } from '@/atoms/kanban'
+import {
+  kanbanProjectFilterAtom,
+  kanbanColumnStatusAtom,
+  kanbanEditorTargetAtom,
+  kanbanColumnColorsAtom,
+} from '@/atoms/kanban'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { useProjectColorTreatment } from '@/hooks/useProjectColorTreatment'
 import { useLabels } from '@/hooks/useLabels'
 import { getSessionTitle } from '@/utils/session'
 import { routes } from '@/lib/navigate'
-import { resolveTaskScopeLabelId } from '@craft-agent/shared/labels'
+import { flattenLabels, resolveTaskScopeLabelId } from '@craft-agent/shared/labels'
 import { DEFAULT_MODEL, getModelShortName } from '@config/models'
 import { getDefaultModelsForConnection, type LlmConnectionWithStatus } from '@config/llm-connections'
 import type { SessionStatus } from '@/config/session-status-config'
-import type { KanbanColumnDef } from '@craft-agent/shared/projects/types'
-import { KanbanBoard } from './KanbanBoard'
+import { KanbanBoard, type KanbanMoveTarget } from './KanbanBoard'
+import { parsePriorityGroupId } from './priority-groups'
 import { KANBAN_COLUMNS, statusToColumn } from './status-column'
-import { BoardListToggle } from './BoardListToggle'
+import { DEFAULT_KANBAN_COLUMN_COLORS } from './kanban-colors'
+import { CollectionViewChrome } from '../collection/CollectionViewChrome'
+import { CollectionBulkBar } from '../collection/CollectionBulkBar'
 import { KanbanProjectFilter, type KanbanProjectFilterOption } from './KanbanProjectFilter'
 import { TaskEditor } from './TaskEditor'
 import { mergeSubtaskRows, type SpecNodeSummary, type SubtaskChildRow } from './subtask-merge'
+import { enqueueKanbanColumnRun, shouldAutoRunOnDrop } from './kanban-column-queue'
 import type { SpecNode } from './task-spec-form'
 import type {
+  BuiltInKanbanColumnId,
   KanbanColumnId,
   KanbanColumnMeta,
   KanbanModelProviderGroup,
@@ -35,11 +50,7 @@ import type {
 
 /**
  * Subtask run-state from the child session. A closed status wins (done), then an
- * in-flight turn (running). A subtask that has exchanged at least one message has
- * been dispatched — in the create-then-run flow these are one-shot, so a finished
- * turn reads as done. Only a created-but-never-run child (no messages) is pending —
- * and that is exactly what the tile's Play button dispatches. `lastMessageAt` can't
- * carry this distinction: the server stamps it at creation time as a sort key.
+ * in-flight turn (running), then failed, else pending.
  */
 function deriveRunState(child: SessionMeta, statusesById: Map<string, SessionStatus>): SubtaskRunState {
   if (statusesById.get(child.sessionStatus ?? '')?.category === 'closed') return 'done'
@@ -86,31 +97,86 @@ function buildModelCatalog(connections: LlmConnectionWithStatus[]): {
   return { groups, modelToConnection }
 }
 
+function groupCollapseStorageKey(workspaceId: string): string {
+  return `craft-kanban-group-collapsed:${workspaceId}`
+}
+
+function readCollapsedGroups(workspaceId: string): Set<string> {
+  try {
+    const raw = sessionStorage.getItem(groupCollapseStorageKey(workspaceId))
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return new Set()
+    return new Set(parsed.filter((x): x is string => typeof x === 'string'))
+  } catch {
+    return new Set()
+  }
+}
+
+function writeCollapsedGroups(workspaceId: string, keys: Set<string>): void {
+  try {
+    sessionStorage.setItem(groupCollapseStorageKey(workspaceId), JSON.stringify([...keys]))
+  } catch {
+    // sessionStorage full / unavailable — collapse state is best-effort.
+  }
+}
+
+/**
+ * Merge workspace board config onto the built-in column defs.
+ * Config wins for label/color/collapsed/prompt/dropStatus; built-ins keep labelKey
+ * as fallback when no override label is set.
+ */
+function mergeBoardColumns(config: KanbanBoardConfig | null): KanbanColumnMeta[] {
+  const builtinById = new Map(KANBAN_COLUMNS.map(c => [c.id, c]))
+  const colorDefaults = DEFAULT_KANBAN_COLUMN_COLORS
+
+  if (!config?.columns?.length) {
+    return KANBAN_COLUMNS.map(c => ({
+      ...c,
+      color: colorDefaults[c.id as BuiltInKanbanColumnId],
+      collapsed: c.defaultCollapsed ?? false,
+    }))
+  }
+
+  return config.columns.map(col => {
+    const builtin = builtinById.get(col.id as BuiltInKanbanColumnId)
+    const isBuiltIn = col.isBuiltIn ?? !!builtin
+    return {
+      id: col.id,
+      labelKey: builtin?.labelKey,
+      name: col.label,
+      color:
+        col.color ??
+        (builtin ? colorDefaults[builtin.id] : undefined),
+      dropStatusId: col.dropStatusId ?? builtin?.dropStatusId ?? (isBuiltIn ? col.id : undefined),
+      defaultCollapsed: builtin?.defaultCollapsed,
+      collapsed: col.collapsed ?? builtin?.defaultCollapsed ?? false,
+      promptEnabled: col.promptEnabled,
+      prompt: col.prompt,
+      isBuiltIn,
+    } satisfies KanbanColumnMeta
+  })
+}
+
 /**
  * Live Kanban board. Derives tiles from the session metadata map: top-level
- * sessions become task tiles, child sessions (those carrying a `parentSessionId`)
- * become subtask rows under their parent. Column placement comes from the
- * persisted `kanbanColumn`, falling back to the session status' default column;
- * the status badge is independent from the column.
+ * sessions become tiles; children become subtask rows. Board column layout,
+ * rename/color/prompts, and group-by live in `{workspace}/kanban/config.json`.
  */
 export function KanbanBoardContainer() {
-  const { activeWorkspaceId, llmConnections, sessionStatuses, onCreateSession, onSendMessage, onJumpToTaskSessions } =
+  const { activeWorkspaceId, workspaces, llmConnections, sessionStatuses, onCreateSession, onSendMessage, onJumpToTaskSessions } =
     useAppShellContext()
   const { t } = useTranslation()
   const metaMap = useAtomValue(sessionMetaMapAtom)
   const projects = useAtomValue(projectsAtom)
   const [projectFilter, setProjectFilter] = useAtom(kanbanProjectFilterAtom)
   const [columnStatus, setColumnStatus] = useAtom(kanbanColumnStatusAtom)
+  const setColumnColors = useSetAtom(kanbanColumnColorsAtom)
   const treatment = useProjectColorTreatment()
   const updateSessionMeta = useSetAtom(updateSessionMetaAtom)
   const { navigate, navigateToSession } = useNavigation()
-  // Label tree for resolving the reserved Task label (scoped tile-click navigation).
   const { labels: labelConfigs } = useLabels(activeWorkspaceId ?? null)
 
-  // Keep the (module-global) board project filter scoped to the current workspace + live projects:
-  //  • on workspace switch, clear it — the previous workspace's project ids are meaningless here;
-  //  • otherwise prune ids whose project no longer exists (e.g. after a delete) so the board can't
-  //    stay filtered to nothing. Identity-preserving returns avoid needless re-renders/loops.
   const prevWorkspaceRef = React.useRef(activeWorkspaceId)
   React.useEffect(() => {
     if (prevWorkspaceRef.current !== activeWorkspaceId) {
@@ -126,13 +192,122 @@ export function KanbanBoardContainer() {
   }, [activeWorkspaceId, projects, setProjectFilter])
 
   const [expandedTaskIds, setExpandedTaskIds] = React.useState<Set<string>>(() => new Set())
-
-  // Full-pane Task editor overlays the board pane (no global route needed). "Add task" opens it in
-  // create mode; the tile "Edit task" affordance opens it in edit mode pointed at that session.
-  // Atom-backed (not local state) so the chat header's "Edit task" can set the target and
-  // navigate here — the overlay is already open when the board mounts. Declared before the
-  // spec fetch below, which refetches when the editor closes (a save may have changed specs).
   const [editorTarget, setEditorTarget] = useAtom(kanbanEditorTargetAtom)
+  const collectionDisplay = useAtomValue(collectionDisplayAtom)
+  const collectionFilters = useAtomValue(collectionFiltersAtom)
+
+  // Workspace board config (columns + groupBy).
+  const [boardConfig, setBoardConfig] = React.useState<KanbanBoardConfig | null>(null)
+  const boardConfigRef = React.useRef<KanbanBoardConfig | null>(null)
+  // Sync-safe loop-guard: metaMap updates are async/batched, so a second drop
+  // in the same tick can still see isProcessing=false. Keep an immediate Set.
+  const processingRef = useRef(new Set<string>())
+
+  // Drop loop-guard entries once session meta reports idle again.
+  React.useEffect(() => {
+    for (const id of [...processingRef.current]) {
+      if (!metaMap.get(id)?.isProcessing) processingRef.current.delete(id)
+    }
+  }, [metaMap])
+
+  boardConfigRef.current = boardConfig
+
+  React.useEffect(() => {
+    if (!activeWorkspaceId) {
+      setBoardConfig(null)
+      return
+    }
+    const remoteWorkspaceId = workspaces.find(w => w.id === activeWorkspaceId)?.remoteServer?.remoteWorkspaceId
+    let cancelled = false
+    void window.electronAPI.getKanbanConfig(activeWorkspaceId).then(cfg => {
+      if (cancelled) return
+      setBoardConfig(cfg)
+      // One-time migrate localStorage color overrides into file when file has no custom colors.
+      try {
+        const raw = localStorage.getItem('craft-kanban-column-colors')
+        if (raw && cfg) {
+          const overrides = JSON.parse(raw) as Record<string, string>
+          const keys = Object.keys(overrides)
+          if (keys.length > 0) {
+            const nextCols = cfg.columns.map(c => {
+              const override = overrides[c.id]
+              if (!override) return c
+              // Prefer localStorage override when file color is missing OR still
+              // the stock default — user overrides always win once, then clear.
+              const stock =
+                DEFAULT_KANBAN_COLUMN_COLORS[c.id as BuiltInKanbanColumnId]
+              if (!c.color || (stock && c.color === stock)) {
+                return { ...c, color: override }
+              }
+              return c
+            })
+            const changed = nextCols.some((c, i) => c.color !== cfg.columns[i]?.color)
+            if (changed) {
+              const next = { ...cfg, columns: nextCols }
+              void window.electronAPI.setKanbanConfig(activeWorkspaceId, next).then(saved => {
+                if (!cancelled) setBoardConfig(saved)
+              })
+              setColumnColors({})
+            }
+            // One-shot: drop localStorage whether or not file colors changed
+            // (overrides for stock defaults already applied above).
+            localStorage.removeItem('craft-kanban-column-colors')
+          }
+        }
+      } catch {
+        // migrate is best-effort
+      }
+    }).catch(() => {
+      if (!cancelled) setBoardConfig(null)
+    })
+    const unsub = window.electronAPI.onKanbanConfigChanged((wsId, cfg) => {
+      if (wsId === activeWorkspaceId || (!!remoteWorkspaceId && wsId === remoteWorkspaceId)) setBoardConfig(cfg)
+    })
+    return () => {
+      cancelled = true
+      unsub()
+    }
+  }, [activeWorkspaceId, workspaces, setColumnColors])
+
+  const persistBoardConfig = React.useCallback(
+    (next: KanbanBoardConfig) => {
+      setBoardConfig(next)
+      if (!activeWorkspaceId) return
+      void window.electronAPI.setKanbanConfig(activeWorkspaceId, next).then(
+        saved => setBoardConfig(saved),
+        (err: unknown) => {
+          toast.error(t('kanban.toastConfigSaveFailed'), {
+            description: err instanceof Error ? err.message : String(err),
+          })
+        },
+      )
+    },
+    [activeWorkspaceId, t],
+  )
+
+  const groupBy: KanbanGroupBy = boardConfig?.groupBy ?? 'project'
+
+  const [collapsedGroupKeys, setCollapsedGroupKeys] = React.useState<Set<string>>(() => new Set())
+  React.useEffect(() => {
+    if (!activeWorkspaceId) {
+      setCollapsedGroupKeys(new Set())
+      return
+    }
+    setCollapsedGroupKeys(readCollapsedGroups(activeWorkspaceId))
+  }, [activeWorkspaceId])
+
+  const handleToggleProjectGroup = React.useCallback(
+    (groupKey: string) => {
+      setCollapsedGroupKeys(prev => {
+        const next = new Set(prev)
+        if (next.has(groupKey)) next.delete(groupKey)
+        else next.add(groupKey)
+        if (activeWorkspaceId) writeCollapsedGroups(activeWorkspaceId, next)
+        return next
+      })
+    },
+    [activeWorkspaceId],
+  )
 
   const statusesById = React.useMemo(() => {
     const map = new Map<string, SessionStatus>()
@@ -140,58 +315,58 @@ export function KanbanBoardContainer() {
     return map
   }, [sessionStatuses])
 
+  // All projects for grouping (color optional — group header still works).
   const projectsById = React.useMemo(() => {
     const map = new Map<string, KanbanProject>()
     for (const project of projects) {
-      const color = project.config.color
-      // Only color-bearing projects need an entry; a tile without one renders plain.
-      if (!color) continue
-      map.set(project.config.id, { id: project.config.id, name: project.config.name, color })
+      map.set(project.config.id, {
+        id: project.config.id,
+        name: project.config.name,
+        color: project.config.color ?? '#94a3b8',
+        slug: project.config.slug,
+        icon: project.config.icon,
+        workspaceId: project.workspaceId || activeWorkspaceId || undefined,
+      })
     }
     return map
-  }, [projects])
+  }, [projects, activeWorkspaceId])
 
-  // Every project (with or without a color) is selectable in the header filter.
   const projectOptions = React.useMemo<KanbanProjectFilterOption[]>(
     () => projects.map(p => ({ id: p.config.id, name: p.config.name, color: p.config.color })),
-    [projects]
+    [projects],
+  )
+  const labelOptions = React.useMemo(
+    () => flattenLabels(labelConfigs).map(label => ({ id: label.id, name: label.name })),
+    [labelConfigs],
+  )
+  const renderBulkActions = React.useCallback(
+    (visibleTaskIds: readonly string[]) => (
+      <CollectionBulkBar
+        workspaceId={activeWorkspaceId}
+        visibleSessionIds={visibleTaskIds}
+        statuses={sessionStatuses}
+        projects={projectOptions}
+        labels={labelOptions}
+      />
+    ),
+    [activeWorkspaceId, labelOptions, projectOptions, sessionStatuses],
   )
 
   const { groups: subtaskModelGroups, modelToConnection } = React.useMemo(
     () => buildModelCatalog(llmConnections),
-    [llmConnections]
+    [llmConnections],
   )
 
-  // Per-project columns apply only when exactly one project is in focus — the
-  // cross-project "all tasks" view always uses the default 3 columns so it stays
-  // coherent. `editingProject` is that single project (column editing is a project
-  // property, so it's only offered here).
-  const editingProject = React.useMemo(
-    () => (projectFilter.length === 1 ? projects.find(p => p.config.id === projectFilter[0]) : undefined),
-    [projectFilter, projects]
+  const activeColumns = React.useMemo(
+    () => mergeBoardColumns(boardConfig),
+    [boardConfig],
   )
-
-  // The active column set: the focused project's custom columns when it defines
-  // any, otherwise the default built-ins. Custom defs map straight onto the
-  // presentational meta (verbatim `name`, no i18n key).
-  const activeColumns = React.useMemo<readonly KanbanColumnMeta[]>(() => {
-    const custom = editingProject?.config.kanbanColumns
-    if (custom?.length) {
-      return custom.map(c => ({ id: c.id, name: c.name, color: c.color, dropStatusId: c.dropStatusId }))
-    }
-    return KANBAN_COLUMNS
-  }, [editingProject])
-
-  const usingProjectColumns = !!editingProject?.config.kanbanColumns?.length
 
   // ---------------------------------------------------------------------------
-  // Spec node summaries for spec-backed tiles, keyed by task slug. The tile merges
-  // these with live child sessions (see mergeSubtaskRows) so authored-but-never-run
-  // nodes show as pending rows. Refetched when the slug set changes and whenever the
-  // editor closes — a save/generate may have rewritten any task.yaml.
+  // Spec node summaries for spec-backed tiles
   // ---------------------------------------------------------------------------
   const [specNodesBySlug, setSpecNodesBySlug] = React.useState<ReadonlyMap<string, SpecNodeSummary[]>>(
-    () => new Map()
+    () => new Map(),
   )
 
   const specSlugsKey = React.useMemo(() => {
@@ -223,10 +398,9 @@ export function KanbanBoardContainer() {
             (spec?.nodes ?? []).map(n => ({ id: n.id, title: n.title || n.id, model: n.model ?? defaultModel })),
           ]
         } catch {
-          // Unreadable spec → empty node list: the tile falls back to children-only rows.
           return [slug, []]
         }
-      })
+      }),
     ).then(entries => {
       if (!cancelled) setSpecNodesBySlug(new Map(entries))
     })
@@ -245,13 +419,13 @@ export function KanbanBoardContainer() {
     }
 
     const result: KanbanTask[] = []
+    const now = Date.now()
     for (const meta of metaMap.values()) {
       if (meta.parentSessionId) continue
       if (meta.isArchived || meta.hidden || meta.taskDraft) continue
+      // B6: honor workspace collection filters (Display.showCompleted EC-5 respects explicit status chips).
+      if (!filterSessionMeta(meta, collectionFilters, { showCompleted: collectionDisplay.showCompleted, now, statusById: statusesById })) continue
       const statusId = meta.sessionStatus ?? 'todo'
-      // Placement is the persisted free-string column, else the status' default column.
-      // Validity against the *active* column set is enforced by KanbanBoard (unknown
-      // ids fall back to the first column), so no built-in-only guard is needed here.
       const column = meta.kanbanColumn ?? statusToColumn(statusId)
       const children: SubtaskChildRow[] = (childrenByParent.get(meta.id) ?? []).map(child => ({
         id: child.id,
@@ -261,8 +435,6 @@ export function KanbanBoardContainer() {
         taskNodeId: child.taskNodeId,
         createdAt: child.createdAt,
       }))
-      // Spec-backed tiles show one row per DAG node (bound to its latest child session,
-      // or pending when never run) plus unadopted quick-adds; plain tiles show children.
       const specNodes = meta.taskSlug ? specNodesBySlug.get(meta.taskSlug) : undefined
       const subtasks = mergeSubtaskRows(specNodes, children, DEFAULT_MODEL)
       result.push({
@@ -272,10 +444,9 @@ export function KanbanBoardContainer() {
         statusId,
         model: meta.model ?? DEFAULT_MODEL,
         projectId: meta.projectId,
+        priority: meta.priority ?? 'none',
         taskSlug: meta.taskSlug,
         subtasks,
-        // With merged spec rows the list already contains every node, so it IS the
-        // denominator; the header count only backstops the not-yet-fetched window.
         subtaskTotal: specNodes?.length ? undefined : meta.taskNodeCount,
         isFlagged: meta.isFlagged,
         isProcessing: meta.isProcessing,
@@ -286,15 +457,29 @@ export function KanbanBoardContainer() {
       })
     }
     return result
-  }, [metaMap, statusesById, specNodesBySlug])
+  }, [metaMap, statusesById, specNodesBySlug, collectionFilters, collectionDisplay])
 
-  // Project filter: empty selection = show all. While a filter is active, tiles
-  // with no project are hidden (an explicit "No project" option is a later add).
   const visibleTasks = React.useMemo(() => {
     if (projectFilter.length === 0) return tasks
     const allow = new Set(projectFilter)
     return tasks.filter(task => task.projectId !== undefined && allow.has(task.projectId))
   }, [tasks, projectFilter])
+
+  const visibleColumns = React.useMemo(() => {
+    if (collectionDisplay.showEmptyGroups) return activeColumns
+    return activeColumns.filter(column => visibleTasks.some(task => task.column === column.id))
+  }, [activeColumns, collectionDisplay.showEmptyGroups, visibleTasks])
+
+  // B6: honor Display.orderBy when ranking cards within each column.
+  const displayDrivenSort = React.useCallback(
+    (a: KanbanTask, b: KanbanTask): number => {
+      const metaA = metaMap.get(a.id)
+      const metaB = metaMap.get(b.id)
+      if (!metaA || !metaB) return 0
+      return compareSessions(metaA, metaB, collectionDisplay.orderBy, collectionDisplay.orderDir)
+    },
+    [metaMap, collectionDisplay.orderBy, collectionDisplay.orderDir],
+  )
 
   const defaultSubtaskModel = modelToConnection.has(DEFAULT_MODEL) ? DEFAULT_MODEL : undefined
 
@@ -311,11 +496,6 @@ export function KanbanBoardContainer() {
     async (taskId: string, title: string, model: string) => {
       if (!activeWorkspaceId) return
       const llmConnection = modelToConnection.get(model)
-      // Create only — the subtask lands as a pending row. The title is stored as
-      // the session `name` so it shows on the row, is recovered as the prompt when
-      // Play dispatches it, and suppresses AI title-gen. Execution is deferred.
-      // applyTaskLabel: the child inherits the parent's task::N (numbering a
-      // plain-chat parent in the same pass — it becomes a task by gaining a subtask).
       await onCreateSession(activeWorkspaceId, {
         parentSessionId: taskId,
         model,
@@ -325,14 +505,9 @@ export function KanbanBoardContainer() {
       })
       setExpandedTaskIds(prev => new Set(prev).add(taskId))
     },
-    [activeWorkspaceId, modelToConnection, onCreateSession]
+    [activeWorkspaceId, modelToConnection, onCreateSession],
   )
 
-  // Tile Play. Spec-backed tasks start a Conductor run of the whole DAG (tasks:run —
-  // the runner drives child creation, statuses, and columns; it throws if a run is
-  // already active). Plain tiles dispatch every pending quick-add child directly: the
-  // prompt is the child's `name` (set at creation), with `isProcessing` flipped
-  // optimistically so the row spins immediately and a double-click is a no-op.
   const handleRunSubtasks = React.useCallback(
     (taskId: string) => {
       const meta = metaMap.get(taskId)
@@ -348,8 +523,6 @@ export function KanbanBoardContainer() {
       }
       for (const child of metaMap.values()) {
         if (child.parentSessionId !== taskId) continue
-        // Skip Conductor-owned children: the TaskRunner drives their lifecycle (prompts,
-        // status, retries). Dispatching them manually would double-run and race the runner.
         if (child.taskRunId) continue
         if (deriveRunState(child, statusesById) !== 'pending') continue
         const prompt = child.name?.trim()
@@ -358,13 +531,9 @@ export function KanbanBoardContainer() {
         updateSessionMeta(child.id, { isProcessing: true })
       }
     },
-    [metaMap, statusesById, onSendMessage, updateSessionMeta, activeWorkspaceId, t]
+    [metaMap, statusesById, onSendMessage, updateSessionMeta, activeWorkspaceId, t],
   )
 
-  // Create a parent task tile in place — no navigation. It lands in ToDo (no
-  // kanbanColumn + todo status → todo column). While a project filter is active,
-  // bind the new task to the first selected project so it stays visible under the
-  // filter (an unbound task would be hidden the moment it's created).
   const handleCreateTask = React.useCallback(
     async (title: string) => {
       if (!activeWorkspaceId) return
@@ -376,106 +545,287 @@ export function KanbanBoardContainer() {
         applyTaskLabel: true,
       })
     },
-    [activeWorkspaceId, onCreateSession, projectFilter]
+    [activeWorkspaceId, onCreateSession, projectFilter],
   )
 
-  // Change a task's status badge directly (independent from its column). Mirrors
-  // the move handler's optimistic-then-persist shape so the badge reflows before
-  // the RPC lands.
   const handleChangeStatus = React.useCallback(
     (taskId: string, statusId: string) => {
       updateSessionMeta(taskId, { sessionStatus: statusId })
       void window.electronAPI.sessionCommand(taskId, { type: 'setSessionStatus', state: statusId })
     },
-    [updateSessionMeta]
+    [updateSessionMeta],
   )
 
   const handleMoveTask = React.useCallback(
-    (taskId: string, toColumn: KanbanColumnId) => {
-      // Optimistic: the column derives from `kanbanColumn` first, so writing it
-      // immediately reflows the tile before the RPC lands.
+    (taskId: string, to: KanbanColumnId | KanbanMoveTarget) => {
+      const target: KanbanMoveTarget = typeof to === 'string' ? { columnId: to } : to
+      const toColumn = target.columnId
+
+      // Capture prior column before optimistic writes so same-column project
+      // drops never re-trigger auto-run.
+      const priorMeta = metaMap.get(taskId)
+      const previousColumn: KanbanColumnId =
+        (priorMeta?.kanbanColumn as KanbanColumnId | undefined) ??
+        statusToColumn(priorMeta?.sessionStatus ?? 'todo')
+
+      // Optimistic column placement.
       updateSessionMeta(taskId, { kanbanColumn: toColumn })
       void window.electronAPI.sessionCommand(taskId, { type: 'setKanbanColumn', column: toColumn })
-      // Optionally fold the status to the column's configured target. Project
-      // columns carry their own `dropStatusId`; the default view reads the global
-      // atom. Guarded on a known status so a stale mapping is a no-op.
-      const autoStatus = activeColumns.find(c => c.id === toColumn)?.dropStatusId ?? columnStatus[toColumn]
+
+      // B6: pseudo group '__priority_<value>' assigns priority instead of project (FR-30/FR-47).
+      const priorityDrop = parsePriorityGroupId(target.projectId)
+      if (priorityDrop !== null) {
+        const prio = priorityDrop as SessionPriority
+        updateSessionMeta(taskId, { priority: prio })
+        void window.electronAPI.sessionCommand(taskId, { type: 'setPriority', priority: prio })
+      } else if (target.projectId !== undefined) {
+        const nextProjectId = target.projectId
+        updateSessionMeta(taskId, {
+          projectId: nextProjectId === null ? undefined : nextProjectId,
+        })
+        void window.electronAPI.sessionCommand(taskId, {
+          type: 'setProjectId',
+          projectId: nextProjectId,
+        })
+      }
+
+      // B5: re-rank within destination column when Display orderBy === 'rank'.
+      if (collectionDisplay.orderBy === 'rank') {
+        const destSiblings = visibleTasks
+          .filter((t) => t.column === toColumn)
+          .filter((t) => t.id !== taskId)
+          .sort(displayDrivenSort)
+        const last = destSiblings[destSiblings.length - 1]
+        void window.electronAPI.sessionCommand(taskId, {
+          type: 'reorderRank',
+          prevId: last?.id,
+        })
+      }
+
+      // Optionally fold the status to the column's configured target.
+      const autoStatus =
+        activeColumns.find(c => c.id === toColumn)?.dropStatusId ?? columnStatus[toColumn]
       if (autoStatus && statusesById.has(autoStatus)) {
         handleChangeStatus(taskId, autoStatus)
       }
+
+      // P1.4 auto-run hook — only when the column actually changes.
+      // In-progress always starts; other columns need prompt.
+      const destColumn = activeColumns.find(c => c.id === toColumn)
+      if (!activeWorkspaceId) return
+      if (previousColumn === toColumn) return
+      if (!shouldAutoRunOnDrop(toColumn, destColumn)) return
+      const meta = metaMap.get(taskId)
+      if (!meta || meta.isProcessing || processingRef.current.has(taskId)) return
+
+      const title = getSessionTitle(meta) || meta.name?.trim() || ''
+      const kick = (goalText: string) => {
+        enqueueKanbanColumnRun(
+          {
+            workspaceId: activeWorkspaceId,
+            sessionId: taskId,
+            columnId: toColumn,
+            columnPrompt: destColumn?.prompt?.trim() ?? '',
+            title,
+            goalText,
+            taskSlug: meta.taskSlug,
+            enqueuedAt: Date.now(),
+          },
+          {
+            sendMessage: onSendMessage,
+            runTask: (wsId, args) => window.electronAPI.runTask(wsId, args),
+            isProcessing: id =>
+              processingRef.current.has(id) || !!metaMap.get(id)?.isProcessing,
+            markProcessing: id => {
+              processingRef.current.add(id)
+              updateSessionMeta(id, { isProcessing: true })
+            },
+            onError: (err, job) => {
+              processingRef.current.delete(job.sessionId)
+              updateSessionMeta(job.sessionId, { isProcessing: false })
+              toast.error(t('kanban.toastAutoRunFailed'), {
+                description: err instanceof Error ? err.message : String(err),
+              })
+            },
+          },
+        )
+      }
+
+      // Spec-backed: load goal/acceptance from task.yaml; plain tiles use
+      // title + any acceptance/goal-like text from session meta preview.
+      if (meta.taskSlug) {
+        void window.electronAPI
+          .getTask(activeWorkspaceId, meta.taskSlug)
+          .then(res => {
+            const spec = res.spec as
+              | { goal?: string; acceptance_criteria?: string; title?: string }
+              | undefined
+            const parts = [spec?.goal, spec?.acceptance_criteria].filter(
+              (s): s is string => typeof s === 'string' && s.trim().length > 0,
+            )
+            kick(parts.join('\n\n') || title)
+          })
+          .catch(() => kick(title))
+      } else {
+        const preview = typeof meta.preview === 'string' ? meta.preview.trim() : ''
+        // Prefer preview when it carries more than the bare title (acceptance/goal context).
+        if (preview && preview !== title) {
+          kick(preview)
+        } else {
+          kick(title)
+        }
+      }
     },
-    [updateSessionMeta, activeColumns, columnStatus, statusesById, handleChangeStatus]
+    [
+      updateSessionMeta,
+      activeColumns,
+      collectionDisplay.orderBy,
+      columnStatus,
+      displayDrivenSort,
+      statusesById,
+      handleChangeStatus,
+      activeWorkspaceId,
+      metaMap,
+      onSendMessage,
+      t,
+      visibleTasks,
+    ],
   )
-
-  // Persist a full ordered column set onto the focused project. The `projects:changed`
-  // broadcast refreshes `projectsAtom`, so the board reflows without optimistic state.
-  const persistProjectColumns = React.useCallback(
-    (columns: KanbanColumnDef[]) => {
-      if (!activeWorkspaceId || !editingProject) return
-      void window.electronAPI.updateProject(activeWorkspaceId, editingProject.config.slug, {
-        kanbanColumns: columns,
-      })
-    },
-    [activeWorkspaceId, editingProject]
-  )
-
-  // The project's current custom set, or — on first customization — a seed
-  // materialized from the active (default) columns. The seed reuses the built-in
-  // ids so existing card placement survives, and freezes the default labels in the
-  // user's current language (thereafter user-authored, like the project name).
-  const resolveEditableColumns = React.useCallback((): KanbanColumnDef[] => {
-    const custom = editingProject?.config.kanbanColumns
-    if (custom?.length) return custom.map(c => ({ ...c }))
-    return activeColumns.map(c => ({
-      id: c.id,
-      name: c.name ?? (c.labelKey ? t(c.labelKey) : c.id),
-      color: c.color,
-      dropStatusId: c.dropStatusId,
-    }))
-  }, [editingProject, activeColumns, t])
-
-  const handleAddColumn = React.useCallback(() => {
-    const base = resolveEditableColumns()
-    const id = `col-${crypto.randomUUID().slice(0, 8)}`
-    persistProjectColumns([...base, { id, name: t('kanban.column.newColumnName') }])
-  }, [resolveEditableColumns, persistProjectColumns, t])
 
   const handleUpdateColumn = React.useCallback(
-    (columnId: string, patch: Partial<KanbanColumnDef>) => {
-      const next = resolveEditableColumns().map(c => (c.id === columnId ? { ...c, ...patch } : c))
-      persistProjectColumns(next)
+    (
+      columnId: string,
+      patch: Partial<{
+        name: string
+        label: string
+        color: string
+        dropStatusId: string
+        collapsed: boolean
+        promptEnabled: boolean
+        prompt: string
+      }>,
+    ) => {
+      const current = boardConfigRef.current
+      const baseColumns = current?.columns?.length
+        ? current.columns.map(c => ({ ...c }))
+        : mergeBoardColumns(null).map(c => ({
+            id: c.id,
+            label: c.name,
+            color: c.color,
+            collapsed: c.collapsed,
+            promptEnabled: c.promptEnabled,
+            prompt: c.prompt,
+            dropStatusId: c.dropStatusId,
+            isBuiltIn: c.isBuiltIn,
+          }))
+
+      const nextColumns = baseColumns.map(c => {
+        if (c.id !== columnId) return c
+        const label = patch.label ?? patch.name
+        return {
+          ...c,
+          ...(label !== undefined ? { label } : {}),
+          ...(patch.color !== undefined ? { color: patch.color } : {}),
+          ...(patch.dropStatusId !== undefined
+            ? { dropStatusId: patch.dropStatusId || undefined }
+            : {}),
+          ...(patch.collapsed !== undefined ? { collapsed: patch.collapsed } : {}),
+          ...(patch.promptEnabled !== undefined ? { promptEnabled: patch.promptEnabled } : {}),
+          ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),
+        }
+      })
+
+      persistBoardConfig({
+        version: 1,
+        groupBy: current?.groupBy ?? 'project',
+        columns: nextColumns,
+      })
+
+      // Keep legacy atom in sync for Appearance settings consumers of color overrides.
+      if (patch.color !== undefined) {
+        setColumnColors(prev => ({ ...prev, [columnId]: patch.color! }))
+      }
     },
-    [resolveEditableColumns, persistProjectColumns]
+    [persistBoardConfig, setColumnColors],
+  )
+
+  const handleAddColumn = React.useCallback(
+    (side: 'left' | 'right' = 'right') => {
+      const current = boardConfigRef.current
+      const baseColumns = current?.columns?.length
+        ? current.columns.map(c => ({ ...c }))
+        : mergeBoardColumns(null).map(c => ({
+            id: c.id,
+            label: c.name,
+            color: c.color,
+            collapsed: c.collapsed,
+            promptEnabled: c.promptEnabled,
+            prompt: c.prompt,
+            dropStatusId: c.dropStatusId,
+            isBuiltIn: c.isBuiltIn,
+          }))
+      const id = `col-${crypto.randomUUID().slice(0, 8)}`
+      const fresh = {
+        id,
+        label: t('kanban.column.newColumnName'),
+        isBuiltIn: false,
+        promptEnabled: false,
+        prompt: '',
+      }
+      const columns =
+        side === 'left' ? [fresh, ...baseColumns] : [...baseColumns, fresh]
+      persistBoardConfig({
+        version: 1,
+        groupBy: current?.groupBy ?? 'project',
+        columns,
+      })
+    },
+    [persistBoardConfig, t],
   )
 
   const handleRemoveColumn = React.useCallback(
     (columnId: string) => {
-      const remaining = resolveEditableColumns().filter(c => c.id !== columnId)
+      const current = boardConfigRef.current
+      const baseColumns = current?.columns?.length
+        ? current.columns.map(c => ({ ...c }))
+        : mergeBoardColumns(null).map(c => ({
+            id: c.id,
+            label: c.name,
+            color: c.color,
+            collapsed: c.collapsed,
+            promptEnabled: c.promptEnabled,
+            prompt: c.prompt,
+            dropStatusId: c.dropStatusId,
+            isBuiltIn: c.isBuiltIn,
+          }))
+      const target = baseColumns.find(c => c.id === columnId)
+      if (target?.isBuiltIn) return
+      const remaining = baseColumns.filter(c => c.id !== columnId)
+      if (remaining.length === 0) return
       const fallbackId = remaining[0]?.id
-      // Reassign orphaned cards to the first remaining column so none disappears
-      // (optimistic per-task, mirroring handleMoveTask).
       if (fallbackId) {
         for (const task of visibleTasks) {
           if (task.column !== columnId) continue
           updateSessionMeta(task.id, { kanbanColumn: fallbackId })
-          void window.electronAPI.sessionCommand(task.id, { type: 'setKanbanColumn', column: fallbackId })
+          void window.electronAPI.sessionCommand(task.id, {
+            type: 'setKanbanColumn',
+            column: fallbackId,
+          })
         }
       }
-      persistProjectColumns(remaining)
+      persistBoardConfig({
+        version: 1,
+        groupBy: current?.groupBy ?? 'project',
+        columns: remaining,
+      })
     },
-    [resolveEditableColumns, persistProjectColumns, visibleTasks, updateSessionMeta]
+    [persistBoardConfig, visibleTasks, updateSessionMeta],
   )
 
-  // Set the status auto-applied when a task is dropped into a column (header picker).
-  // In single-project view this persists onto the project column's `dropStatusId`;
-  // the default/all view edits the global atom (shared with AppearanceSettingsPage,
-  // so board header and Settings stay in sync).
   const handleSelectDropStatus = React.useCallback(
     (column: KanbanColumnId, statusId: string) => {
-      if (editingProject) {
-        handleUpdateColumn(column, { dropStatusId: statusId || undefined })
-        return
-      }
+      handleUpdateColumn(column, { dropStatusId: statusId })
+      // Also mirror into the legacy atom so Appearance settings stay coherent.
       setColumnStatus(prev => {
         const next = { ...prev }
         if (statusId) next[column] = statusId
@@ -483,16 +833,29 @@ export function KanbanBoardContainer() {
         return next
       })
     },
-    [editingProject, handleUpdateColumn, setColumnStatus]
+    [handleUpdateColumn, setColumnStatus],
   )
 
-  // Board clicks land on All Sessions with the task's scope applied as the NORMAL,
-  // user-clearable header-chip filters: label filter = the session's per-task item
-  // label (`TASK-<slug>-<N>` — exactly this task's family; legacy root-only sessions
-  // fall back to the Task root), project filter = the task's project (when bound).
-  // Sessions without any task label (plain chats) fall back to plain navigation.
-  // `projectFallbackId` lets subtask rows inherit the parent tile's project when
-  // the child session itself carries none (older quick-add subtasks).
+  const handleGroupByChange = React.useCallback(
+    (next: KanbanGroupBy) => {
+      const current = boardConfigRef.current
+      const columns = current?.columns?.length
+        ? current.columns
+        : mergeBoardColumns(null).map(c => ({
+            id: c.id,
+            label: c.name,
+            color: c.color,
+            collapsed: c.collapsed,
+            promptEnabled: c.promptEnabled,
+            prompt: c.prompt,
+            dropStatusId: c.dropStatusId,
+            isBuiltIn: c.isBuiltIn,
+          }))
+      persistBoardConfig({ version: 1, groupBy: next, columns })
+    },
+    [persistBoardConfig],
+  )
+
   const openSessionScoped = React.useCallback(
     (sessionId: string, projectFallbackId?: string) => {
       const meta = metaMap.get(sessionId)
@@ -506,7 +869,7 @@ export function KanbanBoardContainer() {
       }
       navigateToSession(sessionId)
     },
-    [metaMap, labelConfigs, onJumpToTaskSessions, navigateToSession]
+    [metaMap, labelConfigs, onJumpToTaskSessions, navigateToSession],
   )
 
   const handleEditTask = React.useCallback(
@@ -519,7 +882,7 @@ export function KanbanBoardContainer() {
         initialTitle: meta ? getSessionTitle(meta) : undefined,
       })
     },
-    [metaMap]
+    [metaMap, setEditorTarget],
   )
 
   if (editorTarget && activeWorkspaceId) {
@@ -537,12 +900,11 @@ export function KanbanBoardContainer() {
               }
             : undefined
         }
-        onOpenChildSession={(sessionId) => {
+        onOpenChildSession={sessionId => {
           setEditorTarget(null)
           navigateToSession(sessionId)
         }}
         onCreated={({ sessionId, taskLabelId, projectId: createdProjectId }) => {
-          // Same human-clearable scope as a tile click; no label (fail-soft) → plain open.
           if (taskLabelId && onJumpToTaskSessions) {
             onJumpToTaskSessions(sessionId, { labelId: taskLabelId, projectId: createdProjectId })
           } else {
@@ -564,11 +926,30 @@ export function KanbanBoardContainer() {
           {projectOptions.length > 0 && (
             <KanbanProjectFilter projects={projectOptions} value={projectFilter} onChange={setProjectFilter} />
           )}
-          {usingProjectColumns && editingProject && (
-            <span className="truncate text-[11px] text-foreground/45">
-              {t('kanban.column.columnsFrom', { project: editingProject.config.name })}
-            </span>
-          )}
+          <div className="inline-flex items-center gap-0.5 rounded-lg border border-border/60 bg-card p-0.5 text-[11px]">
+            <button
+              type="button"
+              onClick={() => handleGroupByChange('none')}
+              className={
+                groupBy === 'none'
+                  ? 'rounded-md bg-foreground/[0.08] px-2 py-1 font-semibold text-foreground'
+                  : 'rounded-md px-2 py-1 text-foreground/55 hover:text-foreground/80'
+              }
+            >
+              {t('kanban.groupBy.none')}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleGroupByChange('project')}
+              className={
+                groupBy === 'project'
+                  ? 'rounded-md bg-foreground/[0.08] px-2 py-1 font-semibold text-foreground'
+                  : 'rounded-md px-2 py-1 text-foreground/55 hover:text-foreground/80'
+              }
+            >
+              {t('kanban.groupBy.project')}
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -579,18 +960,23 @@ export function KanbanBoardContainer() {
           >
             <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> {t('kanban.newTask')}
           </button>
-          <BoardListToggle
-            value="board"
-            onChange={view => {
+          <CollectionViewChrome
+            workspaceId={activeWorkspaceId}
+            viewMode="board"
+            onViewModeChange={view => {
               if (view === 'list') navigate(routes.view.allSessions())
+              else if (view === 'table') navigate(routes.view.table())
             }}
+            compact
           />
         </div>
       </div>
       <div className="min-h-0 flex-1">
         <KanbanBoard
-          columns={activeColumns}
+          columns={visibleColumns}
           tasks={visibleTasks}
+          sortTasks={displayDrivenSort}
+          renderBulkActions={renderBulkActions}
           projectsById={projectsById}
           statusesById={statusesById}
           statuses={sessionStatuses ?? []}
@@ -609,13 +995,18 @@ export function KanbanBoardContainer() {
           onMoveTask={handleMoveTask}
           columnDropStatus={columnStatus}
           onSelectDropStatus={handleSelectDropStatus}
-          {...(editingProject
-            ? {
-                onUpdateColumn: handleUpdateColumn,
-                onRemoveColumn: handleRemoveColumn,
-                onAddColumn: handleAddColumn,
-              }
-            : {})}
+          onUpdateColumn={handleUpdateColumn}
+          onRemoveColumn={handleRemoveColumn}
+          onAddColumn={handleAddColumn}
+          groupByPriority={collectionDisplay.groupBy === 'priority'}
+          groupByProject={
+            collectionDisplay.groupBy === 'priority'
+              ? false
+              : groupBy === 'project' || collectionDisplay.groupBy === 'project'
+          }
+          collapsedGroupKeys={collapsedGroupKeys}
+          onToggleProjectGroup={handleToggleProjectGroup}
+          noProjectLabel={t('kanban.noProject')}
         />
       </div>
     </div>

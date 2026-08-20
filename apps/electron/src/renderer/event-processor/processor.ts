@@ -14,6 +14,7 @@
 
 import type { SessionState, AgentEvent, ProcessResult } from './types'
 import { handleTextDelta, handleTextComplete } from './handlers/text'
+import { handleThinkingDelta, handleThinkingComplete } from './handlers/thinking'
 import { handleToolStart, handleToolResult, handleTaskBackgrounded, handleShellBackgrounded, handleTaskProgress, handleTaskCompleted } from './handlers/tool'
 import {
   handleComplete,
@@ -73,6 +74,16 @@ export function processEvent(
 
     case 'text_complete': {
       const newState = handleTextComplete(state, event)
+      return { state: newState, effects: [] }
+    }
+
+    case 'thinking_delta': {
+      const newState = handleThinkingDelta(state, event)
+      return { state: newState, effects: [] }
+    }
+
+    case 'thinking_complete': {
+      const newState = handleThinkingComplete(state, event)
       return { state: newState, effects: [] }
     }
 

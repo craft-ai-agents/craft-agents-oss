@@ -51,6 +51,28 @@ export interface TextCompleteEvent {
 }
 
 /**
+ * Thinking delta event - streaming reasoning content (OMP reasoning models)
+ *
+ * Runtime-only: never persisted to session.jsonl. Parallel to TextDeltaEvent.
+ */
+export interface ThinkingDeltaEvent {
+  type: 'thinking_delta'
+  sessionId: string
+  text: string
+  turnId?: string
+}
+
+/**
+ * Thinking complete event - finalizes the streaming reasoning block
+ */
+export interface ThinkingCompleteEvent {
+  type: 'thinking_complete'
+  sessionId: string
+  text: string
+  turnId?: string
+}
+
+/**
  * Tool start event - begins tool execution
  * Field names match SessionEvent from shared/types.ts
  */
@@ -102,6 +124,10 @@ export interface CompleteEvent {
    * `complete`; a real `task_completed` will arrive when the agent actually finishes.
    */
   backgroundTasksAlive?: boolean
+  /** Why processing stopped. Set by SessionManager.onProcessingStopped (#664). */
+  reason?: 'complete' | 'interrupted' | 'error' | 'timeout'
+  /** True iff this turn produced a NEW final assistant message. Used to gate completion notifications (#664). */
+  didReceiveNewFinalMessage?: boolean
 }
 
 /**
@@ -172,7 +198,7 @@ export interface SessionStatusChangedEvent {
 export interface SessionMetadataChangedEvent {
   type: 'session_metadata_changed'
   sessionId: string
-  changes: Partial<Pick<Session, 'taskNodeCount' | 'kanbanColumn' | 'taskDraft' | 'taskSlug' | 'projectId'>>
+  changes: Partial<Pick<Session, 'taskNodeCount' | 'kanbanColumn' | 'taskDraft' | 'taskSlug' | 'projectId' | 'memoryMode' | 'rank' | 'priority' | 'dueDate'>>
 }
 
 /**
@@ -517,6 +543,8 @@ export interface UsageUpdateEvent {
 export type AgentEvent =
   | TextDeltaEvent
   | TextCompleteEvent
+  | ThinkingDeltaEvent
+  | ThinkingCompleteEvent
   | ToolStartEvent
   | ToolResultEvent
   | CompleteEvent

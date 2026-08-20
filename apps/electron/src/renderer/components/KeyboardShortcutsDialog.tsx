@@ -152,11 +152,11 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{t("shortcuts.title")}</DialogTitle>
+      <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto p-4 text-sm">
+        <DialogHeader className="pb-1">
+          <DialogTitle className="text-base">{t("shortcuts.title")}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-6 py-2">
+        <div className="space-y-4 py-1">
           {/* Registry-driven sections */}
           {Object.entries(actionsByCategory).map(([category, actions]) => (
             <RegistrySection

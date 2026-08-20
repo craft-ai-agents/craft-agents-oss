@@ -143,6 +143,7 @@ export function PanelSlot({
             <MainContentPanel
               navStateOverride={navState}
               isSidebarAndNavigatorHidden={isSidebarAndNavigatorHidden}
+              panelId={entry.id}
             />
           </AppShellProvider>
         </div>

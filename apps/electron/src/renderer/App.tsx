@@ -11,10 +11,14 @@ import { generateMessageId } from '../shared/types'
 import { useEventProcessor } from './event-processor'
 import type { AgentEvent, Effect } from './event-processor'
 import { AppShell } from '@/components/app-shell/AppShell'
+import { collectionBulkOperationRegistry } from '@/components/app-shell/collection/collection-bulk-optimistic'
+import { WorkspaceIconRail } from '@/components/app-shell/WorkspaceIconRail'
+import { getTopBarLeftInset, shouldShowWorkspaceIconRail, WORKSPACE_SELECTOR_RAIL_CHANGED_EVENT } from '@/components/app-shell/workspace-rail'
 import type { AppShellContextType } from '@/context/AppShellContext'
 import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
 import { WorkspacePicker } from '@/components/workspace'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
+import { KeyboardShortcutsDialog } from '@/components/KeyboardShortcutsDialog'
 import { SplashScreen } from '@/components/SplashScreen'
 import { TooltipProvider } from '@craft-agent/ui'
 import { FocusProvider } from '@/context/FocusContext'
@@ -26,6 +30,8 @@ import { useNotifications } from '@/hooks/useNotifications'
 import { useSession } from '@/hooks/useSession'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { NavigationProvider } from '@/contexts/NavigationContext'
+import * as storage from '@/lib/local-storage'
+import { markStatusUnseen } from '@/lib/sidebar-unseen-status'
 import { navigate, routes } from './lib/navigate'
 import { attachmentFromContentRef, toDraftRef } from './lib/drafts'
 import { stripMarkdown } from './utils/text'
@@ -74,8 +80,10 @@ import {
 } from '@craft-agent/ui'
 import { useLinkInterceptor, type FilePreviewState } from '@/hooks/useLinkInterceptor'
 import { useTransportConnectionState } from '@/hooks/useTransportConnectionState'
+import { useSshConnectionStatus } from '@/hooks/useSshConnectionStatus'
 import { useStaleSessionRecovery } from '@/hooks/useStaleSessionRecovery'
-import { TransportConnectionBanner, shouldShowTransportConnectionBanner } from '@/components/app-shell/TransportConnectionBanner'
+import { TransportConnectionBanner, shouldShowTransportConnectionBanner, shouldShowSshBanner } from '@/components/app-shell/TransportConnectionBanner'
+import { ToolchainStatusBanner } from '@/components/app-shell/ToolchainStatusBanner'
 import {
   markBackgroundTaskSignal,
   markLiveBackgroundTasksOrphaned,
@@ -83,6 +91,7 @@ import {
 import { getFileManagerName } from '@/lib/platform'
 import { rendererLog } from '@/lib/logger'
 import { ActionRegistryProvider } from '@/actions'
+import { OmniboxHost } from '@/platform/OmniboxHost'
 import { toast } from 'sonner'
 
 type AppState = 'loading' | 'onboarding' | 'reauth' | 'workspace-picker' | 'ready'
@@ -317,6 +326,26 @@ export default function App() {
   }, [updateSessionDirect])
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [workspaceSelectorRail, setWorkspaceSelectorRail] = useState(() =>
+    storage.get(storage.KEYS.workspaceSelectorRail, false)
+  )
+
+  useEffect(() => {
+    const handleWorkspaceSelectorRailChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<boolean>
+      setWorkspaceSelectorRail(
+        typeof customEvent.detail === 'boolean'
+          ? customEvent.detail
+          : storage.get(storage.KEYS.workspaceSelectorRail, false)
+      )
+    }
+
+    window.addEventListener(WORKSPACE_SELECTOR_RAIL_CHANGED_EVENT, handleWorkspaceSelectorRailChanged)
+    return () => {
+      window.removeEventListener(WORKSPACE_SELECTOR_RAIL_CHANGED_EVENT, handleWorkspaceSelectorRailChanged)
+    }
+  }, [])
+
   // Window's workspace ID — shared atom so Root/ThemeProvider stays in sync on switch
   const [windowWorkspaceId, setWindowWorkspaceId] = useAtom(windowWorkspaceIdAtom)
 
@@ -372,6 +401,7 @@ export default function App() {
   const [appTheme, setAppTheme] = useState<ThemeOverrides | null>(null)
   // Reset confirmation dialog
   const [showResetDialog, setShowResetDialog] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false)
 
   // Auto-update state
   const updateChecker = useUpdateChecker()
@@ -964,6 +994,15 @@ export default function App() {
         return
       }
 
+      if (event.type === 'messages_replaced') {
+        window.electronAPI.getSessionMessages(sessionId)
+          .then((updatedSession) => {
+            if (updatedSession) replaceLoadedSession(updatedSession)
+          })
+          .catch((error: unknown) => console.error('Failed to refresh messages after undo:', error))
+        return
+      }
+
       const agentEvent = event as unknown as AgentEvent
 
       // Track activity for stale session watchdog
@@ -1006,17 +1045,38 @@ export default function App() {
         handleBackgroundTaskEvent(store, sessionId, event, agentEvent)
 
         // For handoff events, update metadata map for list display
-        // NOTE: No sessionsAtom to sync - atom and metadata are the source of truth
         if (isHandoff) {
           // Update metadata map
           const metaMap = store.get(sessionMetaMapAtom)
+          const prevMeta = metaMap.get(sessionId)
           const newMetaMap = new Map(metaMap)
-          newMetaMap.set(sessionId, extractSessionMeta(updatedSession))
+          const nextMeta = extractSessionMeta(updatedSession)
+          newMetaMap.set(sessionId, nextMeta)
           store.set(sessionMetaMapAtom, newMetaMap)
 
-          // Show notification on complete (when window is not focused)
-          // Skip hidden sessions (mini-agent sessions) - they shouldn't trigger notifications
+          // Agent/automation flipped status → light sidebar unseen accent.
+          if (
+            event.type === 'session_status_changed' &&
+            nextMeta.sessionStatus &&
+            nextMeta.sessionStatus !== prevMeta?.sessionStatus &&
+            nextMeta.workspaceId
+          ) {
+            markStatusUnseen(nextMeta.workspaceId, nextMeta.sessionStatus)
+          }
+
+          // Show notification on complete (when window is not focused).
+          // Skip hidden sessions (mini-agent sessions) - they shouldn't trigger notifications.
+          // Gate on reason + didReceiveNewFinalMessage so error/interrupt cleanup
+          // events don't fire success-style notifications previewing stale or
+          // never-persisted content (#664). Both fields are optional — when
+          // absent (older backends) treat as success to preserve prior behavior.
           if (event.type === 'complete' && !updatedSession.hidden) {
+            const completeEvent = event as { reason?: string; didReceiveNewFinalMessage?: boolean }
+            const isSuccessfulCompletion =
+              (completeEvent.reason === undefined || completeEvent.reason === 'complete') &&
+              completeEvent.didReceiveNewFinalMessage !== false
+
+            if (isSuccessfulCompletion) {
             // Get the last assistant/plan message as preview
             const lastMessage = updatedSession.messages.findLast(
               m => (m.role === 'assistant' || m.role === 'plan') && !m.isIntermediate
@@ -1040,6 +1100,8 @@ export default function App() {
                 finishedAt: Date.now(),
               })
             }
+            }
+
           }
         }
 
@@ -1087,6 +1149,22 @@ export default function App() {
     applyPermissionModeState,
     reconcilePermissionModeState,
   ])
+
+  useEffect(() => {
+    const cleanup = window.electronAPI.onSessionsBulkChanged((event) => {
+      if (event.workspaceId !== windowWorkspaceId) return
+      // The originating call performs an authoritative read after its result.
+      // Ignore its earlier coalesced push so it cannot clobber a newer local
+      // optimistic operation on an overlapping session.
+      if (collectionBulkOperationRegistry.hasCurrentTargets()) return
+      void refreshSessionListMetadataFromServer({
+        removeMissing: false,
+        reason: 'bulk-changed',
+      })
+    })
+
+    return cleanup
+  }, [refreshSessionListMetadataFromServer, windowWorkspaceId])
 
   // Transport reconnect recovery — refresh session metadata plus active/processing
   // session content after stale reconnects.
@@ -1255,9 +1333,15 @@ export default function App() {
   }, [updateSessionById])
 
   const handleSessionStatusChange = useCallback((sessionId: string, state: SessionStatus) => {
+    const prev = store.get(sessionMetaMapAtom).get(sessionId)
     updateSessionById(sessionId, { sessionStatus: state })
     window.electronAPI.sessionCommand(sessionId, { type: 'setSessionStatus', state })
-  }, [updateSessionById])
+    // Sidebar unseen dot when the session moves into a different status bucket.
+    // (updateSessionById → extractSessionMeta path does not go through updateSessionMetaAtom.)
+    if (prev?.workspaceId && prev.sessionStatus !== state) {
+      markStatusUnseen(prev.workspaceId, state)
+    }
+  }, [updateSessionById, store])
 
   const handleRenameSession = useCallback((sessionId: string, name: string) => {
     updateSessionById(sessionId, { name })
@@ -1713,14 +1797,31 @@ export default function App() {
   })
 
   const connectionState = useTransportConnectionState()
-  const showTransportConnectionBanner = shouldShowTransportConnectionBanner(connectionState)
+  // SSH-backed workspace: surface SSH-level status in front of the ws transport
+  // so the banner never shows a raw ws error for the (ephemeral) forwarded port.
+  const windowSshHostId = useMemo(() => {
+    if (!windowWorkspaceId) return null
+    const workspace = workspaces.find(w => w.id === windowWorkspaceId)
+    return workspace?.remoteServer?.sshHostId ?? null
+  }, [windowWorkspaceId, workspaces])
+  const sshConnectionStatus = useSshConnectionStatus(windowSshHostId)
+  const showTransportConnectionBanner =
+    shouldShowTransportConnectionBanner(connectionState) || shouldShowSshBanner(sshConnectionStatus)
+
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
+  useEffect(() => {
+    const handleResize = () => setViewportWidth(window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+  const showWorkspaceIconRail = shouldShowWorkspaceIconRail(workspaceSelectorRail, viewportWidth)
 
   const handleReconnectTransport = useCallback(() => {
     void window.electronAPI.reconnectTransport().catch((error) => {
       const message = error instanceof Error ? error.message : 'Unknown error'
       toast.error(t('toast.reconnectFailed'), { description: message })
     })
-  }, [])
+  }, [t])
 
   const handleOpenFile = linkInterceptor.handleOpenFile
   const handleOpenUrl = linkInterceptor.handleOpenUrl
@@ -1730,11 +1831,11 @@ export default function App() {
   }, [])
 
   const handleOpenKeyboardShortcuts = useCallback(() => {
-    navigate(routes.view.settings('shortcuts'))
+    setShowShortcuts(true)
   }, [])
 
   const handleOpenStoredUserPreferences = useCallback(() => {
-    navigate(routes.view.settings('preferences'))
+    navigate(routes.view.settings('context'))
   }, [])
 
   // Show reset confirmation dialog
@@ -1998,12 +2099,19 @@ export default function App() {
             onBack={onboarding.handleBack}
             onSelectProvider={onboarding.handleSelectProvider}
             onSkipSetup={onboarding.handleSkipSetup}
+            roxConnectCodes={onboarding.roxConnectCodes}
+            roxConnectStatus={onboarding.roxConnectStatus}
+            roxConnectError={onboarding.roxConnectError}
+            roxAuthBaseUrl={onboarding.roxAuthBaseUrl}
+            onStartRoxConnect={onboarding.handleStartRoxConnect}
+            onOpenRoxConnectBrowser={onboarding.handleOpenRoxConnectBrowser}
             onSelectApiSetupMethod={onboarding.handleSelectApiSetupMethod}
             onSubmitCredential={onboarding.handleSubmitCredential}
             onSubmitLocalModel={onboarding.handleSubmitLocalModel}
             onStartOAuth={onboarding.handleStartOAuth}
             onFinish={onboarding.handleFinish}
             isWaitingForCode={onboarding.isWaitingForCode}
+            isProviderOAuthPending={onboarding.isProviderOAuthPending}
             onSubmitAuthCode={onboarding.handleSubmitAuthCode}
             onCancelOAuth={onboarding.handleCancelOAuth}
             copilotDeviceCode={onboarding.copilotDeviceCode}
@@ -2062,6 +2170,10 @@ export default function App() {
           {/* Handle window close requests (X button, Cmd+W) - close modal first if open */}
           <WindowCloseHandler />
 
+          {/* W3 Omnibox — unified ⌘K palette (S-04). Renderer hotkey + embedded
+              SiYuan webContents ⌘K bridge are both implemented. */}
+          <OmniboxHost />
+
           {/* Splash screen overlay - fades out when fully ready */}
           {showSplash && (
             <SplashScreen
@@ -2071,36 +2183,54 @@ export default function App() {
           )}
 
           {/* Main UI - always rendered, splash fades away to reveal it */}
-          <div
-            className="h-full flex flex-col text-foreground"
-            style={{ paddingTop: 'var(--topbar-height)' }}
-          >
-            {showTransportConnectionBanner && connectionState && (
-              <TransportConnectionBanner
-                state={connectionState}
-                onRetry={handleReconnectTransport}
+          <div className="flex h-full text-foreground">
+            {showWorkspaceIconRail && !sessionLoadError && (
+              <WorkspaceIconRail
+                workspaces={workspaces}
+                activeWorkspaceId={windowWorkspaceId}
+                onSelect={handleSelectWorkspace}
+                onWorkspaceCreated={handleRefreshWorkspaces}
               />
             )}
-            <div className="flex-1 min-h-0">
-              {sessionLoadError ? (
-                <SessionLoadErrorScreen
-                  message={sessionLoadError}
-                  onRetry={() => { void loadSessionsFromServer() }}
-                />
-              ) : (
-                <AppShell
-                  contextValue={appShellContextValue}
-                  defaultLayout={[20, 32, 48]}
-                  menuNewChatTrigger={menuNewChatTrigger}
-                  isFocusedMode={isFocusedMode}
+            <div
+              className="flex min-w-0 flex-1 flex-col"
+              style={{ paddingTop: 'var(--topbar-height)' }}
+            >
+              {showTransportConnectionBanner && connectionState && (
+                <TransportConnectionBanner
+                  state={connectionState}
+                  sshStatus={sshConnectionStatus}
+                  onRetry={handleReconnectTransport}
                 />
               )}
+              <ToolchainStatusBanner />
+              <div className="min-h-0 flex-1">
+                {sessionLoadError ? (
+                  <SessionLoadErrorScreen
+                    message={sessionLoadError}
+                    onRetry={() => { void loadSessionsFromServer() }}
+                  />
+                ) : (
+                  <AppShell
+                    contextValue={appShellContextValue}
+                    defaultLayout={[20, 32, 48]}
+                    menuNewChatTrigger={menuNewChatTrigger}
+                    isFocusedMode={isFocusedMode}
+                    showTopBarWorkspaceSelector={!showWorkspaceIconRail}
+                    topBarLeftInset={getTopBarLeftInset(showWorkspaceIconRail)}
+                  />
+                )}
+              </div>
+              <ResetConfirmationDialog
+                open={showResetDialog}
+                onConfirm={executeReset}
+                onCancel={() => setShowResetDialog(false)}
+              />
+              <KeyboardShortcutsDialog
+                open={showShortcuts}
+                onOpenChange={setShowShortcuts}
+              />
             </div>
-            <ResetConfirmationDialog
-              open={showResetDialog}
-              onConfirm={executeReset}
-              onCancel={() => setShowResetDialog(false)}
-            />
           </div>
 
           {/* File preview overlay — rendered by the link interceptor when a previewable file is clicked */}

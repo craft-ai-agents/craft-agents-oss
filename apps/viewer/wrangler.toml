@@ -1,0 +1,11 @@
+# Cloudflare Pages project for Craft session viewer + share API
+name = "craft-agents-viewer"
+compatibility_date = "2025-08-01"
+pages_build_output_dir = "dist"
+
+[[r2_buckets]]
+binding = "SHARES"
+bucket_name = "craft-session-shares"
+
+[vars]
+VIEWER_ORIGIN = "https://agents.rox.one"

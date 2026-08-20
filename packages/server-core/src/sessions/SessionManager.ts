@@ -20,10 +20,13 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior, getPersistedUiLanguage, resolveTitleLanguageName } from '@craft-agent/shared/config'
-import type { MidStreamBehavior } from '@craft-agent/shared/config'
+import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, getRuntimeEnvOverrides, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior, getPersistedUiLanguage, resolveTitleLanguageName } from '@craft-agent/shared/config'
+import type { MidStreamBehavior, LlmProviderType } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
+import { MemoryService } from '../memory/MemoryService'
+import { readProvenance, writeProvenance, type SessionProvenance } from '../memory/provenance'
+import { appendSkillUsage, extractSkillMentions } from '../memory/skill-usage'
 import { InitGate } from '@craft-agent/server-core/domain'
 import { i18n } from '@craft-agent/shared/i18n'
 import {
@@ -34,6 +37,7 @@ import {
   migrateLegacyCredentials,
   migrateLegacyLlmConnectionsConfig,
   migrateOrphanedDefaultConnections,
+  seedDefaultLlmConnection,
   MODEL_REGISTRY,
   type Workspace,
   type WorkspaceInfo,
@@ -71,7 +75,11 @@ import {
   type SessionMetadata,
   type SessionStatus,
   type SessionHeader,
+  type SessionPriority,
   pickSessionFields,
+  lexorankValidate,
+  lexorankBetween,
+  backfillRanks,
 } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
 import { listTaskSlugs, parseTaskSpec, uniqueTaskSlug } from '@craft-agent/shared/tasks'
@@ -85,10 +93,21 @@ import { restoreFiles } from '@craft-agent/shared/utils/bundle-files'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
-import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta, type TokenUsage } from '@craft-agent/core/types'
+import type {
+  BulkUpdateSessionsInput,
+  BulkUpdateSessionsPatch,
+  BulkUpdateSessionsResult,
+} from '@craft-agent/shared/protocol'
+import {
+  assertValidBulkUpdateInput,
+  assertValidBulkUpdatePatch,
+} from './bulk-labels'
+import { resolveBulkLabels } from '@craft-agent/shared/sessions/collection'
+import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta, type TokenUsage, type SessionMemoryMode } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
 import { loadAllSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
-import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
+import { invalidateContextFileCache, formatSourceRetrieveForPrompt } from '@craft-agent/shared/prompts/system'
+import { retrieveSourcesForPrompt } from '../sources/source-index'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
@@ -98,7 +117,20 @@ import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId, resolveSessionLabels, findTaskItemLabelId } from '@craft-agent/shared/labels'
 import { ensureLabelsExist, ensureTaskItemLabel } from '@craft-agent/shared/labels/crud'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
-import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
+import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot, type KnowledgeActionExecutor, type CloudRunSubmitExecutor, type KnowledgeActionExecutorContext, type KnowledgeAutomationAction, type CloudRunSubmitAction, type CloudRunSubmitExecutorContext } from '@craft-agent/shared/automations'
+import { awardXpSafe } from '@craft-agent/shared/gamification'
+import { ServerKnowledgeActionExecutor } from '../knowledge/automation-actions'
+import { KnowledgeBridgeService } from '../knowledge/bridge-service'
+import { KnowledgeMutationProposalsStore } from '../knowledge/proposals-store'
+import { KnowledgeAuditLog } from '../knowledge/knowledge-audit'
+import { getKnowledgeBridge, getKnowledgeProviderResolver, registerKnowledgeBridge } from '../knowledge/bridge-registry'
+import {
+  startKnowledgeWatch,
+  stopKnowledgeWatchesForWorkspace,
+  stopAllKnowledgeWatches,
+} from '../knowledge/change-watcher'
+import { KnowledgeConnectionsStore, credentialIdFromRef } from '../knowledge/connections-store'
+import { submitCloudRunInternal } from '../handlers/rpc/cloud-runs'
 import { buildBackendRuntimeSignature, buildRestartRequiredSignature, filterAttachmentsForModelInput } from './runtime-config'
 import { validateArchiveTarget } from './archive-guards'
 
@@ -274,6 +306,73 @@ export async function copyPiTurnAnchorsForBranch(
   await writeFile(
     getPiTurnAnchorsPath(branchSessionPath),
     JSON.stringify({ version: PI_TURN_ANCHORS_VERSION, anchors: filtered }),
+    'utf-8',
+  )
+}
+
+// OMP turn anchors: craft message id → OMP transcript entry id (8-hex,
+// see docs/omp-rpc-notes.md §Branching). Same sidecar mechanics as the Pi
+// anchors; the anchor is the id of the ASSISTANT message entry — the child
+// OmpAgent resolves the cut (following user entry, or tail-copy) at fork time.
+const OMP_TURN_ANCHORS_VERSION = 1
+const OMP_TURN_ANCHORS_FILE = 'omp-turn-anchors.json'
+
+function getOmpTurnAnchorsPath(sessionPath: string): string {
+  return join(sessionPath, 'meta', OMP_TURN_ANCHORS_FILE)
+}
+
+export async function loadOmpTurnAnchors(sessionPath: string): Promise<PiTurnAnchorsIndex> {
+  const filePath = getOmpTurnAnchorsPath(sessionPath)
+  try {
+    const parsed = JSON.parse(await readFile(filePath, 'utf-8')) as Partial<PiTurnAnchorsIndex>
+    const normalized: Record<string, string> = {}
+    for (const [messageId, anchor] of Object.entries(parsed.anchors ?? {})) {
+      if (typeof messageId === 'string' && typeof anchor === 'string' && messageId && anchor) {
+        normalized[messageId] = anchor
+      }
+    }
+    return { version: OMP_TURN_ANCHORS_VERSION, anchors: normalized }
+  } catch {
+    return { version: OMP_TURN_ANCHORS_VERSION, anchors: {} }
+  }
+}
+
+async function getOmpTurnAnchor(sessionPath: string, messageId: string): Promise<string | undefined> {
+  if (!messageId) return undefined
+  const index = await loadOmpTurnAnchors(sessionPath)
+  return index.anchors[messageId]
+}
+
+export async function saveOmpTurnAnchor(sessionPath: string, messageId: string, anchorId: string): Promise<void> {
+  if (!messageId || !anchorId) return
+
+  const index = await loadOmpTurnAnchors(sessionPath)
+  if (index.anchors[messageId] === anchorId) return
+
+  index.anchors[messageId] = anchorId
+  await mkdir(join(sessionPath, 'meta'), { recursive: true })
+  await writeFile(getOmpTurnAnchorsPath(sessionPath), JSON.stringify(index), 'utf-8')
+}
+
+export async function copyOmpTurnAnchorsForBranch(
+  sourceSessionPath: string,
+  branchSessionPath: string,
+  branchedMessageIds: Iterable<string>,
+): Promise<void> {
+  const index = await loadOmpTurnAnchors(sourceSessionPath)
+  if (Object.keys(index.anchors).length === 0) return
+  const idSet = new Set(branchedMessageIds)
+  const filtered: Record<string, string> = {}
+  for (const [messageId, anchor] of Object.entries(index.anchors)) {
+    if (idSet.has(messageId)) {
+      filtered[messageId] = anchor
+    }
+  }
+  if (Object.keys(filtered).length === 0) return
+  await mkdir(join(branchSessionPath, 'meta'), { recursive: true })
+  await writeFile(
+    getOmpTurnAnchorsPath(branchSessionPath),
+    JSON.stringify({ version: OMP_TURN_ANCHORS_VERSION, anchors: filtered }),
     'utf-8',
   )
 }
@@ -793,6 +892,17 @@ interface RunningBackgroundTask {
   agentsCompleted?: number
 }
 
+type CollectionMutableField =
+  | 'isArchived'
+  | 'archivedAt'
+  | 'isFlagged'
+  | 'sessionStatus'
+  | 'priority'
+  | 'dueDate'
+  | 'projectId'
+  | 'labels'
+  | 'kanbanColumn'
+
 interface ManagedSession {
   id: string
   workspace: Workspace
@@ -821,6 +931,8 @@ interface ManagedSession {
   permissionMode?: PermissionMode
   /** Previous permission mode (preserved across restarts for session_state modeTransition context) */
   previousPermissionMode?: PermissionMode
+  /** Self-learning memory mode for this session (default 'persistent' when absent) */
+  memoryMode?: SessionMemoryMode
   /** Centralized MCP client pool for this session's source connections */
   mcpPool?: McpClientPool
   /** HTTP MCP server exposing pool tools to external SDK subprocesses */
@@ -860,6 +972,10 @@ interface ManagedSession {
   parentSessionId?: string
   // Kanban board column id ('todo' | 'in-progress' | 'done'); independent of sessionStatus
   kanbanColumn?: string
+  // Collection linear views: LexoRank manual order, priority, due date
+  rank?: string
+  priority?: SessionPriority
+  dueDate?: number | null
   // Tasks Conductor: slug of the task spec this session belongs to (orchestrator + child nodes)
   taskSlug?: string
   // Tasks Conductor: id of the run that spawned this child session (child nodes only)
@@ -900,6 +1016,8 @@ interface ManagedSession {
   // Guard: suppress external metadata revert after programmatic writes (setSessionStatus/setSessionLabels).
   // fs.watch fires during atomic write (unlink+rename) and can read stale data, reverting in-memory state.
   _metadataWriteGuardUntil?: number
+  /** Runtime-only per-field versions prevent stale failed writes from rolling back newer mutations. */
+  _collectionFieldVersions?: Partial<Record<CollectionMutableField, number>>
   // Whether an async operation is ongoing (sharing, updating share, revoking, title regeneration)
   // Used for shimmer effect on session title
   isAsyncOperationOngoing?: boolean
@@ -946,9 +1064,14 @@ interface ManagedSession {
   authRetryAttempted?: boolean
   // Flag indicating auth retry is in progress (to prevent complete handler from interfering)
   authRetryInProgress?: boolean
+  // Rate-limit failover tracking (runtime only): switch to another compatible OAuth connection once current subscription is capped.
+  rateLimitFailoverInProgress?: boolean
+  rateLimitFailoverTriedConnections?: Set<string>
   // Whether this session is hidden from session list (e.g., mini edit sessions)
   hidden?: boolean
   branchFromMessageId?: string
+  // Parent session id (UI lineage) — persisted via SESSION_PERSISTENT_FIELDS
+  branchFromSessionId?: string
   // Branch context strategy:
   // - sdk-fork: provider-level fork from parent SDK session
   // - seeded-fresh-session: fresh backend session seeded with transcript up to branch cutoff
@@ -1147,6 +1270,9 @@ function managedToSession(m: ManagedSession, overrides?: Partial<Session>): Sess
     isProcessing: m.isProcessing,
     sessionFolderPath: getSessionStoragePath(m.workspace.rootPath, m.id),
     supportsBranching: resolveSupportsBranching(m),
+    // Collection fields: coerce defaults on read (FR-14)
+    priority: m.priority ?? 'none',
+    dueDate: m.dueDate ?? null,
     ...overrides,
   } as Session
 }
@@ -1346,20 +1472,25 @@ export class SessionManager implements ISessionManager {
    * 2. A session-bound {@link RemoteBrowserPaneManager} when `rpcServer` is set.
    *    Cached in `remoteBpms` so repeat lookups don't allocate.
    * 3. `null` when there's neither a local BPM nor an RPC server.
+   *
+   * `opts.workspaceId` is a fallback used when the session is not yet registered
+   * in `this.sessions` (e.g. during eager agent creation for branch preflight,
+   * before the session is inserted). Without it the remote bridge could not be
+   * built and the caller's "passed the gate" invariant would be violated.
    */
-  getBrowserPaneManagerForSession(sid: string): IBrowserPaneManager | null {
+  getBrowserPaneManagerForSession(sid: string, opts?: { workspaceId?: string }): IBrowserPaneManager | null {
     if (this.browserPaneManager) return this.browserPaneManager
     if (!this.rpcServer) return null
 
     const cached = this.remoteBpms.get(sid)
     if (cached) return cached
 
-    const session = this.sessions.get(sid)
-    if (!session) return null
+    const workspaceId = this.sessions.get(sid)?.workspace.id ?? opts?.workspaceId
+    if (!workspaceId) return null
 
     const bridge = new RemoteBrowserPaneManager({
       sessionId: sid,
-      workspaceId: session.workspace.id,
+      workspaceId,
       rpcServer: this.rpcServer,
       getHostClient: () => this.getBrowserHostClient(sid),
     })
@@ -1497,6 +1628,7 @@ export class SessionManager implements ISessionManager {
     const oldLabels = JSON.stringify(managed.labels ?? [])
     const newLabels = JSON.stringify(header.labels ?? [])
     if (oldLabels !== newLabels) {
+      this.markCollectionFieldMutations(managed, ['labels'])
       managed.labels = header.labels
       this.sendEvent({ type: 'labels_changed', sessionId, labels: header.labels ?? [] }, managed.workspace.id)
       changed = true
@@ -1504,6 +1636,7 @@ export class SessionManager implements ISessionManager {
 
     // Flagged
     if ((managed.isFlagged ?? false) !== (header.isFlagged ?? false)) {
+      this.markCollectionFieldMutations(managed, ['isFlagged'])
       managed.isFlagged = header.isFlagged ?? false
       this.sendEvent(
         { type: header.isFlagged ? 'session_flagged' : 'session_unflagged', sessionId },
@@ -1514,6 +1647,7 @@ export class SessionManager implements ISessionManager {
 
     // Session status
     if (managed.sessionStatus !== header.sessionStatus) {
+      this.markCollectionFieldMutations(managed, ['sessionStatus'])
       managed.sessionStatus = header.sessionStatus
       this.sendEvent({ type: 'session_status_changed', sessionId, sessionStatus: header.sessionStatus ?? '' }, managed.workspace.id)
       changed = true
@@ -1528,13 +1662,37 @@ export class SessionManager implements ISessionManager {
 
     // Project binding (no dedicated event today — handled via metaChanged broadcast)
     if (managed.projectId !== header.projectId) {
+      this.markCollectionFieldMutations(managed, ['projectId'])
       managed.projectId = header.projectId
       changed = true
     }
 
     // Kanban column (mutable via drag; reconcile external/multi-window changes)
     if (managed.kanbanColumn !== header.kanbanColumn) {
+      this.markCollectionFieldMutations(managed, ['kanbanColumn'])
       managed.kanbanColumn = header.kanbanColumn
+      changed = true
+    }
+
+    // Collection linear-view fields (rank / priority / dueDate)
+    if (managed.rank !== header.rank) {
+      managed.rank = header.rank
+      changed = true
+    }
+    if (managed.priority !== header.priority) {
+      this.markCollectionFieldMutations(managed, ['priority'])
+      managed.priority = header.priority
+      changed = true
+    }
+    if ((managed.dueDate ?? null) !== (header.dueDate ?? null)) {
+      this.markCollectionFieldMutations(managed, ['dueDate'])
+      managed.dueDate = header.dueDate ?? undefined
+      changed = true
+    }
+
+    // Memory mode (no dedicated event — reconcile + persist; broadcast below)
+    if ((managed.memoryMode ?? 'persistent') !== (header.memoryMode ?? 'persistent')) {
+      managed.memoryMode = header.memoryMode
       changed = true
     }
 
@@ -1630,6 +1788,10 @@ export class SessionManager implements ISessionManager {
         sessionLog.info('Default permissions changed')
         this.broadcastDefaultPermissionsChanged()
       },
+      onContextDocsChange: () => {
+        sessionLog.info('Context docs changed')
+        this.broadcastContextDocsChanged()
+      },
       onSkillsListChange: async (skills) => {
         sessionLog.info(`Skills list changed in ${workspaceRootPath} (${skills.length} skills)`)
         this.broadcastSkillsChanged(workspaceId, skills)
@@ -1704,6 +1866,8 @@ export class SessionManager implements ISessionManager {
         workspaceRootPath,
         workspaceId,
         enableScheduler: true,
+        knowledgeExecutor: this.createKnowledgeActionExecutor(workspaceRootPath, workspaceId),
+        cloudRunSubmitExecutor: this.createCloudRunSubmitExecutor(workspaceRootPath, workspaceId),
         onPromptsReady: async (prompts) => {
           // Execute prompt automations by creating new sessions
           const settled = await Promise.allSettled(
@@ -1738,6 +1902,7 @@ export class SessionManager implements ISessionManager {
             })
 
             appendAutomationHistoryEntry(workspaceRootPath, entry).catch(e => sessionLog.warn('[Automations] Failed to write history:', e))
+            awardXpSafe('automation_ran')
 
             if (result.status === 'rejected') {
               sessionLog.error(`[Automations] Failed to execute prompt action ${idx + 1}:`, result.reason)
@@ -1752,6 +1917,13 @@ export class SessionManager implements ISessionManager {
       })
       this.automationSystems.set(workspaceRootPath, automationSystem)
       sessionLog.info(`Initialized AutomationSystem for workspace ${workspaceId}`)
+      // Auto-start knowledge change watchers for connections scoped to this workspace
+      void this.autoStartKnowledgeWatches(workspaceRootPath, workspaceId).catch((error) => {
+        sessionLog.warn(
+          `Failed to auto-start knowledge watches for ${workspaceId}:`,
+          error instanceof Error ? error.message : error,
+        )
+      })
     }
   }
 
@@ -1763,6 +1935,171 @@ export class SessionManager implements ISessionManager {
     const watcher = this.configWatchers.get(workspaceRootPath)
     watcher?.notifyFileChange(relativePath)
   }
+
+
+  /**
+   * Emit an AppEvent into the workspace AutomationSystem bus (P6 knowledge watcher).
+   */
+  async emitWorkspaceEvent(workspaceId: string, event: string, payload: Record<string, unknown>): Promise<void> {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    const workspaceRootPath = workspace?.rootPath
+      ?? (this.automationSystems.size === 1 ? this.automationSystems.keys().next().value : undefined)
+    if (!workspaceRootPath) return
+    const automationSystem = this.automationSystems.get(workspaceRootPath)
+    if (!automationSystem || automationSystem.isDisposed()) return
+    await automationSystem.emit(event as Parameters<AutomationSystem['emit']>[0], {
+      workspaceId,
+      timestamp: Date.now(),
+      ...payload,
+    } as Parameters<AutomationSystem['emit']>[1])
+  }
+
+  /** Knowledge action executor bound to workspace bridge (P6). */
+  private createKnowledgeActionExecutor(workspaceRootPath: string, workspaceId: string): KnowledgeActionExecutor {
+    const executor = new ServerKnowledgeActionExecutor({
+      getBridge: (root, wsId) => {
+        const existing = getKnowledgeBridge(root)
+        if (existing) return existing
+        const resolver = getKnowledgeProviderResolver(root)
+        const bridge = new KnowledgeBridgeService({
+          providerResolver: resolver ?? (async (connectionId) => {
+            throw new Error(
+              `knowledge automation: no provider resolver for workspace (connection=${connectionId}). Start knowledge WATCH or open knowledge UI first.`,
+            )
+          }),
+          proposalsStore: new KnowledgeMutationProposalsStore(root),
+          audit: new KnowledgeAuditLog(root),
+          workspaceId: wsId,
+        })
+        registerKnowledgeBridge(root, bridge, resolver)
+        return bridge
+      },
+      resolveConnectionId: (ctx) => {
+        const p = ctx.payload.connectionId
+        return typeof p === 'string' && p.length > 0 ? p : undefined
+      },
+    })
+    return {
+      execute: (action: KnowledgeAutomationAction, ctx: KnowledgeActionExecutorContext) =>
+        executor.execute(action, ctx),
+    }
+  }
+
+  private createCloudRunSubmitExecutor(workspaceRootPath: string, workspaceId: string): CloudRunSubmitExecutor {
+    const executor = new ServerKnowledgeActionExecutor({
+      getBridge: () => {
+        throw new Error('cloud_run.submit does not use the knowledge bridge')
+      },
+      submitCloudRun: async (action, ctx) => {
+        const topic =
+          (action.topic && action.topic.trim().length > 0 ? action.topic : undefined) ??
+          (typeof ctx.payload.title === 'string' ? ctx.payload.title : undefined) ??
+          (typeof ctx.payload.topic === 'string' ? ctx.payload.topic : undefined) ??
+          action.skillSlug ??
+          'automation cloud run'
+        const sessionId =
+          action.sessionId ??
+          (typeof ctx.payload.sessionId === 'string' ? ctx.payload.sessionId : undefined)
+        const callbackTag =
+          action.callbackTag ??
+          (typeof ctx.payload.callbackTag === 'string' ? ctx.payload.callbackTag : undefined)
+        const result = await submitCloudRunInternal({
+          topic,
+          sessionId,
+          workspaceId: ctx.workspaceId || workspaceId,
+          labels: action.labels,
+          callbackTag,
+          skillSlug: action.skillSlug,
+        })
+        if (result.ok && result.runId) {
+          return { ok: true, runId: result.runId }
+        }
+        // Synthetic fallback when cloud runs disabled or provider submit failed.
+        const runId = `run_auto_${randomUUID()}`
+        sessionLog.warn(
+          `[cloud_run.submit] real submit failed (${result.error ?? 'unknown'}); using synthetic runId=${runId}. ` +
+            `Enable settings.cloudRuns.enabled and configure provider for live runs. workspace=${workspaceRootPath}`,
+        )
+        const audit = new KnowledgeAuditLog(ctx.workspaceRootPath || workspaceRootPath)
+        await audit.append({
+          actor: 'automation',
+          action: 'knowledge.automation.cloud_run_submit',
+          target: `craft:run/${runId}`,
+          detail: JSON.stringify({
+            skillSlug: action.skillSlug,
+            topic,
+            labels: action.labels,
+            callbackTag,
+            intentOnly: true,
+            realSubmitError: result.error,
+          }),
+        })
+        return { ok: true, runId }
+      },
+    })
+    return {
+      submit: (action: CloudRunSubmitAction, ctx: CloudRunSubmitExecutorContext) =>
+        executor.submitCloudRun(action, {
+          event: String(ctx.event),
+          payload: ctx.payload,
+          matcherId: ctx.matcherId,
+          automationName: ctx.automationName,
+          workspaceId: ctx.workspaceId || workspaceId,
+          workspaceRootPath: ctx.workspaceRootPath || workspaceRootPath,
+          env: ctx.env,
+        }),
+    }
+  }
+
+  /**
+   * Start KnowledgeChangeWatcher for each knowledge connection that belongs
+   * to this workspace (credentialRef embeds workspaceId). Process-level
+   * (no clientId) so daemon headless still gets AttributeChanged events.
+   */
+  private async autoStartKnowledgeWatches(workspaceRootPath: string, workspaceId: string): Promise<void> {
+    const store = new KnowledgeConnectionsStore()
+    const connections = store.list()
+    if (connections.length === 0) return
+
+    const emit = this.emitWorkspaceEvent.bind(this)
+
+    for (const record of connections) {
+      const cred = credentialIdFromRef(record.credentialRef)
+      // Prefer workspace-scoped connections; if credential is unscoped and only
+      // one workspace is active, still start (single-workspace installs).
+      if (cred?.workspaceId && cred.workspaceId !== workspaceId) continue
+
+      try {
+        startKnowledgeWatch({
+          connectionId: record.id,
+          workspaceId,
+          workspaceRoot: workspaceRootPath,
+          intervalMs: 60_000,
+          getProvider: async () => {
+            const resolver = getKnowledgeProviderResolver(workspaceRootPath)
+            if (resolver) return resolver(record.id)
+            // Lazy: without a registered resolver, skip this tick by throwing (fail-soft).
+            throw new Error(
+              `knowledge watch: no provider resolver for workspace ${workspaceId} (open knowledge UI or call knowledge.watch once)`,
+            )
+          },
+          onEvent: async (event, payload) => {
+            await emit(workspaceId, event, {
+              ...payload,
+              connectionId: record.id,
+            })
+          },
+        })
+        sessionLog.info(`Auto-started knowledge watch for connection ${record.id} in ${workspaceId}`)
+      } catch (error) {
+        sessionLog.warn(
+          `autoStartKnowledgeWatches: skip ${record.id}:`,
+          error instanceof Error ? error.message : error,
+        )
+      }
+    }
+  }
+
 
   /**
    * Reload sources for all sessions in a workspace, skipping those currently processing.
@@ -1779,9 +2116,120 @@ export class SessionManager implements ISessionManager {
     }
   }
 
+  /**
+   * One-shot LLM runner for MemoryService distillation. Mirrors
+   * generateRemoteTransferSummary: spawns a scratch backend agent on the
+   * workspace's default connection/mini model, single mini completion, destroy.
+   * Returns null-tolerant text ('' on failure is fine — the service drops).
+   */
+  private async runMemoryDistillOneShot(
+    workspace: { id: string; rootPath: string },
+    prompt: string,
+  ): Promise<string> {
+    const wsConfig = loadWorkspaceConfig(workspace.rootPath)
+    const backendContext = resolveBackendContext({
+      sessionConnectionSlug: undefined,
+      workspaceDefaultConnectionSlug: wsConfig?.defaults?.defaultLlmConnection,
+      managedModel: wsConfig?.defaults?.model,
+    })
+    const miniModel = backendContext.connection
+      ? (getMiniModel(backendContext.connection) ?? backendContext.connection.defaultModel ?? getDefaultSummarizationModel())
+      : getDefaultSummarizationModel()
+    const agent = createBackendFromResolvedContext({
+      context: backendContext,
+      hostRuntime: buildBackendHostRuntimeContext(),
+      coreConfig: {
+        workspace: workspace as Workspace,
+        session: {
+          id: `memory-distill-${Date.now()}`,
+          workspaceRootPath: workspace.rootPath,
+          createdAt: Date.now(),
+          lastUsedAt: Date.now(),
+          workingDirectory: workspace.rootPath,
+          model: wsConfig?.defaults?.model,
+          permissionMode: 'allow-all',
+        },
+        miniModel,
+        envOverrides: { CRAFT_WORKSPACE_PATH: workspace.rootPath },
+        isHeadless: true,
+      },
+      providerOptions: { piAuthProvider: backendContext.connection?.piAuthProvider },
+    })
+    try {
+      const text = await agent.runMiniCompletion(prompt)
+      if (text == null) throw new Error('runMiniCompletion returned null')
+      return text
+    } finally {
+      agent.destroy()
+    }
+  }
+
+  /**
+   * Public one-shot LLM seam for non-distill memory checks (spec L2 conflict
+   * detection on add). Thin wrapper over the private distill runner: resolves
+   * the workspace by id (throws when unknown). Callers must treat failures as
+   * skippable — this spawns a scratch backend agent per call.
+   */
+  async runDistillOneShot(workspaceId: string, prompt: string): Promise<string> {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`runDistillOneShot: unknown workspace '${workspaceId}'`)
+    return this.runMemoryDistillOneShot({ id: workspace.id, rootPath: workspace.rootPath }, prompt)
+  }
+
   private broadcastSourcesChanged(workspaceId: string, sources: LoadedSource[]): void {
     if (!this.eventSink) return
     this.eventSink(RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, sources)
+  }
+
+  // Self-learning memory services, one per workspace, created lazily.
+  private memoryServices = new Map<string, MemoryService>()
+
+  /**
+   * Lazily build the workspace's MemoryService (distill triggers, prompt
+   * blocks). Subscribes to this manager's session-completion seam and
+   * broadcasts through eventSink. Never throws — returns null on init
+   * failure and when memory.enabled is false (service keeps every trigger
+   * as a no-op internally).
+   */
+  private memoryServiceFor(workspace: { id: string; rootPath: string }): MemoryService | null {
+    let svc = this.memoryServices.get(workspace.rootPath)
+    if (svc) return svc
+    // P2: workspace-level kill switch — {workspace}/config.json memory.enabled:false
+    // overrides the global memory.enabled. Read at lazy-create time so a workspace
+    // synthesized without its config on disk (tests, fresh imports) falls through
+    // to global behavior; an unreadable config must never break session start.
+    try {
+      if (loadWorkspaceConfig(workspace.rootPath)?.memory?.enabled === false) return null
+    } catch {
+      // fall through to the global default
+    }
+    try {
+      svc = new MemoryService({
+        workspaceRoot: workspace.rootPath,
+        workspaceId: workspace.id,
+        emit: (channel, args) => {
+          if (!this.eventSink) return
+          if (channel === 'memory:changed') this.eventSink(RPC_CHANNELS.memory.CHANGED, { to: 'workspace', workspaceId: workspace.id }, args[0], args[1])
+          else if (channel === 'skillsPending:changed') this.eventSink(RPC_CHANNELS.skillsPending.CHANGED, { to: 'workspace', workspaceId: workspace.id }, args[0])
+        },
+        logger: { warn: (msg, err) => sessionLog.warn(`memory: ${msg}`, err) },
+        // F3: per-session memory-mode lookup — incognito/temporary sessions skip
+        // all memory writes (distill/branch/idle triggers). Unknown sessions default
+        // to 'persistent' so a session being torn down never loses lessons it earned.
+        getSessionMode: (sessionId) => this.sessions.get(sessionId)?.memoryMode ?? 'persistent',
+        // L1: session provenance (F4) for the feedback loop — which lessons the
+        // session saw, so a bad ending can attribute conflicts per scope.
+        readSessionProvenance: (sessionId) => readProvenance(workspace.rootPath, sessionId)?.lessons ?? [],
+      })
+      svc.attachSessionCompletion((cb) => this.onSessionComplete((evt) => { if (evt.workspaceId === workspace.id) cb(evt) }))
+      svc.setDistiller((prompt) => this.runMemoryDistillOneShot(workspace, prompt))
+      svc.start()
+      this.memoryServices.set(workspace.rootPath, svc)
+    } catch (err) {
+      sessionLog.error(`MemoryService init failed for ${workspace.rootPath}:`, err)
+      return null
+    }
+    return svc
   }
 
   private broadcastStatusesChanged(workspaceId: string): void {
@@ -1824,6 +2272,12 @@ export class SessionManager implements ISessionManager {
     if (!this.eventSink) return
     sessionLog.info('Broadcasting default permissions changed')
     this.eventSink(RPC_CHANNELS.permissions.DEFAULTS_CHANGED, { to: 'all' }, null)
+  }
+
+  private broadcastContextDocsChanged(): void {
+    if (!this.eventSink) return
+    sessionLog.info('Broadcasting context docs changed')
+    this.eventSink(RPC_CHANNELS.contextDocs.CHANGED, { to: 'all' })
   }
 
   /**
@@ -1919,10 +2373,27 @@ export class SessionManager implements ISessionManager {
     }
   }
 
+  /**
+   * Default permission mode for restored sessions that have no explicit mode
+   * persisted. Resolves through bundled defaults (workspaceDefaults.permissionMode,
+   * currently allow-all / «Выполнение») so restored sessions preselect Execute
+   * just like freshly created ones; explicit user choices still win.
+   */
+  private defaultRestorePermissionMode(): PermissionMode {
+    try {
+      return loadConfigDefaults().workspaceDefaults.permissionMode
+    } catch {
+      return 'ask'
+    }
+  }
+
   async initialize(): Promise<void> {
     try {
       // Backfill missing `models` arrays on existing LLM connections
       migrateLegacyLlmConnectionsConfig()
+
+      // Seed the default Rox connection on fresh installs (before orphan fix)
+      await seedDefaultLlmConnection()
 
       // Fix defaultLlmConnection if it points to a non-existent connection
       migrateOrphanedDefaultConnections()
@@ -1993,7 +2464,7 @@ export class SessionManager implements ISessionManager {
 
           // Initialize mode-manager state for restored sessions even before agent creation.
           // This keeps diagnostics/effective mode aligned with persisted session metadata.
-          setPermissionMode(meta.id, managed.permissionMode ?? 'ask', { changedBy: 'restore' })
+          setPermissionMode(meta.id, managed.permissionMode ?? this.defaultRestorePermissionMode(), { changedBy: 'restore' })
           if (managed.previousPermissionMode) {
             hydratePreviousPermissionMode(meta.id, managed.previousPermissionMode)
           }
@@ -2029,6 +2500,21 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
+   * Advance runtime versions for collection fields before mutating them.
+   * Failed async writes use these versions to avoid reverting later changes.
+   */
+  private markCollectionFieldMutations(
+    managed: ManagedSession,
+    fields: readonly CollectionMutableField[],
+  ): void {
+    const versions = managed._collectionFieldVersions ?? {}
+    for (const field of fields) {
+      versions[field] = (versions[field] ?? 0) + 1
+    }
+    managed._collectionFieldVersions = versions
+  }
+
+  /**
    * Persist a session to disk (async, with debouncing in the persistence queue).
    *
    * Cold-session path: if messages haven't been lazy-loaded yet, hydrate them
@@ -2045,6 +2531,10 @@ export class SessionManager implements ISessionManager {
       this.hydrateMessagesForColdPersist(managed)
     }
     this.enqueuePersist(managed)
+    // Self-learning memory: count-driven distill trigger (no-op when disabled).
+    try {
+      this.memoryServiceFor(managed.workspace)?.notifyMessageCount(managed.id, managed.messages.length)
+    } catch {}
   }
 
   // Cold-persist hydration. Mirrors the messages/queue-recovery half of
@@ -2421,9 +2911,46 @@ export class SessionManager implements ISessionManager {
       sessions = sessions.filter(m => m.workspace.id === workspaceId)
     }
 
+    // FR-15 / AC-8: if any session in a workspace lacks a valid rank, assign a full
+    // lexorankN sequence ordered by lastMessageAt desc (id asc). Second load is a
+    // no-op once every rank is valid. Group by workspace so ranks don't cross roots.
+    const byWorkspace = new Map<string, ManagedSession[]>()
+    for (const m of sessions) {
+      const list = byWorkspace.get(m.workspace.id)
+      if (list) list.push(m)
+      else byWorkspace.set(m.workspace.id, [m])
+    }
+    for (const group of byWorkspace.values()) {
+      this.backfillSessionRanksIfNeeded(group)
+    }
+
     return sessions
       .map(m => managedToSession(m))
       .sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0))
+  }
+
+  /**
+   * Idempotent rank backfill for one workspace group.
+   * When any member lacks a valid rank, rewrite the full ordered sequence and
+   * persist only sessions whose rank value actually changed.
+   */
+  private backfillSessionRanksIfNeeded(group: ManagedSession[]): void {
+    if (group.length === 0) return
+    const needsBackfill = group.some(m => !m.rank || !lexorankValidate(m.rank))
+    if (!needsBackfill) return
+
+    const assignments = backfillRanks(
+      group.map(m => ({ id: m.id, lastMessageAt: m.lastMessageAt ?? 0 })),
+    )
+    for (const { id, rank } of assignments) {
+      const managed = this.sessions.get(id)
+      if (!managed || managed.rank === rank) continue
+      managed.rank = rank
+      this.setMetadataWriteGuard(managed)
+      this.persistSession(managed)
+      // getSessions is sync — enqueue + fire-and-forget flush (same durability path).
+      void this.flushSession(managed.id)
+    }
   }
 
   /**
@@ -2585,6 +3112,17 @@ export class SessionManager implements ISessionManager {
     return getSessionStoragePath(managed.workspace.rootPath, sessionId)
   }
 
+  /**
+   * Memory provenance (spec F4): the lessons/skills injected into this
+   * session's prompts. Null for unknown sessions, sessions that never
+   * received memory blocks, or missing/corrupt records.
+   */
+  getSessionProvenance(sessionId: string): SessionProvenance | null {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return null
+    return readProvenance(managed.workspace.rootPath, sessionId)
+  }
+
   async createSession(
     workspaceId: string,
     options?: import('@craft-agent/shared/protocol').CreateSessionOptions,
@@ -2708,7 +3246,7 @@ export class SessionManager implements ISessionManager {
       branchFromSessionPath?: string
       branchFromSdkCwd?: string
       branchFromSdkTurnId?: string
-      sourceProvider?: 'anthropic' | 'pi'
+      sourceProvider?: LlmProviderType
     } | undefined
 
     if (options?.branchFromSessionId || options?.branchFromMessageId) {
@@ -2746,6 +3284,15 @@ export class SessionManager implements ISessionManager {
         })
         throw new Error(`Invalid branch request: source session ${options.branchFromSessionId} not found`)
       }
+
+      // Self-learning memory: a branch off an earlier message is a strong
+      // correction signal — enqueue a lightweight distill of the source session.
+      try {
+        this.memoryServiceFor({ id: workspaceId, rootPath: workspaceRootPath })?.notifyBranchCorrection(
+          options.branchFromSessionId,
+          options.branchFromMessageId,
+        )
+      } catch {}
 
       const sourceBackendContext = resolveBackendContext({
         sessionConnectionSlug: sourceManaged?.llmConnection || sourceSession.llmConnection,
@@ -2817,6 +3364,25 @@ export class SessionManager implements ISessionManager {
                 branchFromSessionId: options.branchFromSessionId,
                 branchFromMessageId: options.branchFromMessageId,
               })
+            }
+          }
+        } else if (sourceBackendContext.provider === 'omp') {
+          // OMP: assistant transcript entry id persisted in the omp-turn-anchors
+          // sidecar. Unlike Pi there is no safe "full-history fork" fallback —
+          // without the anchor the child cannot cut at the requested message,
+          // and OMP's branch RPC requires a precise user-entry cut, so a missing
+          // anchor (legacy session, unanchored message, or a transcript rewritten
+          // by OMP compaction) fails the branch loudly via the subsequent
+          // branchFromSdkTurnId === undefined check below.
+          if (branchFromSessionPath) {
+            branchFromSdkTurnId = await getOmpTurnAnchor(branchFromSessionPath, options.branchFromMessageId)
+            if (!branchFromSdkTurnId) {
+              sessionLog.warn('OMP branch anchor missing; branch will fail preflight', {
+                workspaceId,
+                branchFromSessionId: options.branchFromSessionId,
+                branchFromMessageId: options.branchFromMessageId,
+              })
+              throw new Error('Cannot create branch: this message has no OMP branch anchor. OMP branching requires a completed assistant reply whose transcript entry is known (branch from that message instead).')
             }
           }
         } else if (sourceBackendContext.provider === 'anthropic') {
@@ -2932,6 +3498,7 @@ export class SessionManager implements ISessionManager {
       }
 
       branchedStored.branchFromMessageId = validatedBranch.sourceMessageId
+      branchedStored.branchFromSessionId = validatedBranch.sourceSessionId
       if (validatedBranch.branchContextStrategy === 'sdk-fork') {
         branchedStored.branchFromSdkSessionId = validatedBranch.branchFromSdkSessionId
         branchedStored.branchFromSessionPath = validatedBranch.branchFromSessionPath
@@ -2967,6 +3534,26 @@ export class SessionManager implements ISessionManager {
           })
         }
       }
+
+      // Same propagation for OMP anchors — branch-of-branch stays cuttable.
+      if (
+        validatedBranch.branchContextStrategy === 'sdk-fork' &&
+        validatedBranch.sourceProvider === 'omp'
+      ) {
+        try {
+          await copyOmpTurnAnchorsForBranch(
+            sourceDir,
+            branchDir,
+            branchedStored.messages.map((m) => m.id),
+          )
+        } catch (err) {
+          sessionLog.warn('Failed to copy OMP turn-anchors sidecar to branch', {
+            err,
+            sourceSessionId: validatedBranch.sourceSessionId,
+            branchSessionId: storedSession.id,
+          })
+        }
+      }
     }
 
     // Resolve connection/provider/auth/model using the provider-agnostic backend resolver.
@@ -2990,6 +3577,7 @@ export class SessionManager implements ISessionManager {
       systemPromptPreset: options?.systemPromptPreset,
       enabledSourceSlugs: defaultEnabledSourceSlugs,
       branchFromMessageId: validatedBranch?.sourceMessageId,
+      branchFromSessionId: validatedBranch?.sourceSessionId,
       branchContextStrategy: validatedBranch?.branchContextStrategy,
       branchFromSdkSessionId: validatedBranch?.branchFromSdkSessionId,
       branchFromSessionPath: validatedBranch?.branchFromSessionPath,
@@ -2998,6 +3586,19 @@ export class SessionManager implements ISessionManager {
       branchSeedApplied: validatedBranch ? validatedBranch.branchContextStrategy === 'sdk-fork' : undefined,
       messagesLoaded: !isBranch,  // Branched sessions: lazy-load messages from JSONL
     })
+
+    // Register the session and initialize mode-manager state BEFORE any eager
+    // agent creation (branch preflight). getOrCreateAgent's browser-pane wiring
+    // resolves the session via this.sessions, so it must be present first: the
+    // browser-pane gate resolves a remote BrowserPaneManager via
+    // this.sessions.get(id), so an unregistered session trips the "passed the
+    // gate" guard under rpcServer (remote) deployments. rollbackFailedBranchCreation
+    // removes it again if preflight fails.
+    setPermissionMode(storedSession.id, managed.permissionMode ?? this.defaultRestorePermissionMode(), { changedBy: 'restore' })
+    if (managed.previousPermissionMode) {
+      hydratePreviousPermissionMode(storedSession.id, managed.previousPermissionMode)
+    }
+    this.sessions.set(storedSession.id, managed)
 
     // Eagerly load messages for branched sessions so the renderer gets the full
     // conversation immediately (needed for scroll-to-bottom on panel open)
@@ -3045,14 +3646,6 @@ export class SessionManager implements ISessionManager {
       }
     }
 
-    // Initialize mode-manager state immediately to avoid UI/enforcement races
-    // before the agent instance is lazily created.
-    setPermissionMode(storedSession.id, managed.permissionMode ?? 'ask', { changedBy: 'restore' })
-    if (managed.previousPermissionMode) {
-      hydratePreviousPermissionMode(storedSession.id, managed.previousPermissionMode)
-    }
-
-    this.sessions.set(storedSession.id, managed)
 
     // Initialize session metadata in AutomationSystem for diffing
     const automationSystem = this.automationSystems.get(workspaceRootPath)
@@ -3271,9 +3864,12 @@ export class SessionManager implements ISessionManager {
             customModels: connection.models?.map(model => {
               if (typeof model === 'string') return model
               const supportsImages = typeof model.supportsImages === 'boolean' ? model.supportsImages : undefined
-              if (model.contextWindow || supportsImages !== undefined) {
+              const hasDisplayName = typeof model.name === 'string' || typeof model.shortName === 'string'
+              if (model.contextWindow || supportsImages !== undefined || hasDisplayName) {
                 return {
                   id: model.id,
+                  ...(typeof model.name === 'string' ? { name: model.name } : {}),
+                  ...(typeof model.shortName === 'string' ? { shortName: model.shortName } : {}),
                   ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
                   ...(supportsImages !== undefined ? { supportsImages } : {}),
                 }
@@ -3412,6 +4008,9 @@ export class SessionManager implements ISessionManager {
       // Per-session env overrides
       const miniModel = connection ? (getMiniModel(connection) ?? connection.defaultModel) : undefined
       const envOverrides: Record<string, string> = {
+        // User-configured session env (config runtime.envOverrides); the
+        // structural keys below (workspace path, mini model) always win.
+        ...getRuntimeEnvOverrides(),
         CRAFT_WORKSPACE_PATH: managed.workspace.rootPath,
         // Pass mini model to SDK subprocess so built-in tools like WebFetch
         // use the correct model for summarization (instead of hardcoded Haiku)
@@ -3540,11 +4139,56 @@ export class SessionManager implements ISessionManager {
       // Construct backend via factory
       // ============================================================
 
+      // Self-learning memory prompt blocks (lessons + workspace memory), resolved
+      // lazily per session start. Undefined when memory.enabled is false, or when the
+      // session runs in 'temporary' memory mode (no read, no write — spec F3).
+      // M1: the last two user messages drive FTS-ranked recall (recency fallback).
+      const memoryQuery = managed.messages
+        .filter(m => m.role === 'user')
+        .slice(-2)
+        .map(m => m.content)
+        .join('\n')
+        .trim()
+      let memoryBlocks = managed.memoryMode === 'temporary'
+        ? undefined
+        : await this.memoryServiceFor(managed.workspace)?.buildMemoryBlocks(memoryQuery ? { query: memoryQuery } : undefined)
+      // P2.7: FTS-retrieve local source docs into the same memoryBlocks payload
+      // (sourcesBlock). Same memoryQuery as lessons; fail-soft on missing index.
+      if (memoryQuery && managed.workspace?.rootPath) {
+        try {
+          const retrieved = retrieveSourcesForPrompt(managed.workspace.rootPath, memoryQuery)
+          const sourcesBlock = formatSourceRetrieveForPrompt(retrieved.hits)
+          if (sourcesBlock) {
+            memoryBlocks = { ...(memoryBlocks ?? {}), sourcesBlock }
+          }
+        } catch (err) {
+          sessionLog.warn(`Failed to retrieve sources for prompt (${managed.id}):`, err)
+        }
+      }
+      // Provenance (spec F4): persist which lessons were injected so the feedback
+      // loop and usage UI can attribute behavior later. BackendConfig.memoryBlocks
+      // is a constructor-time snapshot, so this record refreshes per session start
+      // (i.e. per backend (re)spawn), not per turn. Skills attach per-message via
+      // [skill:slug] mentions (sessions and CoreBackendConfig carry no per-session
+      // skills list), so the per-skill prompt-hit set (spec S4) is recovered here
+      // from the session's own message contents and recorded both in the
+      // provenance record and the skills usage ledger (skills/.usage.jsonl).
+      const skillMentions = extractSkillMentions(managed.messages.map(m => m.content))
+      if ((memoryBlocks?.used?.length ?? 0) > 0 || skillMentions.length > 0) {
+        try {
+          writeProvenance(managed.workspace.rootPath, managed.id, { lessons: memoryBlocks?.used ?? [], skills: skillMentions })
+          appendSkillUsage(managed.workspace.rootPath, managed.id, skillMentions)
+        } catch (err) {
+          sessionLog.warn(`Failed to write memory provenance for ${managed.id}:`, err)
+        }
+      }
+
       managed.agent = createBackendFromResolvedContext({
         context: backendContext,
         hostRuntime: buildBackendHostRuntimeContext(),
         coreConfig: {
         workspace: managed.workspace,
+        memoryBlocks,
         miniModel,
         thinkingLevel: managed.thinkingLevel,
         session: sessionConfig,
@@ -3672,7 +4316,7 @@ export class SessionManager implements ISessionManager {
       })
       if (this.browserPaneManager || this.rpcServer) {
         const sid = managed.id
-        const bpm = this.getBrowserPaneManagerForSession(sid)
+        const bpm = this.getBrowserPaneManagerForSession(sid, { workspaceId: managed.workspace.id })
         if (!bpm) {
           throw new Error('Browser pane manager unavailable despite passing the gate — this is a bug.')
         }
@@ -4643,6 +5287,7 @@ export class SessionManager implements ISessionManager {
   async flagSession(sessionId: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
+      this.markCollectionFieldMutations(managed, ['isFlagged'])
       managed.isFlagged = true
       // Persist in-memory state directly to avoid race with pending queue writes
       this.persistSession(managed)
@@ -4660,6 +5305,7 @@ export class SessionManager implements ISessionManager {
   async unflagSession(sessionId: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
+      this.markCollectionFieldMutations(managed, ['isFlagged'])
       managed.isFlagged = false
       // Persist in-memory state directly to avoid race with pending queue writes
       this.persistSession(managed)
@@ -4680,6 +5326,7 @@ export class SessionManager implements ISessionManager {
       sessionLog.warn(`archiveSession: unknown session ${sessionId} — no-op`)
     }
     if (managed) {
+      this.markCollectionFieldMutations(managed, ['isArchived', 'archivedAt'])
       managed.isArchived = true
       managed.archivedAt = Date.now()
       // Persist in-memory state directly to avoid race with pending queue writes
@@ -4697,6 +5344,7 @@ export class SessionManager implements ISessionManager {
       sessionLog.warn(`unarchiveSession: unknown session ${sessionId} — no-op`)
     }
     if (managed) {
+      this.markCollectionFieldMutations(managed, ['isArchived', 'archivedAt'])
       managed.isArchived = false
       managed.archivedAt = undefined
       // Persist in-memory state directly to avoid race with pending queue writes
@@ -4711,6 +5359,7 @@ export class SessionManager implements ISessionManager {
   async setSessionStatus(sessionId: string, sessionStatus: SessionStatus): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
+      this.markCollectionFieldMutations(managed, ['sessionStatus'])
       managed.sessionStatus = sessionStatus
       this.setMetadataWriteGuard(managed)
       // Persist in-memory state directly to avoid race with pending queue writes
@@ -4821,6 +5470,46 @@ export class SessionManager implements ISessionManager {
       await clearStoredPendingPlanExecution(managed.workspace.rootPath, sessionId)
       sessionLog.info(`Session ${sessionId}: cleared pending plan execution`)
     }
+  }
+
+  /**
+   * Undo the last user message by truncating session messages to before it.
+   * Returns the user message content so the client can restore it to the input.
+   */
+  async undoLastUserMessage(sessionId: string): Promise<{ success: boolean; userMessage?: string }> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return { success: false }
+
+    await this.ensureMessagesLoaded(managed)
+
+    const lastUserIndex = managed.messages.map(m => m.role).lastIndexOf('user')
+    if (lastUserIndex === -1) return { success: false }
+
+    // Cancel any in-flight processing before truncating
+    if (managed.isProcessing) {
+      await this.cancelProcessing(sessionId, true)
+    }
+
+    const userMessage = managed.messages[lastUserIndex]
+    const content = typeof userMessage.content === 'string' ? userMessage.content : ''
+
+    managed.messages = managed.messages.slice(0, lastUserIndex)
+    managed.messageCount = managed.messages.length
+    managed.lastFinalMessageId = undefined
+    managed.lastMessageRole = managed.messages.length > 0
+      ? managed.messages[managed.messages.length - 1].role as ManagedSession['lastMessageRole']
+      : undefined
+    // Reset provider-side conversation history so the next turn doesn't
+    // include the undone messages.  clearHistory() resets the SDK session
+    // without tearing down MCP pools / pool servers / other shared resources.
+    managed.agent?.clearHistory()
+    managed.sdkSessionId = undefined
+    managed.wasInterrupted = false
+    this.setProcessing(managed, false)
+    this.persistSession(managed)
+    this.sendEvent({ type: 'messages_replaced', sessionId, messages: managed.messages }, managed.workspace.id)
+
+    return { success: true, userMessage: content }
   }
 
   /**
@@ -5789,6 +6478,11 @@ export class SessionManager implements ISessionManager {
      * directly (tests, intra-server flows) to leave the existing pin in place.
      */
     rpcContext?: { callerClientId?: string },
+    /**
+     * Internal retry mode. Kept as the trailing argument so public/RPC call sites
+     * don't need to know about retry bookkeeping.
+     */
+    _internalRetryKind?: 'auth' | 'failover',
   ): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (!managed) {
@@ -5990,6 +6684,7 @@ export class SessionManager implements ISessionManager {
           .filter(entry => !existingLabels.includes(entry))
 
         if (newEntries.length > 0) {
+          this.markCollectionFieldMutations(managed, ['labels'])
           managed.labels = [...existingLabels, ...newEntries]
           this.persistSession(managed)
           this.sendEvent({
@@ -6009,12 +6704,18 @@ export class SessionManager implements ISessionManager {
     managed.processingGeneration++
     managed.turnStartFinalMessageId = this.getLastFinalAssistantMessageId(managed.messages)
 
-    // Reset auth retry flag for this new message (allows one retry per message)
-    // IMPORTANT: Skip reset if this is an auth retry call - the flag is already true
-    // and resetting it would allow infinite retry loops
-    // Note: authRetryInProgress is NOT reset here - it's managed by the retry logic
-    if (!_isAuthRetry) {
+    // Reset retry flags for this new message (allows bounded retries per turn).
+    // IMPORTANT: Skip the matching reset for internal retry calls; the tracking
+    // state is already set and resetting it would allow retry loops.
+    // Note: in-progress flags are managed by their retry helpers.
+    const isAuthRetry = _isAuthRetry || _internalRetryKind === 'auth'
+    const isFailoverRetry = _internalRetryKind === 'failover'
+    if (!isAuthRetry) {
       managed.authRetryAttempted = false
+    }
+    if (!isFailoverRetry) {
+      managed.rateLimitFailoverTriedConnections = undefined
+      managed.rateLimitFailoverInProgress = false
     }
 
     // Store message/attachments for potential retry after auth refresh
@@ -6202,8 +6903,8 @@ export class SessionManager implements ISessionManager {
       sessionLog.info('Got chat iterator, starting iteration...')
 
       for await (const event of chatIterator) {
-        // Log events (skip noisy text_delta)
-        if (event.type !== 'text_delta') {
+        // Log events (skip noisy text_delta / thinking_delta)
+        if (event.type !== 'text_delta' && event.type !== 'thinking_delta') {
           if (event.type === 'tool_start') {
             sessionLog.info(`tool_start: ${event.toolName} (${event.toolUseId})`)
           } else if (event.type === 'tool_result') {
@@ -6234,11 +6935,11 @@ export class SessionManager implements ISessionManager {
         // Handle complete event - SDK always sends this (even after interrupt)
         // This is the central place where processing ends
         if (event.type === 'complete') {
-          // Skip normal completion handling if auth retry is in progress
-          // The retry will handle its own completion
-          if (managed.authRetryInProgress) {
-            sessionLog.info('Chat completed but auth retry is in progress, skipping normal completion handling')
-            sendSpan.mark('chat.complete.auth_retry_pending')
+          // Skip normal completion handling if an internal retry is in progress.
+          // The retry will handle its own completion.
+          if (managed.authRetryInProgress || managed.rateLimitFailoverInProgress) {
+            sessionLog.info('Chat completed but internal retry is in progress, skipping normal completion handling')
+            sendSpan.mark(managed.authRetryInProgress ? 'chat.complete.auth_retry_pending' : 'chat.complete.failover_retry_pending')
             sendSpan.end()
             return  // Exit function - retry will handle completion
           }
@@ -6464,6 +7165,170 @@ export class SessionManager implements ISessionManager {
     // The event loop will drain remaining events and call onProcessingStopped when done.
   }
 
+  private modelAvailableOnConnection(connection: NonNullable<ReturnType<typeof getLlmConnection>>, modelId?: string): boolean {
+    if (!modelId) return true
+    const models = connection.models
+    if (!models || models.length === 0) return true
+    return models.some(model => (typeof model === 'string' ? model : model.id) === modelId)
+  }
+
+  private isSameOAuthAccount(
+    current: NonNullable<ReturnType<typeof getLlmConnection>>,
+    candidate: NonNullable<ReturnType<typeof getLlmConnection>>,
+  ): boolean {
+    if (current.oauthAccountUuid && candidate.oauthAccountUuid) {
+      return current.oauthAccountUuid === candidate.oauthAccountUuid
+    }
+    if (current.oauthAccountEmail && candidate.oauthAccountEmail) {
+      return current.oauthAccountEmail === candidate.oauthAccountEmail
+        && (current.oauthOrganizationUuid || current.oauthOrganizationName || '') === (candidate.oauthOrganizationUuid || candidate.oauthOrganizationName || '')
+    }
+    return false
+  }
+
+  private async findRateLimitFailoverConnection(
+    managed: ManagedSession,
+  ): Promise<NonNullable<ReturnType<typeof getLlmConnection>> | null> {
+    const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+    const current = resolveSessionConnection(
+      managed.llmConnection,
+      workspaceConfig?.defaults?.defaultLlmConnection,
+    )
+    if (!current || current.authType !== 'oauth') return null
+
+    const tried = managed.rateLimitFailoverTriedConnections ?? new Set<string>()
+    const modelId = managed.model || current.defaultModel
+    const credentialManager = getCredentialManager()
+
+    for (const candidate of getLlmConnections()) {
+      if (candidate.slug === current.slug) continue
+      if (tried.has(candidate.slug)) continue
+      if (candidate.authType !== 'oauth') continue
+      if (candidate.providerType !== current.providerType) continue
+      if (candidate.piAuthProvider !== current.piAuthProvider) continue
+      if (this.isSameOAuthAccount(current, candidate)) continue
+      if (!this.modelAvailableOnConnection(candidate, modelId)) continue
+
+      const hasCredentials = await credentialManager.hasLlmCredentials(
+        candidate.slug,
+        candidate.authType,
+        candidate.providerType,
+      )
+      if (!hasCredentials) continue
+
+      return candidate
+    }
+
+    return null
+  }
+
+  /**
+   * Attempt rate-limit failover: switch to another compatible OAuth connection
+   * and resend the last user message. This is intentionally owned by Craft
+   * rather than Pi/Claude because Craft owns the user's connection list and can
+   * ensure we only switch between distinct accounts for the same provider/model.
+   */
+  private async attemptRateLimitFailover(
+    sessionId: string,
+    managed: ManagedSession,
+    workspaceId: string,
+  ): Promise<boolean> {
+    if (!managed.lastSentMessage) return false
+
+    const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+    const current = resolveSessionConnection(
+      managed.llmConnection,
+      workspaceConfig?.defaults?.defaultLlmConnection,
+    )
+    if (!current) return false
+
+    const tried = managed.rateLimitFailoverTriedConnections ?? new Set<string>()
+    tried.add(current.slug)
+    managed.rateLimitFailoverTriedConnections = tried
+
+    const failoverConnection = await this.findRateLimitFailoverConnection(managed)
+    if (!failoverConnection) {
+      sessionLog.info(`[rate-limit-failover] No compatible failover connection found for session ${sessionId}`)
+      return false
+    }
+
+    sessionLog.info(`[rate-limit-failover] Switching session ${sessionId} from ${current.slug} to ${failoverConnection.slug}`)
+    managed.rateLimitFailoverInProgress = true
+
+    this.sendEvent({
+      type: 'info',
+      sessionId,
+      message: `Rate limit reached on ${current.name}. Switching to ${failoverConnection.name}…`,
+      timestamp: this.monotonic(),
+    }, workspaceId)
+
+    setImmediate(async () => {
+      try {
+        const retryMessage = managed.lastSentMessage
+        const retryAttachments = managed.lastSentAttachments
+        const retryStoredAttachments = managed.lastSentStoredAttachments
+        const retryOptions = managed.lastSentOptions
+
+        if (!retryMessage) {
+          managed.rateLimitFailoverInProgress = false
+          return
+        }
+
+        resetSummarizationClient()
+        managed.agent = null
+        managed.llmConnection = failoverConnection.slug
+        managed.connectionLocked = true
+        this.persistSession(managed)
+        await this.flushSession(managed.id)
+
+        this.sendEvent({
+          type: 'connection_changed',
+          sessionId: managed.id,
+          connectionSlug: failoverConnection.slug,
+          supportsBranching: resolveSupportsBranching(managed),
+        }, managed.workspace.id)
+
+        this.setProcessing(managed, false)
+
+        // Remove the user message from the failed attempt; the retry will add it
+        // back once it is durably accepted under the new connection.
+        const lastUserMsgIndex = managed.messages.findLastIndex(m => m.role === 'user')
+        if (lastUserMsgIndex !== -1) {
+          managed.messages.splice(lastUserMsgIndex, 1)
+        }
+
+        managed.rateLimitFailoverInProgress = false
+
+        await this.sendMessage(
+          sessionId,
+          retryMessage,
+          retryAttachments,
+          retryStoredAttachments,
+          retryOptions,
+          undefined,
+          false,
+          undefined,
+          undefined,
+          'failover',
+        )
+        sessionLog.info(`[rate-limit-failover] Retry on ${failoverConnection.slug} completed for session ${sessionId}`)
+      } catch (retryError) {
+        managed.rateLimitFailoverInProgress = false
+        sessionLog.error(`[rate-limit-failover] Failed to retry session ${sessionId}:`, retryError)
+        sessionRuntimeHooks.captureException(retryError, { errorSource: 'rate-limit-failover', sessionId })
+        this.sendEvent({
+          type: 'error',
+          sessionId,
+          error: retryError instanceof Error ? retryError.message : 'Rate-limit failover failed',
+          timestamp: this.monotonic(),
+        }, workspaceId)
+        this.onProcessingStopped(sessionId, 'error')
+      }
+    })
+
+    return true
+  }
+
   /**
    * Attempt auth retry: refresh token, destroy agent, resend last message.
    * Shared by both typed_error and plain error auth-retry paths.
@@ -6574,6 +7439,8 @@ export class SessionManager implements ISessionManager {
   }
 
   private emitSessionComplete(evt: SessionCompletionEvent): void {
+    // Best-effort profile XP — never block completion fan-out.
+    awardXpSafe('session_completed')
     if (this.sessionCompletionListeners.size === 0) return
     for (const listener of this.sessionCompletionListeners) {
       try {
@@ -6689,7 +7556,9 @@ export class SessionManager implements ISessionManager {
         }
       }
 
-      // No queue - emit complete to UI (include tokenUsage and hasUnread for state updates)
+      // No queue - emit complete to UI (include tokenUsage and hasUnread for state updates).
+      // reason + didReceiveNewFinalMessage let the renderer distinguish a real
+      // completion from an error/interrupt cleanup so it can gate notifications (#664).
       this.sendEvent({
         type: 'complete',
         sessionId,
@@ -6700,6 +7569,8 @@ export class SessionManager implements ISessionManager {
         // chip orphan-backstop does not falsely flip live tasks to `orphaned`; a
         // real `task_completed` will arrive when the agent actually finishes.
         backgroundTasksAlive: this.keepBackgroundTasksAlive,
+        reason,
+        didReceiveNewFinalMessage,
       }, managed.workspace.id)
 
       // Tasks Conductor seam: signal true completion (queue empty) with the stop
@@ -7170,6 +8041,7 @@ export class SessionManager implements ISessionManager {
   async setSessionLabels(sessionId: string, labels: string[]): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
+      this.markCollectionFieldMutations(managed, ['labels'])
       managed.labels = labels
       this.setMetadataWriteGuard(managed)
 
@@ -7187,6 +8059,186 @@ export class SessionManager implements ISessionManager {
       const watcher = this.configWatchers.get(managed.workspace.rootPath)
       watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
     }
+  }
+
+  /**
+   * Apply one collection patch to caller-authorized sessions. Target
+   * resolution is an all-or-none preflight; persistence remains per-target so
+   * processing/archive and disk failures can be reported independently.
+   */
+  async bulkUpdateSessions(
+    workspaceId: string,
+    input: Pick<BulkUpdateSessionsInput, 'ids' | 'patch'>,
+  ): Promise<BulkUpdateSessionsResult> {
+    const { ids, patch } = input
+    assertValidBulkUpdateInput({ workspaceId, ids, patch })
+    assertValidBulkUpdatePatch(patch)
+    if (ids.length === 0) return { ok: [], failed: [] }
+
+    const resolved: ManagedSession[] = []
+    const preflightErrorById = new Map<string, string>()
+    for (const sessionId of ids) {
+      const managed = this.sessions.get(sessionId)
+      if (!managed) {
+        preflightErrorById.set(sessionId, 'not_found')
+      } else if (managed.workspace.id !== workspaceId) {
+        preflightErrorById.set(sessionId, 'foreign')
+      } else {
+        resolved.push(managed)
+      }
+    }
+    if (preflightErrorById.size > 0) {
+      return {
+        ok: [],
+        failed: ids.map(id => ({
+          id,
+          error: preflightErrorById.get(id) ?? 'preflight_aborted',
+        })),
+      }
+    }
+
+    const ok: string[] = []
+    const failed: BulkUpdateSessionsResult['failed'] = []
+    let unreadSummaryChanged = false
+
+    for (const managed of resolved) {
+      if (patch.isArchived === true && managed.isProcessing) {
+        failed.push({ id: managed.id, error: 'busy' })
+        continue
+      }
+
+      const affectedFields: CollectionMutableField[] = []
+      const before: Partial<Pick<ManagedSession, CollectionMutableField>> = {}
+      const optimistic: Partial<Pick<ManagedSession, CollectionMutableField>> = {}
+      const headerPatch: Partial<SessionHeader> = {}
+
+      if (patch.isArchived !== undefined) {
+        const archivedAt = patch.isArchived ? Date.now() : undefined
+        affectedFields.push('isArchived', 'archivedAt')
+        before.isArchived = managed.isArchived
+        before.archivedAt = managed.archivedAt
+        optimistic.isArchived = patch.isArchived
+        optimistic.archivedAt = archivedAt
+        headerPatch.isArchived = patch.isArchived
+        headerPatch.archivedAt = archivedAt
+      }
+      if (patch.isFlagged !== undefined) {
+        affectedFields.push('isFlagged')
+        before.isFlagged = managed.isFlagged
+        optimistic.isFlagged = patch.isFlagged
+        headerPatch.isFlagged = patch.isFlagged
+      }
+      if (patch.sessionStatus !== undefined) {
+        affectedFields.push('sessionStatus')
+        before.sessionStatus = managed.sessionStatus
+        optimistic.sessionStatus = patch.sessionStatus
+        headerPatch.sessionStatus = patch.sessionStatus
+      }
+      if (patch.priority !== undefined) {
+        affectedFields.push('priority')
+        before.priority = managed.priority
+        optimistic.priority = patch.priority
+        headerPatch.priority = patch.priority
+      }
+      if (patch.dueDate !== undefined) {
+        const dueDate = patch.dueDate ?? undefined
+        affectedFields.push('dueDate')
+        before.dueDate = managed.dueDate
+        optimistic.dueDate = dueDate
+        headerPatch.dueDate = dueDate
+      }
+      if (patch.projectId !== undefined) {
+        const projectId = patch.projectId ?? undefined
+        affectedFields.push('projectId')
+        before.projectId = managed.projectId
+        optimistic.projectId = projectId
+        headerPatch.projectId = projectId
+      }
+
+      const nextLabels = resolveBulkLabels(managed.labels, patch)
+      if (nextLabels !== undefined) {
+        affectedFields.push('labels')
+        before.labels = managed.labels
+        optimistic.labels = nextLabels
+        headerPatch.labels = nextLabels
+      }
+      if (patch.kanbanColumn !== undefined) {
+        const kanbanColumn = patch.kanbanColumn ?? undefined
+        affectedFields.push('kanbanColumn')
+        before.kanbanColumn = managed.kanbanColumn
+        optimistic.kanbanColumn = kanbanColumn
+        headerPatch.kanbanColumn = kanbanColumn
+      }
+
+      this.markCollectionFieldMutations(managed, affectedFields)
+      const operationVersions: Partial<Record<CollectionMutableField, number>> = {}
+      for (const field of affectedFields) {
+        operationVersions[field] = managed._collectionFieldVersions?.[field]
+      }
+      Object.assign(managed, optimistic)
+      this.setMetadataWriteGuard(managed)
+
+      try {
+        await sessionPersistenceQueue.updateSessionHeader(
+          managed.id,
+          managed.workspace.rootPath,
+          headerPatch,
+        )
+        ok.push(managed.id)
+        unreadSummaryChanged ||= (
+          patch.isArchived !== undefined
+          && before.isArchived !== optimistic.isArchived
+        )
+        this.configWatchers
+          .get(managed.workspace.rootPath)
+          ?.notifyFileChange(`sessions/${managed.id}/session.jsonl`)
+      } catch (error) {
+        // Restore only fields still owned by this failed operation. Per-field
+        // versions distinguish later same-value writes from this projection.
+        for (const field of affectedFields) {
+          if (managed._collectionFieldVersions?.[field] !== operationVersions[field]) continue
+          if (managed[field] !== optimistic[field]) continue
+          switch (field) {
+            case 'isArchived':
+              managed.isArchived = before.isArchived
+              break
+            case 'archivedAt':
+              managed.archivedAt = before.archivedAt
+              break
+            case 'isFlagged':
+              managed.isFlagged = before.isFlagged ?? false
+              break
+            case 'sessionStatus':
+              managed.sessionStatus = before.sessionStatus
+              break
+            case 'priority':
+              managed.priority = before.priority
+              break
+            case 'dueDate':
+              managed.dueDate = before.dueDate
+              break
+            case 'projectId':
+              managed.projectId = before.projectId
+              break
+            case 'labels':
+              managed.labels = before.labels
+              break
+            case 'kanbanColumn':
+              managed.kanbanColumn = before.kanbanColumn
+              break
+          }
+        }
+        failed.push({
+          id: managed.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    if (unreadSummaryChanged) {
+      this.emitUnreadSummaryChanged()
+    }
+    return { ok, failed }
   }
 
   /**
@@ -7244,6 +8296,7 @@ export class SessionManager implements ISessionManager {
   async setSessionProjectId(sessionId: string, projectId: string | null): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
+      this.markCollectionFieldMutations(managed, ['projectId'])
       managed.projectId = projectId ?? undefined
       this.setMetadataWriteGuard(managed)
 
@@ -7267,6 +8320,7 @@ export class SessionManager implements ISessionManager {
   async setKanbanColumn(sessionId: string, column: string | null): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
+      this.markCollectionFieldMutations(managed, ['kanbanColumn'])
       managed.kanbanColumn = column ?? undefined
       this.setMetadataWriteGuard(managed)
 
@@ -7278,6 +8332,93 @@ export class SessionManager implements ISessionManager {
       const watcher = this.configWatchers.get(managed.workspace.rootPath)
       watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
     }
+  }
+
+  /**
+   * Set collection priority for a session ('none' | 'urgent' | 'high' | 'medium' | 'low').
+   */
+  async setPriority(sessionId: string, priority: SessionPriority): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      this.markCollectionFieldMutations(managed, ['priority'])
+      managed.priority = priority
+      this.setMetadataWriteGuard(managed)
+
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+      this.sendEvent({ type: 'session_metadata_changed', sessionId, changes: { priority } }, managed.workspace.id)
+      const watcher = this.configWatchers.get(managed.workspace.rootPath)
+      watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
+    }
+  }
+
+  /**
+   * Set due date (epoch ms). Pass `null` to clear (stored as undefined on managed;
+   * event carries dueDate: null so renderers clear).
+   */
+  async setDueDate(sessionId: string, dueDate: number | null): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      this.markCollectionFieldMutations(managed, ['dueDate'])
+      managed.dueDate = dueDate ?? undefined
+      this.setMetadataWriteGuard(managed)
+
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+      this.sendEvent({ type: 'session_metadata_changed', sessionId, changes: { dueDate } }, managed.workspace.id)
+      const watcher = this.configWatchers.get(managed.workspace.rootPath)
+      watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
+    }
+  }
+
+  /**
+   * Set LexoRank string for a session. Rejects invalid ranks.
+   */
+  async setRank(sessionId: string, rank: string): Promise<void> {
+    if (!lexorankValidate(rank)) {
+      throw new Error(`Invalid rank: ${rank}`)
+    }
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.rank = rank
+      this.setMetadataWriteGuard(managed)
+
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+      this.sendEvent({ type: 'session_metadata_changed', sessionId, changes: { rank } }, managed.workspace.id)
+      const watcher = this.configWatchers.get(managed.workspace.rootPath)
+      watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
+    }
+  }
+
+  /**
+   * Recompute rank between optional neighbor sessions and persist.
+   * Missing neighbor ids (when provided) throw RANK_NEIGHBORS_STALE.
+   */
+  async reorderRank(sessionId: string, prevId?: string, nextId?: string): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return
+
+    let prevRank: string | undefined
+    let nextRank: string | undefined
+
+    if (prevId !== undefined) {
+      const prev = this.sessions.get(prevId)
+      if (!prev) {
+        throw new Error(`RANK_NEIGHBORS_STALE: prev session not found: ${prevId}`)
+      }
+      prevRank = prev.rank
+    }
+    if (nextId !== undefined) {
+      const next = this.sessions.get(nextId)
+      if (!next) {
+        throw new Error(`RANK_NEIGHBORS_STALE: next session not found: ${nextId}`)
+      }
+      nextRank = next.rank
+    }
+
+    const rank = lexorankBetween(prevRank ?? null, nextRank ?? null)
+    await this.setRank(sessionId, rank)
   }
 
   /**
@@ -7295,6 +8436,26 @@ export class SessionManager implements ISessionManager {
       // Self-writes don't re-emit through the file watcher (taskNodeCount isn't in the header
       // signature), so push a live metadata event so the progress denominator updates immediately.
       this.sendEvent({ type: 'session_metadata_changed', sessionId, changes: { taskNodeCount: count } }, managed.workspace.id)
+      const watcher = this.configWatchers.get(managed.workspace.rootPath)
+      watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
+    }
+  }
+
+  /**
+   * Set the self-learning memory mode for a session ('persistent' | 'incognito' | 'temporary').
+   * 'persistent' is the default and clears the field (absent = persistent).
+   */
+  async setSessionMemoryMode(sessionId: string, mode: SessionMemoryMode): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.memoryMode = mode === 'persistent' ? undefined : mode
+      this.setMetadataWriteGuard(managed)
+
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+      // Same rationale as kanbanColumn — push a live metadata event so open renderers
+      // (including other windows on the same workspace) refresh the header toggle.
+      this.sendEvent({ type: 'session_metadata_changed', sessionId, changes: { memoryMode: mode } }, managed.workspace.id)
       const watcher = this.configWatchers.get(managed.workspace.rootPath)
       watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
     }
@@ -7352,6 +8513,9 @@ export class SessionManager implements ISessionManager {
     // the connection_changed event below keeps the renderer in sync.
     managed.taskSlug = taskSlug
     managed.taskDraft = false
+    if (reconcile?.projectId !== undefined) {
+      this.markCollectionFieldMutations(managed, ['projectId'])
+    }
     if (reconcile?.projectId !== undefined) managed.projectId = reconcile.projectId
     if (connectionChanged) managed.llmConnection = reconcile!.llmConnection
     const renamed = Boolean(reconcile?.name && reconcile.name !== managed.name)
@@ -7439,6 +8603,9 @@ export class SessionManager implements ISessionManager {
     // the connection_changed event below keeps the renderer in sync.
     managed.taskSlug = taskSlug
     managed.taskDraft = false
+    if (reconcile?.projectId !== undefined) {
+      this.markCollectionFieldMutations(managed, ['projectId'])
+    }
     if (reconcile?.projectId !== undefined) managed.projectId = reconcile.projectId
     if (connectionChanged) managed.llmConnection = reconcile!.llmConnection
     const renamed = Boolean(reconcile?.name && reconcile.name !== managed.name)
@@ -7669,6 +8836,17 @@ export class SessionManager implements ISessionManager {
         break
       }
 
+      // Thinking stream (OMP reasoning models): runtime-only passthrough.
+      // Never pushed into managed.messages — thinking must not land in
+      // title-gen/summary/persisted history.
+      case 'thinking_delta':
+        this.sendEvent({ type: 'thinking_delta', sessionId, text: event.text, turnId: event.turnId }, workspaceId)
+        break
+
+      case 'thinking_complete':
+        this.sendEvent({ type: 'thinking_complete', sessionId, text: event.text, turnId: event.turnId }, workspaceId)
+        break
+
       case 'pi_turn_anchor': {
         // Follow-up to a `text_complete` from the Pi backend, carrying the
         // correct leaf id captured AFTER the SDK appended its assistant entry
@@ -7686,6 +8864,26 @@ export class SessionManager implements ISessionManager {
           await savePiTurnAnchor(sessionPath, craftMessageId, event.sdkTurnAnchor)
         } catch (error) {
           sessionLog.warn(`Failed to persist Pi turn anchor for session ${sessionId}:`, error)
+        }
+        break
+      }
+
+      case 'omp_turn_anchor': {
+        // Follow-up to an OMP backend text_complete (same turnId), carrying
+        // the parent transcript entry id of the assistant message — the OMP
+        // branch() RPC anchor (docs/omp-rpc-notes.md §Branching).
+        const anchorMessage = [...managed.messages].reverse().find(
+          (m) => m.role === 'assistant' && m.turnId === event.turnId,
+        )
+        if (!anchorMessage) {
+          sessionLog.debug(`omp_turn_anchor for unknown turnId=${event.turnId}; ignoring`)
+          break
+        }
+        const sessionPath = getSessionStoragePath(managed.workspace.rootPath, sessionId)
+        try {
+          await saveOmpTurnAnchor(sessionPath, anchorMessage.id, event.entryId)
+        } catch (error) {
+          sessionLog.warn(`Failed to persist OMP turn anchor for session ${sessionId}:`, error)
         }
         break
       }
@@ -8014,6 +9212,11 @@ export class SessionManager implements ISessionManager {
           break
         }
 
+        const isPlainRateLimitError = lowerErr.includes('429') || lowerErr.includes('rate limit') || lowerErr.includes('too many requests')
+        if (isPlainRateLimitError && await this.attemptRateLimitFailover(sessionId, managed, workspaceId)) {
+          break
+        }
+
         // AgentEvent uses `message` not `error`
         const errorMessage: Message = {
           id: generateMessageId(),
@@ -8053,6 +9256,11 @@ export class SessionManager implements ISessionManager {
 
         if (isAuthError && this.attemptAuthRetry(sessionId, managed, workspaceId, event.error.code)) {
           // Don't add error message or send to renderer - we're handling it via retry
+          break
+        }
+
+        if (event.error.code === 'rate_limited' && await this.attemptRateLimitFailover(sessionId, managed, workspaceId)) {
+          // Don't add error message or send to renderer - we're handling it via failover retry
           break
         }
 
@@ -8937,7 +10145,7 @@ export class SessionManager implements ISessionManager {
     })
     managed.messages = bundleMessages.map(storedToMessage)
 
-    setPermissionMode(sessionId, managed.permissionMode ?? 'ask', { changedBy: 'restore' })
+    setPermissionMode(sessionId, managed.permissionMode ?? this.defaultRestorePermissionMode(), { changedBy: 'restore' })
     if (managed.previousPermissionMode) {
       hydratePreviousPermissionMode(sessionId, managed.previousPermissionMode)
     }
@@ -8998,12 +10206,14 @@ export class SessionManager implements ISessionManager {
     for (const [workspacePath, automationSystem] of this.automationSystems) {
       try {
         automationSystem.dispose()
+        stopKnowledgeWatchesForWorkspace(workspacePath)
         sessionLog.info(`Disposed AutomationSystem for ${workspacePath}`)
       } catch (error) {
         sessionLog.error(`Failed to dispose AutomationSystem for ${workspacePath}:`, error)
       }
     }
     this.automationSystems.clear()
+    stopAllKnowledgeWatches()
 
     // Clear all pending delta flush timers
     for (const [sessionId, timer] of this.deltaFlushTimers) {

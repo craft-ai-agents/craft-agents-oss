@@ -141,6 +141,9 @@ function migratePermissions(
   const existingMcpPatterns = new Set(
     (installed.allowedMcpPatterns || []).map(getPatternString)
   );
+  const existingKnowledgePatterns = new Set(
+    (installed.allowedKnowledgePatterns || []).map(getPatternString)
+  );
 
   // Find new patterns not already in installed
   const newBashPatterns = (bundled.allowedBashPatterns || []).filter(
@@ -148,6 +151,16 @@ function migratePermissions(
   );
   const newMcpPatterns = (bundled.allowedMcpPatterns || []).filter(
     p => !existingMcpPatterns.has(getPatternString(p))
+  );
+  const newKnowledgePatterns = (bundled.allowedKnowledgePatterns || []).filter(
+    p => !existingKnowledgePatterns.has(getPatternString(p))
+  );
+
+  // Blocked tools merge additively by exact name (P3: knowledge-write capabilities)
+  const installedBlockedTools = installed.blockedTools || [];
+  const existingBlockedTools = new Set(installedBlockedTools.map(getPatternString));
+  const newBlockedTools = (bundled.blockedTools || []).filter(
+    p => !existingBlockedTools.has(getPatternString(p))
   );
 
   // Merge blocked command hints (dedupe by command + whenNotMatching + reason)
@@ -161,6 +174,8 @@ function migratePermissions(
 
   debug('[Permissions] Adding', newBashPatterns.length, 'new bash patterns');
   debug('[Permissions] Adding', newMcpPatterns.length, 'new MCP patterns');
+  debug('[Permissions] Adding', newKnowledgePatterns.length, 'new knowledge patterns');
+  debug('[Permissions] Adding', newBlockedTools.length, 'new blocked tools');
   debug('[Permissions] Adding', newBlockedCommandHints.length, 'new blocked command hints');
 
   return {
@@ -173,6 +188,14 @@ function migratePermissions(
     allowedMcpPatterns: [
       ...(installed.allowedMcpPatterns || []),
       ...newMcpPatterns,
+    ],
+    allowedKnowledgePatterns: [
+      ...(installed.allowedKnowledgePatterns || []),
+      ...newKnowledgePatterns,
+    ],
+    blockedTools: [
+      ...installedBlockedTools,
+      ...newBlockedTools,
     ],
     blockedCommandHints: [
       ...installedHints,
@@ -229,19 +252,33 @@ export interface PatternWithComment {
 /**
  * Parsed and normalized permissions configuration
  *
- * Note: blockedTools (Write, Edit, MultiEdit, NotebookEdit) are hardcoded in
- * SAFE_MODE_CONFIG and not configurable here - they're fundamental write
- * operations that must always be blocked in Explore mode.
+ * Note: the core write tools (Write, Edit, MultiEdit, NotebookEdit) are
+ * hardcoded in SAFE_MODE_CONFIG and always blocked in Explore mode. Config
+ * files may ADD exact tool names via `blockedTools` (additive, union-only —
+ * e.g. the P3 knowledge-write capabilities in the bundled default.json);
+ * they can never REMOVE entries from the hardcoded set.
  */
 export interface PermissionsCustomConfig {
   /** Additional bash patterns to allow (with optional comments for error messages) */
   allowedBashPatterns: PatternWithComment[];
   /** Additional MCP patterns to allow (as regex strings) */
   allowedMcpPatterns: string[];
+  /**
+   * Additional knowledge operation patterns to allow (as regex strings,
+   * matched against knowledge operation names like "knowledge:search").
+   * Read-only by definition: P1 ships no mutation operations (spec 03).
+   */
+  allowedKnowledgePatterns: string[];
   /** API endpoint rules for fine-grained control */
   allowedApiEndpoints: ApiEndpointRule[];
   /** File paths to allow writes in Explore mode (glob pattern strings) */
   allowedWritePaths: string[];
+  /**
+   * Exact tool names to block (matched via Set lookup, see mode-manager).
+   * Extends the hardcoded SAFE_MODE_CONFIG write tools — union-only, never
+   * removals. P3 ships the four knowledge-write capabilities here (spec 05 §3.6).
+   */
+  blockedTools: string[];
   /** Command-specific hints for blocked Bash commands */
   blockedCommandHints: BlockedCommandHintRule[];
 }
@@ -250,13 +287,15 @@ export interface PermissionsCustomConfig {
  * Merged permissions config for runtime use
  */
 export interface MergedPermissionsConfig {
-  /** Blocked tools (Write, Edit, MultiEdit, NotebookEdit) - hardcoded, not configurable */
+  /** Blocked tools: hardcoded SAFE_MODE_CONFIG write tools + additive config-file entries (union-only) */
   blockedTools: Set<string>;
   /** Read-only bash patterns with metadata for helpful error messages */
   readOnlyBashPatterns: CompiledBashPattern[];
   /** Command-specific hints for blocked Bash command explanations */
   blockedCommandHints: CompiledBlockedCommandHint[];
   readOnlyMcpPatterns: RegExp[];
+  /** Read-only knowledge operation patterns (allowed without prompting in Explore mode) */
+  readOnlyKnowledgePatterns: RegExp[];
   /** Fine-grained API endpoint rules */
   allowedApiEndpoints: CompiledApiEndpointRule[];
   /** File paths allowed for writes in Explore mode (glob patterns) */
@@ -289,8 +328,10 @@ export function parsePermissionsJson(content: string): PermissionsCustomConfig {
   const emptyConfig: PermissionsCustomConfig = {
     allowedBashPatterns: [],
     allowedMcpPatterns: [],
+    allowedKnowledgePatterns: [],
     allowedApiEndpoints: [],
     allowedWritePaths: [],
+    blockedTools: [],
     blockedCommandHints: [],
   };
 
@@ -329,8 +370,11 @@ export function parsePermissionsJson(content: string): PermissionsCustomConfig {
     return {
       allowedBashPatterns: normalizeBashPatterns(data.allowedBashPatterns),
       allowedMcpPatterns: normalizePatterns(data.allowedMcpPatterns),
+      allowedKnowledgePatterns: normalizePatterns(data.allowedKnowledgePatterns),
       allowedApiEndpoints: data.allowedApiEndpoints ?? [],
       allowedWritePaths: normalizePatterns(data.allowedWritePaths),
+      // Exact tool names (not regex) — keep verbatim for Set-exact matching
+      blockedTools: normalizePatterns(data.blockedTools),
       blockedCommandHints: data.blockedCommandHints ?? [],
     };
   } catch (error) {
@@ -403,6 +447,7 @@ export function validatePermissionsConfig(config: PermissionsConfigFile): string
 
   checkPatterns(config.allowedBashPatterns, 'allowedBashPatterns');
   checkPatterns(config.allowedMcpPatterns, 'allowedMcpPatterns');
+  checkPatterns(config.allowedKnowledgePatterns, 'allowedKnowledgePatterns');
 
   // Validate API endpoint patterns
   if (config.allowedApiEndpoints) {
@@ -680,13 +725,14 @@ class PermissionsConfigCache {
     const defaults = SAFE_MODE_CONFIG;
 
     // Start with hardcoded fallback defaults (blocked tools are fixed, display settings)
-    // blockedTools (Write, Edit, MultiEdit, NotebookEdit) come from SAFE_MODE_CONFIG
-    // and cannot be modified via permissions.json
+    // blockedTools (Write, Edit, MultiEdit, NotebookEdit) come from SAFE_MODE_CONFIG;
+    // permissions.json layers can only ADD entries, never remove the hardcoded set.
     const merged: MergedPermissionsConfig = {
       blockedTools: new Set(defaults.blockedTools),
       readOnlyBashPatterns: [...defaults.readOnlyBashPatterns],
       blockedCommandHints: [...(defaults.blockedCommandHints ?? [])],
       readOnlyMcpPatterns: [...defaults.readOnlyMcpPatterns],
+      readOnlyKnowledgePatterns: [...defaults.readOnlyKnowledgePatterns],
       allowedApiEndpoints: [],
       allowedWritePaths: [],
       displayName: defaults.displayName,
@@ -728,8 +774,8 @@ class PermissionsConfigCache {
 
   /**
    * Apply app-level default config (from default.json)
-   * This adds bash/MCP patterns from the JSON config. Blocked tools are hardcoded
-   * in SAFE_MODE_CONFIG and not loaded from JSON.
+   * This adds bash/MCP patterns from the JSON config. Blocked tools seed from
+   * the hardcoded SAFE_MODE_CONFIG set and are EXTENDED (never replaced) from JSON.
    */
   private applyDefaultConfig(merged: MergedPermissionsConfig, config: PermissionsCustomConfig): void {
     // Add allowed bash patterns (as CompiledBashPattern with metadata for error messages)
@@ -759,6 +805,22 @@ class PermissionsConfigCache {
       } else {
         debug(`[Permissions] Invalid default MCP pattern, skipping: ${pattern}`);
       }
+    }
+
+    // Add allowed knowledge operation patterns (P1 read-only — see default.json)
+    for (const pattern of config.allowedKnowledgePatterns) {
+      const regex = validateRegex(pattern);
+      if (regex) {
+        merged.readOnlyKnowledgePatterns.push(regex);
+      } else {
+        debug(`[Permissions] Invalid default knowledge pattern, skipping: ${pattern}`);
+      }
+    }
+
+    // Add blocked tools (exact names; P3 ships knowledge-write capabilities here,
+    // spec 05 §3.6). Union-only: nothing can remove the hardcoded SAFE_MODE_CONFIG set.
+    for (const tool of config.blockedTools) {
+      merged.blockedTools.add(tool);
     }
 
     // Add allowed API endpoints
@@ -814,6 +876,21 @@ class PermissionsConfigCache {
       } else {
         debug(`[Permissions] Invalid MCP pattern, skipping: ${pattern}`);
       }
+    }
+
+    // Add allowed knowledge operation patterns (read-only; not source-scoped)
+    for (const pattern of custom.allowedKnowledgePatterns) {
+      const regex = validateRegex(pattern);
+      if (regex) {
+        merged.readOnlyKnowledgePatterns.push(regex);
+      } else {
+        debug(`[Permissions] Invalid knowledge pattern, skipping: ${pattern}`);
+      }
+    }
+
+    // Add blocked tools (exact names) — additive restriction, same as other layers
+    for (const tool of custom.blockedTools) {
+      merged.blockedTools.add(tool);
     }
 
     // Add allowed API endpoints (fine-grained)
@@ -911,6 +988,22 @@ class PermissionsConfigCache {
       if (compiled) {
         merged.blockedCommandHints.push(compiled);
       }
+    }
+
+    // Knowledge operation patterns - apply normally (knowledge ops are not
+    // source-scoped; P1 allows only read operations)
+    for (const pattern of custom.allowedKnowledgePatterns) {
+      const regex = validateRegex(pattern);
+      if (regex) {
+        merged.readOnlyKnowledgePatterns.push(regex);
+      } else {
+        debug(`[Permissions] Invalid knowledge pattern after source config, skipping: ${pattern}`);
+      }
+    }
+
+    // Blocked tools - apply normally (exact names; additive restriction)
+    for (const tool of custom.blockedTools) {
+      merged.blockedTools.add(tool);
     }
   }
 

@@ -5,6 +5,7 @@ import {
   resolvePresetStateForBaseUrlChange,
 } from '../submit-helpers'
 import { pickTierDefaults, resolveTierModels } from '../tier-models'
+import { parseCustomModelsJson, formatModelList } from '../ApiKeyInput'
 
 const MODELS = [
   { id: 'pi/zai-best', name: 'Best', costInput: 10, costOutput: 20, contextWindow: 200000, reasoning: true },
@@ -115,7 +116,7 @@ describe('resolveCustomEndpointPayload', () => {
     })
   })
 
-  it('honors the protocol toggle for the generic custom preset', () => {
+  it('honors the Anthropic protocol toggle for the generic custom preset', () => {
     expect(resolveCustomEndpointPayload({
       activePreset: 'custom',
       baseUrl: 'https://my-endpoint.example.com',
@@ -125,6 +126,19 @@ describe('resolveCustomEndpointPayload', () => {
     })).toEqual({
       customEndpoint: { api: 'anthropic-messages' },
       piAuthProvider: 'anthropic',
+    })
+  })
+
+  it('honors the OpenAI Responses protocol toggle for the generic custom preset', () => {
+    expect(resolveCustomEndpointPayload({
+      activePreset: 'custom',
+      baseUrl: 'https://my-endpoint.example.com/v1',
+      customApi: 'openai-responses',
+      brandedOpenAiCompatPresets: BRANDED,
+      fallbackPiAuthProvider: undefined,
+    })).toEqual({
+      customEndpoint: { api: 'openai-responses' },
+      piAuthProvider: 'openai',
     })
   })
 
@@ -152,5 +166,38 @@ describe('resolveCustomEndpointPayload', () => {
       customEndpoint: undefined,
       piAuthProvider: undefined,
     })
+  })
+})
+
+describe('custom endpoint model metadata helpers', () => {
+  it('parses display names and capability metadata from JSON', () => {
+    expect(parseCustomModelsJson(JSON.stringify([
+      {
+        id: 'gpt-5.5',
+        name: 'GPT 5.5',
+        shortName: 'GPT 5.5',
+        supportsImages: true,
+        contextWindow: 131072,
+      },
+    ]))).toEqual({
+      models: [
+        {
+          id: 'gpt-5.5',
+          name: 'GPT 5.5',
+          shortName: 'GPT 5.5',
+          description: '',
+          provider: 'pi',
+          supportsImages: true,
+          contextWindow: 131072,
+        },
+      ],
+    })
+  })
+
+  it('formats object models back to model id lists for editing', () => {
+    expect(formatModelList([
+      { id: 'gpt-5.5', name: 'GPT 5.5', shortName: 'GPT 5.5', description: '', provider: 'pi', contextWindow: 131072 },
+      'gpt-5.4',
+    ], '')).toBe('gpt-5.5, gpt-5.4')
   })
 })

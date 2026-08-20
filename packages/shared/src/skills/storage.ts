@@ -9,14 +9,20 @@ import {
   existsSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from 'fs';
+import type { Dirent } from 'fs';
 import { homedir } from 'os';
-import { join } from 'path';
+import { isAbsolute, join, relative, resolve } from 'path';
 import matter from 'gray-matter';
 import type { LoadedSkill, SkillMetadata, SkillSource } from './types.ts';
+import { listOmpSkills } from './omp-discovery.ts';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
+import { getBundledSkillsDisabled } from '../config/storage.ts';
+import { SLUG_RE } from '../tasks/schema.ts';
 import {
   validateIconValue,
   findIconFile,
@@ -94,6 +100,22 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
   }
 }
 
+function isDirectoryOrSymlinkToDirectory(parentDir: string, entry: Dirent): boolean {
+  if (entry.isDirectory()) {
+    return true;
+  }
+
+  if (!entry.isSymbolicLink()) {
+    return false;
+  }
+
+  try {
+    return statSync(join(parentDir, entry.name)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 // ============================================================
 // Load Operations
 // ============================================================
@@ -105,6 +127,8 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
  * @param source - Where this skill is loaded from
  */
 function loadSkillFromDir(skillsDir: string, slug: string, source: SkillSource): LoadedSkill | null {
+  // Dot entries (.pending, .versions) are internal state, never skills.
+  if (slug.startsWith('.')) return null;
   const skillDir = join(skillsDir, slug);
   const skillFile = join(skillDir, 'SKILL.md');
 
@@ -156,7 +180,10 @@ function loadSkillsFromDir(skillsDir: string, source: SkillSource): LoadedSkill[
   try {
     const entries = readdirSync(skillsDir, { withFileTypes: true });
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
+      if (!isDirectoryOrSymlinkToDirectory(skillsDir, entry)) continue;
+      // Skip dot-dirs (.pending/, .versions/ inside skills, etc.) — internal
+      // state, never real skills.
+      if (entry.name.startsWith('.')) continue;
 
       const skill = loadSkillFromDir(skillsDir, entry.name, source);
       if (skill) {
@@ -197,6 +224,38 @@ export function loadWorkspaceSkills(workspaceRoot: string): LoadedSkill[] {
 const skillsCache = new Map<string, { skills: LoadedSkill[]; ts: number }>();
 const SKILLS_CACHE_TTL = 5 * 60_000; // 5 minutes
 
+/** Dot-dir under ~/.agents/skills holding per-pack sync state (bundled.ts). */
+const BUNDLED_STATE_DIR = '.bundled';
+
+/**
+ * Skill slugs owned by disabled bundled packs (from .bundled/<pack>.json state).
+ * Kept local to avoid storage ↔ bundled import cycle.
+ */
+export function getDisabledBundledSkillSlugsFromDisk(
+  targetRoot: string = GLOBAL_AGENT_SKILLS_DIR,
+  disabled: string[] = getBundledSkillsDisabled(),
+): Set<string> {
+  const out = new Set<string>();
+  if (disabled.length === 0) return out;
+  const stateDir = join(targetRoot, BUNDLED_STATE_DIR);
+  if (!existsSync(stateDir)) return out;
+  for (const packSlug of disabled) {
+    try {
+      const path = join(stateDir, `${packSlug}.json`);
+      if (!existsSync(path)) continue;
+      const parsed = JSON.parse(readFileSync(path, 'utf-8')) as { pack?: string; files?: Record<string, string> };
+      if (!parsed || parsed.pack !== packSlug || typeof parsed.files !== 'object' || !parsed.files) continue;
+      for (const key of Object.keys(parsed.files)) {
+        const slash = key.indexOf('/');
+        if (slash > 0) out.add(key.slice(0, slash));
+      }
+    } catch {
+      // corrupt state — skip pack
+    }
+  }
+  return out;
+}
+
 /** Invalidate the skills cache (call on working dir change or skill file events). */
 export function invalidateSkillsCache(): void {
   skillsCache.clear();
@@ -213,8 +272,29 @@ export function invalidateSkillsCache(): void {
  * @param workspaceRoot - Absolute path to workspace root
  * @param projectRoot - Optional project root (working directory) for project-level skills
  */
-export function loadAllSkills(workspaceRoot: string, projectRoot?: string): LoadedSkill[] {
-  const cacheKey = `${workspaceRoot}::${projectRoot ?? ''}`;
+export interface LoadAllSkillsOptions {
+  /**
+   * Include OMP skills (`~/.omp/agent/skills` + `{workspaceRoot}/.omp/skills`)
+   * in the result. OMP skills have the LOWEST priority — a craft skill with
+   * the same slug always wins (craft-wins dedupe). Default: true.
+   */
+  includeOmp?: boolean;
+  /**
+   * Also include OMP variants shadowed by a craft skill of the same slug
+   * (marked with `shadowedByCraft: true`), for UI display. Default: false.
+   */
+  includeShadowedOmp?: boolean;
+}
+
+export function loadAllSkills(workspaceRoot: string, projectRoot?: string, options?: LoadAllSkillsOptions): LoadedSkill[] {
+  // Default false: callers embedding skills into agent context (base-agent,
+  // SessionManager) must NOT inherit thousands of OMP skills. Panel/RPC code
+  // passes includeOmp: true explicitly.
+  const includeOmp = options?.includeOmp ?? false;
+  const includeShadowedOmp = options?.includeShadowedOmp ?? false;
+  // Disabled bundled packs stay on disk but must not appear in discovery.
+  const disabledKey = getBundledSkillsDisabled().slice().sort().join(',');
+  const cacheKey = `${workspaceRoot}::${projectRoot ?? ''}::${includeOmp}:${includeShadowedOmp}::d:${disabledKey}`;
   const now = Date.now();
   const cached = skillsCache.get(cacheKey);
   if (cached && now - cached.ts < SKILLS_CACHE_TTL) {
@@ -222,26 +302,55 @@ export function loadAllSkills(workspaceRoot: string, projectRoot?: string): Load
   }
 
   const skillsBySlug = new Map<string, LoadedSkill>();
+  const shadowedOmp: LoadedSkill[] = [];
 
-  // 1. Global skills (lowest priority): ~/.agents/skills/
-  for (const skill of loadSkillsFromDir(GLOBAL_AGENT_SKILLS_DIR, 'global')) {
-    skillsBySlug.set(skill.slug, skill);
+  // 0. OMP skills (LOWEST priority — craft always wins on slug conflict):
+  //    ~/.omp/agent/skills/ and {workspaceRoot}/.omp/skills/
+  if (includeOmp) {
+    for (const omp of listOmpSkills(workspaceRoot)) {
+      skillsBySlug.set(omp.slug, {
+        slug: omp.slug,
+        metadata: { name: omp.name, description: omp.description },
+        content: '',
+        path: omp.path,
+        source: 'omp',
+      });
+    }
   }
 
-  // 2. Workspace skills (medium priority)
-  for (const skill of loadWorkspaceSkills(workspaceRoot)) {
+  const mergeCraftSkill = (skill: LoadedSkill) => {
+    const existing = skillsBySlug.get(skill.slug);
+    if (existing?.source === 'omp') {
+      // Craft wins; remember the shadowed OMP variant for UI display.
+      skillsBySlug.delete(skill.slug);
+      if (includeShadowedOmp) shadowedOmp.push({ ...existing, shadowedByCraft: true });
+    }
     skillsBySlug.set(skill.slug, skill);
+  };
+
+  const disabledBundled = getDisabledBundledSkillSlugsFromDisk();
+
+  // 1. Global skills (lowest craft priority): ~/.agents/skills/
+  //    Skip slugs owned by disabled bundled packs (files stay on disk).
+  for (const skill of loadSkillsFromDir(GLOBAL_AGENT_SKILLS_DIR, 'global')) {
+    if (disabledBundled.has(skill.slug)) continue;
+    mergeCraftSkill(skill);
+  }
+
+  // 2. Workspace skills (medium priority) — user/workspace content always visible.
+  for (const skill of loadWorkspaceSkills(workspaceRoot)) {
+    mergeCraftSkill(skill);
   }
 
   // 3. Project skills (highest priority): {projectRoot}/.agents/skills/
   if (projectRoot) {
     const projectSkillsDir = join(projectRoot, PROJECT_AGENT_SKILLS_DIR);
     for (const skill of loadSkillsFromDir(projectSkillsDir, 'project')) {
-      skillsBySlug.set(skill.slug, skill);
+      mergeCraftSkill(skill);
     }
   }
 
-  const result = Array.from(skillsBySlug.values());
+  const result = [...skillsBySlug.values(), ...shadowedOmp];
   skillsCache.set(cacheKey, { skills: result, ts: now });
   return result;
 }
@@ -266,7 +375,8 @@ export function loadSkillBySlug(workspaceRoot: string, slug: string, projectRoot
   const workspaceSkill = loadSkillFromDir(getWorkspaceSkillsPath(workspaceRoot), slug, 'workspace');
   if (workspaceSkill) return workspaceSkill;
 
-  // Lowest priority: global
+  // Lowest priority: global — hide slugs owned by disabled bundled packs
+  if (getDisabledBundledSkillSlugsFromDisk().has(slug)) return null;
   return loadSkillFromDir(GLOBAL_AGENT_SKILLS_DIR, slug, 'global');
 }
 
@@ -287,8 +397,121 @@ export function getSkillIconPath(workspaceRoot: string, slug: string): string | 
 }
 
 // ============================================================
-// Delete Operations
+// Write / Delete Operations
 // ============================================================
+
+
+/**
+ * Resolve a workspace skill directory with slug + path-escape guards.
+ * Throws on invalid slug or path that escapes {workspace}/skills/.
+ */
+export function resolveWorkspaceSkillDir(workspaceRoot: string, slug: string): string {
+  if (!SLUG_RE.test(slug)) {
+    throw new Error(`Invalid skill slug: ${slug}`);
+  }
+  const skillsDir = resolve(getWorkspaceSkillsPath(workspaceRoot));
+  const skillDir = resolve(skillsDir, slug);
+  const rel = relative(skillsDir, skillDir);
+  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
+    throw new Error(`Skill path escapes skills directory: ${slug}`);
+  }
+  if (existsSync(skillDir)) {
+    const realSkillsDir = realpathSync(skillsDir);
+    const realSkillDir = realpathSync(skillDir);
+    const realRel = relative(realSkillsDir, realSkillDir);
+    if (realRel === '' || realRel.startsWith('..') || isAbsolute(realRel)) {
+      throw new Error(`Skill path escapes skills directory: ${slug}`);
+    }
+  }
+  return skillDir;
+}
+
+export interface UpdateSkillContentInput {
+  /** Display name (frontmatter name) */
+  name?: string;
+  /** Description (frontmatter description) */
+  description?: string;
+  /** Markdown body without frontmatter */
+  content?: string;
+  /** Alias for content (UI native editor). */
+  instructions?: string;
+  /** Optional icon emoji or URL */
+  icon?: string | null;
+}
+
+/**
+ * Update a workspace skill's SKILL.md (frontmatter + body).
+ * Only workspace-tier skills under {workspace}/skills/{slug}/ are writable.
+ * Returns the reloaded skill, or null if not found / unreadable.
+ */
+export function updateSkillContent(
+  workspaceRoot: string,
+  slug: string,
+  updates: UpdateSkillContentInput,
+): LoadedSkill | null {
+  const skillDir = resolveWorkspaceSkillDir(workspaceRoot, slug);
+  const skillsDir = resolve(getWorkspaceSkillsPath(workspaceRoot));
+  const skillFile = join(skillDir, 'SKILL.md');
+
+  if (!existsSync(skillFile)) {
+    return null;
+  }
+
+  let raw: string;
+  try {
+    raw = readFileSync(skillFile, 'utf-8');
+  } catch {
+    return null;
+  }
+
+  const parsed = parseSkillFile(raw);
+  if (!parsed) {
+    // Fall back to gray-matter parse even if required fields were missing so we can repair
+    try {
+      const loose = matter(raw);
+      const name = (updates.name ?? loose.data.name ?? slug) as string;
+      const description = (updates.description ?? loose.data.description ?? '') as string;
+      if (!name || !description) {
+        throw new Error('Skill name and description are required');
+      }
+      const data: Record<string, unknown> = { ...loose.data, name, description };
+      if (updates.icon !== undefined) {
+        if (updates.icon === null || updates.icon === '') delete data.icon;
+        else data.icon = updates.icon;
+      }
+      const body = updates.content !== undefined ? updates.content : updates.instructions !== undefined ? updates.instructions : loose.content;
+      writeFileSync(skillFile, matter.stringify(body.replace(/^\n+/, ''), data), 'utf-8');
+    } catch (err) {
+      throw err instanceof Error ? err : new Error(String(err));
+    }
+  } else {
+    const name = updates.name ?? parsed.metadata.name;
+    const description = updates.description ?? parsed.metadata.description;
+    if (!name.trim() || !description.trim()) {
+      throw new Error('Skill name and description are required');
+    }
+
+    const data: Record<string, unknown> = {
+      name: name.trim(),
+      description: description.trim(),
+    };
+    if (parsed.metadata.globs?.length) data.globs = parsed.metadata.globs;
+    if (parsed.metadata.alwaysAllow?.length) data.alwaysAllow = parsed.metadata.alwaysAllow;
+    if (parsed.metadata.requiredSources?.length) data.requiredSources = parsed.metadata.requiredSources;
+
+    const nextIcon = updates.icon !== undefined ? updates.icon : parsed.metadata.icon;
+    if (nextIcon) data.icon = nextIcon;
+
+    const body = updates.content !== undefined ? updates.content : updates.instructions !== undefined ? updates.instructions : parsed.body;
+    // matter.stringify adds a trailing newline; strip leading newlines from body for stable files
+    writeFileSync(skillFile, matter.stringify(body.replace(/^\n+/, ''), data), 'utf-8');
+  }
+
+  // Bust cache so subsequent loads see the write
+  invalidateSkillsCache();
+
+  return loadSkillFromDir(skillsDir, slug, 'workspace');
+}
 
 /**
  * Delete a skill from a workspace
@@ -296,8 +519,7 @@ export function getSkillIconPath(workspaceRoot: string, slug: string): string | 
  * @param slug - Skill directory name
  */
 export function deleteSkill(workspaceRoot: string, slug: string): boolean {
-  const skillsDir = getWorkspaceSkillsPath(workspaceRoot);
-  const skillDir = join(skillsDir, slug);
+  const skillDir = resolveWorkspaceSkillDir(workspaceRoot, slug);
 
   if (!existsSync(skillDir)) {
     return false;
@@ -342,7 +564,8 @@ export function listSkillSlugs(workspaceRoot: string): string[] {
   try {
     return readdirSync(skillsDir, { withFileTypes: true })
       .filter((entry) => {
-        if (!entry.isDirectory()) return false;
+        if (!isDirectoryOrSymlinkToDirectory(skillsDir, entry)) return false;
+        if (entry.name.startsWith('.')) return false;
         const skillFile = join(skillsDir, entry.name, 'SKILL.md');
         return existsSync(skillFile);
       })

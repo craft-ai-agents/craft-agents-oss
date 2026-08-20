@@ -127,15 +127,34 @@ export class RoutedClient implements RpcClient {
       return this.localClient.on(channel, callback)
     }
 
-    // REMOTE_ELIGIBLE — subscribe on workspaceClient and track for re-subscription
-    const unsub = this.workspaceClient.on(channel, callback)
+    // REMOTE_ELIGIBLE — subscribe on workspaceClient and track for re-subscription.
+    // Reverse-map remote workspace ids → local ids on push payloads so renderer
+    // listeners (which key off the local workspace id) still match. Delivery
+    // stays on the remote/workspace client; only the callback args are rewritten.
+    const wrapped = (...args: any[]) => {
+      const mapping = this.workspaceIdMapping
+      if (!mapping) {
+        callback(...args)
+        return
+      }
+      const translated = args.map(arg => {
+        if (arg === mapping.remoteId) return mapping.localId
+        if (arg && typeof arg === 'object' && 'workspaceId' in arg && arg.workspaceId === mapping.remoteId) {
+          return { ...arg, workspaceId: mapping.localId }
+        }
+        return arg
+      })
+      callback(...translated)
+    }
+    const unsub = this.workspaceClient.on(channel, wrapped)
 
     let set = this.remoteListeners.get(channel)
     if (!set) {
       set = new Set()
       this.remoteListeners.set(channel, set)
     }
-    const entry: ListenerEntry = { callback, unsub }
+    // Store the wrapped listener so workspace swaps re-subscribe the same adapter.
+    const entry: ListenerEntry = { callback: wrapped, unsub }
     set.add(entry)
 
     return () => {

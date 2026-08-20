@@ -1,15 +1,21 @@
+import { DEFAULT_BUILTIN_STATUS_PALETTE } from '@craft-agent/shared/colors'
 import type { BuiltInKanbanColumnId } from './types'
 
 /**
- * Default accent color for each board column (hex). Single source of truth for
- * the column identity; user overrides live in `kanbanColumnColorsAtom` and are
- * merged over these by `useKanbanColumnColors`.
+ * Renderer projection of the shared built-in status palette. Per-column
+ * overrides remain in `kanbanColumnColorsAtom` and take precedence in the
+ * existing hooks and persisted board configuration.
  *
- * Picked from `PROJECT_COLOR_PALETTE` so the board reads as one family: indigo
- * (planning) → amber (active) → emerald (done).
+ * `todo` and `done` retain their explicit legacy semantics if a future shared
+ * palette omits either status.
  */
+const TODO_FALLBACK = '#3b82f6'
+const DONE_FALLBACK = '#10b981'
+
 export const DEFAULT_KANBAN_COLUMN_COLORS: Record<BuiltInKanbanColumnId, string> = {
-  todo: '#6366f1', // indigo
-  'in-progress': '#f59e0b', // amber
-  done: '#10b981', // emerald
+  backlog: DEFAULT_BUILTIN_STATUS_PALETTE.backlog.light,
+  todo: DEFAULT_BUILTIN_STATUS_PALETTE.todo?.light ?? TODO_FALLBACK,
+  'in-progress': DEFAULT_BUILTIN_STATUS_PALETTE['in-progress'].light,
+  'needs-review': DEFAULT_BUILTIN_STATUS_PALETTE['needs-review'].light,
+  done: DEFAULT_BUILTIN_STATUS_PALETTE.done?.light ?? DONE_FALLBACK,
 }

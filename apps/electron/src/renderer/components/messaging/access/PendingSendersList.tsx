@@ -52,10 +52,6 @@ function PendingRow({
 }) {
   const { t } = useTranslation()
   const primary = sender.displayName || sender.username || sender.userId
-  const lastAttemptText = formatRelativeTime(sender.lastAttemptAt, t)
-  const attemptText = t('settings.messaging.telegram.access.pending.attempts', {
-    count: sender.attemptCount,
-  })
   const isBindingScoped = sender.reason === 'not-on-binding-allowlist'
   const allowLabel = isBindingScoped
     ? t('settings.messaging.telegram.access.pending.allowForBinding')
@@ -76,11 +72,17 @@ function PendingRow({
           )}
         </div>
         <div className="mt-0.5 truncate text-xs text-foreground/50">
-          {t('settings.messaging.telegram.access.pending.metaLine', {
-            attempts: attemptText,
-            relative: lastAttemptText,
-            userId: sender.userId,
-          })}
+          {t(
+            isBindingScoped
+              ? 'settings.messaging.telegram.access.pending.audit.notOnBindingAllowlist'
+              : 'settings.messaging.telegram.access.pending.audit.notOwner',
+            {
+              userId: sender.userId,
+              defaultValue: isBindingScoped
+                ? 'Rejected on this chat. Allow adds this exact sender id to the binding allow-list.'
+                : 'Rejected as a workspace non-owner. Allow adds this exact sender id as an owner.',
+            },
+          )}
         </div>
       </div>
       <div className="flex items-center gap-1">
@@ -100,22 +102,4 @@ function PendingRow({
       </div>
     </div>
   )
-}
-
-function formatRelativeTime(
-  epochMs: number,
-  t: (key: string, opts?: Record<string, unknown>) => string,
-): string {
-  const diff = Date.now() - epochMs
-  if (diff < 60_000) return t('settings.messaging.telegram.access.pending.justNow')
-  const minutes = Math.floor(diff / 60_000)
-  if (minutes < 60) {
-    return t('settings.messaging.telegram.access.pending.minutesAgo', { count: minutes })
-  }
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) {
-    return t('settings.messaging.telegram.access.pending.hoursAgo', { count: hours })
-  }
-  const days = Math.floor(hours / 24)
-  return t('settings.messaging.telegram.access.pending.daysAgo', { count: days })
 }

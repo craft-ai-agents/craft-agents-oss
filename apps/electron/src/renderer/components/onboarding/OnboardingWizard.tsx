@@ -5,12 +5,14 @@ import { ProviderSelectStep, type ProviderChoice } from "./ProviderSelectStep"
 import { CredentialsStep, type CredentialStatus } from "./CredentialsStep"
 import { LocalModelStep, type LocalModelSubmitData } from "./LocalModelStep"
 import { CompletionStep } from "./CompletionStep"
+import { RoxConnectStep, type RoxConnectCodes } from "./RoxConnectStep"
 import { GitBashWarning, type GitBashStatus } from "./GitBashWarning"
-import type { ApiKeySubmitData } from "../apisetup"
+import type { ApiKeySubmitData, CustomEndpointModelInput } from "../apisetup"
 import type { CustomEndpointApi } from '@config/llm-connections'
 
 export type OnboardingStep =
   | 'welcome'
+  | 'rox-connect'
   | 'git-bash'
   | 'provider-select'
   | 'local-model'
@@ -46,6 +48,7 @@ interface OnboardingWizardProps {
 
   // Claude OAuth (two-step flow)
   isWaitingForCode?: boolean
+  isProviderOAuthPending?: boolean
   onSubmitAuthCode?: (code: string) => void
   onCancelOAuth?: () => void
 
@@ -63,6 +66,14 @@ interface OnboardingWizardProps {
   /** Called when user chooses "Setup later" on provider select */
   onSkipSetup?: () => void
 
+  // Rox cloud Connect
+  roxConnectCodes?: RoxConnectCodes | null
+  roxConnectStatus?: 'idle' | 'starting' | 'waiting' | 'success' | 'error'
+  roxConnectError?: string
+  roxAuthBaseUrl?: string
+  onStartRoxConnect?: () => void
+  onOpenRoxConnectBrowser?: () => void
+
   // Local model
   onSubmitLocalModel?: (data: LocalModelSubmitData) => void
 
@@ -72,7 +83,7 @@ interface OnboardingWizardProps {
     baseUrl?: string
     connectionDefaultModel?: string
     activePreset?: string
-    models?: string[]
+    models?: CustomEndpointModelInput[]
     customApi?: CustomEndpointApi
   }
 
@@ -98,6 +109,7 @@ export function OnboardingWizard({
   onFinish,
   // Two-step OAuth flow
   isWaitingForCode,
+  isProviderOAuthPending,
   onSubmitAuthCode,
   onCancelOAuth,
   // Copilot device flow
@@ -110,6 +122,12 @@ export function OnboardingWizard({
   // Provider select (new flow)
   onSelectProvider,
   onSkipSetup,
+  roxConnectCodes,
+  roxConnectStatus = 'idle',
+  roxConnectError,
+  roxAuthBaseUrl = 'https://rox.one',
+  onStartRoxConnect,
+  onOpenRoxConnectBrowser,
   // Local model
   onSubmitLocalModel,
   // Edit mode
@@ -124,6 +142,18 @@ export function OnboardingWizard({
             isExistingUser={state.isExistingUser}
             onContinue={onContinue}
             isLoading={state.isCheckingGitBash}
+          />
+        )
+
+      case 'rox-connect':
+        return (
+          <RoxConnectStep
+            codes={roxConnectCodes ?? null}
+            status={roxConnectStatus}
+            errorMessage={roxConnectError}
+            onStart={onStartRoxConnect!}
+            onOpenBrowser={onOpenRoxConnectBrowser!}
+            authBaseUrl={roxAuthBaseUrl}
           />
         )
 
@@ -169,6 +199,7 @@ export function OnboardingWizard({
             onStartOAuth={onStartOAuth}
             onBack={onBack}
             isWaitingForCode={isWaitingForCode}
+            isProviderOAuthPending={isProviderOAuthPending}
             onSubmitAuthCode={onSubmitAuthCode}
             editInitialValues={editInitialValues}
             onCancelOAuth={onCancelOAuth}

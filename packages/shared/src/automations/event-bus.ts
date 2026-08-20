@@ -68,6 +68,62 @@ export interface GenericEventPayload extends BaseEventPayload {
   data: Record<string, unknown>;
 }
 
+/** Knowledge document lifecycle payload (created/updated/stale) */
+export interface KnowledgeDocumentEventPayload extends BaseEventPayload {
+  ref?: { scheme: string; kind: string; id: string; provider?: string; connectionId?: string };
+  notebookId?: string;
+  path?: string;
+  title?: string;
+  contentHashBefore?: string;
+  contentHashAfter?: string;
+  contentHash?: string;
+  updatedAt?: number;
+  createdAt?: number;
+  lastUpdatedAt?: number;
+  staleAfterDays?: number;
+  editor?: string;
+  attrs?: Record<string, unknown>;
+  connectionId?: string;
+  /** Originating automation id when write came from automation (loop-safety) */
+  automationId?: string;
+}
+
+/** Knowledge attribute change payload */
+export interface KnowledgeAttributeChangedPayload extends BaseEventPayload {
+  ref?: { scheme: string; kind: string; id: string; provider?: string; connectionId?: string };
+  databaseId?: string;
+  rowId?: string;
+  attribute?: { name: string; type?: string };
+  /** Flat convenience fields used by matchers/conditions */
+  attributeName?: string;
+  oldValue?: unknown;
+  newValue?: unknown;
+  changedAt?: number;
+  connectionId?: string;
+  automationId?: string;
+}
+
+/** Knowledge database row change payload */
+export interface KnowledgeDatabaseRowChangedPayload extends BaseEventPayload {
+  database?: { scheme: string; kind: string; id: string };
+  row?: { blockId?: string; ref?: { scheme: string; kind: string; id: string } };
+  changeKind?: 'created' | 'updated' | 'deleted' | string;
+  changedAttributes?: Record<string, { old?: unknown; new?: unknown }>;
+  changedAt?: number;
+  connectionId?: string;
+  automationId?: string;
+}
+
+/** Cloud run completed payload (success path for automation chains) */
+export interface CloudRunCompletedPayload extends BaseEventPayload {
+  runId?: string;
+  state?: string;
+  skillSlug?: string;
+  topic?: string;
+  callbackTag?: string;
+  labels?: string[];
+}
+
 // ============================================================================
 // Event Payload Map
 // ============================================================================
@@ -84,6 +140,12 @@ export interface EventPayloadMap {
   FlagChange: FlagChangePayload;
   SessionStatusChange: SessionStatusChangePayload;
   SchedulerTick: SchedulerTickPayload;
+  KnowledgeDocumentCreated: KnowledgeDocumentEventPayload;
+  KnowledgeDocumentUpdated: KnowledgeDocumentEventPayload;
+  KnowledgeAttributeChanged: KnowledgeAttributeChangedPayload;
+  KnowledgeDatabaseRowChanged: KnowledgeDatabaseRowChangedPayload;
+  KnowledgeDocumentStale: KnowledgeDocumentEventPayload;
+  CloudRunCompleted: CloudRunCompletedPayload;
 
   // Agent events (generic payload)
   PreToolUse: GenericEventPayload;

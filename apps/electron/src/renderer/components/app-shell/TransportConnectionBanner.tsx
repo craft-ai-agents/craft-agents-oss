@@ -1,11 +1,53 @@
 import i18n from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
-import type { TransportConnectionState } from '../../../shared/types'
+import type { TransportConnectionState, SshConnectionStatus } from '../../../shared/types'
 
 export function shouldShowTransportConnectionBanner(state: TransportConnectionState | null): boolean {
   if (!state || state.mode === 'local') return false
   return state.status !== 'connected' && state.status !== 'idle'
+}
+
+/** Whether the SSH layer should mask the ws transport state — the tunnel/server is
+ * still settling, so show SSH status (not a raw ws error) until it is `ready`. */
+export function shouldShowSshBanner(ssh: SshConnectionStatus | null | undefined): boolean {
+  return !!ssh && ssh.phase !== 'ready'
+}
+
+/** Banner copy for the SSH connection layer (shown in front of ws state). */
+export function getSshBannerCopy(ssh: SshConnectionStatus): TransportBannerCopy {
+  const via = i18n.t('ssh.conn.hostLabel', { host: ssh.hostLabel })
+  switch (ssh.phase) {
+    case 'bootstrapping':
+      return {
+        title: i18n.t('ssh.conn.startingServer'),
+        description: via,
+        showRetry: false,
+        tone: 'info',
+      }
+    case 'tunnel-reconnecting':
+      return {
+        title: i18n.t('ssh.conn.reconnecting', { attempt: ssh.attempt ?? 1 }),
+        description: via,
+        showRetry: false,
+        tone: 'warning',
+      }
+    case 'error':
+      return {
+        title: i18n.t('ssh.conn.error'),
+        description: ssh.detail ? `${via} — ${ssh.detail}` : via,
+        showRetry: true,
+        tone: 'error',
+      }
+    case 'tunnel-connecting':
+    default:
+      return {
+        title: i18n.t('ssh.conn.connecting'),
+        description: via,
+        showRetry: false,
+        tone: 'info',
+      }
+  }
 }
 
 export interface TransportBannerCopy {
@@ -81,13 +123,16 @@ function getFailureReason(state: TransportConnectionState): string {
 
 export function TransportConnectionBanner({
   state,
+  sshStatus,
   onRetry,
 }: {
   state: TransportConnectionState
+  /** When set and not `ready`, the SSH layer masks the ws state (see shouldShowSshBanner). */
+  sshStatus?: SshConnectionStatus | null
   onRetry: () => void
 }) {
   const { t } = useTranslation()
-  const copy = getTransportBannerCopy(state)
+  const copy = shouldShowSshBanner(sshStatus) ? getSshBannerCopy(sshStatus!) : getTransportBannerCopy(state)
 
   const toneClasses = copy.tone === 'error'
     ? 'border-destructive/30 bg-destructive/10 text-destructive'

@@ -164,7 +164,7 @@ async function makeHarness(opts: StubSessionManagerOpts = {}): Promise<Harness> 
     'telegram',
     'chat-1',
     undefined,
-    { approvalChannel: 'chat' },
+    { approvalChannel: 'chat', accessMode: 'owner-control', allowedSenderIds: ['sender-A'] },
   )
 
   return { gateway, adapter, sessionManager }
@@ -338,7 +338,7 @@ describe('MessagingGateway — perm: button (#726)', () => {
       'telegram',
       'chat-2',
       undefined,
-      { approvalChannel: 'chat' },
+      { approvalChannel: 'chat', accessMode: 'owner-control', allowedSenderIds: ['sender-A'] },
     )
     await registerPrompt(h.gateway, { sessionId: 'sess-A', requestId: 'req-A' })
     await registerPrompt(h.gateway, { sessionId: 'sess-B', requestId: 'req-B' })

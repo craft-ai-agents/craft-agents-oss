@@ -10,7 +10,7 @@
  *   craftagents://flagged[/session/{sessionId}]             - Session list (flagged filter)
  *   craftagents://state/{stateId}[/session/{sessionId}]     - Session list (state filter)
  *   craftagents://sources[/source/{sourceSlug}]          - Sources list
- *   craftagents://settings[/{subpage}]                   - Settings (general, shortcuts, preferences)
+ *   craftagents://settings[/{subpage}]                   - Settings (general, shortcuts, context)
  *
  * Action format:
  *   craftagents://action/{actionName}[/{id}][?params]

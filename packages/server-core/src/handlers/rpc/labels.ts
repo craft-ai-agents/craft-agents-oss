@@ -6,6 +6,7 @@ import type { HandlerDeps } from '../handler-deps'
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.labels.LIST,
   RPC_CHANNELS.labels.CREATE,
+  RPC_CHANNELS.labels.UPDATE,
   RPC_CHANNELS.labels.DELETE,
 ] as const
 
@@ -26,6 +27,22 @@ export function registerLabelsHandlers(server: RpcServer, _deps: HandlerDeps): v
 
     const { createLabel } = await import('@craft-agent/shared/labels/crud')
     const label = createLabel(workspace.rootPath, input)
+    pushTyped(server, RPC_CHANNELS.labels.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
+    return label
+  })
+
+  // Update an existing label (name, color, valueType)
+  server.handle(RPC_CHANNELS.labels.UPDATE, async (
+    _ctx,
+    workspaceId: string,
+    labelId: string,
+    updates: import('@craft-agent/shared/labels').UpdateLabelInput,
+  ) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { updateLabel } = await import('@craft-agent/shared/labels/crud')
+    const label = updateLabel(workspace.rootPath, labelId, updates)
     pushTyped(server, RPC_CHANNELS.labels.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
     return label
   })

@@ -12,8 +12,16 @@ export interface RequestContext {
 
 export type HandlerFn = (ctx: RequestContext, ...args: any[]) => Promise<any> | any
 
+/**
+ * An opt-in access restriction for a handler. Existing handlers remain
+ * transport-compatible unless they explicitly choose a restriction.
+ */
+export interface RpcHandlerOptions {
+  readonly access?: 'localElectron'
+}
+
 export interface RpcServer {
-  handle(channel: string, handler: HandlerFn): void
+  handle(channel: string, handler: HandlerFn, options?: RpcHandlerOptions): void
   push(channel: string, target: PushTarget, ...args: any[]): void
   invokeClient(clientId: string, channel: string, ...args: any[]): Promise<any>
   updateClientWorkspace?(clientId: string, workspaceId: string): void

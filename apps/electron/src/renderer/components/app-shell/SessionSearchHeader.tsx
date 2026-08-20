@@ -54,12 +54,13 @@ export function SessionSearchHeader({
   resultCount,
   exceededLimit = false,
   inputRef,
-  placeholder = 'Search titles and content...',
+  placeholder,
   readOnly = false,
 }: SessionSearchHeaderProps) {
   const { t } = useTranslation()
+  const resolvedPlaceholder = placeholder ?? t('session.searchTitlesAndContent')
   return (
-    <div className="shrink-0 px-2 pt-2 pb-1.5 border-b border-border/50">
+    <div className="sticky top-0 z-10 shrink-0 px-2 pt-2 pb-1.5 border-b border-border/50 bg-background/95 backdrop-blur-sm">
       {/* Search input */}
       <div className="relative rounded-[8px] shadow-minimal bg-muted/50 has-[:focus-visible]:bg-background">
         {/* Search icon - always static, never changes to spinner */}
@@ -73,7 +74,7 @@ export function SessionSearchHeader({
           onFocus={onFocus}
           onBlur={onBlur}
           readOnly={readOnly}
-          placeholder={placeholder}
+          placeholder={resolvedPlaceholder}
           className="w-full h-8 pl-8 pr-8 text-sm bg-transparent border-0 rounded-[8px] outline-none focus-visible:ring-0 focus-visible:outline-none placeholder:text-muted-foreground/50"
         />
         {onSearchClose && (

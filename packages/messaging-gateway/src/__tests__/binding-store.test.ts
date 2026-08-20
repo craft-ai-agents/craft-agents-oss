@@ -143,6 +143,7 @@ describe('BindingStore', () => {
 
     const store = new BindingStore(dir, legacyDir)
     expect(store.findByChannel('telegram', 'c1')?.id).toBe('legacy-1')
+    expect(store.findByChannel('telegram', 'c1')?.config.accessMode).toBe('public-inbox')
     expect(existsSync(join(dir, 'bindings.json'))).toBe(true)
   })
 
@@ -193,6 +194,52 @@ describe('BindingStore', () => {
     store.bind('ws1', 'sess', 'telegram', 'c1')
     const raw = readFileSync(join(dir, 'bindings.json'), 'utf-8')
     expect(JSON.parse(raw)).toHaveLength(1)
+  })
+
+  it('rewrites legacy open/inherit records to public-inbox on load and save', () => {
+    writeFileSync(
+      join(dir, 'bindings.json'),
+      JSON.stringify([
+        {
+          id: 'legacy-open',
+          workspaceId: 'ws1',
+          sessionId: 'sess',
+          platform: 'discord',
+          channelId: 'c-open',
+          enabled: true,
+          createdAt: 1,
+          config: { accessMode: 'open' },
+        },
+        {
+          id: 'legacy-inherit',
+          workspaceId: 'ws1',
+          sessionId: 'sess',
+          platform: 'lark',
+          channelId: 'c-inherit',
+          enabled: true,
+          createdAt: 2,
+          config: { accessMode: 'inherit' },
+        },
+      ]),
+    )
+
+    const store = new BindingStore(dir)
+    expect(store.findByChannel('discord', 'c-open')?.config.accessMode).toBe('public-inbox')
+    expect(store.findByChannel('lark', 'c-inherit')?.config.accessMode).toBe('public-inbox')
+
+    const persisted = JSON.parse(readFileSync(join(dir, 'bindings.json'), 'utf-8')) as Array<{
+      config: { accessMode: string }
+    }>
+    expect(persisted.map((row) => row.config.accessMode)).toEqual(['public-inbox', 'public-inbox'])
+  })
+
+  it('new binds persist owner-control, never open', () => {
+    const store = new BindingStore(dir)
+    store.bind('ws1', 'sess', 'wechat', 'c1')
+    const persisted = JSON.parse(readFileSync(join(dir, 'bindings.json'), 'utf-8')) as Array<{
+      config: { accessMode: string }
+    }>
+    expect(persisted[0]?.config.accessMode).toBe('owner-control')
   })
 })
 

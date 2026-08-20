@@ -101,7 +101,66 @@ describe('RoutedClient', () => {
       const cb = mock(() => {})
       routed.on(REMOTE_CHANNEL, cb)
 
-      expect(workspace.on).toHaveBeenCalledWith(REMOTE_CHANNEL, cb)
+      // Listener is wrapped for optional remote→local id reverse-map
+      expect(workspace.on).toHaveBeenCalledWith(REMOTE_CHANNEL, expect.any(Function))
+      expect(local.on).not.toHaveBeenCalledWith(REMOTE_CHANNEL, expect.any(Function))
+    })
+  })
+
+  describe('workspace id mapping', () => {
+    it('translates local workspace ids to remote on REMOTE_ELIGIBLE invoke', async () => {
+      const local = stubClient()
+      const workspace = stubClient({ invoke: mock(async () => 'ok') })
+      const routed = new RoutedClient(local, workspace)
+      routed.setWorkspaceMapping('local-ws', 'remote-ws')
+
+      await routed.invoke(REMOTE_CHANNEL, 'local-ws')
+      expect(workspace.invoke).toHaveBeenCalledWith(REMOTE_CHANNEL, 'remote-ws')
+
+      await routed.invoke(REMOTE_CHANNEL, { workspaceId: 'local-ws', other: 1 })
+      expect(workspace.invoke).toHaveBeenCalledWith(REMOTE_CHANNEL, { workspaceId: 'remote-ws', other: 1 })
+    })
+
+    it('reverse-maps remote workspace ids to local on push payloads', () => {
+      const local = stubClient()
+      const workspace = stubClient()
+      const routed = new RoutedClient(local, workspace)
+      routed.setWorkspaceMapping('local-ws', 'remote-ws')
+
+      const cb = mock(() => {})
+      routed.on(REMOTE_CHANNEL, cb)
+
+      const wrapped = (workspace.on as any).mock.calls.find(
+        (c: any[]) => c[0] === REMOTE_CHANNEL,
+      )?.[1] as (...args: any[]) => void
+      expect(typeof wrapped).toBe('function')
+
+      const cfg = { version: 1 }
+      wrapped('remote-ws', cfg)
+      expect(cb).toHaveBeenCalledWith('local-ws', cfg)
+
+      wrapped({ workspaceId: 'remote-ws', foo: true })
+      expect(cb).toHaveBeenCalledWith({ workspaceId: 'local-ws', foo: true })
+
+      // Unrelated ids pass through unchanged
+      wrapped('other-ws')
+      expect(cb).toHaveBeenCalledWith('other-ws')
+    })
+
+    it('passes push args through when no workspace mapping is set', () => {
+      const local = stubClient()
+      const workspace = stubClient()
+      const routed = new RoutedClient(local, workspace)
+
+      const cb = mock(() => {})
+      routed.on(REMOTE_CHANNEL, cb)
+
+      const wrapped = (workspace.on as any).mock.calls.find(
+        (c: any[]) => c[0] === REMOTE_CHANNEL,
+      )?.[1] as (...args: any[]) => void
+
+      wrapped('remote-ws', { ok: true })
+      expect(cb).toHaveBeenCalledWith('remote-ws', { ok: true })
     })
   })
 
@@ -163,13 +222,16 @@ describe('RoutedClient', () => {
       // Subscribe a listener before switch
       const cb = mock(() => {})
       routed.on(REMOTE_CHANNEL, cb)
-      expect(workspace.on).toHaveBeenCalledWith(REMOTE_CHANNEL, cb)
+      const initialWrapped = (workspace.on as any).mock.calls.find(
+        (c: any[]) => c[0] === REMOTE_CHANNEL,
+      )?.[1]
+      expect(typeof initialWrapped).toBe('function')
 
       // Trigger switch
       await routed.invoke(SWITCH_CHANNEL)
 
-      // Listener should be re-subscribed on the new client
-      expect(newRemote.on).toHaveBeenCalledWith(REMOTE_CHANNEL, cb)
+      // Same wrapped adapter is re-subscribed on the new client (make-before-break)
+      expect(newRemote.on).toHaveBeenCalledWith(REMOTE_CHANNEL, initialWrapped)
     })
 
     it('re-registers capabilities on swap', async () => {

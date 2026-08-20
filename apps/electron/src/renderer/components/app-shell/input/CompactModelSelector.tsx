@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Image as ImageIcon,
+  Sparkles,
 } from 'lucide-react'
 import { Spinner } from '@craft-agent/ui'
 import {
@@ -17,6 +18,7 @@ import {
   DrawerClose,
 } from '@/components/ui/drawer'
 import { cn } from '@/lib/utils'
+import { isWebUI } from '@/lib/platform'
 import * as storage from '@/lib/local-storage'
 import { navigate, routes } from '@/lib/navigate'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
@@ -39,6 +41,7 @@ import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { derivePickerMode } from './picker-mode'
 import {
   formatTokenCount,
+  getConnectionPickerMeta,
   groupConnectionsByProvider,
   stripPiPrefixForDisplay,
 } from './model-picker-helpers'
@@ -173,27 +176,38 @@ export function CompactModelSelector({
           aria-label={connectionUnavailable
             ? t('common.unavailable')
             : `${t('common.model')}: ${currentModelDisplayName}`}
+          title={connectionUnavailable
+            ? t('common.unavailable')
+            : `${t('common.model')}: ${currentModelDisplayName}`}
           className={cn(
-            'h-7 pl-2 pr-2 text-xs font-medium rounded-[6px] flex items-center gap-1.5 shadow-tinted outline-none select-none min-w-[64px] shrink',
-            connectionUnavailable
-              ? 'bg-destructive/10 text-destructive'
-              : 'bg-foreground/5 text-foreground/70',
+            isWebUI
+              ? 'h-7 w-7 p-0 text-xs font-medium rounded-[6px] flex items-center justify-center outline-none select-none shrink-0'
+              : 'h-7 pl-2 pr-2 text-xs font-medium rounded-[6px] flex items-center gap-1.5 shadow-tinted outline-none select-none min-w-[64px] shrink',
+            isWebUI
+              ? (connectionUnavailable ? 'text-destructive hover:bg-destructive/10' : 'text-foreground/70 hover:bg-foreground/5')
+              : (connectionUnavailable ? 'bg-destructive/10 text-destructive' : 'bg-foreground/5 text-foreground/70'),
           )}
-          style={{ '--shadow-color': 'var(--foreground-rgb)' } as React.CSSProperties}
+          style={!isWebUI ? { '--shadow-color': 'var(--foreground-rgb)' } as React.CSSProperties : undefined}
         >
           {connectionUnavailable ? (
             <>
               <AlertCircle className="h-3.5 w-3.5" />
-              <span>{t('common.unavailable')}</span>
+              {!isWebUI && <span>{t('common.unavailable')}</span>}
             </>
           ) : (
             <>
-              {showConnectionIcon && effectiveConnectionDetails && (
-                <ConnectionIcon connection={effectiveConnectionDetails} size={14} />
-              )}
-              <span className="truncate min-w-0">{currentModelDisplayName}</span>
-              {pickerMode !== 'locked-single' && (
-                <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
+              {isWebUI ? (
+                <Sparkles className="h-4 w-4" />
+              ) : (
+                <>
+                  {showConnectionIcon && effectiveConnectionDetails && (
+                    <ConnectionIcon connection={effectiveConnectionDetails} size={14} />
+                  )}
+                  <span className="truncate min-w-0">{currentModelDisplayName}</span>
+                  {pickerMode !== 'locked-single' && (
+                    <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
+                  )}
+                </>
               )}
             </>
           )}
@@ -243,6 +257,7 @@ export function CompactModelSelector({
                   const isCurrentConnection = effectiveConnection === conn.slug
                   const isAuthenticated = conn.isAuthenticated
                   const isExpanded = expandedConnection === conn.slug
+                  const connectionMeta = getConnectionPickerMeta(conn)
                   return (
                     <React.Fragment key={conn.slug}>
                       <button
@@ -261,6 +276,9 @@ export function CompactModelSelector({
                         <ConnectionIcon connection={conn} size={14} />
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium truncate">{conn.name}</div>
+                          {connectionMeta && (
+                            <div className="text-xs text-foreground/50 truncate mt-0.5">{connectionMeta}</div>
+                          )}
                           {!isAuthenticated && (
                             <div className="text-xs text-muted-foreground">
                               {t('settings.ai.notAuthenticated')}

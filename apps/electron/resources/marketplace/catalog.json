@@ -1,0 +1,744 @@
+{
+  "catalogVersion": 1,
+  "updatedAt": "2026-08-07",
+  "entries": [
+    {
+      "id": "agent-skills-installer",
+      "kind": "skillpack",
+      "title": "Agent Skills Installer",
+      "descriptionRu": "Проверяемый движок установки AI-скиллов: 62 upstream-источника, 1268 скиллов, lockfile и контроль целостности по SHA-256. Ставится целиком как справочный инструментарий.",
+      "source": {
+        "type": "github",
+        "repo": "agisota/agent-skills-installer",
+        "ref": "918a8da1d0d0ccae6726baa90610daa2df2e8cff"
+      },
+      "skills": [],
+      "license": "MIT",
+      "default": "available",
+      "installMode": "directory",
+      "sizeHintKb": 1024,
+      "tags": [
+        "installer",
+        "skills",
+        "marketplace"
+      ],
+      "expectedContentSha256": {
+        "agent-skills-installer": "226942ea62707feb5296fb64ddc7b96649e70d31cdefa33c40bf3cd178667ee7"
+      }
+    },
+    {
+      "id": "superpowers",
+      "kind": "skillpack",
+      "title": "Superpowers",
+      "descriptionRu": "Методология агентной разработки от obra: брейншторм → план → TDD, делегирование субагентам, системная отладка и проверка перед «готово».",
+      "source": {
+        "type": "github",
+        "repo": "obra/superpowers",
+        "ref": "44c9b2d6e889982ac18c27d05a19fefe335194e1"
+      },
+      "skills": [
+        "brainstorming",
+        "dispatching-parallel-agents",
+        "executing-plans",
+        "finishing-a-development-branch",
+        "receiving-code-review",
+        "requesting-code-review",
+        "subagent-driven-development",
+        "systematic-debugging",
+        "test-driven-development",
+        "using-git-worktrees",
+        "using-superpowers",
+        "verification-before-completion",
+        "writing-plans",
+        "writing-skills"
+      ],
+      "skillsSubdir": "skills",
+      "license": "MIT",
+      "default": "available",
+      "sizeHintKb": 512,
+      "tags": [
+        "methodology",
+        "tdd",
+        "planning",
+        "workflow"
+      ],
+      "expectedContentSha256": {
+        "using-git-worktrees": "98dc7da4ead1fe3c523c7ac314082f1f85114ad5e6ec39d4426b4a7f76ed9d0c",
+        "test-driven-development": "0ff8639af929add22342c8fbd7accfd26529c64c9998e2b65e78dfe73e19b48c",
+        "systematic-debugging": "e4263f70f52de0286442ea874f8d10c874b65e8e08af20595b6b241d996915f5",
+        "using-superpowers": "53c4239df21b152fc1cffce0b16dee01e46c45a51b92231b97a71cd582caa80e",
+        "dispatching-parallel-agents": "1acb899b23c2bdb5af5961e7b97ba43fb2a5593822db755747ef3d5db9f825a4",
+        "executing-plans": "5036191743cbb55b8665ddf0d6b89daad668525adf28291fe1054e86e01972d9",
+        "finishing-a-development-branch": "1fbb4cc3d58f7892dd9ac7690c569261a71d7a84a0057bb78566978108cef4c5",
+        "brainstorming": "5e6e91b078faa0029407be720134a4b0cc9636612600e418adbf56ea9772f453",
+        "writing-plans": "b2c043f104d972a8a843ab3b3b31ac2280a4fac3db6af2b1d66bbd8e392e863f",
+        "requesting-code-review": "0f41514c70ea491d649aaff72c9c82adce333a674b33c1f2983a98f9e196803d",
+        "receiving-code-review": "e5dd23be2d93f751c8b28d647c4b139754aedfe75648cd8e1100e47f5da0c3c5",
+        "writing-skills": "ab1277cb61c94df65aa187f23c7db8d6dbbb94a1a018d8f7082f011602976cf1",
+        "verification-before-completion": "d8a53168f152b6163bd3447f7d4c20b6b4cddf6bd907f9aa5856b514c032db0e",
+        "subagent-driven-development": "3a6c25ff1b43e1c882c474acb54adf4fd2d719628582f76da4586424da46b96b"
+      }
+    },
+    {
+      "id": "hallmark",
+      "kind": "skillpack",
+      "title": "Hallmark",
+      "descriptionRu": "Дизайн-скилл против «AI-шаблонности»: 21 готовая тема оформления и 57 проверок (slop-гейтов) качества интерфейсов для Claude Code, Cursor и Codex.",
+      "source": {
+        "type": "github",
+        "repo": "Nutlope/hallmark",
+        "ref": "13ac0ec7e148655948100b6396439e481361d690"
+      },
+      "skills": [
+        "hallmark"
+      ],
+      "skillsSubdir": "skills",
+      "license": "MIT",
+      "default": "available",
+      "sizeHintKb": 256,
+      "tags": [
+        "design",
+        "frontend",
+        "ui"
+      ],
+      "expectedContentSha256": {
+        "hallmark": "5264dfd5bc851ae711b98121b992de514efab5c140856ffa0e4d9c3414a2ab85"
+      }
+    },
+    {
+      "id": "vercel-agent-skills",
+      "kind": "skillpack",
+      "title": "Vercel Agent Skills",
+      "descriptionRu": "Официальный набор скиллов Vercel: лучшие практики React, оптимизация приложений (vercel-optimize), паттерны композиции и гайды по веб-дизайну.",
+      "source": {
+        "type": "github",
+        "repo": "vercel-labs/agent-skills",
+        "ref": "7c180d9044c9ae2b442b567aad4e42a28dd5ed62"
+      },
+      "skills": [
+        "composition-patterns",
+        "deploy-to-vercel",
+        "react-best-practices",
+        "react-native-skills",
+        "react-view-transitions",
+        "vercel-cli-with-tokens",
+        "vercel-optimize",
+        "web-design-guidelines",
+        "writing-guidelines"
+      ],
+      "skillsSubdir": "skills",
+      "license": "MIT",
+      "default": "available",
+      "sizeHintKb": 384,
+      "tags": [
+        "react",
+        "frontend",
+        "vercel",
+        "performance"
+      ],
+      "expectedContentSha256": {
+        "deploy-to-vercel": "15894f2b4dd7bcc29daf71aa715eb79a188eb193af416d8c58ca0513797a626a",
+        "web-design-guidelines": "f3bc47f890f42a44db1007ab390709ec368e4b8c089baee6b0007182236ac474",
+        "writing-guidelines": "25aa3a33a97bddbcb1847ce4a6169106ec25e5b19b15b99c66e75ab383866ef2",
+        "vercel-cli-with-tokens": "eb16b20dcbe6ce51e0372083d624e0847af1b09487ec99249227d5a8eddebfc0",
+        "composition-patterns": "646f870906914c3787efa7403ec4716dfddf78fc17a12ec1f0556caf2143ac66",
+        "vercel-optimize": "c75179c844eee289c90149cec78c3968b73010565eccbd747f00d338241b890f",
+        "react-best-practices": "e3f2294574b469c7c198373a443a86571012769d0bbeed68854bd55642ec0d7b",
+        "react-view-transitions": "a9b52d90aca14307ae89c84b24d072832296264c89302cda55878489d7226943",
+        "react-native-skills": "7a13afc40d6cf74e431d845f5c19a3047caf4fdfe2d1fed1dbd0c77ed2db7b0b"
+      }
+    },
+    {
+      "id": "next-skills",
+      "kind": "context-doc",
+      "title": "Next.js Guidelines (Vercel)",
+      "descriptionRu": "Актуальные рекомендации Vercel по Next.js для агентов. Ставится как документ контекста и попадает в системный промпт каждой сессии.",
+      "source": {
+        "type": "github",
+        "repo": "vercel-labs/next-skills",
+        "ref": "b76d687cf3e026eac3b1032f610f06b47a56377c"
+      },
+      "documents": [
+        {
+          "repoPath": "AGENTS.md",
+          "targetName": "nextjs.md"
+        },
+        {
+          "repoPath": "CLAUDE.md",
+          "targetName": "nextjs-claude.md"
+        }
+      ],
+      "default": "available",
+      "sizeHintKb": 64,
+      "tags": [
+        "nextjs",
+        "react",
+        "vercel",
+        "context"
+      ],
+      "expectedContentSha256": {
+        "nextjs.md": "8319fa5747599aafe8c802bec9608f4cd163e5dc57355358257a74bbe67b297b",
+        "nextjs-claude.md": "a7dcbc7df6699490e21bf46dfc80b74850de5e646e2931b4968934772be645a8"
+      }
+    },
+    {
+      "id": "gstack-skills",
+      "kind": "skillpack",
+      "title": "gstack Skills",
+      "descriptionRu": "Рабочий набор скиллов Garry Tan: 54 инструмента-роли для Claude Code — от CEO и дизайнера до инженера релизов, документации и QA. Ставится целиком (clone-only), апстримный install.sh НЕ выполняется.",
+      "source": {
+        "type": "github",
+        "repo": "garrytan/gstack",
+        "ref": "a3259400a366593e0c909dd9ac3e59752efd2488"
+      },
+      "skills": [
+        "autoplan",
+        "benchmark-models",
+        "benchmark",
+        "browse",
+        "canary",
+        "careful",
+        "codex",
+        "context-restore",
+        "context-save",
+        "cso",
+        "design-consultation",
+        "design-html",
+        "design-review",
+        "design-shotgun",
+        "devex-review",
+        "diagram",
+        "document-generate",
+        "document-release",
+        "freeze",
+        "gstack-upgrade",
+        "guard",
+        "health",
+        "investigate",
+        "ios-clean",
+        "ios-design-review",
+        "ios-fix",
+        "ios-qa",
+        "ios-sync",
+        "land-and-deploy",
+        "landing-report",
+        "learn",
+        "make-pdf",
+        "office-hours",
+        "open-gstack-browser",
+        "pair-agent",
+        "plan-ceo-review",
+        "plan-design-review",
+        "plan-devex-review",
+        "plan-eng-review",
+        "plan-tune",
+        "qa-only",
+        "qa",
+        "retro",
+        "review",
+        "scrape",
+        "setup-browser-cookies",
+        "setup-deploy",
+        "setup-gbrain",
+        "ship",
+        "skillify",
+        "spec",
+        "sync-gbrain",
+        "unfreeze"
+      ],
+      "license": "MIT",
+      "default": "available",
+      "installMode": "directory",
+      "sizeHintKb": 4096,
+      "tags": [
+        "workflow",
+        "roles",
+        "planning",
+        "review"
+      ],
+      "expectedContentSha256": {
+        "gstack-skills": "5c7f49d34c99506a5fd8d4a633587343a9e23966bedc39390dea037d3cfcb9a3"
+      }
+    },
+    {
+      "id": "oh-my-hermes",
+      "kind": "skillpack",
+      "title": "oh-my-hermes",
+      "descriptionRu": "Набор workflows/skills поверх Hermes Agent: opinionated-слой для сборки, шиппинга и эксплуатации приложений. Ставится целиком (clone-only), апстримный install.sh НЕ выполняется.",
+      "source": {
+        "type": "github",
+        "repo": "Salomondiei08/oh-my-hermes",
+        "ref": "7ce4e3c3aca643e68409ec7a794bdd85c2b6d1bd"
+      },
+      "skills": [],
+      "default": "available",
+      "installMode": "directory",
+      "sizeHintKb": 256,
+      "tags": [
+        "workflow",
+        "hermes",
+        "skills"
+      ],
+      "expectedContentSha256": {
+        "oh-my-hermes": "85b1a92659ad908c4239bf9a8560e83a5a1c7997b09b5921d6f6f99f54165ccd"
+      }
+    },
+    {
+      "id": "gbrain-skills",
+      "kind": "skillpack",
+      "title": "gbrain Skills",
+      "descriptionRu": "Скиллы «мозга» агента от Garry Tan: ingestion заметок и встреч, таксономия знаний, ежедневные брифинги, исследования и оркестрация подзадач.",
+      "source": {
+        "type": "github",
+        "repo": "garrytan/gbrain",
+        "ref": "15b9863d13635d173562a54f55a1d388bfcf546b"
+      },
+      "skills": [
+        "academic-verify",
+        "archive-crawler",
+        "article-enrichment",
+        "ask-user",
+        "book-mirror",
+        "brain-ops",
+        "brain-pdf",
+        "brain-taxonomist",
+        "briefing",
+        "capture",
+        "citation-fixer",
+        "cold-start",
+        "concept-synthesis",
+        "cron-scheduler",
+        "cross-modal-review",
+        "daily-task-manager",
+        "daily-task-prep",
+        "data-research",
+        "eiirp",
+        "enrich",
+        "frontmatter-guard",
+        "functional-area-resolver",
+        "gbrain-advisor",
+        "gbrain-upgrade",
+        "idea-ingest",
+        "idea-lineage",
+        "ingest",
+        "install",
+        "maintain",
+        "media-ingest",
+        "meeting-ingestion",
+        "migrate",
+        "minion-orchestrator",
+        "perplexity-research",
+        "publish",
+        "query",
+        "repo-architecture",
+        "reports",
+        "schema-author",
+        "schema-unify",
+        "setup",
+        "signal-detector",
+        "skill-creator",
+        "skill-optimizer",
+        "skillify",
+        "skillpack-check",
+        "skillpack-harvest",
+        "smoke-test",
+        "soul-audit",
+        "strategic-reading",
+        "testing",
+        "voice-note-ingest",
+        "webhook-transforms"
+      ],
+      "skillsSubdir": "skills",
+      "license": "MIT",
+      "default": "available",
+      "sizeHintKb": 5120,
+      "tags": [
+        "memory",
+        "knowledge",
+        "workflow",
+        "research"
+      ],
+      "expectedContentSha256": {
+        "voice-note-ingest": "8c1c7d08a0a496a3f0d00fa827f1deb2e0ba84c056b66d297533f7fbc75c179f",
+        "article-enrichment": "6cbeda99fda02048533287c9b79fc5d58f77875aca87df506f92786ec18126eb",
+        "book-mirror": "beb2926fff36d81f1757986129e90af4a07d8393e2d9a151f548c2ced02c1d43",
+        "minion-orchestrator": "6058fb0d7255351fde49b49a7cc0b25e4dddcb2e31d14c14a77bcbdde25fabb0",
+        "schema-author": "24283b3bb07c7a52ad267748114780edf52b49fd03848d733e2dc9f31142dbeb",
+        "daily-task-prep": "2937f7b756aee6a34c06215c0944de9c1ac7671f53ea18ec2b6f27d1f34fc621",
+        "capture": "eec7485fe0c4430cc127119f8bd5818d8bded090619d47fcfc6dbcb83ee27112",
+        "brain-taxonomist": "661b7781a662a17a12d86a9030d12d2c634e35a15f83eb8c45a96ad1bfbda8fb",
+        "citation-fixer": "d192e3514ed373105be14ee8d9f09a5c2a8f7bb9b78e6a1e845fe9ee716234d9",
+        "install": "74cf4cbe2cf270345d250705214e5ce8f4a76091f35be4d3fb07cc81e34a8c7f",
+        "cron-scheduler": "f85b4d9d7f5d04cd479502457adcfc77b2ebd6e8a036a866b22753168e5c0ae4",
+        "eiirp": "2c8e50ff5c5d258087f616570d9fae5a3f4287a9e488a328f39043e3547974bb",
+        "ask-user": "ac0aaa3791fd4ab086479a4a85d49ec029f7c8ea4f29d9b94e766f49fe4291e1",
+        "archive-crawler": "f74ad32e39d80e1aa458076449d77c2fb4db56e409fdd3d480612532bb7cf53b",
+        "ingest": "68f1dca3cdc473b58bd3001a9bd6f8f24468bbd5b23f5fb3cb4f736d43dc0037",
+        "repo-architecture": "c652a2fbcc340b3b2ba6eb42d890bebeae50f0506e1fac041be2954fd56c21ef",
+        "skill-optimizer": "8c5a2f52e51c8fea45964b84e4ac58d8b7998f13d43ae27b78efa77c901e66c4",
+        "setup": "b4cb21ff7bcb0f1e8338c3410e444342a6da582abc5af59265ac062016bd1aa9",
+        "brain-ops": "e0f4c7078d3828ec0f45bcdb9cc7685a487f93c4b2eea9c8c8dc42e6c1012a23",
+        "skillpack-check": "472edcb76a095fa058b27e959199d116e63feb3dba2591dd0d842e35b667547d",
+        "smoke-test": "39be516505a9f103af1152dafceaa3e0e6ca144c6ad04eabfb5b4a90cc8431b2",
+        "signal-detector": "6ce52eb7fededbee5fc1f3baea9bafda5830c642d13ce5b8335b1a7d778480f4",
+        "gbrain-advisor": "e5167258c277edc3b66ab8b02e47f48764dbb4d5fb0b54c50ca25caa93d77a3a",
+        "skillify": "472afafdf7d4093ad331860ce392ad019b565d64924f19bbc73895818bd0c326",
+        "maintain": "7815d83e9ea6b51d948c471ff8991cece0bdaebfd277348b6acd6478b0c4ca77",
+        "testing": "765823c136278c53259b219db99e64082d532c61c15ee79b90504e934aa8d644",
+        "cold-start": "76d92cea638071a833046a73cf5b88ff055835c7d7e3a88490c6d194ec6c3f42",
+        "gbrain-upgrade": "58b9a179751905efee7af19823c1607fa1f8c0c1347def2a0ec536de8a69c8db",
+        "publish": "4a9ea68db13ba87abf32454d55b8f8845d134aa425d7bfe1f568b762b045dc48",
+        "skill-creator": "d695f5303162cd9811f5624a6442adafc30295d9191d9c9bd8b3bf3f08867459",
+        "functional-area-resolver": "27a65912e9afe37f4b3401f67c71bd1200fe0c3fa706fb21c49fce8b8632c884",
+        "migrate": "75199cafb15f8aaaa3fd5353db4bc31ad1e81bc6dd9a6b68a6ce94eb9c68922e",
+        "briefing": "e91173daeca15a1aeaf61b324dcafc5bc0066a0c2252411ca4b4ee925f978ef4",
+        "data-research": "f28636285a42a1359e885f8b8f4d138a1d9ca483282ad39b109d3a8a76952152",
+        "idea-ingest": "9869720e9a8614e46e11a16509582d53f68f45d129c79c99667b31620609d1b0",
+        "cross-modal-review": "bd3b30ee54f0f9ebf6575caa46e63518260343d3db96888917c2236b8eb1ef6d",
+        "brain-pdf": "f0fa365c031e2d7e7b37546861a8b01e99c2890f9830709984abd3f091af67f0",
+        "academic-verify": "eb2eaad9a764a7f196c6d8dee8af1aadfd95f9e8270003d0ac7e5eafd6958574",
+        "meeting-ingestion": "9e8222c03794db41816d481fd362d0a6d0430ddf23fd07212c7108b0d6a3ddda",
+        "enrich": "cf9aa3e9a7b05b8ab3a60e009bc9b1e9a4bcac0c4d0a55664b601a909c8943c0",
+        "frontmatter-guard": "2a2094bd567a014b9ebdb6f75230ee8f5eb50f5c5cb446b32302fe58a0a7bb60",
+        "webhook-transforms": "ed9586f7568f71d313fee878cb60ffc8945e8cd6709d9782f0b912642fc866af",
+        "concept-synthesis": "fd59ea045cae8f5f2ae087e9a2ad2a2822861287ba25e3c32a95d05948d227cb",
+        "idea-lineage": "cbe36c913eb0991a5a98c8f35264bf13305a85fa6294695b257f07f78adcc6ec",
+        "schema-unify": "b13b5cace0961f401a2a290502b533f84d61d870fd5b0cf75e9ffaea867ef4ad",
+        "daily-task-manager": "2f5f803c734a44a6b7b2eaa780fca207b4e9b8cae8ed19dd731719f9a02390ab",
+        "query": "3281fb25aad610f7d9a95fef00ddba722c4d5fed1f15aeaf5cfce1436664f135",
+        "soul-audit": "89923de0a15f8e1ba931f16d88cddcc5957c143418719eebd8310f6b8955b74b",
+        "perplexity-research": "b70700db43b4029c2932a85441dc5468853f682c4893a517e61d4818b4aa28c2",
+        "strategic-reading": "0c85f05e6a8fd0994f3cb296836bf04808e43017e75048cd698dda2a1d8d0218",
+        "skillpack-harvest": "5e2f3cd243c9673e490f41e74cfe277af057d74009a08e2f297fd61c6c9753ed",
+        "reports": "ca75b19f393b591c9a728488c67f96d784a3ccb4ebd32f571c9e325f41385ebb",
+        "media-ingest": "797dc4f91f85c236f6a134dfbf6de8c3e196e07bba96285b14f53631e4ef729c"
+      }
+    },
+    {
+      "id": "openpencil-skills",
+      "kind": "skillpack",
+      "title": "OpenPencil Skills",
+      "descriptionRu": "Скиллы OpenPencil — открытого дизайн-редактора: работа с макетами и дизайн-файлами через агента.",
+      "source": {
+        "type": "github",
+        "repo": "open-pencil/skills",
+        "ref": "623927958f277b0d8810a2582a38ae24409f7577"
+      },
+      "skills": [
+        "open-pencil"
+      ],
+      "skillsSubdir": "skills",
+      "license": "MIT",
+      "default": "available",
+      "sizeHintKb": 128,
+      "tags": [
+        "design",
+        "editor",
+        "ui"
+      ],
+      "expectedContentSha256": {
+        "open-pencil": "bc69e33799c93c8af3b0feae171481ad40b52024e2636cd62852c5325fbe6ea5"
+      }
+    },
+    {
+      "id": "opendesign",
+      "kind": "skillpack",
+      "title": "OpenDesign",
+      "descriptionRu": "Открытая версия claude.ai/design: 10 скиллов AI-дизайнера — от дизайн-системы и вайрфрейма до интерактивного прототипа и handoff в код.",
+      "source": {
+        "type": "github",
+        "repo": "manalkaff/opendesign",
+        "ref": "cecd9bb6b59408cb96a3974449b8e6ef9f5b17bb"
+      },
+      "skills": [
+        "create-design-system",
+        "frontend-design",
+        "handoff-to-claude-code",
+        "interactive-prototype",
+        "make-a-deck",
+        "make-tweakable",
+        "opendesign",
+        "run-opendesign",
+        "setup-opendesign",
+        "wireframe"
+      ],
+      "skillsSubdir": "skills",
+      "license": "MIT",
+      "default": "available",
+      "sizeHintKb": 384,
+      "tags": [
+        "design",
+        "frontend",
+        "prototyping",
+        "ui"
+      ],
+      "expectedContentSha256": {
+        "make-a-deck": "10e8498488c13fb4b68b3d54baca0de94847aa21d05a3debe925d4f7aec7b2d2",
+        "interactive-prototype": "f96228b10c6e5ce65c3d49e5dca793395bd22d29c3df9b195df7e0a9bee9c688",
+        "setup-opendesign": "ebe7985f554e027e27cc82bc7bede3ca1c127cd9a91980cf183cf867aa457098",
+        "make-tweakable": "cfe8189fa6bd363717e4793ab36d808f45dad9c382db97caa1b9e1a97a1fd236",
+        "wireframe": "00da89464cc4ff5be2017180fe25d3513f5d2a29a99f1f7aeabe54deb2498878",
+        "create-design-system": "2f28ff2d7bd823c22c8cb279401f2fd5a84d5f12fd4d8f6e40272d42835a41ea",
+        "handoff-to-claude-code": "4fdc9c7a40fd1c42acd289071cb2475ae509aed5a5e4f66b9c550065ac1e0da8",
+        "opendesign": "8fde709b540adc9798e09cc85fa0ea42aa2f1c38f36855eaa483b8c205016305",
+        "frontend-design": "a689d2dae472f77bce57e333d14ed0a1ecd802cdcd21a0c9326f47ffa9417bb4",
+        "run-opendesign": "e635e5f66b27111dcf2651a65bf3283335893dae6fc364fcfdbad3f3e21432cf"
+      }
+    },
+    {
+      "id": "mattpocock-skills",
+      "kind": "skillpack",
+      "title": "Matt Pocock Skills",
+      "descriptionRu": "Скиллы для практикующих инженеров от Matt Pocock: to-spec, to-tickets, TDD, ревью кода, исследование кодовой базы и письмо для агентов.",
+      "source": {
+        "type": "github",
+        "repo": "mattpocock/skills",
+        "ref": "84fdeffd12f2ee307994d1eb6feb48173b6e0502"
+      },
+      "skills": [
+        "ask-matt",
+        "code-review",
+        "codebase-design",
+        "diagnosing-bugs",
+        "domain-modeling",
+        "grill-with-docs",
+        "implement",
+        "improve-codebase-architecture",
+        "prototype",
+        "research",
+        "resolving-merge-conflicts",
+        "setup-matt-pocock-skills",
+        "tdd",
+        "to-spec",
+        "to-tickets",
+        "triage",
+        "wayfinder",
+        "wizard",
+        "claude-handoff",
+        "loop-me",
+        "setup-ts-deep-modules",
+        "writing-beats",
+        "writing-fragments",
+        "writing-shape",
+        "git-guardrails-claude-code",
+        "migrate-to-shoehorn",
+        "scaffold-exercises",
+        "setup-pre-commit",
+        "grill-me",
+        "grilling",
+        "handoff",
+        "teach",
+        "to-questionnaire",
+        "wait-what",
+        "writing-for-agents"
+      ],
+      "skillsSubdir": "skills",
+      "license": "MIT",
+      "default": "available",
+      "sizeHintKb": 768,
+      "tags": [
+        "methodology",
+        "tdd",
+        "review",
+        "planning"
+      ],
+      "expectedContentSha256": {
+        "setup-pre-commit": "de068adf75caf27aae0e80f201c5f4f7eda4f279388120ffb8e6b58533acf34a",
+        "git-guardrails-claude-code": "6f9d49e1517d156d90b9ad084470adb946ad5aabddf0f6782d11e5221a3c6b00",
+        "scaffold-exercises": "30b24d603cdb7e0c82263f264e0a9b52f01188683f7083df88512457b5a9ecb6",
+        "migrate-to-shoehorn": "292b384215d803b52e07a7f463586a4a4e9d1ad89ac0019600ec80af258a648d",
+        "setup-ts-deep-modules": "6502306a758ac25596550c7645d0a95b32c3f377959968f68ae43fafd448cf55",
+        "loop-me": "345f6ac36d702c8190f487931770f12f9e5349f24dd7b4b238689a325b455e04",
+        "writing-fragments": "3be76523ce90b6ea60f884220ea250d898d438e7813f0907d7cc1016aab1e190",
+        "writing-shape": "d2036087f7b91f97d5b9a01b5d2e71017530030af878b3da6a9c7fc9b0190b15",
+        "claude-handoff": "8a952fc5e03a81fd3767f20c04d22a604154f6ecd43da7eb1f046989346c2bd6",
+        "writing-beats": "9ce8e35b980128cee069da05b7213b1a223bdeed8c5478a4d8dd2fb318a9b6dd",
+        "research": "6d02c11a6a7192f3e6058533e1cc310060cfceddd118623ea53e6d1da605d659",
+        "domain-modeling": "40afc20cd49261811d7fe377fff53c1804f5e27644b42adb65469c7fc305a3a2",
+        "wayfinder": "462158ee37389454d44fd1b5e3d8ae5f75650fd621ae843a1d22a53082814b44",
+        "setup-matt-pocock-skills": "132cfdc077fd448b262f2185ef5152f5d4a2c7ad637f0a7183da2d6880deb5e2",
+        "diagnosing-bugs": "7cce376c32380dcc16c8f91cf249b5a317575cf464273b85bde762b9278f63ce",
+        "code-review": "45b9d5e7742f65efda4f5fc53d377f50b451da3687ded48f41b7ae565f8742c8",
+        "to-tickets": "b9eb31fb1c671feb6ba56dc8afc86f5da9992aa307e9e0e0449aee2d4d55f1f2",
+        "ask-matt": "274dda1f5c8b105595a8906102e45f08eca92598ffeca76769d38d3bb45c2571",
+        "wizard": "c8bee82bf582b9889d08187819b273bafc700b3dbb2fcc00b2880225d43c22a8",
+        "improve-codebase-architecture": "98ca22a0717a1e659e9f4714d2c7fa27afdd3497243cd2290fe5a4e04e111e78",
+        "to-spec": "14211cd48167ee7fd243fbb5a6ca380ec5641253298a3fbe779888ff93867f65",
+        "codebase-design": "d2c52f5938ce4f570f16bd8b1c194b07524b57da046a86be1617b390f14f6409",
+        "triage": "71bf2eed918085d4f6912a2b37369993b2b268b1557e4354e2ef1ba5954eafd6",
+        "prototype": "20996d9c591eff86c5f20b8db594ef728c8688b9605bc9543d9d65886523e3b2",
+        "resolving-merge-conflicts": "2c01ba50b0c9707fed7c9080add996caa5e14f05c9f910ad19198b426e645986",
+        "grill-with-docs": "84554e18aac963e26214159bfb522ddbd72dab710f43176727ca14f432033567",
+        "implement": "1a7a56bca542f46ff8e42fa5ddd293dab21b38b6dad57e1bf3e76d12e41c5fc2",
+        "tdd": "020e48193f19c303f462ac6c6bf16548f10e3b1f706df562f8fb8f6b3efb43a6",
+        "writing-for-agents": "ab9bd0b8194e79b371583548024d57781eda0f6797d39d64f0bdd81ba585b705",
+        "wait-what": "89ae282bf3d8ef45ef22aec9610261d466c32e1e4cfb27b27d40e5f3cd197533",
+        "handoff": "c97a305f5ca0b6fa21ca82a009ac5a553acd02aab63cf59de939f75ac7797393",
+        "to-questionnaire": "3d3e99445e02a976bca6107ff081eda1fd05c2d509224f57cdb5ae73de5075ce",
+        "teach": "d646b14188296c5a2658360ac13e7236f1ec564ca4674052ad1c3d3c4fbba058",
+        "grill-me": "000514e9633b1a2df8bef98549e99b6eaf1a8c3fabfad0e3b328440b3b226c90",
+        "grilling": "f82bb664166568b1d7e0323ea13b45b5df4a096bb6b25de7a946e0e58de0529d"
+      }
+    },
+    {
+      "id": "aidevops",
+      "kind": "skillpack",
+      "title": "AIDevOps",
+      "descriptionRu": "DevOps-стек для AI-агентов от marcusquinn: деплой, хостинг, базы данных, браузерная автоматизация и продуктивность — готовые скиллы OpenCode.",
+      "source": {
+        "type": "github",
+        "repo": "marcusquinn/aidevops",
+        "ref": "5b5009cf2b74eb1cf1c81c23a9e73d9003d822ea"
+      },
+      "skills": [
+        "cloudflare-platform-skill",
+        "proxmox-full-skill",
+        "clean-ddd-hexagonal-skill",
+        "feature-slicing-skill",
+        "chromium-debug-use",
+        "remotion-best-practices-skill",
+        "cloudron-app-packaging-skill",
+        "cloudron-app-publishing-skill",
+        "cloudron-server-ops-skill",
+        "mermaid-diagrams-skill",
+        "caldav-calendar-skill",
+        "modern-javascript-skill",
+        "nothing-design-skill",
+        "video-use-skill",
+        "image-mosaic-skill",
+        "seo-audit-skill"
+      ],
+      "skillsSubdir": ".agents",
+      "license": "MIT",
+      "default": "available",
+      "sizeHintKb": 5120,
+      "tags": [
+        "devops",
+        "deployment",
+        "hosting",
+        "automation"
+      ],
+      "expectedContentSha256": {
+        "pageindex": "c84c78832a734bfb84971f568367a3df077ee14524b2b2cdbffa27e7ddd1f134",
+        "chromium-debug-use": "728bbaa2864285d6e60672097e6e61d16ecd96e0cf88404d40a96fa6e96cc738"
+      }
+    },
+    {
+      "id": "portless",
+      "kind": "tool",
+      "title": "portless",
+      "descriptionRu": "Заменяет номера портов стабильными именованными локальными URL (myapp.localhost вместо localhost:3471) — удобно и людям, и агентам.",
+      "source": {
+        "type": "github",
+        "repo": "vercel-labs/portless",
+        "ref": "d42c741ac67d20a0b6e1f8f5b4192136de34fa03"
+      },
+      "toolName": "portless",
+      "npm": {
+        "package": "portless"
+      },
+      "license": "Apache-2.0",
+      "default": "available",
+      "sizeHintKb": 512,
+      "tags": [
+        "cli",
+        "dev-server",
+        "vercel",
+        "networking"
+      ]
+    },
+    {
+      "id": "just-bash",
+      "kind": "tool",
+      "title": "just-bash",
+      "descriptionRu": "Bash-окружение для агентов от Vercel: предсказуемый shell-рантайм для AI-инструментов.",
+      "source": {
+        "type": "github",
+        "repo": "vercel-labs/just-bash",
+        "ref": "d97425dff8f51cfd773d22bc009561a09235cd1b"
+      },
+      "toolName": "just-bash",
+      "npm": {
+        "package": "just-bash"
+      },
+      "default": "available",
+      "sizeHintKb": 1024,
+      "tags": [
+        "cli",
+        "shell",
+        "vercel"
+      ]
+    },
+    {
+      "id": "opensrc",
+      "kind": "tool",
+      "title": "opensrc",
+      "descriptionRu": "Скачивает исходники npm-пакетов локально, давая AI-агенту глубокий контекст по реальному коду зависимостей вместо догадок.",
+      "source": {
+        "type": "github",
+        "repo": "vercel-labs/opensrc",
+        "ref": "f96078ac0a7ce3fb7d058d73ce65ff4b6606d765"
+      },
+      "toolName": "opensrc",
+      "npm": {
+        "package": "opensrc"
+      },
+      "license": "Apache-2.0",
+      "default": "available",
+      "sizeHintKb": 512,
+      "tags": [
+        "cli",
+        "context",
+        "npm",
+        "vercel"
+      ]
+    },
+    {
+      "id": "deepsec",
+      "kind": "tool",
+      "title": "deepsec",
+      "descriptionRu": "Security-harness от Vercel: ищет уязвимости в кодовой базе силами coding-агентов и отдаёт структурированные находки.",
+      "source": {
+        "type": "github",
+        "repo": "vercel-labs/deepsec",
+        "ref": "c121b6a999d7809403f3543b6a648ebd81d8da81"
+      },
+      "toolName": "deepsec",
+      "npm": {
+        "package": "deepsec"
+      },
+      "license": "Apache-2.0",
+      "default": "available",
+      "sizeHintKb": 1024,
+      "tags": [
+        "cli",
+        "security",
+        "vercel"
+      ]
+    },
+    {
+      "id": "dev3000",
+      "kind": "tool",
+      "title": "dev3000",
+      "descriptionRu": "Единая лента разработки веб-приложения: логи сервера, события браузера, консоль, сетевые запросы и автоматические скриншоты с метками времени — контекст для AI-дебага.",
+      "source": {
+        "type": "github",
+        "repo": "vercel-labs/dev3000",
+        "ref": "5abe4f5cab0048b5a507f06feff2d87f11ac4c40"
+      },
+      "toolName": "dev3000",
+      "npm": {
+        "package": "dev3000"
+      },
+      "license": "MIT",
+      "default": "available",
+      "sizeHintKb": 1024,
+      "tags": [
+        "cli",
+        "debugging",
+        "vercel",
+        "web"
+      ]
+    }
+  ]
+}

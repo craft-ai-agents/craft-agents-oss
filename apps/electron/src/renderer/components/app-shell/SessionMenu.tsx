@@ -32,7 +32,9 @@ import {
   Send,
   FolderKanban,
   Check,
+  BookOpen,
 } from 'lucide-react'
+import { useSetAtom } from 'jotai'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getStateColor, getStateIcon, type SessionStatusId } from '@/config/session-status-config'
 import type { SessionStatus } from '@/config/session-status-config'
@@ -43,6 +45,8 @@ import type { SessionMeta } from '@/atoms/sessions'
 import { getSessionStatus, hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
 import { MessagingSessionMenuItem } from '@/components/messaging/MessagingSessionMenuItem'
 import { useSessionMenuActions } from '@/hooks/useSessionMenuActions'
+import { publishSessionDialogAtom } from '@/atoms/knowledge-publish'
+
 
 export interface SessionMenuProjectOption {
   id: string
@@ -113,6 +117,24 @@ export function SessionMenu({
   const _hasUnread = hasUnreadMeta(item)
 
   const actions = useSessionMenuActions({ item, onLabelsChange })
+  const setPublishDialog = useSetAtom(publishSessionDialogAtom)
+  const [hasKnowledgeConnection, setHasKnowledgeConnection] = React.useState(false)
+
+  React.useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const list = await window.electronAPI?.knowledge?.listConnections?.()
+        if (!cancelled) setHasKnowledgeConnection(Array.isArray(list) && list.length > 0)
+      } catch {
+        if (!cancelled) setHasKnowledgeConnection(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
 
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator, Sub, SubTrigger, SubContent } = useMenuComponents()
@@ -154,6 +176,15 @@ export function SessionMenu({
       {/* Connect to Messaging — pairing code flow */}
       <MessagingSessionMenuItem sessionId={sessionId} />
 
+
+      {/* Publish to Knowledge — opens AppShell-hosted PublishSessionDialog */}
+      <MenuItem
+        disabled={!hasKnowledgeConnection}
+        onClick={() => setPublishDialog({ open: true, sessionId })}
+      >
+        <BookOpen className="h-3.5 w-3.5" />
+        <span className="flex-1">{t('knowledge.publish.menu')}</span>
+      </MenuItem>
       <Separator />
 
       {/* Status submenu - includes all statuses plus Flag/Unflag at the bottom */}

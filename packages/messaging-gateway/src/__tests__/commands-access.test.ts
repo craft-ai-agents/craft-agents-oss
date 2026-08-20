@@ -193,12 +193,11 @@ function buildCommands(args: {
 // ---------------------------------------------------------------------------
 
 describe('Commands pre-binding gate', () => {
-  it('open workspace lets a stranger run /new', async () => {
+  it('legacy open workspace does not let a stranger execute /new', async () => {
     const { commands } = buildCommands({ ownerOnly: false })
     const adapter = makeAdapter()
     await commands.handleCommand(adapter, buildMsg({ text: '/new', senderId: 'stranger' }))
-    // The stranger should have received the "Created..." reply, not the
-    // friendly rejection.
+    expect(adapter.sent.some((s) => s.includes('Created'))).toBe(false)
     expect(adapter.sent.some((s) => s.includes('private'))).toBe(false)
   })
 
@@ -381,10 +380,10 @@ describe('Commands.handle (unbound text path) — free-form gate', () => {
     expect(adapter.sent.length).toBe(0)
   })
 
-  it('open workspace lets free-form non-owner text through (legacy / migration)', async () => {
+  it('legacy open workspace does not leak command help to a stranger', async () => {
     const { commands } = buildCommands({ ownerOnly: false, owners: [] })
     const adapter = makeAdapter()
     await commands.handle(adapter, buildMsg({ text: 'hi', senderId: 'stranger' }))
-    expect(adapter.sent.some((s) => s.includes('No session bound'))).toBe(true)
+    expect(adapter.sent.some((s) => s.includes('No session bound'))).toBe(false)
   })
 })

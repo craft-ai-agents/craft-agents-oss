@@ -9,7 +9,15 @@
   "exports": {
     ".": "./src/index.ts",
     "./types": "./src/types/index.ts",
-    "./utils": "./src/utils/index.ts"
+    "./utils": "./src/utils/index.ts",
+    "./platform": "./src/platform/index.ts",
+    "./platform/identity/store": "./src/platform/identity/store.ts",
+    "./platform/identity/types": "./src/platform/identity/types.ts",
+    "./knowledge": "./src/knowledge/index.ts",
+    "./knowledge/providers/siyuan": "./src/knowledge/providers/siyuan/index.ts",
+    "./knowledge/*": "./src/knowledge/*",
+    "./mindmap": "./src/mindmap/index.ts",
+    "./mindmap/*": "./src/mindmap/*"
   },
   "peerDependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.220",

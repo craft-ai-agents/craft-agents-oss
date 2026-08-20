@@ -1,0 +1,22 @@
+{
+  "name": "@craft-agent/messaging-discord-worker",
+  "version": "0.11.0",
+  "license": "Apache-2.0",
+  "description": "Discord worker subprocess for Craft Agent (discord.js-based, official Bot API)",
+  "type": "module",
+  "main": "src/worker.ts",
+  "exports": {
+    ".": "./src/protocol.ts",
+    "./worker": "./src/worker.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2",
+    "@types/node": "^22.0.0"
+  }
+}

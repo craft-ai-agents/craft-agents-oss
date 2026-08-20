@@ -1,3 +1,7 @@
+import { mkdirSync } from 'fs'
+import { join } from 'path'
+import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
+import { getDefaultWorkspacesDir } from '@craft-agent/shared/workspaces'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
@@ -55,6 +59,20 @@ export function registerProjectsHandlers(server: RpcServer, deps: HandlerDeps): 
       details: input.details,
       colorTheme: input.colorTheme,
     })
+    // Ensure notes/projects/{slug}/ folder for project-scoped notes placement.
+    try {
+      const wsConfig = loadWorkspaceConfig(workspace.rootPath)
+      const candidates = [
+        wsConfig?.notesPath,
+        join(workspace.rootPath, 'notes'),
+        join(getDefaultWorkspacesDir(), workspaceId, 'notes'),
+      ].filter((p): p is string => Boolean(p))
+      for (const notesRoot of new Set(candidates)) {
+        mkdirSync(join(notesRoot, 'projects', project.slug), { recursive: true })
+      }
+    } catch (err) {
+      log.warn(`Failed to ensure project notes folder for ${project.slug}:`, err)
+    }
     await broadcastChanged(workspaceId, workspace.rootPath)
     log.info(`Created project: ${project.slug}`)
     return project

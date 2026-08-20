@@ -72,3 +72,5 @@ credentials.enc
 # act (local GitHub Actions runner)
 .secrets
 .actrc
+.superpowers/
+scripts/.marketplace-catalog-signing-key.b64

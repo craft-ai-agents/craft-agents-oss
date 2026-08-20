@@ -1,9 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, type ReactNode } from 'react'
 import * as storage from '@/lib/local-storage'
 import {
   resolveTheme,
   themeToCSS,
-  DEFAULT_THEME,
   DEFAULT_SHIKI_THEME,
   getShikiTheme,
   type ThemeOverrides,
@@ -114,8 +113,8 @@ function saveTheme(theme: StoredTheme): void {
 
 export function ThemeProvider({
   children,
-  defaultMode = 'system',
-  defaultColorTheme = 'default',
+  defaultMode = 'dark',
+  defaultColorTheme = 'pierre',
   defaultFont = 'system',
   activeWorkspaceId = null
 }: ThemeProviderProps) {
@@ -284,7 +283,7 @@ export function ThemeProvider({
   // === DOM Effects (SINGLETON - all theme DOM manipulation happens here) ===
 
   // Apply base theme class and data attributes
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement
 
     // Apply font
@@ -307,7 +306,7 @@ export function ThemeProvider({
 
   // Apply dark/light class and theme-specific DOM attributes
   // This runs when preset loads or mode changes
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement
 
     // Check if this is a dark-only theme (forces dark mode)

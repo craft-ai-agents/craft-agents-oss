@@ -1,0 +1,197 @@
+name: Toolchain Smoke
+
+# Полный цикл first-run download manager на чистом профиле:
+# ensureAll → sha256+install всех инструментов → omp лончер исполняется.
+# Ловит регрессии manifest-data (pinned версии/URL), installer и resolver.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/shared/src/toolchain/**'
+      - 'packages/shared/src/toolchain-runtime.ts'
+      - 'scripts/toolchain-smoke.ts'
+      - 'scripts/toolchain-new-smoke.ts'
+      - 'scripts/runtime-context-smoke.ts'
+      - 'scripts/marketplace-smoke.ts'
+      - '.github/workflows/toolchain-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  toolchain-smoke-selfhosted:
+    # Self-hosted linux runner (craft-agents-us-01) — вне биллинг-блокировки
+    # GitHub-hosted раннеров. Showcases the full first-run install flow on
+    # linux-x64 (uv-python, unzip path, npm ci, launcher).
+    runs-on: [self-hosted, linux-toolchain]
+    name: toolchain-smoke (self-hosted linux)
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Toolchain unit tests
+        run: bun test packages/shared/src/toolchain
+
+      - name: Fresh-profile ensureAll + launcher check
+        run: |
+          SMOKE_DIR="$(mktemp -d /tmp/tc-ci.XXXXXX)"
+          CRAFT_CONFIG_DIR="$SMOKE_DIR" bun scripts/toolchain-smoke.ts
+        env:
+          CI: "1"
+
+      - name: Fresh-profile default-on tools smoke
+        run: |
+          SMOKE_DIR="$(mktemp -d /tmp/tc-new-ci.XXXXXX)"
+          CRAFT_CONFIG_DIR="$SMOKE_DIR" bun scripts/toolchain-new-smoke.ts
+        env:
+          CI: "1"
+
+      - name: Fresh-profile runtime-context smoke (no network)
+        run: |
+          SMOKE_DIR="$(mktemp -d /tmp/rc-smoke.XXXXXX)"
+          CRAFT_CONFIG_DIR="$SMOKE_DIR" bun scripts/runtime-context-smoke.ts
+        env:
+          CI: "1"
+
+      - name: Fresh-profile marketplace smoke (no network)
+        run: |
+          SMOKE_DIR="$(mktemp -d /tmp/mp-smoke.XXXXXX)"
+          CRAFT_CONFIG_DIR="$SMOKE_DIR" bun scripts/marketplace-smoke.ts
+        env:
+          CI: "1"
+
+  toolchain-smoke-selfhosted-macos:
+    # macOS-arm64 leg на self-hosted Mac (craft-agents-mac-01) — GHA-hosted
+    # macos заблокирован биллингом, CCI-план без macos-экзекуторов. Это единство
+    # енственное бесплатное mac-покрытие.
+    runs-on: [self-hosted, macos-toolchain]
+    name: toolchain-smoke (self-hosted macos)
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Toolchain unit tests
+        run: bun test packages/shared/src/toolchain
+
+      - name: Fresh-profile ensureAll + launcher check
+        run: |
+          SMOKE_DIR="$(mktemp -d /tmp/tc-ci.XXXXXX)"
+          CRAFT_CONFIG_DIR="$SMOKE_DIR" bun scripts/toolchain-smoke.ts
+        env:
+          CI: "1"
+
+      - name: Fresh-profile default-on tools smoke
+        run: |
+          SMOKE_DIR="$(mktemp -d /tmp/tc-new-ci.XXXXXX)"
+          CRAFT_CONFIG_DIR="$SMOKE_DIR" bun scripts/toolchain-new-smoke.ts
+        env:
+          CI: "1"
+
+      - name: Fresh-profile runtime-context smoke (no network)
+        run: |
+          SMOKE_DIR="$(mktemp -d /tmp/rc-smoke.XXXXXX)"
+          CRAFT_CONFIG_DIR="$SMOKE_DIR" bun scripts/runtime-context-smoke.ts
+        env:
+          CI: "1"
+
+      - name: Fresh-profile marketplace smoke (no network)
+        run: |
+          SMOKE_DIR="$(mktemp -d /tmp/mp-smoke.XXXXXX)"
+          CRAFT_CONFIG_DIR="$SMOKE_DIR" bun scripts/marketplace-smoke.ts
+        env:
+          CI: "1"
+
+  toolchain-smoke:
+    # macos/ubuntu/windows — заблокированы GitHub billing lock (см.
+    # run 31126113869); оставлены для разблокировки по биллингу.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    name: toolchain-smoke (${{ matrix.os }})
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Toolchain unit tests
+        run: bun test packages/shared/src/toolchain
+
+      - name: Fresh-profile ensureAll + launcher check (mac/linux)
+        if: runner.os != 'Windows'
+        run: |
+          SMOKE_DIR="$(mktemp -d /tmp/tc-ci.XXXXXX)"
+          CRAFT_CONFIG_DIR="$SMOKE_DIR" bun scripts/toolchain-smoke.ts
+        env:
+          CI: "1"
+
+      - name: Fresh-profile default-on tools smoke (mac/linux)
+        if: runner.os != 'Windows'
+        run: |
+          SMOKE_DIR="$(mktemp -d /tmp/tc-new-ci.XXXXXX)"
+          CRAFT_CONFIG_DIR="$SMOKE_DIR" bun scripts/toolchain-new-smoke.ts
+        env:
+          CI: "1"
+      - name: Fresh-profile runtime-context smoke (mac/linux, no network)
+        if: runner.os != 'Windows'
+        run: |
+          SMOKE_DIR="$(mktemp -d /tmp/rc-smoke.XXXXXX)"
+          CRAFT_CONFIG_DIR="$SMOKE_DIR" bun scripts/runtime-context-smoke.ts
+        env:
+          CI: "1"
+
+      - name: Fresh-profile marketplace smoke (mac/linux, no network)
+        if: runner.os != 'Windows'
+        run: |
+          SMOKE_DIR="$(mktemp -d /tmp/mp-smoke.XXXXXX)"
+          CRAFT_CONFIG_DIR="$SMOKE_DIR" bun scripts/marketplace-smoke.ts
+        env:
+          CI: "1"
+
+      - name: Fresh-profile ensureAll + launcher check (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:TEMP ("tc-ci-" + [guid]::NewGuid().ToString("N"))
+          $env:CRAFT_CONFIG_DIR = $dir
+          bun scripts/toolchain-smoke.ts
+        env:
+          CI: "1"
+
+      - name: Toolchain state dump (on failure)
+        if: failure()
+        shell: bash
+        run: |
+          find "${CRAFT_CONFIG_DIR:-/tmp}" -name state.json -path "*tc-ci*" -exec cat {} \; 2>/dev/null || true
+          ls -la "${CRAFT_CONFIG_DIR:-/tmp}"*/toolchain 2>/dev/null || true

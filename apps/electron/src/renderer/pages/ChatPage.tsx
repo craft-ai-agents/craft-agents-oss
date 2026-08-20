@@ -8,7 +8,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { AlertCircle, Globe, Copy, RefreshCw, Link2Off, Info, Pencil } from 'lucide-react'
+import { AlertCircle, Globe, Copy, RefreshCw, Link2Off, Info, Pencil, Eye, EyeOff, SquareSlash } from 'lucide-react'
 import { ChatDisplay, type ChatDisplayHandle } from '@/components/app-shell/ChatDisplay'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { SessionMenu } from '@/components/app-shell/SessionMenu'
@@ -30,6 +30,29 @@ import { kanbanEditorTargetAtom } from '@/atoms/kanban'
 import { getSessionTitle } from '@/utils/session'
 // Model resolution: connection.defaultModel (no hardcoded defaults)
 import { resolveEffectiveConnectionSlug, isSessionConnectionUnavailable } from '@config/llm-connections'
+import {
+  defaultSessionEntityCapabilities,
+  EntityViewPlaceholder,
+  EntityViewTabs,
+  useEntityView,
+  type EntityViewCapability,
+  type EntityViewId,
+} from '@/components/app-shell/EntityViewTabs'
+import KnowledgeSurfacePage from '@/pages/KnowledgeSurfacePage'
+import { SIYUAN_FULL_SURFACE_ID } from '@/knowledge/siyuan-url'
+import { MindMapHost } from '@/mindmap/MindMapHost'
+import { deriveSessionMindMap, type MindMapGraph } from '@craft-agent/core/mindmap'
+import { useSiyuanConnected } from '@/hooks/useSiyuanConnected'
+
+function buildSessionEntityCapabilities(siyuanConnected: boolean): EntityViewCapability[] {
+  return defaultSessionEntityCapabilities({ siyuanConnected }).map((cap) => {
+    // teamchat remains placeholder; legacy SiYuan mindmap stays available with distinct label.
+    if (cap.id === 'teamchat') {
+      return { ...cap, available: false }
+    }
+    return cap
+  })
+}
 
 export interface ChatPageProps {
   sessionId: string
@@ -41,6 +64,18 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   React.useLayoutEffect(() => {
     rendererPerf.markSessionSwitch(sessionId, 'panel.mounted')
   }, [sessionId])
+
+  const siyuanConnected = useSiyuanConnected()
+  const sessionEntityCapabilities = React.useMemo(
+    () => buildSessionEntityCapabilities(siyuanConnected ?? false),
+    [siyuanConnected],
+  )
+
+  const [sessionView, setSessionView] = useEntityView(
+    `session:${sessionId}`,
+    sessionEntityCapabilities,
+    'standard',
+  )
 
   const {
     activeWorkspaceId,
@@ -63,6 +98,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     skills,
     labels,
     onSessionLabelsChange,
+    projects,
+    onSetProjectId,
     enabledModes,
     sessionStatuses,
     onSessionSourcesChange,
@@ -331,8 +368,36 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     await window.electronAPI.sessionCommand(session.id, { type: 'updateWorkingDirectory', dir: path })
   }, [session])
 
+  const resolveNoteNavigation = React.useCallback(
+    (noteId: string) => {
+      navigate(routes.view.notes(noteId))
+    },
+    [],
+  )
+
   const handleOpenFile = React.useCallback(
     async (path: string) => {
+      const getNoteIdFromPath = (candidate: string): string | null => {
+        const cleaned = candidate.replace(/^\.\//, '').replace(/\\/g, '/')
+        const relativeMatch = cleaned.match(/^notes\/(.+)\.md$/i)
+        if (relativeMatch) return relativeMatch[1]
+
+        const workspaceRoot = activeWorkspace?.rootPath?.replace(/[\\/]+$/, '').replace(/\\/g, '/')
+        if (!workspaceRoot) return null
+
+        const notesPrefix = `${workspaceRoot}/notes/`
+        if (cleaned.startsWith(notesPrefix) && cleaned.toLowerCase().endsWith('.md')) {
+          return cleaned.slice(notesPrefix.length, -3)
+        }
+        return null
+      }
+
+      const directNoteId = getNoteIdFromPath(path)
+      if (directNoteId) {
+        await resolveNoteNavigation(directNoteId)
+        return
+      }
+
       // Resolve bare relative paths against session working directory,
       // or workspace root as a fallback when workingDirectory is not set.
       const resolved = (() => {
@@ -349,6 +414,12 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
         const cleanedPath = path.replace(/^\.\//, '')
         return `${cleanedBase}/${cleanedPath}`
       })()
+
+      const resolvedNoteId = getNoteIdFromPath(resolved)
+      if (resolvedNoteId) {
+        await resolveNoteNavigation(resolvedNoteId)
+        return
+      }
 
       // Smart fallback for missing files in AI output:
       // if the exact path doesn't exist, search nearby for same basename
@@ -381,14 +452,36 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
 
       onOpenFile(resolved)
     },
-    [onOpenFile, workingDirectory, activeWorkspace?.rootPath]
+    [onOpenFile, workingDirectory, activeWorkspace?.rootPath, resolveNoteNavigation, t]
   )
 
   const handleOpenUrl = React.useCallback(
-    (url: string) => {
+    async (url: string) => {
+      if (url.startsWith('craft-note:')) {
+        const target = decodeURIComponent(url.slice('craft-note:'.length)).replace(/\.md$/i, '')
+        if (activeWorkspaceId) {
+          try {
+            const notes = await window.electronAPI.listNotes(activeWorkspaceId)
+            const normalized = target.trim().toLowerCase()
+            const note = notes.find(item => {
+              const id = item.id.toLowerCase()
+              const title = item.title.toLowerCase()
+              const basename = id.split('/').pop() ?? id
+              return id === normalized || title === normalized || basename === normalized
+            })
+            await resolveNoteNavigation(note?.id ?? target)
+            return
+          } catch {
+            await resolveNoteNavigation(target)
+            return
+          }
+        }
+        await resolveNoteNavigation(target)
+        return
+      }
       onOpenUrl(url)
     },
-    [onOpenUrl]
+    [activeWorkspaceId, onOpenUrl, resolveNoteNavigation]
   )
 
   // Perf: Mark when data is ready
@@ -423,6 +516,108 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     : false
   // Use isAsyncOperationOngoing for shimmer effect (sharing, updating share, revoking, title regeneration)
   const isAsyncOperationOngoing = session?.isAsyncOperationOngoing || sessionMeta?.isAsyncOperationOngoing || false
+
+  // Craft mind-map projection for map/outline tabs (live derive; no pin yet).
+  const sessionMindMapGraph = React.useMemo((): MindMapGraph | null => {
+    if (sessionView !== 'map' && sessionView !== 'outline') return null
+    const messages = session?.messages ?? []
+    // Wait until messages are loaded (or confirmed empty) before deriving.
+    if (!messagesLoaded && messages.length === 0) return null
+    return deriveSessionMindMap({
+      sessionId,
+      title: displayTitle,
+      messages: messages.map((m) => ({
+        id: m.id,
+        type: m.role,
+        content: m.content ?? '',
+        toolName: m.toolName,
+        toolUseId: m.toolUseId,
+        parentToolUseId: m.parentToolUseId,
+        turnId: m.turnId,
+        statusType: m.statusType,
+      })),
+    })
+  }, [sessionView, session?.messages, messagesLoaded, sessionId, displayTitle])
+
+  const sessionMindMapLoading =
+    (sessionView === 'map' || sessionView === 'outline') &&
+    !messagesLoaded &&
+    (session?.messages?.length ?? 0) === 0 &&
+    !messageLoadState.error
+
+  const handleMindMapNavigate = React.useCallback(
+    (source: { kind: string; id: string }) => {
+      // Switch to standard chat and scroll to the source message/turn.
+      if (source.kind === 'message' || source.kind === 'tool') {
+        setSessionView('standard')
+        // Defer until ChatDisplay is mounted for standard view.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            chatDisplayRef?.current?.scrollToMessage?.(source.id)
+          })
+        })
+      }
+    },
+    [chatDisplayRef, setSessionView],
+  )
+
+  const renderSessionViewBody = React.useCallback(
+    (chatDisplay: React.ReactNode) => {
+      if (sessionView === 'graph') {
+        return (
+          <KnowledgeSurfacePage
+            kind="notebook"
+            id={SIYUAN_FULL_SURFACE_ID}
+            mode="global-graph"
+          />
+        )
+      }
+      if (sessionView === 'mindmap') {
+        // Legacy SiYuan mind-map/graph dock (not Craft projection).
+        return (
+          <KnowledgeSurfacePage
+            kind="notebook"
+            id={SIYUAN_FULL_SURFACE_ID}
+            mode="graph"
+          />
+        )
+      }
+      if (sessionView === 'map' || sessionView === 'outline') {
+        return (
+          <MindMapHost
+            entity={{ type: 'session', sessionId }}
+            graph={sessionMindMapGraph}
+            loading={sessionMindMapLoading}
+            error={messageLoadState.error}
+            mode={sessionView}
+            workspaceId={activeWorkspaceId || undefined}
+            sourceExcerpt={
+              session?.messages
+                ?.slice(-12)
+                .map((m) => `${m.role}: ${(m.content ?? '').slice(0, 240)}`)
+                .join('\n') || undefined
+            }
+            onNavigate={handleMindMapNavigate}
+          />
+        )
+      }
+      if (sessionView !== 'standard') {
+        return <EntityViewPlaceholder view={sessionView as EntityViewId} />
+      }
+      return chatDisplay
+    },
+    [
+      sessionView,
+      sessionId,
+      sessionMindMapGraph,
+      sessionMindMapLoading,
+      messageLoadState.error,
+      handleMindMapNavigate,
+      activeWorkspaceId,
+    ],
+  )
+
+
 
   // Rename dialog state
   const [renameDialogOpen, setRenameDialogOpen] = React.useState(false)
@@ -638,13 +833,42 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     )
   }, [isTaskOrchestrator, handleEditTask, t])
 
+  // Self-learning memory mode toggle (spec F3): persistent → incognito → temporary.
+  // Value lives on session.memoryMode; updates arrive via session_metadata_changed.
+  const memoryModeButton = React.useMemo(() => {
+    const mode = session?.memoryMode ?? 'persistent'
+    const nextMode = mode === 'persistent' ? 'incognito' : mode === 'incognito' ? 'temporary' : 'persistent'
+    const label = t(`memory.mode.${mode}`)
+    const icon = mode === 'persistent'
+      ? <Eye className="h-4 w-4" />
+      : mode === 'incognito'
+        ? <EyeOff className="h-4 w-4" />
+        : <SquareSlash className="h-4 w-4" />
+    return (
+      <PanelHeaderCenterButton
+        icon={icon}
+        tooltip={label}
+        className={mode === 'persistent' ? undefined : 'text-accent'}
+        onClick={() => {
+          void window.electronAPI.setMemoryMode(sessionId, nextMode)
+        }}
+      />
+    )
+  }, [session?.memoryMode, sessionId, t])
+
   const primaryHeaderAction = isCompactMode ? compactInfoButton : shareButton
   const headerActions = editTaskButton ? (
     <div className="flex items-center gap-1.5">
       {editTaskButton}
+      {memoryModeButton}
       {primaryHeaderAction}
     </div>
-  ) : primaryHeaderAction
+  ) : (
+    <div className="flex items-center gap-1.5">
+      {memoryModeButton}
+      {primaryHeaderAction}
+    </div>
+  )
 
   // Build title menu content for chat sessions using shared SessionMenu.
   // Desktop uses Radix DropdownMenu via PanelHeader; compact mode uses a
@@ -737,12 +961,17 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
         workingDirectory: sessionMeta.workingDirectory,
         enabledSourceSlugs: sessionMeta.enabledSourceSlugs,
       }
-
       return (
         <>
           <div className="h-full flex flex-col">
             <PanelHeader  title={displayTitle} titleMenu={titleMenu} compactTitleMenu={compactTitleMenu} leadingAction={leadingAction} actions={headerActions} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+            <EntityViewTabs
+              value={sessionView}
+              onChange={setSessionView}
+              capabilities={sessionEntityCapabilities}
+            />
             <div className="flex-1 flex flex-col min-h-0">
+              {renderSessionViewBody(
               <ChatDisplay
                 ref={chatDisplayRef}
                 session={skeletonSession}
@@ -783,7 +1012,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 connectionUnavailable={connectionUnavailable}
                 compactMode={!!isCompactMode}
                 enableCompactModelPicker={!!isCompactMode}
-              />
+              />,
+              )}
             </div>
           </div>
           <RenameDialog
@@ -815,55 +1045,64 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     <>
       <div className="h-full flex flex-col">
         <PanelHeader  title={displayTitle} titleMenu={titleMenu} compactTitleMenu={compactTitleMenu} leadingAction={leadingAction} actions={headerActions} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+        <EntityViewTabs
+          value={sessionView}
+          onChange={setSessionView}
+          capabilities={sessionEntityCapabilities}
+        />
         <div className="flex-1 flex flex-col min-h-0">
-          <ChatDisplay
-            ref={chatDisplayRef}
-            session={session}
-            onSendMessage={(message, attachments, skillSlugs) => {
-              if (session) {
-                onSendMessage(session.id, message, attachments, skillSlugs)
-              }
-            }}
-            onOpenFile={handleOpenFile}
-            onOpenUrl={handleOpenUrl}
-            currentModel={effectiveModel}
-            onModelChange={handleModelChange}
-            onConnectionChange={handleConnectionChange}
-            pendingPermission={pendingPermission}
-            onRespondToPermission={onRespondToPermission}
-            pendingCredential={pendingCredential}
-            onRespondToCredential={onRespondToCredential}
-            thinkingLevel={sessionOpts.thinkingLevel}
-            onThinkingLevelChange={(level) => setOption('thinkingLevel', level)}
-            permissionMode={sessionOpts.permissionMode}
-            onPermissionModeChange={setPermissionMode}
-            enabledModes={enabledModes}
-            inputValue={inputValue}
-            onInputChange={handleInputChange}
-            attachmentsValue={attachmentsValue}
-            onAttachmentsChange={handleAttachmentsChange}
-            sources={enabledSources}
-            skills={skills}
-            labels={labels}
-            onLabelsChange={(newLabels) => onSessionLabelsChange?.(sessionId, newLabels)}
-            sessionStatuses={sessionStatuses}
-            onSessionStatusChange={handleSessionStatusChange}
-            workspaceId={activeWorkspaceId || undefined}
-            onSourcesChange={(slugs) => onSessionSourcesChange?.(sessionId, slugs)}
-            workingDirectory={workingDirectory}
-            onWorkingDirectoryChange={handleWorkingDirectoryChange}
-            sessionFolderPath={session?.sessionFolderPath}
-            messagesLoading={messageLoadState.messagesLoading || (messagesRetrying && !messageLoadState.messagesReady)}
-            messagesLoadError={messageLoadState.error}
-            messagesRetrying={messagesRetrying}
-            onRetryMessagesLoad={handleRetryMessagesLoad}
-            searchQuery={sessionListSearchQuery}
-            isSearchModeActive={isSearchModeActive}
-            onMatchInfoChange={onChatMatchInfoChange}
-            connectionUnavailable={connectionUnavailable}
-            compactMode={!!isCompactMode}
-            enableCompactModelPicker={!!isCompactMode}
-          />
+          {renderSessionViewBody(
+            <ChatDisplay
+              ref={chatDisplayRef}
+              session={session}
+              onSendMessage={(message, attachments, skillSlugs) => {
+                if (session) {
+                  onSendMessage(session.id, message, attachments, skillSlugs)
+                }
+              }}
+              onOpenFile={handleOpenFile}
+              onOpenUrl={handleOpenUrl}
+              currentModel={effectiveModel}
+              onModelChange={handleModelChange}
+              onConnectionChange={handleConnectionChange}
+              pendingPermission={pendingPermission}
+              onRespondToPermission={onRespondToPermission}
+              pendingCredential={pendingCredential}
+              onRespondToCredential={onRespondToCredential}
+              thinkingLevel={sessionOpts.thinkingLevel}
+              onThinkingLevelChange={(level) => setOption('thinkingLevel', level)}
+              permissionMode={sessionOpts.permissionMode}
+              onPermissionModeChange={setPermissionMode}
+              enabledModes={enabledModes}
+              inputValue={inputValue}
+              onInputChange={handleInputChange}
+              attachmentsValue={attachmentsValue}
+              onAttachmentsChange={handleAttachmentsChange}
+              sources={enabledSources}
+              skills={skills}
+              labels={labels}
+              onLabelsChange={(newLabels) => onSessionLabelsChange?.(sessionId, newLabels)}
+              sessionStatuses={sessionStatuses}
+              onSessionStatusChange={handleSessionStatusChange}
+              projects={projects}
+              onSetProjectId={(projectId) => onSetProjectId?.(sessionId, projectId)}
+              workspaceId={activeWorkspaceId || undefined}
+              onSourcesChange={(slugs) => onSessionSourcesChange?.(sessionId, slugs)}
+              workingDirectory={workingDirectory}
+              onWorkingDirectoryChange={handleWorkingDirectoryChange}
+              sessionFolderPath={session?.sessionFolderPath}
+              messagesLoading={messageLoadState.messagesLoading || (messagesRetrying && !messageLoadState.messagesReady)}
+              messagesLoadError={messageLoadState.error}
+              messagesRetrying={messagesRetrying}
+              onRetryMessagesLoad={handleRetryMessagesLoad}
+              searchQuery={sessionListSearchQuery}
+              isSearchModeActive={isSearchModeActive}
+              onMatchInfoChange={onChatMatchInfoChange}
+              connectionUnavailable={connectionUnavailable}
+              compactMode={!!isCompactMode}
+              enableCompactModelPicker={!!isCompactMode}
+            />,
+          )}
         </div>
       </div>
       <RenameDialog

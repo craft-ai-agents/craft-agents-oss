@@ -6,8 +6,15 @@ import { lockHolderMatchesLock, parseTasklistImageName, type LockIdentity } from
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
 import { ensureConfigDir, loadStoredConfig, saveConfig } from '@craft-agent/shared/config'
 import { CONFIG_DIR } from '@craft-agent/shared/config/paths'
+import { ensureContextDocs } from '@craft-agent/shared/context-docs'
+import { ensureBundledSkills } from '@craft-agent/shared/skills'
 import { setBundledAssetsRoot } from '@craft-agent/shared/utils'
-import { WsRpcServer, type WsRpcTlsOptions } from '../transport/server'
+import {
+  WsRpcServer,
+  type LocalClientBindingCandidate,
+  type TrustedLocalClientBinding,
+  type WsRpcTlsOptions,
+} from '../transport/server'
 import type { EventSink, RpcServer } from '../transport/types'
 import { createHeadlessPlatform } from '../runtime/platform-headless'
 import type { PlatformServices } from '../runtime/platform'
@@ -42,7 +49,13 @@ export interface ServerBootstrapOptions<TSessionManager, THandlerDeps> {
   initModelRefreshService: () => ModelRefreshServiceLike
   cleanupSessionManager?: (sessionManager: TSessionManager) => Promise<void> | void
   cleanupClientResources?: (clientId: string) => void
-  onClientConnected?: (info: { clientId: string; webContentsId: number | null; workspaceId: string | null; capabilities: string[] }) => void
+  onClientConnected?: (info: {
+    clientId: string
+    webContentsId: number | null
+    workspaceId: string | null
+    capabilities: string[]
+    isLocalElectronClient: boolean
+  }) => void
   serverId?: string
   /** App version string, included in handshake_ack for client compatibility checks. */
   serverVersion?: string
@@ -50,6 +63,8 @@ export interface ServerBootstrapOptions<TSessionManager, THandlerDeps> {
   tls?: WsRpcTlsOptions
   /** Cookie-based session validator for web UI auth on WebSocket upgrade. */
   validateSessionCookie?: (cookieHeader: string | null) => Promise<boolean>
+  /** Electron main resolves an ephemeral renderer proof into trusted scope. */
+  resolveLocalClientBinding?: (candidate: LocalClientBindingCandidate) => TrustedLocalClientBinding | null
   /**
    * Optional HTTP request handler for non-WebSocket requests on the RPC port.
    * When provided, the WsRpcServer serves HTTP (e.g. WebUI) on the same port.
@@ -311,6 +326,35 @@ export function releaseServerLock(): void {
 function bootstrapConfigArtifacts(platform: PlatformServices): void {
   ensureConfigDir()
   platform.logger.info('[bootstrap] Config artifacts initialized')
+
+  // Runtime context documents: seed bundled soul.md/rules.md templates into
+  // <CONFIG_DIR>/context/ once per boot; existing user files are never
+  // overwritten. Runs after setBundledAssetsRoot (bootstrapServer orders it
+  // first) and never blocks startup on failure — the RPC handler retry covers
+  // servers whose registration runs anyway.
+  try {
+    ensureContextDocs()
+  } catch (error) {
+    platform.logger.warn(`[bootstrap] Context documents seeding failed: ${error instanceof Error ? error.message : error}`)
+  }
+
+  // Preset skill packs (superpowers/vercel/mattpocock/…): same as electron main.
+  // Hash-merge keeps user-local edits; disabled packs skipped via config.
+  try {
+    ensureBundledSkills()
+  } catch (error) {
+    platform.logger.warn(`[bootstrap] Bundled skills seeding failed: ${error instanceof Error ? error.message : error}`)
+  }
+
+  // Toolchain: fire-and-forget background install/update of missing/outdated
+  // tools (omp et al.). ensureAll returns a status snapshot immediately and
+  // continues downloading in the background; never blocks server startup.
+  void import('@craft-agent/shared/toolchain-runtime')
+    .then(({ getToolchainManager }) => getToolchainManager().ensureAll({ background: true }))
+    .then(() => platform.logger.info('[bootstrap] Toolchain ensureAll scheduled'))
+    .catch((err) => {
+      platform.logger.warn(`[bootstrap] Toolchain ensureAll failed: ${err instanceof Error ? err.message : err}`)
+    })
 }
 
 function ensureGlobalConfigExists(platform: PlatformServices): void {
@@ -379,6 +423,7 @@ export async function bootstrapServer<TSessionManager, THandlerDeps>(
     tls: options.tls,
     httpHandler: options.httpHandler,
     onClientConnected: options.onClientConnected,
+    resolveLocalClientBinding: options.resolveLocalClientBinding,
     onClientDisconnected: (clientId) => {
       options.cleanupClientResources?.(clientId)
       // Best-effort: notify SM so it can drop browser-host pins for this client.

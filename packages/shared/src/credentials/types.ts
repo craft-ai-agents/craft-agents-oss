@@ -33,7 +33,13 @@ export type CredentialType =
   | 'source_apikey'      // API keys
   | 'source_basic'       // Basic auth (base64 encoded user:pass)
   // Messaging gateway credentials (keyed by workspaceId + platform)
-  | 'messaging_bearer';  // Platform tokens (e.g., Telegram bot token)
+  | 'messaging_bearer'   // Platform tokens (e.g., Telegram bot token)
+  // SSH host credentials (keyed by host id)
+  | 'ssh_managed_token' // Auth token for the app-managed remote craft-agent server
+  // Managed OpenClaw Gateway token, keyed only by opaque runtimeId.
+  | 'openclaw_gateway_token'
+  // Identity Center service OAuth (SiYuan Cloud, etc.) — key service_oauth::{workspaceId}::{name}
+  | 'service_oauth';
 
 /** Valid credential types for validation */
 const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
@@ -49,6 +55,9 @@ const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
   'source_apikey',
   'source_basic',
   'messaging_bearer',
+  'ssh_managed_token',
+  'openclaw_gateway_token',
+  'service_oauth',
 ] as const;
 
 /** Check if a string is a valid CredentialType */
@@ -71,6 +80,21 @@ export interface CredentialId {
   sourceId?: string;
   /** Server name or API name */
   name?: string;
+
+  // SSH-scoped format
+  /** SSH host id for ssh_managed_token credentials */
+  hostId?: string;
+  // Managed OpenClaw runtime-scoped format
+  /** Opaque OpenClaw runtime ID for openclaw_gateway_token credentials */
+  runtimeId?: string;
+}
+
+/** Construct the only credential identity accepted for a managed OpenClaw Gateway token. */
+export function openClawGatewayCredentialId(runtimeId: string): CredentialId {
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(runtimeId)) {
+    throw new Error('Invalid managed OpenClaw runtime identifier');
+  }
+  return { type: 'openclaw_gateway_token', runtimeId };
 }
 
 /**
@@ -179,6 +203,20 @@ export function credentialIdToAccount(id: CredentialId): string {
     return parts.join(CREDENTIAL_DELIMITER);
   }
 
+  // SSH-scoped format:
+  // ssh_managed_token::{hostId}
+  if (id.type === 'ssh_managed_token' && id.hostId) {
+    parts.push(id.hostId);
+    return parts.join(CREDENTIAL_DELIMITER);
+  }
+
+  // Managed OpenClaw runtime-scoped format:
+  // openclaw_gateway_token::{opaqueRuntimeId}
+  if (id.type === 'openclaw_gateway_token' && id.runtimeId) {
+    parts.push(id.runtimeId);
+    return parts.join(CREDENTIAL_DELIMITER);
+  }
+
   // Workspace-scoped format (no source):
   // workspace_oauth::{workspaceId}
   if (id.type === 'workspace_oauth' && id.workspaceId) {
@@ -197,6 +235,14 @@ export function credentialIdToAccount(id: CredentialId): string {
   // Messaging-scoped format:
   // messaging_bearer::{workspaceId}::{platform}
   if (isMessagingCredential(id.type) && id.workspaceId && id.name) {
+    parts.push(id.workspaceId);
+    parts.push(id.name);
+    return parts.join(CREDENTIAL_DELIMITER);
+  }
+
+  // Identity Center service OAuth:
+  // service_oauth::{workspaceId}::{name}
+  if (id.type === 'service_oauth' && id.workspaceId && id.name) {
     parts.push(id.workspaceId);
     parts.push(id.name);
     return parts.join(CREDENTIAL_DELIMITER);
@@ -252,6 +298,18 @@ export function accountToCredentialId(account: string): CredentialId | null {
     return { type, connectionSlug: parts[1] };
   }
 
+  // SSH-scoped format:
+  // ssh_managed_token::{hostId}
+  if (type === 'ssh_managed_token' && parts.length === 2) {
+    return { type, hostId: parts[1] };
+  }
+
+  // Managed OpenClaw runtime-scoped format:
+  // openclaw_gateway_token::{opaqueRuntimeId}
+  if (type === 'openclaw_gateway_token' && parts.length === 2) {
+    return { type, runtimeId: parts[1] };
+  }
+
   // Workspace-scoped format (no source):
   // workspace_oauth::{workspaceId}
   if (type === 'workspace_oauth' && parts.length === 2) {
@@ -267,6 +325,12 @@ export function accountToCredentialId(account: string): CredentialId | null {
   // Messaging-scoped format:
   // messaging_bearer::{workspaceId}::{platform}
   if (isMessagingCredential(type) && parts.length === 3) {
+    return { type, workspaceId: parts[1], name: parts[2] };
+  }
+
+  // Identity Center service OAuth:
+  // service_oauth::{workspaceId}::{name}
+  if (type === 'service_oauth' && parts.length === 3) {
     return { type, workspaceId: parts[1], name: parts[2] };
   }
 

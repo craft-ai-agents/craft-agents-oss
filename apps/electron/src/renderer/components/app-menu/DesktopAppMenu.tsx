@@ -142,7 +142,6 @@ export function DesktopAppMenu({
   onNewWindow,
   onOpenSettings,
   onOpenSettingsSubpage,
-  onOpenKeyboardShortcuts,
   onToggleSidebar,
   onToggleFocusMode,
 }: AppMenuProps) {
@@ -152,7 +151,6 @@ export function DesktopAppMenu({
   const newChatHotkey = useActionLabel('app.newChat').hotkey
   const newWindowHotkey = useActionLabel('app.newWindow').hotkey
   const settingsHotkey = useActionLabel('app.settings').hotkey
-  const keyboardShortcutsHotkey = useActionLabel('app.keyboardShortcuts').hotkey
   const quitHotkey = useActionLabel('app.quit').hotkey
 
   useEffect(() => {
@@ -239,11 +237,6 @@ export function DesktopAppMenu({
                 </StyledDropdownMenuItem>
               )
             })}
-            <StyledDropdownMenuItem onClick={onOpenKeyboardShortcuts}>
-              <Icons.Keyboard className="h-3.5 w-3.5" />
-              {t(ROOT_MENU.keyboardShortcuts.labelKey)}
-              {keyboardShortcutsHotkey && <DropdownMenuShortcut className="pl-6">{keyboardShortcutsHotkey}</DropdownMenuShortcut>}
-            </StyledDropdownMenuItem>
           </StyledDropdownMenuSubContent>
         </DropdownMenuSub>
 
