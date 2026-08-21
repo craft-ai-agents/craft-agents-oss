@@ -254,6 +254,36 @@ async function buildPiAgentServer(): Promise<void> {
     process.exit(1);
   }
 
+  // Copy amazon-bedrock.js to dist/ — the Pi SDK lazy-loads this module via
+  // dynamic import("./amazon-bedrock.js") to keep the AWS SDK out of the main
+  // bundle. Without this file next to index.js, Bedrock provider fails at runtime
+  // with "Cannot find module './amazon-bedrock.js'".
+  //
+  // The source file uses relative imports (e.g. "../models.js") that resolve
+  // within pi-ai's dist/ tree. Since we place this file in pi-agent-server/dist/,
+  // rewrite them to package specifiers so bun resolves from node_modules.
+  const bedrockSrc = join(ROOT_DIR, "node_modules/@mariozechner/pi-ai/dist/providers/amazon-bedrock.js");
+  const bedrockDest = join(distDir, "amazon-bedrock.js");
+  if (existsSync(bedrockSrc)) {
+    let bedrockCode = readFileSync(bedrockSrc, "utf-8");
+    const importRewrites: [RegExp, string][] = [
+      [/from\s+"\.\.\/models\.js"/g,                   'from "@mariozechner/pi-ai/dist/models.js"'],
+      [/from\s+"\.\.\/utils\/event-stream\.js"/g,      'from "@mariozechner/pi-ai/dist/utils/event-stream.js"'],
+      [/from\s+"\.\.\/utils\/json-parse\.js"/g,        'from "@mariozechner/pi-ai/dist/utils/json-parse.js"'],
+      [/from\s+"\.\.\/utils\/sanitize-unicode\.js"/g,  'from "@mariozechner/pi-ai/dist/utils/sanitize-unicode.js"'],
+      [/from\s+"\.\/simple-options\.js"/g,             'from "@mariozechner/pi-ai/dist/providers/simple-options.js"'],
+      [/from\s+"\.\/transform-messages\.js"/g,         'from "@mariozechner/pi-ai/dist/providers/transform-messages.js"'],
+    ];
+    for (const [pattern, replacement] of importRewrites) {
+      bedrockCode = bedrockCode.replace(pattern, replacement);
+    }
+    const { writeFileSync } = await import("fs");
+    writeFileSync(bedrockDest, bedrockCode, "utf-8");
+    console.log("✅ Copied amazon-bedrock.js to pi-agent-server dist (imports rewritten)");
+  } else {
+    console.warn("⚠️  amazon-bedrock.js source not found — Bedrock provider will not work");
+  }
+
   console.log("✅ Pi agent server built successfully");
 }
 
