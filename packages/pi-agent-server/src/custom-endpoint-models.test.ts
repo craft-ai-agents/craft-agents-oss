@@ -31,13 +31,17 @@ describe('normalizeCustomEndpointModelEntry', () => {
     })
   })
 
-  it('preserves context window and image support together', () => {
+  it('preserves display names, context window, and image support together', () => {
     expect(normalizeCustomEndpointModelEntry({
       id: 'pi/vision-model',
+      name: 'Vision Model',
+      shortName: 'Vision',
       contextWindow: 262_144,
       supportsImages: true,
     })).toEqual({
       id: 'vision-model',
+      name: 'Vision Model',
+      shortName: 'Vision',
       contextWindow: 262_144,
       supportsImages: true,
     })
@@ -64,5 +68,17 @@ describe('buildCustomEndpointModelDef', () => {
     const model = buildCustomEndpointModelDef('vision-model', undefined, { supportsImages: true, contextWindow: 262_144 })
     expect(model.input).toEqual(['text', 'image'])
     expect(model.contextWindow).toBe(262_144)
+  })
+
+  it('uses per-model display names when provided', () => {
+    const model = buildCustomEndpointModelDef('gpt-5.5', undefined, { name: 'GPT 5.5', shortName: 'GPT 5.5' })
+    expect(model.name).toBe('GPT 5.5')
+    expect(model.shortName).toBe('GPT 5.5')
+  })
+
+  it('marks openai-responses custom endpoint models as reasoning-capable', () => {
+    const model = buildCustomEndpointModelDef('gpt-5.5', { reasoning: true })
+    expect(model.reasoning).toBe(true)
+    expect(model.thinkingLevelMap).toEqual({ off: null, xhigh: 'xhigh' })
   })
 })

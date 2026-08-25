@@ -240,9 +240,12 @@ export const piDriver: ProviderDriver = {
       const supportsImages = typeof m.supportsImages === 'boolean'
         ? m.supportsImages
         : undefined;
-      if (m.contextWindow || supportsImages !== undefined) {
+      const hasDisplayName = typeof m.name === 'string' || typeof m.shortName === 'string';
+      if (m.contextWindow || supportsImages !== undefined || hasDisplayName) {
         return {
           id: m.id,
+          ...(typeof m.name === 'string' ? { name: m.name } : {}),
+          ...(typeof m.shortName === 'string' ? { shortName: m.shortName } : {}),
           ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
           ...(supportsImages !== undefined ? { supportsImages } : {}),
         };
