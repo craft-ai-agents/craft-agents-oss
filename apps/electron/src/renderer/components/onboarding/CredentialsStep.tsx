@@ -14,6 +14,7 @@ import {
   ApiKeyInput,
   type ApiKeyStatus,
   type ApiKeySubmitData,
+  type CustomEndpointModelInput,
   OAuthConnect,
   type OAuthStatus,
 } from "../apisetup"
@@ -40,7 +41,7 @@ interface CredentialsStepProps {
     baseUrl?: string
     connectionDefaultModel?: string
     activePreset?: string
-    models?: string[]
+    models?: CustomEndpointModelInput[]
     customApi?: CustomEndpointApi
   }
 }
