@@ -21,7 +21,9 @@ import { resolveAutomationsConfigPath, generateShortId } from './resolve-config-
 import { compactAutomationHistorySync } from './history-store.ts';
 import { createLogger } from '../utils/debug.ts';
 import { WorkspaceEventBus, type EventPayloadMap } from './event-bus.ts';
-import { PromptHandler, EventLogHandler, WebhookHandler, type AutomationsConfigProvider } from './handlers/index.ts';
+import { PromptHandler, EventLogHandler, WebhookHandler, RetentionHandler, type AutomationsConfigProvider } from './handlers/index.ts';
+import { loadWorkspaceConfig } from '../workspaces/storage.ts';
+import type { RetentionConfig } from '../workspaces/types.ts';
 import { type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type WebhookActionResult, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
 import { validateAutomationsConfig } from './validation.ts';
 import { matcherMatchesSdk } from './utils.ts';
@@ -56,6 +58,8 @@ export interface AutomationSystemOptions {
   onError?: (event: AutomationEvent, error: Error) => void;
   /** Called when events are lost after retries */
   onEventLost?: (events: string[], error: Error) => void;
+  /** Returns IDs of sessions currently being viewed (excluded from auto-archive) */
+  getActiveSessionIds?: () => string[];
 }
 
 // ============================================================================
@@ -70,6 +74,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
   private promptHandler: PromptHandler | null = null;
   private webhookHandler: WebhookHandler | null = null;
   private eventLogHandler: EventLogHandler | null = null;
+  private retentionHandler: RetentionHandler | null = null;
   private scheduler: SchedulerService | null = null;
   private disposed = false;
 
@@ -276,7 +281,33 @@ export class AutomationSystem implements AutomationsConfigProvider {
     });
     this.eventLogHandler.subscribe(this.eventBus);
 
+    // Retention handler (auto-archive and cleanup)
+    this.retentionHandler = new RetentionHandler({
+      workspaceRootPath: this.options.workspaceRootPath,
+      workspaceId: this.options.workspaceId,
+      getRetentionConfig: () => this.getWorkspaceRetentionConfig(),
+      getActiveSessionIds: this.options.getActiveSessionIds,
+    });
+    this.retentionHandler.subscribe(this.eventBus);
+
     log.debug(`[AutomationSystem] Handlers created and subscribed`);
+  }
+
+  // ============================================================================
+  // Retention Config
+  // ============================================================================
+
+  /**
+   * Read retention config live from workspace config.json.
+   * Returns undefined if no retention settings are configured.
+   */
+  private getWorkspaceRetentionConfig(): RetentionConfig | undefined {
+    try {
+      const config = loadWorkspaceConfig(this.options.workspaceRootPath);
+      return config?.defaults?.retention;
+    } catch {
+      return undefined;
+    }
   }
 
   // ============================================================================
@@ -549,6 +580,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
     // Dispose handlers
     this.promptHandler?.dispose();
     this.webhookHandler?.dispose();
+    this.retentionHandler?.dispose();
     await this.eventLogHandler?.dispose();
 
     // Dispose event bus

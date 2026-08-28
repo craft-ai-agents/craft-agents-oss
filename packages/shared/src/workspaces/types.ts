@@ -28,6 +28,18 @@ export interface LocalMcpConfig {
 }
 
 /**
+ * Configuration for automatic session lifecycle management.
+ * When set, the system will periodically archive idle sessions and
+ * purge archived sessions that exceed the retention window.
+ */
+export interface RetentionConfig {
+  /** Archive sessions idle for this many days (uses lastMessageAt, falls back to lastUsedAt). Flagged and active sessions are skipped. */
+  autoArchiveAfterDays?: number;
+  /** Permanently delete archived sessions after this many days (uses archivedAt, falls back to lastUsedAt). */
+  autoDeleteArchivedAfterDays?: number;
+}
+
+/**
  * Workspace configuration (stored in config.json)
  */
 export interface WorkspaceConfig {
@@ -48,6 +60,7 @@ export interface WorkspaceConfig {
     workingDirectory?: string;
     thinkingLevel?: ThinkingLevel; // Default thinking level for new sessions (default: 'medium')
     colorTheme?: string; // Color theme override for this workspace (preset ID). Undefined = inherit from app default.
+    retention?: RetentionConfig; // Automatic session archiving and cleanup policy
   };
 
   /**

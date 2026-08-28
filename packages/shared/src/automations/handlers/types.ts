@@ -10,6 +10,7 @@
 
 import type { EventBus, BaseEventPayload } from '../event-bus.ts';
 import type { AutomationEvent, AutomationsConfig, AutomationMatcher, PendingPrompt } from '../types.ts';
+import type { RetentionConfig } from '../../workspaces/types.ts';
 
 // ============================================================================
 // Handler Interface
@@ -53,6 +54,30 @@ export interface EventLogHandlerOptions {
   workspaceId: string;
   /** Called when logging fails after retries */
   onEventLost?: (events: string[], error: Error) => void;
+}
+
+/** Options for creating a RetentionHandler */
+export interface RetentionHandlerOptions {
+  /** Workspace root path (for session storage access) */
+  workspaceRootPath: string;
+  /** Workspace ID for logging */
+  workspaceId: string;
+  /** Called each tick to get current retention settings (supports live config changes) */
+  getRetentionConfig: () => RetentionConfig | undefined;
+  /** Returns IDs of sessions currently being viewed (these are never auto-archived) */
+  getActiveSessionIds?: () => string[];
+  /** Called after each retention run with results */
+  onRetentionRun?: (result: RetentionResult) => void;
+}
+
+/** Result from a retention run */
+export interface RetentionResult {
+  /** Number of sessions archived in this run */
+  archived: number;
+  /** Number of archived sessions permanently deleted in this run */
+  deleted: number;
+  /** ISO timestamp of when this run completed */
+  timestamp: string;
 }
 
 // ============================================================================
