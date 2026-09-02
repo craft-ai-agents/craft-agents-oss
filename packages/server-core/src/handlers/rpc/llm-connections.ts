@@ -355,7 +355,11 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         allowEmptyApiKey,
         model: testModel,
         baseUrl,
-        timeoutMs: 45000,
+        // Must stay comfortably under the WS RPC client's default request timeout
+        // (30_000ms, see WsRpcClientOptions.requestTimeout) — otherwise the client
+        // gives up and shows "Request timeout" while the server-side test is still
+        // running (or even after it already succeeded).
+        timeoutMs: 25000,
         hostRuntime: buildBackendHostRuntimeContext(deps.platform),
         connection: hint,
       })
