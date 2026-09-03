@@ -3142,8 +3142,10 @@ This is a branched conversation. All prior messages in this conversation are par
     const options = {
       ...getDefaultOptions(this.config.envOverrides),
       model,
-      // Reasoning-model outputs (Opus extended thinking) can span multiple SDK-counted
-      // turns even with no tools exposed. Tool surface here is empty, so no tool-use loop risk.
+      // Reasoning-model outputs (such as Opus extended thinking) can span multiple
+      // SDK-counted turns, so a 1-turn cap can drop long-form completions with
+      // "Reached maximum number of turns (1)". The tool surface here is empty,
+      // so 10 turns provides headroom without risking a tool-use loop.
       maxTurns: 10,
       systemPrompt: request.systemPrompt ?? 'Reply with ONLY the requested text. No explanation.',
       ...(request.maxTokens ? { maxTokens: request.maxTokens } : {}),
