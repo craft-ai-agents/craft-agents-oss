@@ -1,0 +1,18 @@
+{
+  "name": "Retro Terminal",
+  "description": "Phosphor green CRT terminal, ROBCO Industries certified",
+  "author": "Craft Agent",
+  "license": "MIT",
+  "source": "https://github.com/lukilabs/craft-agents-oss",
+  "supportedModes": ["dark"],
+  "shikiTheme": {
+    "light": "github-light",
+    "dark": "vitesse-dark"
+  },
+  "background": "#070d07",
+  "foreground": "#00ff41",
+  "accent": "#39ff14",
+  "info": "#ffaa00",
+  "success": "#00ffaa",
+  "destructive": "#ff3333"
+}
