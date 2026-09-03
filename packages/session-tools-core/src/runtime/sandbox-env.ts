@@ -45,6 +45,9 @@ export interface ScriptRuntimeEnvOptions {
  *
  * For Python/uv, redirect caches away from home-directory defaults (e.g. ~/.cache/uv)
  * into the writable session data directory so sandboxed execution remains reliable.
+ * For non-Python runtimes, host python/uv cache vars inherited from the parent
+ * process are stripped: a host path like ~/cache/uv may lie outside the dirs a
+ * sandboxed subprocess is allowed to touch, and is meaningless for node/bun.
  */
 export function createScriptRuntimeEnv(
   options: ScriptRuntimeEnvOptions,
@@ -73,6 +76,12 @@ export function createScriptRuntimeEnv(
     env.UV_CACHE_DIR = uvCacheDir;
     env.XDG_CACHE_HOME = xdgCacheHome;
     env.PYTHONPYCACHEPREFIX = pythonPyCachePrefix;
+  } else {
+    // Keep the subprocess env hermetic: never leak host python/uv cache paths
+    // into non-python runtimes (they may point outside the session data dir).
+    delete env.UV_CACHE_DIR;
+    delete env.XDG_CACHE_HOME;
+    delete env.PYTHONPYCACHEPREFIX;
   }
 
   return env;
