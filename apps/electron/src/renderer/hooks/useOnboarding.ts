@@ -9,7 +9,7 @@
  * 4. Credentials (API Key or Claude OAuth)
  * 5. Complete
  */
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import type {
   OnboardingState,
   OnboardingStep,
@@ -20,6 +20,7 @@ import type { LocalModelSubmitData } from '@/components/onboarding/LocalModelSte
 import type { ApiKeySubmitData } from '@/components/apisetup'
 import type { CustomEndpointConfig } from '@config/llm-connections'
 import type { SetupNeeds, LlmConnectionSetup, ClaudeOAuthIdentityDto } from '../../shared/types'
+import { cancelOnboardingOAuth, isProviderManagedOAuthMethod } from './oauth-cancel'
 
 interface UseOnboardingOptions {
   /** Called when onboarding is complete */
@@ -64,6 +65,7 @@ interface UseOnboardingReturn {
 
   // Claude OAuth (two-step flow)
   isWaitingForCode: boolean
+  isProviderOAuthPending: boolean
   handleSubmitAuthCode: (code: string) => void
   handleCancelOAuth: () => void
 
@@ -521,6 +523,9 @@ export function useOnboarding({
 
   // Two-step OAuth flow state
   const [isWaitingForCode, setIsWaitingForCode] = useState(false)
+  const [activeProviderOAuthMethod, setActiveProviderOAuthMethod] = useState<ApiSetupMethod | null>(null)
+  const oauthAttemptIdRef = useRef(0)
+  const cancelledOAuthAttemptIdRef = useRef<number | null>(null)
 
   // Copilot device code (displayed during device flow)
   const [copilotDeviceCode, setCopilotDeviceCode] = useState<{ userCode: string; verificationUri: string } | undefined>()
@@ -553,25 +558,36 @@ export function useOnboarding({
     try {
       // ChatGPT OAuth (single-step flow - opens browser, captures tokens automatically)
       if (effectiveMethod === 'pi_chatgpt_oauth') {
+        const attemptId = ++oauthAttemptIdRef.current
+        cancelledOAuthAttemptIdRef.current = null
+        setActiveProviderOAuthMethod(effectiveMethod)
         const effectiveEditingSlug = connectionSlugOverride ?? editingSlug
         const isReauth = !!effectiveEditingSlug
         const connectionSlug = apiSetupMethodToConnectionSetup(effectiveMethod, {}, effectiveEditingSlug, existingSlugs).slug
-        const result = await window.electronAPI.startChatGptOAuth(connectionSlug)
+        try {
+          const result = await window.electronAPI.startChatGptOAuth(connectionSlug)
+          if (attemptId !== oauthAttemptIdRef.current || cancelledOAuthAttemptIdRef.current === attemptId) return
 
-        if (result.success) {
-          await saveAndValidateConnection(connectionSlug, effectiveMethod, undefined, isReauth)
-        } else {
-          setState(s => ({
-            ...s,
-            credentialStatus: 'error',
-            errorMessage: result.error || 'ChatGPT authentication failed',
-          }))
+          if (result.success) {
+            await saveAndValidateConnection(connectionSlug, effectiveMethod, undefined, isReauth)
+          } else {
+            setState(s => ({
+              ...s,
+              credentialStatus: 'error',
+              errorMessage: result.error || 'ChatGPT authentication failed',
+            }))
+          }
+        } finally {
+          setActiveProviderOAuthMethod(current => current === effectiveMethod ? null : current)
         }
         return
       }
 
       // Copilot OAuth (device flow — polls for token after user enters code on GitHub)
       if (effectiveMethod === 'pi_copilot_oauth') {
+        const attemptId = ++oauthAttemptIdRef.current
+        cancelledOAuthAttemptIdRef.current = null
+        setActiveProviderOAuthMethod(effectiveMethod)
         const effectiveEditingSlug = connectionSlugOverride ?? editingSlug
         const isReauth = !!effectiveEditingSlug
         const connectionSlug = apiSetupMethodToConnectionSetup(effectiveMethod, {}, effectiveEditingSlug, existingSlugs).slug
@@ -583,6 +599,7 @@ export function useOnboarding({
 
         try {
           const result = await window.electronAPI.startCopilotOAuth(connectionSlug)
+          if (attemptId !== oauthAttemptIdRef.current || cancelledOAuthAttemptIdRef.current === attemptId) return
 
           if (result.success) {
             await saveAndValidateConnection(connectionSlug, effectiveMethod, undefined, isReauth)
@@ -594,6 +611,7 @@ export function useOnboarding({
             }))
           }
         } finally {
+          setActiveProviderOAuthMethod(current => current === effectiveMethod ? null : current)
           cleanup()
           setCopilotDeviceCode(undefined)
         }
@@ -729,11 +747,15 @@ export function useOnboarding({
 
   // Cancel OAuth flow
   const handleCancelOAuth = useCallback(async () => {
+    cancelledOAuthAttemptIdRef.current = oauthAttemptIdRef.current
+    const methodToCancel = isWaitingForCode ? 'claude_oauth' : activeProviderOAuthMethod
+
     setIsWaitingForCode(false)
+    setActiveProviderOAuthMethod(null)
+    setCopilotDeviceCode(undefined)
     setState(s => ({ ...s, credentialStatus: 'idle', errorMessage: undefined }))
-    // Clear OAuth state on backend
-    await window.electronAPI.clearClaudeOAuthState()
-  }, [])
+    await cancelOnboardingOAuth(methodToCancel, window.electronAPI)
+  }, [activeProviderOAuthMethod, isWaitingForCode])
 
   // Git Bash handlers (Windows only)
   const handleBrowseGitBash = useCallback(async () => {
@@ -795,6 +817,9 @@ export function useOnboarding({
 
   // Cancel onboarding
   const handleCancel = useCallback(() => {
+    setActiveProviderOAuthMethod(null)
+    setIsWaitingForCode(false)
+    setCopilotDeviceCode(undefined)
     setState(s => ({ ...s, step: 'welcome' }))
   }, [])
 
@@ -811,6 +836,10 @@ export function useOnboarding({
 
   // Reset onboarding to initial state (used after logout or modal close)
   const reset = useCallback(() => {
+    const methodToCancel = isWaitingForCode ? 'claude_oauth' : activeProviderOAuthMethod
+    cancelOnboardingOAuth(methodToCancel, window.electronAPI).catch(() => {
+      // Ignore cleanup errors during reset.
+    })
     setState({
       step: initialStep,
       loginStatus: 'idle',
@@ -821,11 +850,13 @@ export function useOnboarding({
       errorMessage: undefined,
     })
     setIsWaitingForCode(false)
+    setActiveProviderOAuthMethod(null)
+    setCopilotDeviceCode(undefined)
     // Clean up any pending OAuth state
     window.electronAPI.clearClaudeOAuthState().catch(() => {
       // Ignore errors - state may not exist
     })
-  }, [initialStep, initialApiSetupMethod])
+  }, [activeProviderOAuthMethod, initialStep, initialApiSetupMethod, isWaitingForCode])
 
   return {
     state,
@@ -838,6 +869,7 @@ export function useOnboarding({
     handleStartOAuth,
     // Two-step OAuth flow
     isWaitingForCode,
+    isProviderOAuthPending: isProviderManagedOAuthMethod(activeProviderOAuthMethod),
     handleSubmitAuthCode,
     handleCancelOAuth,
     // Copilot device code
