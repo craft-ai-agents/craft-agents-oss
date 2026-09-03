@@ -102,7 +102,8 @@ export class CraftOAuth {
     code: string,
     codeVerifier: string,
     clientId: string,
-    port: number
+    port: number,
+    clientSecret?: string
   ): Promise<OAuthTokens> {
     const redirectUri = `http://localhost:${port}${CALLBACK_PATH}`;
 
@@ -113,6 +114,10 @@ export class CraftOAuth {
       client_id: clientId,
       code_verifier: codeVerifier,
     });
+
+    if (clientSecret) {
+      params.set('client_secret', clientSecret);
+    }
 
     const response = await fetch(tokenEndpoint, {
       method: 'POST',
@@ -249,11 +254,13 @@ export class CraftOAuth {
 
     // 4. Register client if endpoint available — now has the bound port
     let clientId: string;
+    let clientSecret: string | undefined;
     if (metadata.registration_endpoint) {
       this.callbacks.onStatus(`Registering client at ${metadata.registration_endpoint}...`);
       try {
         const client = await this.registerClient(metadata.registration_endpoint, port);
         clientId = client.client_id;
+        clientSecret = client.client_secret;
         this.callbacks.onStatus(`Registered as client: ${clientId}`);
       } catch (error) {
         // Clean up the callback server if registration fails
@@ -294,7 +301,8 @@ export class CraftOAuth {
       authCode,
       pkce.verifier,
       clientId,
-      port
+      port,
+      clientSecret
     );
     this.callbacks.onStatus('Tokens received successfully!');
 
@@ -500,7 +508,8 @@ async function exchangeMcpCodeForTokens(
   code: string,
   codeVerifier: string,
   clientId: string,
-  redirectUri: string
+  redirectUri: string,
+  clientSecret?: string
 ): Promise<OAuthTokens> {
   const params = new URLSearchParams({
     grant_type: 'authorization_code',
@@ -509,6 +518,10 @@ async function exchangeMcpCodeForTokens(
     client_id: clientId,
     code_verifier: codeVerifier,
   });
+
+  if (clientSecret) {
+    params.set('client_secret', clientSecret);
+  }
 
   const response = await fetch(tokenEndpoint, {
     method: 'POST',
@@ -610,7 +623,8 @@ export async function exchangeMcpOAuth(params: OAuthExchangeParams): Promise<OAu
       params.code,
       params.codeVerifier,
       params.clientId,
-      params.redirectUri
+      params.redirectUri,
+      params.clientSecret
     );
 
     return {
