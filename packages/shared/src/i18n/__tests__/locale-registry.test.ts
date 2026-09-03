@@ -100,6 +100,11 @@ describe("getDateLocale", () => {
     expect(locale.code).toBe("zh-CN");
   });
 
+  it("zh-Hant resolves to Traditional Chinese (Taiwan)", () => {
+    const locale = getDateLocale("zh-Hant");
+    expect(locale.code).toBe("zh-TW");
+  });
+
   it("hu resolves to Hungarian", () => {
     const locale = getDateLocale("hu");
     expect(locale.code).toBe("hu");
