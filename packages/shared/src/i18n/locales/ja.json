@@ -145,6 +145,7 @@
   "chat.connectionUnavailableDescription": "このセッションで使用していた接続は削除されました。続行するには新しいセッションを作成してください。",
   "chat.context": "コンテキスト",
   "chat.contextBadge": "コンテキストバッジ",
+  "chat.copyMessage": "メッセージをコピー",
   "chat.enterSessionName": "セッション名を入力...",
   "chat.failedToLoadConversation": "会話を読み込めませんでした",
   "chat.failedToStopSharing": "共有の停止に失敗しました",
