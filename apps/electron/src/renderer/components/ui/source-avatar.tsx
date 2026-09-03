@@ -12,7 +12,7 @@
 import * as React from 'react'
 import { Globe, HardDrive, Mail, Plug } from 'lucide-react'
 import { EntityIcon, type IconComponent } from '@/components/ui/entity-icon'
-import { useEntityIcon, logoUrlCache } from '@/lib/icon-cache'
+import { useEntityIcon, resolveRawSvgIcon, logoUrlCache } from '@/lib/icon-cache'
 import { McpIcon } from '@/components/icons/McpIcon'
 import type { LoadedSource } from '@craft-agent/shared/sources/types'
 import type { IconSize, ResolvedEntityIcon } from '@craft-agent/shared/icons'
@@ -143,13 +143,23 @@ function useFaviconFallback(
 // ============================================================================
 
 export function SourceAvatar({ source, size = 'md', fluid, showStatus, className }: SourceAvatarProps) {
-  const icon = useEntityIcon({
+  // When raw SVG is available (server pre-reads the icon file), resolve it directly
+  // for inline rendering with currentColor normalization — same approach as tool icons.
+  // Falls back to useEntityIcon for non-SVG icons, emojis, and favicon resolution.
+  const rawSvgIcon = React.useMemo<ResolvedEntityIcon | null>(
+    () => source.rawSvg ? resolveRawSvgIcon(source.rawSvg, '') : null,
+    [source.rawSvg]
+  )
+
+  const hookIcon = useEntityIcon({
     workspaceId: source.workspaceId,
     entityType: 'source',
     identifier: source.config.slug,
     iconDir: `sources/${source.config.slug}`,
     iconValue: source.config.icon,
   })
+
+  const icon = rawSvgIcon ?? hookIcon
 
   // Source-specific: favicon as secondary fallback when no local icon found
   const faviconUrl = useFaviconFallback(source, icon)
