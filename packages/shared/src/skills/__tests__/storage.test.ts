@@ -14,7 +14,7 @@
  * baseline count and validating relative to it.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, symlinkSync } from 'fs';
 import { homedir, tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -309,6 +309,48 @@ describe('loadWorkspaceSkills', () => {
     expect(skills).toHaveLength(1);
     expect(skills[0]!.slug).toBe('real-skill');
   });
+
+  it('should load symlinked skill directories from workspace', () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const skillsDir = join(workspaceRoot, 'skills');
+    const realSkillsDir = join(tempDir, 'real-skills');
+    mkdirSync(realSkillsDir, { recursive: true });
+    createSkill(realSkillsDir, 'shared-skill', {
+      name: 'Shared Skill',
+      description: 'Loaded through a symlink',
+    });
+
+    symlinkSync(
+      join(realSkillsDir, 'shared-skill'),
+      join(skillsDir, 'shared-skill'),
+      'dir'
+    );
+
+    const skills = loadWorkspaceSkills(workspaceRoot);
+
+    expect(skills.map(skill => skill.slug)).toContain('shared-skill');
+    const skill = skills.find(skill => skill.slug === 'shared-skill');
+    expect(skill!.metadata.name).toBe('Shared Skill');
+  });
+
+  it('should ignore broken symlinked skill directories', () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const skillsDir = join(workspaceRoot, 'skills');
+    symlinkSync(
+      join(tempDir, 'missing-target'),
+      join(skillsDir, 'broken-skill'),
+      'dir'
+    );
+
+    expect(() => loadWorkspaceSkills(workspaceRoot)).not.toThrow();
+    expect(loadWorkspaceSkills(workspaceRoot)).toEqual([]);
+  });
 });
 
 // ============================================================
@@ -574,6 +616,27 @@ describe('listSkillSlugs', () => {
   it('should return empty array for non-existent workspace', () => {
     const slugs = listSkillSlugs(join(tempDir, 'nonexistent'));
     expect(slugs).toEqual([]);
+  });
+
+  it('should include symlinked skill directories in listSkillSlugs', () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const skillsDir = join(workspaceRoot, 'skills');
+    const realSkillDir = join(tempDir, 'real-shared-skill');
+    mkdirSync(realSkillDir, { recursive: true });
+    writeFileSync(join(realSkillDir, 'SKILL.md'), `---
+name: "Shared Skill"
+description: "Loaded through a symlink"
+---
+Instructions
+`);
+
+    symlinkSync(realSkillDir, join(skillsDir, 'shared-skill'), 'dir');
+
+    const slugs = listSkillSlugs(workspaceRoot);
+    expect(slugs).toContain('shared-skill');
   });
 });
 
