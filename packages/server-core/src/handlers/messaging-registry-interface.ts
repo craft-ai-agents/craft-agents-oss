@@ -191,6 +191,26 @@ export interface IMessagingGatewayRegistry {
     domain: 'lark' | 'feishu'
   }): Promise<void>
 
+  /** Test a WeChat iLink bot token. */
+  testWeChatCredentials(token: string): Promise<{ success: boolean; botName?: string; error?: string }>
+
+  /** Save WeChat bot token and (re)initialize the adapter. */
+  saveWeChatCredentials(workspaceId: string, token: string, skipValidation?: boolean): Promise<void>
+
+  /**
+   * Step 1 of WeChat login: request a QR code from the iLink API.
+   * Returns qrContent (the URL the QR encodes) and qrcode (used to poll status).
+   */
+  startWeChatQRLogin(): Promise<{ qrContent: string; qrcode: string }>
+
+  /**
+   * Step 2 of WeChat login: poll the QR scan status.
+   * When status is confirmed and bot_token is present, credentials are saved automatically.
+   */
+  pollWeChatQRStatus(workspaceId: string, qrcode: string): Promise<{
+    status: 'waiting' | 'scanned' | 'confirmed' | 'expired'
+  }>
+
   /** Disable a platform for a workspace, preserving WhatsApp auth state unless forgotten separately. */
   disconnectPlatform(workspaceId: string, platform: string): Promise<void>
 

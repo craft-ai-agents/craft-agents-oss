@@ -9,7 +9,7 @@
 // Platform types
 // ---------------------------------------------------------------------------
 
-export type PlatformType = 'telegram' | 'whatsapp' | 'lark'
+export type PlatformType = 'telegram' | 'whatsapp' | 'lark' | 'wechat'
 
 // ---------------------------------------------------------------------------
 // Logger
@@ -70,7 +70,7 @@ export interface AdapterCapabilities {
   inlineButtons: boolean
   maxButtons: number
   maxMessageLength: number
-  markdown: 'v2' | 'whatsapp' | 'lark-post'
+  markdown: 'v2' | 'whatsapp' | 'lark-post' | 'wechat'
   webhookSupport: boolean
 }
 
@@ -302,6 +302,7 @@ export function getDefaultBindingConfig(platform: PlatformType): BindingConfig {
   return {
     ...DEFAULT_BINDING_CONFIG,
     approvalChannel: platform === 'whatsapp' ? 'app' : DEFAULT_BINDING_CONFIG.approvalChannel,
+    responseMode: platform === 'wechat' ? 'final_only' : DEFAULT_BINDING_CONFIG.responseMode,
   }
 }
 
@@ -508,6 +509,13 @@ export interface MessagingConfig {
        *  - `feishu` → open.feishu.cn (China)
        */
       domain?: 'lark' | 'feishu'
+    }
+    wechat?: {
+      enabled: boolean
+      /**
+       * iLink Bot API bot_token is stored in the credential manager, not here.
+       * Obtained via QR scan login through iLink (https://ilinkai.weixin.qq.com).
+       */
     }
   }
 }
