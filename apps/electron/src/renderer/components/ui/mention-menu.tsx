@@ -207,7 +207,7 @@ export function InlineMentionMenu({
   filter = '',
   position,
   workspaceId,
-  maxWidth = 280,
+  maxWidth = 340,
   className,
 }: InlineMentionMenuProps) {
   const { t } = useTranslation()
@@ -286,89 +286,122 @@ export function InlineMentionMenu({
     ? window.innerHeight - Math.round(position.y) + 8
     : 0
 
+  // Resolve the currently highlighted item for the detail panel
+  const highlightedItem = flatItems[selectedIndex] as MentionItem | undefined
+  const showDetailPanel = highlightedItem && (highlightedItem.type === 'skill' || highlightedItem.type === 'source') && highlightedItem.description
+
   return (
     <div
       ref={menuRef}
       data-inline-menu
-      className={cn('fixed z-dropdown', MENU_CONTAINER_STYLE, className)}
+      className="fixed z-dropdown flex items-end gap-2"
       style={{
         left: Math.round(position.x) - 10,
         bottom: bottomPosition,
-        width: maxWidth,
-        maxWidth,
       }}
     >
-      {/* Menu header — sticky above scroll area */}
-      <div className="px-3 py-1.5 text-[12px] font-medium text-muted-foreground border-b border-foreground/5">
-        {t('chat.mentionFilesSkillsSources')}
-      </div>
+      {/* Main dropdown list */}
+      <div
+        className={cn(MENU_CONTAINER_STYLE, className)}
+        style={{ width: maxWidth, maxWidth }}
+      >
+        {/* Menu header — sticky above scroll area */}
+        <div className="px-3 py-1.5 text-[12px] font-medium text-muted-foreground border-b border-foreground/5">
+          {t('chat.mentionFilesSkillsSources')}
+        </div>
 
-      <div ref={listRef} className={MENU_LIST_STYLE}>
-        {flatItems.length === 0 && filter && (
-          <div className="px-3 py-2 text-[12px] text-muted-foreground/60">{t('chat.noResults')}</div>
-        )}
-        {flatItems.map((item, itemIndex) => {
-          const isSelected = itemIndex === selectedIndex
+        <div ref={listRef} className={MENU_LIST_STYLE}>
+          {flatItems.length === 0 && filter && (
+            <div className="px-3 py-2 text-[12px] text-muted-foreground/60">{t('chat.noResults')}</div>
+          )}
+          {flatItems.map((item, itemIndex) => {
+            const isSelected = itemIndex === selectedIndex
 
-          return (
-            <div
-              key={`${item.type}-${item.id}`}
-              data-selected={isSelected}
-              onClick={() => {
-                onSelect(item)
-                onOpenChange(false)
-              }}
-              onMouseEnter={() => setSelectedIndex(itemIndex)}
-              className={cn(
-                MENU_ITEM_STYLE,
-                isSelected && MENU_ITEM_SELECTED
-              )}
-            >
-              {/* Icon based on type */}
-              <div className="shrink-0">
-                {item.type === 'skill' && item.skill && (
-                  <SkillAvatar skill={item.skill} size="sm" workspaceId={workspaceId} />
+            return (
+              <div
+                key={`${item.type}-${item.id}`}
+                data-selected={isSelected}
+                onClick={() => {
+                  onSelect(item)
+                  onOpenChange(false)
+                }}
+                onMouseEnter={() => setSelectedIndex(itemIndex)}
+                className={cn(
+                  MENU_ITEM_STYLE,
+                  isSelected && MENU_ITEM_SELECTED
                 )}
-                {item.type === 'source' && item.source && (
-                  <SourceAvatar source={item.source} size="sm" />
-                )}
-                {item.type === 'folder' && (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" className="text-muted-foreground">
-                    <path d="M20.5 10C20.5 9.07003 20.5 8.60504 20.3978 8.22354C20.1204 7.18827 19.3117 6.37962 18.2765 6.10222C17.895 6 17.43 6 16.5 6H13.1008C12.4742 6 12.1609 6 11.8739 5.91181C11.6824 5.85298 11.5009 5.76572 11.3353 5.65295C11.0871 5.48389 10.8914 5.23926 10.5 4.75L10.4095 4.63693C10.107 4.25881 9.9558 4.06975 9.7736 3.92674C9.54464 3.74703 9.27921 3.61946 8.99585 3.55294C8.77037 3.5 8.52825 3.5 8.04402 3.5C6.60485 3.5 5.88527 3.5 5.32008 3.74178C4.61056 4.0453 4.0453 4.61056 3.74178 5.32008C3.5 5.88527 3.5 6.60485 3.5 8.04402V10M9.46502 20.5H14.535C16.9102 20.5 18.0978 20.5 18.9301 19.8113C19.7624 19.1226 19.9846 17.9559 20.429 15.6227L20.8217 13.5613C21.1358 11.9121 21.2929 11.0874 20.843 10.5437C20.393 10 19.5536 10 17.8746 10H6.12537C4.44643 10 3.60696 10 3.15704 10.5437C2.70713 11.0874 2.8642 11.9121 3.17835 13.5613L3.57099 15.6227C4.01541 17.9559 4.23763 19.1226 5.06992 19.8113C5.90221 20.5 7.08981 20.5 9.46502 20.5Z"/>
-                  </svg>
-                )}
-                {item.type === 'file' && (
-                  <FileMenuIcon name={item.label} />
+              >
+                {/* Icon based on type */}
+                <div className="shrink-0">
+                  {item.type === 'skill' && item.skill && (
+                    <SkillAvatar skill={item.skill} size="sm" workspaceId={workspaceId} />
+                  )}
+                  {item.type === 'source' && item.source && (
+                    <SourceAvatar source={item.source} size="sm" />
+                  )}
+                  {item.type === 'folder' && (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" className="text-muted-foreground">
+                      <path d="M20.5 10C20.5 9.07003 20.5 8.60504 20.3978 8.22354C20.1204 7.18827 19.3117 6.37962 18.2765 6.10222C17.895 6 17.43 6 16.5 6H13.1008C12.4742 6 12.1609 6 11.8739 5.91181C11.6824 5.85298 11.5009 5.76572 11.3353 5.65295C11.0871 5.48389 10.8914 5.23926 10.5 4.75L10.4095 4.63693C10.107 4.25881 9.9558 4.06975 9.7736 3.92674C9.54464 3.74703 9.27921 3.61946 8.99585 3.55294C8.77037 3.5 8.52825 3.5 8.04402 3.5C6.60485 3.5 5.88527 3.5 5.32008 3.74178C4.61056 4.0453 4.0453 4.61056 3.74178 5.32008C3.5 5.88527 3.5 6.60485 3.5 8.04402V10M9.46502 20.5H14.535C16.9102 20.5 18.0978 20.5 18.9301 19.8113C19.7624 19.1226 19.9846 17.9559 20.429 15.6227L20.8217 13.5613C21.1358 11.9121 21.2929 11.0874 20.843 10.5437C20.393 10 19.5536 10 17.8746 10H6.12537C4.44643 10 3.60696 10 3.15704 10.5437C2.70713 11.0874 2.8642 11.9121 3.17835 13.5613L3.57099 15.6227C4.01541 17.9559 4.23763 19.1226 5.06992 19.8113C5.90221 20.5 7.08981 20.5 9.46502 20.5Z"/>
+                    </svg>
+                  )}
+                  {item.type === 'file' && (
+                    <FileMenuIcon name={item.label} />
+                  )}
+                </div>
+
+                {/* Label and optional path/badge */}
+                {(item.type === 'file' || item.type === 'folder') ? (
+                  <>
+                    {/* File/folder: filename then parent path fading out on overflow */}
+                    <span className="shrink-0">{item.label}</span>
+                    {item.file?.relativePath && getParentDir(item.file.relativePath) && (
+                      <FadingText className="text-[11px] text-muted-foreground min-w-0 opacity-50" fadeWidth={20}>
+                        {getParentDir(item.file.relativePath)}
+                      </FadingText>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {/* Skill/source: label with type badge */}
+                    <div className="flex-1 min-w-0">
+                      <span className="truncate block">{item.label}</span>
+                    </div>
+                    <span className={MENU_TYPE_BADGE}>
+                      {item.type === 'skill' ? t('common.skill') : t('common.source')}
+                    </span>
+                  </>
                 )}
               </div>
+            )
+          })}
 
-              {/* Label and optional path/badge */}
-              {(item.type === 'file' || item.type === 'folder') ? (
-                <>
-                  {/* File/folder: filename then parent path fading out on overflow */}
-                  <span className="shrink-0">{item.label}</span>
-                  {item.file?.relativePath && getParentDir(item.file.relativePath) && (
-                    <FadingText className="text-[11px] text-muted-foreground min-w-0 opacity-50" fadeWidth={20}>
-                      {getParentDir(item.file.relativePath)}
-                    </FadingText>
-                  )}
-                </>
-              ) : (
-                <>
-                  {/* Skill/source: label with type badge */}
-                  <div className="flex-1 min-w-0">
-                    <span className="truncate block">{item.label}</span>
-                  </div>
-                  <span className={MENU_TYPE_BADGE}>
-                    {item.type === 'skill' ? t('common.skill') : t('common.source')}
-                  </span>
-                </>
-              )}
-            </div>
-          )
-        })}
-
+        </div>
       </div>
+
+      {/* Detail panel — shown beside the dropdown for highlighted skill/source */}
+      {showDetailPanel && (
+        <div
+          className="w-[220px] p-3 overflow-hidden rounded-[8px] bg-foreground-5 text-foreground shadow-modal-small"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            {highlightedItem.type === 'skill' && highlightedItem.skill && (
+              <SkillAvatar skill={highlightedItem.skill} size="md" workspaceId={workspaceId} />
+            )}
+            {highlightedItem.type === 'source' && highlightedItem.source && (
+              <SourceAvatar source={highlightedItem.source} size="md" />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-medium truncate">{highlightedItem.label}</div>
+              <div className="text-[10px] text-muted-foreground">
+                {highlightedItem.type === 'skill' ? t('common.skill') : t('common.source')}
+              </div>
+            </div>
+          </div>
+          <p className="text-[12px] leading-relaxed text-foreground/70">
+            {highlightedItem.description}
+          </p>
+        </div>
+      )}
     </div>
   )
 }
