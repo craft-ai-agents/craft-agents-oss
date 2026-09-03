@@ -244,8 +244,39 @@ export function isRefreshableSource(source: LoadedSource): boolean {
 export type McpTransport = 'http' | 'sse' | 'stdio';
 
 /**
+ * Platform identifier matching Node.js process.platform values.
+ * Used as keys in the `platform` override block.
+ */
+export type McpPlatform = 'win32' | 'darwin' | 'linux';
+
+/**
+ * Stdio fields that can be overridden per-platform.
+ */
+export interface McpPlatformOverride {
+  /** Command to spawn (overrides default for this platform). */
+  command?: string;
+  /** Arguments (overrides default args entirely for this platform). */
+  args?: string[];
+  /** Environment variables (merged on top of default env for this platform). */
+  env?: Record<string, string>;
+}
+
+/**
  * MCP-specific configuration
  * Supports both HTTP-based and local stdio-based MCP servers.
+ *
+ * For cross-platform configs, use the `platform` field to override
+ * stdio fields (command, args, env) per OS:
+ * ```json
+ * {
+ *   "command": "npx",
+ *   "args": ["server.js"],
+ *   "platform": {
+ *     "win32": { "command": "npx.cmd" },
+ *     "darwin": { "env": { "DYLD_LIBRARY_PATH": "/opt/homebrew/lib" } }
+ *   }
+ * }
+ * ```
  */
 export interface McpSourceConfig {
   /**
@@ -300,6 +331,24 @@ export interface McpSourceConfig {
    * Precedence: static headers < credential-store headerNames < Authorization bearer.
    */
   headerNames?: string[];
+
+  // === Platform overrides (stdio only) ===
+  /**
+   * Per-platform overrides for stdio command, args, and env.
+   * Keys are Node.js platform identifiers: "win32", "darwin", "linux".
+   * When the current platform matches a key, its values are applied:
+   * - command: replaces the default command
+   * - args: replaces the default args entirely
+   * - env: merged on top of the default env (not replaced)
+   *
+   * @example
+   * // Use npx.cmd on Windows, npx elsewhere
+   * {
+   *   "command": "npx",
+   *   "platform": { "win32": { "command": "npx.cmd" } }
+   * }
+   */
+  platform?: Partial<Record<McpPlatform, McpPlatformOverride>>;
 }
 
 /**
