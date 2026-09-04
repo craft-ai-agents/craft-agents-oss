@@ -83,6 +83,7 @@ import {
 } from '@/components/app-shell/background-task-chip-state'
 import { getFileManagerName } from '@/lib/platform'
 import { rendererLog } from '@/lib/logger'
+import { preferredWorkspaceIdForDesktopAccount } from '@/lib/desktop-workspace-selection'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
 
@@ -733,7 +734,10 @@ export default function App() {
             setAppState('account-login')
             return
           }
-          accountWorkspaceId = desktopAccount.account.workspaceId
+          // A local account authorizes the desktop but its account-server
+          // workspace does not own this machine's session history. Only ERP
+          // managed execution should replace the window's local workspace.
+          accountWorkspaceId = preferredWorkspaceIdForDesktopAccount(desktopAccount.account)
         }
         // Get this window's workspace ID (passed via URL query param from main process)
         const wsId = accountWorkspaceId ?? await window.electronAPI.getWindowWorkspace()
