@@ -321,6 +321,7 @@
     const loginTab = document.getElementById('login-tab');
     const registerTab = document.getElementById('register-tab');
     const subtitle = document.getElementById('subtitle');
+    const usernameInput = document.getElementById('username');
     const passwordInput = document.getElementById('password');
     let mode = 'login';
     let allowRegistration = false;
@@ -334,6 +335,11 @@
         } else {
           form.hidden = false;
           document.querySelector('.tabs').hidden = false;
+          if (policy?.developmentLoginDefaults) {
+            usernameInput.value = policy.developmentLoginDefaults.username || '';
+            passwordInput.value = policy.developmentLoginDefaults.password || '';
+            subtitle.textContent = '本地开发账号已自动填充';
+          }
         }
         allowRegistration = policy?.allowRegistration === true;
         registerTab.hidden = !allowRegistration;
@@ -355,6 +361,7 @@
       passwordInput.autocomplete = registering ? 'new-password' : 'current-password';
       passwordInput.minLength = registering ? 12 : 1;
       passwordInput.placeholder = registering ? '12–128 个字符' : '请输入密码';
+      if (registering) passwordInput.value = '';
       errorEl.classList.remove('visible');
     }
 

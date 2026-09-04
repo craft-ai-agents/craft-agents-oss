@@ -24,6 +24,8 @@
  *   CRAFT_WEBUI_ALLOW_REGISTRATION — optional true/false (default: false; bootstrap administrator first)
  *   CRAFT_WEBUI_TRUSTED_PROXIES — comma-separated literal IPs/CIDRs of ingress proxies (default: none)
  *   CRAFT_WEBUI_INITIAL_CREDITS — optional signup balance (default: 300)
+ *   JONWORK_DEV_LOGIN_USERNAME  — local debug login-page default (requires password too)
+ *   JONWORK_DEV_LOGIN_PASSWORD  — local debug login-page default (never returned to remote clients)
  *   CRAFT_MESSAGING_WA_WORKER  — absolute path to worker.cjs (default: packages/messaging-whatsapp-worker/dist/worker.cjs)
  *   CRAFT_MESSAGING_NODE_BIN   — Node binary used to spawn the WhatsApp worker (default: node)
  */
@@ -122,6 +124,20 @@ const webuiSecureCookies = parseOptionalBooleanEnv('CRAFT_WEBUI_SECURE_COOKIE', 
 const webuiWsUrl = parseOptionalWebSocketUrl('CRAFT_WEBUI_WS_URL', process.env.CRAFT_WEBUI_WS_URL)
 const serverToken = process.env.CRAFT_SERVER_TOKEN
 const webuiAllowRegistration = parseOptionalBooleanEnv('CRAFT_WEBUI_ALLOW_REGISTRATION', process.env.CRAFT_WEBUI_ALLOW_REGISTRATION) ?? false
+const developmentLoginDefaults = (() => {
+  const username = process.env.JONWORK_DEV_LOGIN_USERNAME?.trim()
+  const password = process.env.JONWORK_DEV_LOGIN_PASSWORD
+  if (!username && !password) return undefined
+  if (process.env.CRAFT_DEBUG !== 'true' && process.env.CRAFT_DEBUG !== '1') {
+    console.error('JONWORK_DEV_LOGIN_* may only be used with CRAFT_DEBUG enabled.')
+    process.exit(1)
+  }
+  if (!username || !password || !/^[A-Za-z0-9._-]{3,32}$/.test(username) || password.length < 12 || password.length > 128) {
+    console.error('Invalid JONWORK_DEV_LOGIN_*: username must be 3-32 safe characters and password 12-128 characters.')
+    process.exit(1)
+  }
+  return { username, password }
+})()
 const initialCredits = Number.parseInt(process.env.CRAFT_WEBUI_INITIAL_CREDITS ?? '300', 10)
 if (!Number.isSafeInteger(initialCredits) || initialCredits < 0) {
   console.error('Invalid CRAFT_WEBUI_INITIAL_CREDITS: expected a non-negative integer.')
@@ -164,6 +180,7 @@ if (webuiEnabled && serverToken) {
     accountStore: accountStore ?? undefined,
     erpControl,
     allowRegistration: webuiAllowRegistration,
+    developmentLoginDefaults,
     trustedProxies: process.env.CRAFT_WEBUI_TRUSTED_PROXIES?.split(',').map(value => value.trim()),
   })
 

@@ -12,7 +12,7 @@
 
 import { join, extname } from 'node:path'
 import { boundRequestBody, MAX_AUTH_BODY_BYTES, MAX_WEBUI_BODY_BYTES, RequestBodyError } from './request-limits'
-import { createProxyTrust, resolveClientIp, proxyOriginValue, validHost, type HttpPeerContext } from './proxy-trust'
+import { createProxyTrust, normalizeIp, resolveClientIp, proxyOriginValue, validHost, type HttpPeerContext } from './proxy-trust'
 import {
   RateLimiter,
   initPasswordHash,
@@ -148,6 +148,8 @@ export interface WebuiHandlerOptions {
   accountStore?: AccountStore
   /** Public self-registration is disabled unless explicitly enabled. It never bootstraps an administrator. */
   allowRegistration?: boolean
+  /** Loopback-only development credentials used to prefill the local login page. Never enable in production. */
+  developmentLoginDefaults?: { username: string; password: string }
   /** Operator-managed public catalog; credentials are never shared with it. */
   publicSkillsRoot?: string
   erpControl?: ErpControlRuntime
@@ -195,6 +197,15 @@ export function createWebuiHandler(options: WebuiHandlerOptions): WebuiHandler {
 
   const loginPassword = password || secret
   const isTrustedProxy = createProxyTrust(trustedProxies)
+
+  function isLoopbackRequest(req: Request, peer?: HttpPeerContext): boolean {
+    const peerIp = normalizeIp(peer?.remoteAddress)
+    if (peerIp !== '127.0.0.1' && peerIp !== '::1') return false
+    const hostname = new URL(req.url).hostname
+    if (hostname === 'localhost') return true
+    const requestIp = normalizeIp(hostname)
+    return requestIp === '127.0.0.1' || requestIp === '::1'
+  }
 
   // Hash the login password at startup (async, but resolves before first auth attempt in practice)
   const passwordReady = initPasswordHash(loginPassword)
@@ -277,7 +288,10 @@ export function createWebuiHandler(options: WebuiHandlerOptions): WebuiHandler {
     // Public, non-identifying policy for the login page; never disclose account/bootstrap state.
     if (path === '/api/auth/policy' && req.method === 'GET') {
       return Response.json({ allowRegistration: !erpControl && !!accountStore && options.allowRegistration === true,
-        ...(erpControl ? {sso:true, loginUrl:'/api/auth/sso/start', executionMode:'server_only'} : {}) }, {
+        ...(erpControl ? {sso:true, loginUrl:'/api/auth/sso/start', executionMode:'server_only'} : {}),
+        ...(!erpControl && options.developmentLoginDefaults && isLoopbackRequest(req, peer)
+          ? { developmentLoginDefaults: options.developmentLoginDefaults }
+          : {}) }, {
         headers: { 'Cache-Control': 'no-store' },
       })
     }

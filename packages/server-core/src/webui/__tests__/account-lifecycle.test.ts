@@ -18,8 +18,8 @@ describe('enterprise account lifecycle', () => {
     store = new AccountStore({ filePath: join(root, 'accounts.json'), usersRoot: join(root, 'users'), createWorkspace: () => ({ id: `ws-${++n}` }) })
   })
   afterEach(() => { handlers.splice(0).forEach(handler => handler.dispose()); rmSync(root, { recursive: true, force: true }) })
-  function handler(allowRegistration?: boolean) {
-    const result = createWebuiHandler({ webuiDir: root, secret, wsProtocol: 'ws', wsPort: 0, getHealthCheck: () => ({ status: 'ok' }), logger: { info() {}, warn() {}, error() {} } as any, accountStore: store, allowRegistration })
+  function handler(allowRegistration?: boolean, developmentLoginDefaults?: { username: string; password: string }) {
+    const result = createWebuiHandler({ webuiDir: root, secret, wsProtocol: 'ws', wsPort: 0, getHealthCheck: () => ({ status: 'ok' }), logger: { info() {}, warn() {}, error() {} } as any, accountStore: store, allowRegistration, developmentLoginDefaults })
     handlers.push(result)
     return result
   }
@@ -40,6 +40,17 @@ describe('enterprise account lifecycle', () => {
     const registered = await open.fetch(request('/api/auth/register', 'POST', { username: 'customer', password, role: 'admin' }))
     expect(registered.status).toBe(201)
     expect((await registered.json() as any).account.role).toBe('user')
+  })
+
+  test('development login defaults are exposed only to direct loopback requests', async () => {
+    const defaults = { username: 'local-admin', password: 'local-password-1234' }
+    const api = handler(false, defaults)
+    const local = await api.fetch(request('/api/auth/policy'), { remoteAddress: '127.0.0.1' })
+    expect(await local.json()).toEqual({ allowRegistration: false, developmentLoginDefaults: defaults })
+    const remote = await api.fetch(new Request('http://example.test/api/auth/policy'), { remoteAddress: '192.0.2.10' })
+    expect(await remote.json()).toEqual({ allowRegistration: false })
+    const forgedHost = await api.fetch(new Request('http://example.test/api/auth/policy'), { remoteAddress: '127.0.0.1' })
+    expect(await forgedHost.json()).toEqual({ allowRegistration: false })
   })
 
   test('disabling and resetting invalidate sessions across restart; re-enable does not resurrect old tokens', async () => {

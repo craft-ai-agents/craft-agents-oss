@@ -17,8 +17,9 @@ function formatLoginError(cause: unknown): string {
 }
 
 export function DesktopAccountLogin({ onErpLogin }: Props) {
-  const [serverUrl, setServerUrl] = useState(DESKTOP_RELEASE.accountServerUrl || (import.meta.env.DEV ? 'http://127.0.0.1:9100' : ''))
-  const [showServer, setShowServer] = useState(!DESKTOP_RELEASE.accountServerUrl)
+  const isDevelopment = import.meta.env.DEV
+  const [serverUrl, setServerUrl] = useState(isDevelopment ? 'http://127.0.0.1:9100' : DESKTOP_RELEASE.accountServerUrl)
+  const [showServer, setShowServer] = useState(isDevelopment || !DESKTOP_RELEASE.accountServerUrl)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -38,7 +39,7 @@ export function DesktopAccountLogin({ onErpLogin }: Props) {
             type="url"
             autoComplete="url"
             required
-            readOnly={!DESKTOP_RELEASE.allowCustomAccountServer}
+            readOnly={!isDevelopment && !DESKTOP_RELEASE.allowCustomAccountServer}
           />
           <p className="text-xs text-muted-foreground">公网生产地址必须使用 HTTPS；HTTP 仅限本机开发。</p>
         </div>}
