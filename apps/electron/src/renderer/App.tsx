@@ -15,7 +15,7 @@ import type { AppShellContextType } from '@/context/AppShellContext'
 import { ReauthScreen } from '@/components/onboarding'
 import { DesktopAccountLogin } from '@/components/onboarding/DesktopAccountLogin'
 import { DESKTOP_RELEASE } from '@craft-agent/shared/deployment'
-import { productionSetupBlocker } from '../shared/startup-readiness'
+import { productionSetupBlocker, shouldEnforceProductionSetup } from '../shared/startup-readiness'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
 import { SplashScreen } from '@/components/SplashScreen'
 import { TooltipProvider } from '@craft-agent/ui'
@@ -87,6 +87,7 @@ import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
 
 type AppState = 'loading' | 'account-login' | 'reauth' | 'ready' | 'startup-blocked'
+const enforceProductionSetup = shouldEnforceProductionSetup(DESKTOP_RELEASE.channel, import.meta.env.DEV)
 
 /** Type for the Jotai store returned by useStore() */
 type JotaiStore = ReturnType<typeof getDefaultStore>
@@ -664,7 +665,7 @@ export default function App() {
 
   const enterDefaultWorkspace = useCallback(async (preferredWorkspaceId?: string | null) => {
     try {
-      if (DESKTOP_RELEASE.channel === 'production') {
+      if (enforceProductionSetup) {
         const blocker = productionSetupBlocker(await window.electronAPI.getSetupNeeds())
         if (blocker) { setStartupError(blocker); setAppState('startup-blocked'); return }
       }
@@ -675,7 +676,7 @@ export default function App() {
           setAppState('ready')
           return
         } catch (error) {
-          if (DESKTOP_RELEASE.channel === 'production') throw error
+          if (enforceProductionSetup) throw error
           console.warn('[App] Preferred workspace is unavailable; using the server default:', error)
         }
       }
@@ -690,7 +691,7 @@ export default function App() {
       await window.electronAPI.switchWorkspace(workspaceId)
       setWindowWorkspaceId(workspaceId)
     } catch (error) {
-      if (DESKTOP_RELEASE.channel === 'production') {
+      if (enforceProductionSetup) {
         setStartupError('企业模型或工作区初始化失败，请检查服务连接并重试。')
         setAppState('startup-blocked')
         return
@@ -740,7 +741,7 @@ export default function App() {
 
         const needs = await window.electronAPI.getSetupNeeds()
 
-        if (!needs.isFullyConfigured && DESKTOP_RELEASE.channel !== 'production') {
+        if (!needs.isFullyConfigured && !enforceProductionSetup) {
           // Provider credentials are preconfigured for the managed Jonwork
           // environment, so first launch must not stop at the legacy picker.
           await window.electronAPI.deferSetup()
@@ -748,7 +749,7 @@ export default function App() {
         await enterDefaultWorkspace(wsId ?? accountWorkspaceId)
       } catch (error) {
         console.error('Failed to check auth state:', error)
-        if (DESKTOP_RELEASE.channel === 'production') {
+        if (enforceProductionSetup) {
           setStartupError('启动检查未完成，请检查企业服务连接后重试。')
           setAppState('startup-blocked')
           return
@@ -1782,7 +1783,7 @@ export default function App() {
       setWindowWorkspaceId(null)
       // Jonwork uses a managed default connection, so resetting local data must
       // not send the user through the legacy provider or workspace pickers.
-      if (DESKTOP_RELEASE.channel !== 'production') await window.electronAPI.deferSetup()
+      if (!enforceProductionSetup) await window.electronAPI.deferSetup()
       const workspaceId = await window.electronAPI.getWindowWorkspace()
       await enterDefaultWorkspace(workspaceId)
     } catch (error) {
@@ -1986,6 +1987,9 @@ export default function App() {
   if (appState === 'account-login') {
     return <DesktopAccountLogin onErpLogin={async (serverUrl) => {
       await window.electronAPI.loginDesktopAccountWithErp(serverUrl)
+      window.location.reload()
+    }} onLocalLogin={async (serverUrl, username, password) => {
+      await window.electronAPI.loginDesktopAccountLocally(serverUrl, username, password)
       window.location.reload()
     }} />
   }

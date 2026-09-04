@@ -196,6 +196,7 @@ const api = buildClientApi(client, CHANNEL_MAP, (ch) => client.isChannelAvailabl
 
 ;(api as any).getRuntimeEnvironment = (): 'electron' | 'web' => 'electron'
 ;(api as any).getDesktopAccount = () => ipcRenderer.invoke('desktop-account:get')
+;(api as any).loginDesktopAccountLocally = (serverUrl: string, username: string, password: string) => ipcRenderer.invoke('desktop-account:password', serverUrl, username, password)
 ;(api as any).loginDesktopAccountWithErp = (serverUrl: string) => ipcRenderer.invoke('desktop-account:sso', serverUrl)
 ;(api as any).logoutDesktopAccount = () => ipcRenderer.invoke('desktop-account:logout')
 
@@ -229,7 +230,8 @@ const sendMessageWithLocalSkills = api.sendMessage.bind(api)
     window.dispatchEvent(new Event('jonwork:credits-changed'))
     return result
   }
-  if (DESKTOP_RELEASE.channel === 'production') {
+  const desktopSession = await ipcRenderer.invoke('desktop-account:get')
+  if (DESKTOP_RELEASE.channel === 'production' && desktopSession?.development !== true) {
     const blocker = productionSetupBlocker(await api.getSetupNeeds())
     if (blocker) throw new Error(blocker)
   }

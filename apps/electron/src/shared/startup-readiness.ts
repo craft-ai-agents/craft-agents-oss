@@ -1,5 +1,9 @@
 import type { SetupNeeds } from '@craft-agent/shared/auth/types'
 
+export function shouldEnforceProductionSetup(channel: string, developmentBuild: boolean): boolean {
+  return channel === 'production' && !developmentBuild
+}
+
 /** Deferred onboarding is a UI preference, never evidence that a production connection works. */
 export function productionSetupBlocker(needs: SetupNeeds): string | null {
   if (!needs || typeof needs.needsBillingConfig !== 'boolean' || typeof needs.needsCredentials !== 'boolean') return '模型配置检查返回无效结果，请重试或联系管理员。'

@@ -18,6 +18,7 @@ type ApiToChannelMapKeys = Exclude<
   | 'getTransportConnectionState'
   | 'getRuntimeEnvironment'
   | 'getDesktopAccount'
+  | 'loginDesktopAccountLocally'
   | 'loginDesktopAccountWithErp'
   | 'logoutDesktopAccount'
   | 'getAccountSkill' // guarded desktop-account IPC / authenticated WebUI HTTP

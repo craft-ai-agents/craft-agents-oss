@@ -186,12 +186,38 @@ export async function registerDesktopAccountHandlers(): Promise<void> {
       const account = await requestAccount(session.serverUrl, session.token)
       if ((account.executionMode === 'server_only') !== !!session.managed) throw new Error('账户执行模式已变更，请退出后通过 ERP 重新登录')
       if (account.executionMode !== 'server_only') await syncAccountSkills()
-      return { account, serverUrl: session.serverUrl }
+      return { account, serverUrl: session.serverUrl, development: !app.isPackaged }
     } catch (error) {
       clearAccountSkills()
       // A temporary network/sync failure must not delete the encrypted login.
       throw error
     }
+  })
+
+  handle('desktop-account:password', async (_event, serverInput: string, username: string, password: string) => {
+    if (app.isPackaged) throw new Error('生产客户端仅允许通过 ERPNext 企业账号登录')
+    if (typeof username !== 'string' || !/^[A-Za-z0-9._-]{3,32}$/.test(username)
+      || typeof password !== 'string' || password.length < 1 || password.length > 128) throw new Error('本地开发账号或密码格式无效')
+    const serverUrl = accountServerUrl(serverInput)
+    const response = await accountFetch(`${serverUrl}/api/auth/desktop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    })
+    const result = await response.json() as { accessToken?: unknown; error?: unknown }
+    if (!response.ok || typeof result.accessToken !== 'string' || !result.accessToken || result.accessToken.length > 16_384) {
+      const detail = typeof result.error === 'string' && result.error.length <= 512 ? result.error : '本地账号登录失败'
+      throw new Error(detail)
+    }
+    const account = await requestAccount(serverUrl, result.accessToken)
+    if (account.executionMode === 'server_only') throw new Error('企业托管账号必须通过 ERPNext 登录')
+    await mutateSession(async () => {
+      loginGeneration++
+      managedConnection = null
+      clearAccountSkills()
+      await saveSession(serverUrl, result.accessToken as string)
+    })
+    return { account, serverUrl, development: true }
   })
 
   handle('desktop-account:sso', async (event, serverInput: string) => {
@@ -210,7 +236,7 @@ export async function registerDesktopAccountHandlers(): Promise<void> {
       managedConnection = { url: wsUrl, token: result.accessToken, remoteWorkspaceId: account.workspaceId }
       clearAccountSkills()
     })
-    return { account, serverUrl }
+    return { account, serverUrl, development: !app.isPackaged }
   })
 
   handle('desktop-account:logout', async () => {
