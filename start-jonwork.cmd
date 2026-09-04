@@ -7,6 +7,11 @@ if errorlevel 1 (
   exit /b 1
 )
 
+if /i "%~1"=="help" goto usage
+if /i "%~1"=="--help" goto usage
+if /i "%~1"=="/?" goto usage
+if not "%~1"=="" if /i not "%~1"=="clean" if /i not "%~1"=="--check" if /i not "%~1"=="--validate-only" goto invalid_argument
+
 where bun >nul 2>nul
 if errorlevel 1 (
   echo [Jonwork] Bun was not found in PATH.
@@ -105,6 +110,7 @@ if errorlevel 1 goto launch_failed
 
 echo [Jonwork] Development server is ready. The desktop window is loading.
 echo [Jonwork] This launcher can now be closed.
+echo [Jonwork] Run .\start-jonwork.cmd --help to see startup examples.
 popd
 exit /b 0
 
@@ -126,3 +132,29 @@ powershell.exe -NoProfile -Command "Get-Content -LiteralPath '%JONWORK_LOG%' -Ta
 pause
 popd
 exit /b 1
+
+:usage
+call :print_usage
+popd
+exit /b 0
+
+:invalid_argument
+echo [Jonwork] Unknown option: %~1
+echo.
+call :print_usage
+popd
+exit /b 2
+
+:print_usage
+echo Jonwork desktop development launcher
+echo.
+echo Usage examples:
+echo   .\start-jonwork.cmd                 Start local development normally
+echo   .\start-jonwork.cmd clean           Clear the Vite cache, then start
+echo   .\start-jonwork.cmd --validate-only Validate the local backend without starting
+echo   .\start-jonwork.cmd --check         Check launcher prerequisites
+echo   .\start-jonwork.cmd --help          Show this help
+echo.
+echo Local backend: http://127.0.0.1:9100
+echo Development UI: http://127.0.0.1:5173
+exit /b 0
