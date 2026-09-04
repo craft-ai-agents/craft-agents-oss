@@ -200,7 +200,7 @@ describe('ERP SSO and reliable business integration',()=>{
   })
   it('serves managed HTTP account state and blocks legacy login/client refunds',async()=>{
     const f=fixture();const a=await f.runtime.provision({member_id:member,account_id:account});const secret='fixture-signing-key'
-    const h=createWebuiHandler({webuiDir:f.root,secret,wsProtocol:'ws',wsPort:1,accountStore:f.store,erpControl:f.runtime,jonworkControl:null,getHealthCheck:()=>({status:'ok'}),logger:{info(){},warn(){},error(){}}as any})
+    const h=createWebuiHandler({webuiDir:f.root,secret,wsProtocol:'ws',wsPort:1,accountStore:f.store,erpControl:f.runtime,getHealthCheck:()=>({status:'ok'}),logger:{info(){},warn(){},error(){}}as any})
     try{
       const policyResponse=await h.fetch(new Request('https://craft.example/api/auth/policy'));expect((await policyResponse.json() as any).sso).toBe(true)
       const token=await createSessionToken(secret,a.id)
@@ -222,7 +222,7 @@ describe('ERP SSO and reliable business integration',()=>{
     const f=fixture();const downloads=join(f.root,'downloads');mkdirSync(downloads)
     writeFileSync(join(downloads,'Jonwork-Setup-x64.exe'),'signed-fixture')
     writeFileSync(join(downloads,'private.txt'),'must-not-be-public')
-    const h=createWebuiHandler({webuiDir:f.root,secret:'fixture-signing-key',wsProtocol:'ws',wsPort:1,accountStore:f.store,erpControl:f.runtime,jonworkControl:null,getHealthCheck:()=>({status:'ok'}),logger:{info(){},warn(){},error(){}}as any})
+    const h=createWebuiHandler({webuiDir:f.root,secret:'fixture-signing-key',wsProtocol:'ws',wsPort:1,accountStore:f.store,erpControl:f.runtime,getHealthCheck:()=>({status:'ok'}),logger:{info(){},warn(){},error(){}}as any})
     try{
       const installer=await h.fetch(new Request('https://v2.jonwork.com/downloads/Jonwork-Setup-x64.exe'))
       expect(installer.status).toBe(200);expect(await installer.text()).toBe('signed-fixture')

@@ -18,7 +18,7 @@ describe('billing HTTP persistence', () => {
     const secret = 'test-only-billing-secret'
     const token = await createSessionToken(secret, account.id)
     const makeHandler = () => {
-      const handler = createWebuiHandler({ webuiDir: root, secret, accountStore: new AccountStore(options), jonworkControl: null,
+      const handler = createWebuiHandler({ webuiDir: root, secret, accountStore: new AccountStore(options),
         wsProtocol: 'ws', wsPort: 9100, getHealthCheck: () => ({ status: 'ok' }), logger: { info() {}, warn() {}, error() {} } as any })
       disposers.push(handler.dispose); return handler
     }

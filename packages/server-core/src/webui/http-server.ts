@@ -27,7 +27,7 @@ import { generateCallbackPage } from '@craft-agent/shared/auth'
 import type { PlatformServices } from '../runtime/platform'
 import type { AccountStore } from './accounts'
 import type { ErpControlRuntime } from './erp-control-runtime'
-import { controlFromEnvironment, controlSkillLibrary, type JonworkControl } from './jonwork-control'
+import { erpSkillLibrary } from './erp-resource-bundle'
 import { AccountSkillLibrary, GLOBAL_AGENT_SKILLS_DIR, SkillLibraryError, invalidateSkillsCache } from '@craft-agent/shared/skills'
 
 // ---------------------------------------------------------------------------
@@ -150,8 +150,6 @@ export interface WebuiHandlerOptions {
   allowRegistration?: boolean
   /** Operator-managed public catalog; credentials are never shared with it. */
   publicSkillsRoot?: string
-  /** Optional ERP bridge; null explicitly disables environment-based configuration. */
-  jonworkControl?: JonworkControl | null
   erpControl?: ErpControlRuntime
 }
 
@@ -189,7 +187,6 @@ export function createWebuiHandler(options: WebuiHandlerOptions): WebuiHandler {
     accountStore,
   } = options
 
-  const jonworkControl = options.jonworkControl === null ? undefined : options.jonworkControl ?? controlFromEnvironment()
   const erpControl = options.erpControl
   const ssoLimiter = new RateLimiter(180, 60_000, 3000)
   const rateLimiter = new RateLimiter(5, 60_000)
@@ -454,13 +451,7 @@ export function createWebuiHandler(options: WebuiHandlerOptions): WebuiHandler {
       }
       if (url.search) return Response.json({ error: '授权接口不接受账号参数' }, { status: 400, headers })
       if (erpControl) return Response.json({configured:true,enforcement:'server',...(await erpControl.policy(session.sub)),balance:erpControl.ledger.balance(session.sub)},{headers})
-      if (!jonworkControl) return Response.json({ configured: false, enforcement: 'local' }, { headers })
-      try {
-        return Response.json({ configured: true, ...await jonworkControl.entitlement(session.sub) }, { headers })
-      } catch (error) {
-        return Response.json({ error: error instanceof SkillLibraryError ? error.message : '中控暂不可用' },
-          { status: error instanceof SkillLibraryError ? error.status : 503, headers })
-      }
+      return Response.json({ configured: false, enforcement: 'local' }, { headers })
     }
 
     // Nginx auth_request target for the protected internal update feed. This
@@ -524,8 +515,8 @@ export function createWebuiHandler(options: WebuiHandlerOptions): WebuiHandler {
       }
       try {
         if (url.search) throw new SkillLibraryError('技能接口不接受账号、工作区或路径参数')
-        const library = (erpControl ?? jonworkControl)
-          ? await controlSkillLibrary((erpControl ?? jonworkControl)!, skillSession.sub, join(accountStore.getSkillWorkspaceRoot(skillSession.sub), 'skills'))
+        const library = erpControl
+          ? await erpSkillLibrary(erpControl, skillSession.sub, join(accountStore.getSkillWorkspaceRoot(skillSession.sub), 'skills'))
           : new AccountSkillLibrary(
           options.publicSkillsRoot ?? process.env.CRAFT_PUBLIC_SKILLS_DIR ?? GLOBAL_AGENT_SKILLS_DIR,
           join(accountStore.getSkillWorkspaceRoot(skillSession.sub), 'skills'),

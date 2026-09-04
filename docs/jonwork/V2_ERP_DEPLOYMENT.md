@@ -16,6 +16,8 @@ https://v2.jonwork.com/api/auth/sso/callback
 
 Jonwork 服务端使用 `JONWORK_SSO_*` 环境变量连接 ERPNext。客户端只获得 Jonwork 会话；ERPNext access token、OAuth client secret 和集成 API 密钥不得进入浏览器、桌面包或日志。
 
+`ErpControlRuntime` 是身份、授权、账本和技能资源同步的唯一 ERP 运行时。早期 `JonworkControl` 适配器及 `JONWORK_CONTROL_URL`、`JONWORK_CONTROL_BINDINGS` 已移除；部署配置中如仍有这两个变量，应在备份后删除，禁止同时启用两套 ERP 链路。
+
 ERP `get_access_snapshot` 的 `role` 支持 `admin` 和 `user`。当前管理员应返回 `admin`，并显式返回全部已批准的 `models`、`skills`、`sources` 和最大允许并发。禁止使用 `*` 通配符。ERP 角色变化会同步到 Jonwork，并递增会话版本使旧 Cookie/Bearer 会话失效。
 
 ## 下载与更新

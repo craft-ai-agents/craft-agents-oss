@@ -4,7 +4,7 @@ import { materializeAccountSkills, setWorkspaceSkillRoots } from '@craft-agent/s
 import type { AccountStore, PublicAccount } from './accounts'
 import { ErpSsoClient, type AccessSnapshot } from './erp-sso'
 import { ControlLedger } from './control-ledger'
-import { decodeBundle, type Release } from './jonwork-control'
+import { decodeBundle, type Release } from './erp-resource-bundle'
 import { rejectUnisolatedAgentExecution } from './execution-isolation'
 
 export interface ExecutionPolicyInput { workspaceId: string; model: string; sources: string[]; skills: string[] }

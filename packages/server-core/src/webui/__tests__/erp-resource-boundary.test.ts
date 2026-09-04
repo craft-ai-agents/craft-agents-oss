@@ -28,7 +28,7 @@ describe('managed execution resource boundary',()=>{
     }
   })
   it('does not pass control-plane secrets to model children',()=>{
-    const input={JONWORK_CANVAS_IMAGE_API_KEY:'fixture',JONWORK_CANVAS_TEXT_API_KEY:'fixture',JONWORK_MESHY_API_KEY:'fixture',JONWORK_SSO_API_SECRET:'fixture',JONWORK_SSO_CLIENT_ID:'fixture',JONWORK_CONTROL_BINDINGS:'fixture',CRAFT_SERVER_TOKEN:'fixture',CRAFT_WEBUI_PASSWORD:'fixture',PATH:'test-path',MODEL_PROVIDER_SETTING:'test-value'}
+    const input={JONWORK_CANVAS_IMAGE_API_KEY:'fixture',JONWORK_CANVAS_TEXT_API_KEY:'fixture',JONWORK_MESHY_API_KEY:'fixture',JONWORK_SSO_API_SECRET:'fixture',JONWORK_SSO_CLIENT_ID:'fixture',CRAFT_SERVER_TOKEN:'fixture',CRAFT_WEBUI_PASSWORD:'fixture',PATH:'test-path',MODEL_PROVIDER_SETTING:'test-value'}
     expect(withoutControlSecrets(input)).toEqual({PATH:'test-path',MODEL_PROVIDER_SETTING:'test-value'})
     expect(input.JONWORK_SSO_API_SECRET).toBe('fixture')
   })

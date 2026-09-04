@@ -19,7 +19,7 @@ describe('enterprise account lifecycle', () => {
   })
   afterEach(() => { handlers.splice(0).forEach(handler => handler.dispose()); rmSync(root, { recursive: true, force: true }) })
   function handler(allowRegistration?: boolean) {
-    const result = createWebuiHandler({ webuiDir: root, secret, wsProtocol: 'ws', wsPort: 0, getHealthCheck: () => ({ status: 'ok' }), logger: { info() {}, warn() {}, error() {} } as any, accountStore: store, allowRegistration, jonworkControl: null })
+    const result = createWebuiHandler({ webuiDir: root, secret, wsProtocol: 'ws', wsPort: 0, getHealthCheck: () => ({ status: 'ok' }), logger: { info() {}, warn() {}, error() {} } as any, accountStore: store, allowRegistration })
     handlers.push(result)
     return result
   }

@@ -45,7 +45,7 @@ const wsServer=new WsRpcServer({host:'127.0.0.1',port:0,requireAuth:true,
 })
 await wsServer.listen()
 let wsClient: WsRpcClient | undefined
-const handler=createWebuiHandler({webuiDir:root,secret,wsProtocol:'ws',wsPort:wsServer.port,accountStore:accounts,erpControl:runtime,jonworkControl:null,getHealthCheck:()=>({status:'ok'}),logger:{info(){},warn(){},error(){}} as any})
+const handler=createWebuiHandler({webuiDir:root,secret,wsProtocol:'ws',wsPort:wsServer.port,accountStore:accounts,erpControl:runtime,getHealthCheck:()=>({status:'ok'}),logger:{info(){},warn(){},error(){}} as any})
 const server=Bun.serve({hostname:'127.0.0.1',port:19190,fetch:req=>handler.fetch(req)})
 let stage='web-oauth'
 let terminalTimer: ReturnType<typeof setTimeout> | undefined
