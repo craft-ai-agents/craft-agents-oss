@@ -51,7 +51,7 @@ export class JonworkControl {
     const binding = this.bindings.get(account)
     if (!binding) fail('账户尚未绑定中控授权', 403)
     try {
-      const response = await this.request(`${this.base}/api/method/jonwork_control.api.${method}`, {
+      const response = await this.request(`${this.base}/api/method/jonwork.api.${method}`, {
         method: 'POST', redirect: 'error', signal: AbortSignal.timeout(10_000),
         headers: { Authorization: `token ${binding!.apiKey}:${binding!.apiSecret}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...params, subscription: binding!.subscription }),

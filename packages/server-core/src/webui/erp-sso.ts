@@ -77,7 +77,7 @@ export class ErpSsoClient {
     if (this.config.clientSecret) body.set('client_secret', this.config.clientSecret)
     const token = await this.json(`${this.config.erp}/api/method/frappe.integrations.oauth2.get_token`, { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body })
     if (typeof token.access_token !== 'string' || !token.access_token || token.token_type?.toLowerCase() !== 'bearer') throw new Error('Invalid ERP token response')
-    const profile = await this.json(`${this.config.erp}/api/method/jonwork_control.integration.my_identity?instance=${encodeURIComponent(this.config.serviceUser)}`,
+    const profile = await this.json(`${this.config.erp}/api/method/jonwork.integration.my_identity?instance=${encodeURIComponent(this.config.serviceUser)}`,
       { headers: {Authorization: `Bearer ${token.access_token}`} })
     const identity = profile.message
     if (!validId(identity?.member_id) || !validId(identity?.account_id)) throw new Error('ERP account not provisioned')
@@ -94,7 +94,7 @@ export class ErpSsoClient {
   }
   async call(method: string, params: Record<string, unknown> = {}): Promise<any> {
     if (!['get_access_snapshot','pending_grants','pending_resolutions','ingest_event','heartbeat','resources','resource_bundle'].includes(method)) throw new Error('Unsupported ERP method')
-    const result = await this.json(`${this.config.erp}/api/method/jonwork_control.integration.${method}`, {
+    const result = await this.json(`${this.config.erp}/api/method/jonwork.integration.${method}`, {
       method:'POST', headers: {Authorization:`token ${this.config.apiKey}:${this.config.apiSecret}`, 'Content-Type':'application/json'}, body: JSON.stringify(params) })
     if (!Object.hasOwn(result, 'message')) throw new Error('Invalid ERP response')
     return result.message

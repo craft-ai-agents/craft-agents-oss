@@ -13,7 +13,7 @@ Brief 确认、真实成果、manifest v2、逐项证据与用户最终批准不
 
 ## 复用的服务契约
 
-读取相邻 `jonwork-control/jonwork_control/api.py` 的现有接口，服务端发起 POST：
+读取 ERP 仓库 `control/jonwork/api.py` 的接口，服务端发起 POST；从 0.3.0 起公开方法前缀为 `/api/method/jonwork.*`：
 
 | ERP 方法 | 用途 | 客户端可见内容 |
 | --- | --- | --- |

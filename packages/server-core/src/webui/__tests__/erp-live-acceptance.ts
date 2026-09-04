@@ -24,7 +24,7 @@ const config=JSON.parse(process.env.CRAFT_E2E_CONFIG ?? '{}')
 delete process.env.CRAFT_E2E_CONFIG
 if (!/^[a-f0-9]{16}$/.test(config.tag ?? '')) throw Error('Local fixture required')
 function bench(method:string,args:unknown[]) {
-  const out=execFileSync('docker',['exec','jonwork-erpnext-backend-1','bench','--site','frontend','execute',`jonwork_control.tests.http_fixture.${method}`,'--args',JSON.stringify(args)],{encoding:'utf8',stdio:['ignore','pipe','pipe']})
+  const out=execFileSync('docker',['exec','jonwork-erpnext-backend-1','bench','--site','frontend','execute',`jonwork.tests.http_fixture.${method}`,'--args',JSON.stringify(args)],{encoding:'utf8',stdio:['ignore','pipe','pipe']})
   return JSON.parse(out.trim().split('\n').at(-1)!)
 }
 const root=mkdtempSync(join(tmpdir(),'craft-live-e2e-'))
