@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Craft Agents — Login</title>
+  <title>Jonwork — Login</title>
   <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
   <link rel="icon" type="image/x-icon" href="./favicon.ico" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
@@ -95,6 +95,14 @@
       -webkit-backdrop-filter: blur(24px) saturate(140%);
     }
 
+    .brand-mark {
+      display: block;
+      width: 64px;
+      height: 64px;
+      object-fit: contain;
+      margin: 0 auto 12px;
+    }
+
     h1 {
       font-size: 20px;
       font-weight: 600;
@@ -108,6 +116,60 @@
       line-height: 1.5;
       color: var(--subtitle);
     }
+
+    .primary-link,
+    .secondary-link {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: 8px;
+      text-decoration: none;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .primary-link {
+      padding: 11px 12px;
+      color: white;
+      background: linear-gradient(180deg, #7b6dff 0%, var(--accent) 100%);
+      box-shadow: 0 10px 24px rgba(109, 93, 252, 0.28);
+    }
+
+    .secondary-link {
+      margin-top: 12px;
+      padding: 9px 12px;
+      color: var(--page-fg);
+      border: 1px solid var(--input-border);
+      background: var(--input-bg);
+    }
+
+    .tabs {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: 1fr;
+      gap: 4px;
+      margin-bottom: 22px;
+      padding: 4px;
+      border-radius: 10px;
+      background: rgba(127, 127, 140, 0.1);
+    }
+
+    .tabs button {
+      margin: 0;
+      padding: 8px;
+      color: var(--subtitle);
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .tabs button.active {
+      color: var(--page-fg);
+      background: var(--card-bg);
+      box-shadow: 0 2px 8px rgba(41, 25, 63, 0.1);
+    }
+
+    .field { margin-bottom: 14px; }
 
     label {
       display: block;
@@ -225,43 +287,93 @@
 </head>
 <body>
   <div class="card">
-    <h1>Craft Agents</h1>
-    <p class="subtitle">Enter your server token to continue</p>
+    <img class="brand-mark" src="./icon-192.png" alt="Jonwork">
+    <h1>Jonwork</h1>
+    <p class="subtitle" id="subtitle">登录你的 Jonwork 账户</p>
 
-    <form id="login-form">
-      <label for="password">Server Token</label>
-      <input
-        id="password"
-        name="password"
-        type="password"
-        placeholder="Enter CRAFT_SERVER_TOKEN"
-        autocomplete="current-password"
-        autofocus
-        required
-      >
-      <button type="submit" id="submit-btn">Sign In</button>
+    <div class="tabs" role="tablist" hidden>
+      <button type="button" id="login-tab" class="active">登录</button>
+      <button type="button" id="register-tab" hidden>注册</button>
+    </div>
+
+    <a class="primary-link" id="erp-login" href="/api/auth/sso/start" hidden>使用 ERPNext 企业账号登录</a>
+    <form id="login-form" hidden>
+      <div class="field">
+        <label for="username">用户名</label>
+        <input id="username" name="username" type="text" placeholder="3–32 个字符" maxlength="32" autocomplete="username" autofocus required>
+      </div>
+      <div class="field">
+        <label for="password">密码</label>
+        <input id="password" name="password" type="password" placeholder="请输入密码" maxlength="128" autocomplete="current-password" required>
+      </div>
+      <button type="submit" id="submit-btn">登录</button>
     </form>
 
     <div id="error" class="error"></div>
+    <a class="secondary-link" href="/downloads/Jonwork-Setup-x64.exe">下载 Windows 客户端</a>
+    <p class="subtitle" id="enrollment-note">账号开通或密码重置，请联系企业管理员。</p>
   </div>
 
   <script>
     const form = document.getElementById('login-form');
     const errorEl = document.getElementById('error');
     const submitBtn = document.getElementById('submit-btn');
+    const loginTab = document.getElementById('login-tab');
+    const registerTab = document.getElementById('register-tab');
+    const subtitle = document.getElementById('subtitle');
+    const passwordInput = document.getElementById('password');
+    let mode = 'login';
+    let allowRegistration = false;
+
+    fetch('/api/auth/policy', { cache: 'no-store' })
+      .then(res => res.ok ? res.json() : null)
+      .then(policy => {
+        if (policy?.sso === true) {
+          document.getElementById('erp-login').hidden = false;
+          subtitle.textContent = '账号、权限和额度由 ERPNext 统一管理';
+        } else {
+          form.hidden = false;
+          document.querySelector('.tabs').hidden = false;
+        }
+        allowRegistration = policy?.allowRegistration === true;
+        registerTab.hidden = !allowRegistration;
+      })
+      .catch(() => {
+        subtitle.textContent = '无法确认 ERPNext 登录策略，请稍后重试或联系管理员';
+        errorEl.textContent = '为保护企业账号，未确认登录策略时不开放 Craft 密码登录。';
+        errorEl.classList.add('visible');
+      });
+
+    function setMode(nextMode) {
+      if (nextMode === 'register' && !allowRegistration) return;
+      mode = nextMode;
+      const registering = mode === 'register';
+      loginTab.classList.toggle('active', !registering);
+      registerTab.classList.toggle('active', registering);
+      subtitle.textContent = registering ? '创建你的 Jonwork 账户' : '登录你的 Jonwork 账户';
+      submitBtn.textContent = registering ? '注册并进入' : '登录';
+      passwordInput.autocomplete = registering ? 'new-password' : 'current-password';
+      passwordInput.minLength = registering ? 12 : 1;
+      passwordInput.placeholder = registering ? '12–128 个字符' : '请输入密码';
+      errorEl.classList.remove('visible');
+    }
+
+    loginTab.addEventListener('click', () => setMode('login'));
+    registerTab.addEventListener('click', () => setMode('register'));
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       errorEl.classList.remove('visible');
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Signing in...';
+      submitBtn.textContent = mode === 'register' ? '正在注册...' : '正在登录...';
 
       try {
+        const username = document.getElementById('username').value;
         const password = document.getElementById('password').value;
-        const res = await fetch('/api/auth', {
+        const res = await fetch(mode === 'register' ? '/api/auth/register' : '/api/auth', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password }),
+          body: JSON.stringify({ username, password }),
         });
 
         if (res.ok) {
@@ -278,7 +390,7 @@
         errorEl.classList.add('visible');
       } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Sign In';
+        submitBtn.textContent = mode === 'register' ? '注册并进入' : '登录';
       }
     });
   </script>

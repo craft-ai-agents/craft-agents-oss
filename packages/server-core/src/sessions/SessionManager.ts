@@ -1,4 +1,7 @@
 import type { EventSink, RpcServer } from '@craft-agent/server-core/transport'
+import type { ExecutionPolicy, ExecutionReceipt } from '../webui/erp-control-runtime'
+import { rejectUnisolatedAgentExecution } from '../webui/execution-isolation'
+import { assertContextSourceScope } from './context-isolation'
 import { CLIENT_BROWSER_INVOKE } from '@craft-agent/server-core/transport'
 import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput } from '@craft-agent/server-core/handlers'
 import { RemoteBrowserPaneManager } from './RemoteBrowserPaneManager'
@@ -87,7 +90,7 @@ import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/share
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
 import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta, type TokenUsage } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
-import { loadAllSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
+import { hasDeliverableSkillIntent, loadAllSkills, loadSkillBySlug, invalidateSkillsCache, matchSkillsForConversation, assertSkillPath, type LoadedSkill } from '@craft-agent/shared/skills'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
@@ -1200,6 +1203,34 @@ export function resolveMidStreamDeliveryOutcome(
 }
 
 export class SessionManager implements ISessionManager {
+  private executionPolicy?: ExecutionPolicy
+  setExecutionPolicy(policy: ExecutionPolicy): void { this.executionPolicy = policy }
+  private accountIsolationRequired = false
+  /** One-way startup guard for every multi-account host, including legacy login. */
+  requireIsolatedAccountExecution(): void { this.accountIsolationRequired = true }
+  private assertAgentExecutionIsolation(): void {
+    if (this.accountIsolationRequired) rejectUnisolatedAgentExecution()
+    this.executionPolicy?.assertAgentExecution()
+  }
+  private assertAgentContextTarget(origin: ManagedSession, targetId: string): void {
+    const target = this.sessions.get(targetId)
+    if (!target || target.workspace.id !== origin.workspace.id) throw new Error('禁止访问其他用户或不存在的会话上下文')
+    if (this.executionPolicy || this.accountIsolationRequired) {
+      assertContextSourceScope(origin.workspace.id,origin.projectId,target)
+    }
+  }
+  private assertAgentAttachmentPath(origin: ManagedSession, path: string): void {
+    if (this.executionPolicy || this.accountIsolationRequired) {
+      if (!origin.projectId || !origin.workingDirectory) throw new Error('企业附件缺少项目执行目录')
+      assertSkillPath(origin.workingDirectory,path)
+    }
+  }
+  private async policySources(managed: ManagedSession): Promise<LoadedSource[]> {
+    const sources = loadAllSources(managed.workspace.rootPath)
+    if (!this.executionPolicy) return sources
+    const allowed = await this.executionPolicy.allowedSources(managed.workspace.id)
+    return sources.filter(s => allowed.includes(s.config.slug))
+  }
   private sessions: Map<string, ManagedSession> = new Map()
   // Delta batching for performance - reduces IPC events from 50+/sec to ~20/sec
   private pendingDeltas: Map<string, PendingDelta> = new Map()
@@ -1838,7 +1869,7 @@ export class SessionManager implements ISessionManager {
     sessionLog.info(`Reloading sources for session ${managed.id}`)
 
     // Reload all sources from disk
-    const allSources = loadAllSources(workspaceRootPath)
+    const allSources = await this.policySources(managed)
     managed.agent.setAllSources(allSources)
 
     // Rebuild MCP and API servers for session's enabled sources
@@ -2237,7 +2268,7 @@ export class SessionManager implements ISessionManager {
       const workspaceRootPath = managed.workspace.rootPath
       const sessionPath = getSessionStoragePath(workspaceRootPath, managed.id)
       const enabledSlugs = managed.enabledSourceSlugs || []
-      const allSources = loadAllSources(workspaceRootPath)
+      const allSources = await this.policySources(managed)
       const enabledSources = allSources.filter(s =>
         enabledSlugs.includes(s.config.slug) && isSourceUsable(s)
       )
@@ -2675,11 +2706,19 @@ export class SessionManager implements ISessionManager {
       ? this.sessions.get(options.parentSessionId)?.projectId
       : undefined
     const requestedProjectId = options?.projectId ?? inheritedProjectId
+    const isolatedContextRequired = !!this.executionPolicy || this.accountIsolationRequired
+    if (isolatedContextRequired) {
+      if (!requestedProjectId) throw new Error('企业会话必须绑定明确的项目')
+      for (const sourceId of [options?.parentSessionId, options?.branchFromSessionId]) {
+        if (sourceId) assertContextSourceScope(workspaceId,requestedProjectId,this.sessions.get(sourceId))
+      }
+    }
     let resolvedProjectId: string | undefined
     if (requestedProjectId) {
       const { loadProjectById } = await import('@craft-agent/shared/projects')
       const project = loadProjectById(workspaceRootPath, requestedProjectId)
       if (!project) {
+        if (isolatedContextRequired) throw new Error('企业会话绑定的项目不存在，禁止回退到工作区')
         // An EXPLICIT binding to a missing project is a caller bug; an inherited one
         // (parent's project deleted since) just no-ops rather than failing the child.
         if (options?.projectId) {
@@ -2687,6 +2726,15 @@ export class SessionManager implements ISessionManager {
         }
       } else {
         resolvedProjectId = project.config.id
+        if (isolatedContextRequired) {
+          assertSkillPath(workspaceRootPath,project.folderPath)
+          if (project.config.workingDirectory) assertSkillPath(project.folderPath,project.config.workingDirectory)
+          // Never inherit the workspace-global cwd in account mode.
+          const requestedDirectory = options?.workingDirectory
+          resolvedWorkingDir = requestedDirectory && !['none','user_default'].includes(requestedDirectory)
+            ? requestedDirectory : project.config.workingDirectory || project.folderPath
+          assertSkillPath(project.folderPath,resolvedWorkingDir)
+        }
         if (
           (options?.workingDirectory === undefined || options?.workingDirectory === 'user_default') &&
           project.config.workingDirectory
@@ -3325,6 +3373,8 @@ export class SessionManager implements ISessionManager {
    * 4. fallback: no connection configured
    */
   private async getOrCreateAgent(managed: ManagedSession): Promise<AgentInstance> {
+    // Also guard callers that bypass sendMessage (resume/automation/internal tools).
+    this.assertAgentExecutionIsolation()
     // Refresh runtime config in-place when the connection has drifted since
     // the agent was created. May null out `managed.agent` if the in-place
     // refresh fails, in which case the create branch below rebuilds it.
@@ -3389,7 +3439,7 @@ export class SessionManager implements ISessionManager {
 
       const sessionPath = getSessionStoragePath(managed.workspace.rootPath, managed.id)
       const enabledSlugs = managed.enabledSourceSlugs || []
-      const allSources = loadAllSources(managed.workspace.rootPath)
+      const allSources = await this.policySources(managed)
       const enabledSources = allSources.filter(s =>
         enabledSlugs.includes(s.config.slug) && isSourceUsable(s)
       )
@@ -4241,6 +4291,7 @@ export class SessionManager implements ISessionManager {
           const attachments: FileAttachment[] = []
           for (const a of request.attachments) {
             try {
+              this.assertAgentAttachmentPath(managed,a.path)
               const extraDirs = getWorkspaceAllowedDirs(managed.workspace.id)
               if (request.workingDirectory) extraDirs.push(request.workingDirectory)
               const safePath = await validateFilePath(a.path, extraDirs)
@@ -4278,9 +4329,11 @@ export class SessionManager implements ISessionManager {
       // Wire up session self-management tools (set_session_labels, set_session_status, etc.)
       mergeSessionScopedToolCallbacks(managed.id, {
         setSessionLabelsFn: async (sessionId: string | undefined, labels: string[]) => {
+          this.assertAgentContextTarget(managed,sessionId ?? managed.id)
           await this.setSessionLabels(sessionId ?? managed.id, labels)
         },
         setSessionStatusFn: async (sessionId: string | undefined, status: string) => {
+          this.assertAgentContextTarget(managed,sessionId ?? managed.id)
           await this.setSessionStatus(sessionId ?? managed.id, status as SessionStatus)
         },
         // archive_session — archive/unarchive ANOTHER session by ID. Scoped to the
@@ -4288,6 +4341,7 @@ export class SessionManager implements ISessionManager {
         // archive-guards.ts so it is unit-testable); delegates to the existing
         // archive/unarchive methods (which persist + emit events).
         archiveSessionFn: async (sessionId: string, archived: boolean) => {
+          this.assertAgentContextTarget(managed,sessionId)
           const target = this.sessions.get(sessionId)
           const guardError = validateArchiveTarget(
             target ? { workspaceId: target.workspace.id, isProcessing: target.isProcessing } : undefined,
@@ -4311,6 +4365,10 @@ export class SessionManager implements ISessionManager {
           // Match spawn_session: an explicit project wins, otherwise keep newly
           // captured work in the project that owns the invoking session.
           const projectId = resolveCreateTaskProjectId(input.projectId, managed.projectId)
+          if (this.executionPolicy || this.accountIsolationRequired) {
+            assertContextSourceScope(ws.id,projectId,managed)
+            if (input.workingDirectory) this.assertAgentAttachmentPath(managed,input.workingDirectory)
+          }
           // Slug is derived from the title and must never overwrite an existing task
           // (unlike the TaskEditor, where re-saving the same slug is the edit flow).
           const slug = uniqueTaskSlug(input.title, new Set(listTaskSlugs(ws.rootPath)))
@@ -4355,6 +4413,7 @@ export class SessionManager implements ISessionManager {
         },
         getSessionInfoFn: (sessionId?: string) => {
           const targetId = sessionId ?? managed.id
+          this.assertAgentContextTarget(managed,targetId)
           const session = this.sessions.get(targetId)
           if (!session) return null
           return {
@@ -4378,6 +4437,9 @@ export class SessionManager implements ISessionManager {
           const offset = options?.offset ?? 0
 
           let sessions = this.getSessions(managed.workspace.id)
+          if (this.executionPolicy || this.accountIsolationRequired) {
+            sessions = managed.projectId ? sessions.filter(s => s.projectId === managed.projectId) : []
+          }
 
           // Filter
           if (options?.status) {
@@ -4421,6 +4483,7 @@ export class SessionManager implements ISessionManager {
         },
         listBackgroundTasksFn: (sessionId?: string) => {
           const targetId = sessionId ?? managed.id
+          this.assertAgentContextTarget(managed,targetId)
           const now = Date.now()
           return this.listBackgroundTasks(targetId).map((t) => {
             // Prefer wall-clock elapsed; running tasks tick off startTime, terminal
@@ -4456,12 +4519,14 @@ export class SessionManager implements ISessionManager {
           return { resolved: null, available }
         },
         sendAgentMessageFn: async (sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>) => {
+          this.assertAgentContextTarget(managed,sessionId)
           // Build FileAttachment[] from paths (same pattern as spawn_session)
           let fileAttachments: FileAttachment[] | undefined
           if (attachments?.length) {
             const builtAttachments: FileAttachment[] = []
             for (const a of attachments) {
               try {
+                this.assertAgentAttachmentPath(managed,a.path)
                 const extraDirs = getWorkspaceAllowedDirs(managed.workspace.id)
                 const safePath = await validateFilePath(a.path, extraDirs)
                 const attachment = readFileAttachment(safePath)
@@ -4879,7 +4944,8 @@ export class SessionManager implements ISessionManager {
         return { success: false, error: 'Session file not found' }
       }
 
-      const { VIEWER_URL } = await import('@craft-agent/shared/branding')
+      const { requireShareServerUrl } = await import('@craft-agent/shared/branding')
+      const VIEWER_URL = requireShareServerUrl()
       const response = await fetch(`${VIEWER_URL}/s/api`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -4943,7 +5009,8 @@ export class SessionManager implements ISessionManager {
         return { success: false, error: 'Session file not found' }
       }
 
-      const { VIEWER_URL } = await import('@craft-agent/shared/branding')
+      const { requireShareServerUrl } = await import('@craft-agent/shared/branding')
+      const VIEWER_URL = requireShareServerUrl()
       const response = await fetch(`${VIEWER_URL}/s/api/${managed.sharedId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -4988,7 +5055,8 @@ export class SessionManager implements ISessionManager {
     this.sendEvent({ type: 'async_operation', sessionId, isOngoing: true }, managed.workspace.id)
 
     try {
-      const { VIEWER_URL } = await import('@craft-agent/shared/branding')
+      const { requireShareServerUrl } = await import('@craft-agent/shared/branding')
+      const VIEWER_URL = requireShareServerUrl()
       const response = await fetch(
         `${VIEWER_URL}/s/api/${managed.sharedId}`,
         { method: 'DELETE' }
@@ -5038,6 +5106,10 @@ export class SessionManager implements ISessionManager {
     }
 
     const workspaceRootPath = managed.workspace.rootPath
+    if (this.executionPolicy) {
+      const allowed = await this.executionPolicy.allowedSources(managed.workspace.id)
+      if (sourceSlugs.some(s => !allowed.includes(s))) throw new Error('ERP 未授权该数据源')
+    }
     sessionLog.info(`Setting sources for session ${sessionId}:`, sourceSlugs)
 
     // Clean up credential cache for sources being disabled (security)
@@ -5067,7 +5139,7 @@ export class SessionManager implements ISessionManager {
       }
 
       // Set all sources for context (agent sees full list with descriptions, including built-ins)
-      const allSources = loadAllSources(workspaceRootPath)
+      const allSources = await this.policySources(managed)
       managed.agent.setAllSources(allSources)
 
       // Set active source servers (tools are only available from these)
@@ -5267,6 +5339,7 @@ export class SessionManager implements ISessionManager {
    * Automatically uses the same provider as the session (Claude or OpenAI).
    */
   async refreshTitle(sessionId: string): Promise<{ success: boolean; title?: string; error?: string }> {
+    if (this.executionPolicy) return {success:false,error:'中台模式暂不提供独立付费标题生成，请手动命名'}
     sessionLog.info(`refreshTitle called for session ${sessionId}`)
     const managed = this.sessions.get(sessionId)
     if (!managed) {
@@ -5394,6 +5467,9 @@ export class SessionManager implements ISessionManager {
   updateWorkingDirectory(sessionId: string, path: string): void {
     const managed = this.sessions.get(sessionId)
     if (managed) {
+      if ((this.executionPolicy || this.accountIsolationRequired) && path !== managed.workingDirectory) {
+        throw new Error('企业会话工作目录不能更改，请在目标项目新建会话')
+      }
       const validation = isValidWorkingDirectory(path)
       if (!validation.valid) {
         sessionLog.warn(`Session ${sessionId}: rejected working directory "${path}" — ${validation.reason}`)
@@ -5688,7 +5764,8 @@ export class SessionManager implements ISessionManager {
     // Revoke share if session was shared (prevent orphaned viewer copies)
     if (managed.sharedId) {
       try {
-        const { VIEWER_URL } = await import('@craft-agent/shared/branding')
+        const { requireShareServerUrl } = await import('@craft-agent/shared/branding')
+        const VIEWER_URL = requireShareServerUrl()
         const response = await fetch(
           `${VIEWER_URL}/s/api/${managed.sharedId}`,
           { method: 'DELETE', signal: AbortSignal.timeout(5000) }
@@ -5794,7 +5871,17 @@ export class SessionManager implements ISessionManager {
     if (!managed) {
       throw new Error(`Session ${sessionId} not found`)
     }
+    // Before persistence, ACK, skills, model credentials or SDK initialization.
+    this.assertAgentExecutionIsolation()
     this.setLastMessageClientId(sessionId, rpcContext?.callerClientId)
+    const executionInput = () => ({ workspaceId: managed.workspace.id,
+      model: resolveBackendContext({sessionConnectionSlug:managed.llmConnection,
+        workspaceDefaultConnectionSlug:loadWorkspaceConfig(managed.workspace.rootPath)?.defaults?.defaultLlmConnection,
+        managedModel:managed.model}).resolvedModel,
+      sources: managed.enabledSourceSlugs ?? [], skills: options?.skillSlugs ?? [] })
+    // All callers (RPC, automation, queued messages and retries) pass this gate.
+    await this.executionPolicy?.authorize(executionInput())
+    await this.executionPolicy?.prepare(managed.workspace.id)
 
     // Source-activation auto-retry dedup (craft-agents-oss#804). When the server
     // has just scheduled or committed a "[<slug> activated]" retry, drop a matching
@@ -5972,7 +6059,7 @@ export class SessionManager implements ISessionManager {
 
         // Generate AI title asynchronously using agent's SDK
         // (waits briefly for agent creation if needed)
-        this.generateTitle(managed, message)
+        if (!this.executionPolicy) this.generateTitle(managed, message)
       }
     }
 
@@ -6029,15 +6116,37 @@ export class SessionManager implements ISessionManager {
     // This prevents the finally block from clobbering state when a follow-up message arrives.
     const myGeneration = managed.processingGeneration
 
+    // Resolve both explicitly selected skills and conservative automatic matches.
+    // The injected markers below are backend-only, so the user's stored message
+    // remains clean while BaseAgent still applies the complete SKILL.md contract.
+    const invokedSkillSlugs = new Set(options?.skillSlugs ?? [])
+    let useBuiltInDeliverableWorkflow = false
+    try {
+      const availableSkills = loadAllSkills(managed.workspace.rootPath, managed.workingDirectory)
+      const previousUserRequests = managed.messages
+        .slice(0, -1)
+        .filter(previous => previous.role === 'user' && !previous.hidden)
+        .map(previous => previous.content)
+      const matchedSkills = matchSkillsForConversation(message, previousUserRequests, availableSkills)
+      for (const skill of matchedSkills) {
+        invokedSkillSlugs.add(skill.slug)
+      }
+      const hasCurrentOrPriorDeliverableIntent = hasDeliverableSkillIntent(message)
+        || previousUserRequests.some(previous => hasDeliverableSkillIntent(previous))
+      useBuiltInDeliverableWorkflow = invokedSkillSlugs.size === 0 && hasCurrentOrPriorDeliverableIntent
+    } catch (e) {
+      sessionLog.warn(`Failed to auto-route skills for session ${sessionId}:`, e)
+    }
+
     // Pre-enable sources required by invoked skills (Issue #249)
     // This eliminates the two-turn penalty where the agent discovers missing sources at runtime.
     // Uses targeted loadSkillBySlug() instead of loadAllSkills() to avoid O(N) filesystem scans.
-    if (options?.skillSlugs?.length) {
+    if (invokedSkillSlugs.size > 0) {
       try {
         const workspaceRoot = managed.workspace.rootPath
 
         const requiredSources = new Set<string>()
-        for (const slug of options.skillSlugs) {
+        for (const slug of invokedSkillSlugs) {
           const skill = loadSkillBySlug(workspaceRoot, slug, managed.workingDirectory)
           if (skill?.metadata.requiredSources) {
             for (const src of skill.metadata.requiredSources) {
@@ -6102,6 +6211,10 @@ export class SessionManager implements ISessionManager {
       ? getSourcesBySlugs(workspaceRootPath, enabledSlugs)
       : []
 
+    let agent: Awaited<ReturnType<SessionManager['getOrCreateAgent']>>
+    try {
+    await this.executionPolicy?.authorize({...executionInput(),skills:[...invokedSkillSlugs]})
+
     if (hasSources && managed.tokenRefreshManager) {
       const refreshResult = await refreshExpiredCredentials(sources, managed.tokenRefreshManager)
       if (refreshResult.failedSources.length > 0) {
@@ -6115,11 +6228,11 @@ export class SessionManager implements ISessionManager {
     // Get or create the agent (lazy loading). Its internal cold-session build at
     // ~L2956 now sees fresh tokens (or correctly-needs_auth failed sources, since
     // ensureFreshToken mirrors the disk write to source.config in-memory).
-    const agent = await this.getOrCreateAgent(managed)
+    agent = await this.getOrCreateAgent(managed)
     sendSpan.mark('agent.ready')
 
     // Always set all sources for context (even if none are enabled), including built-ins
-    const allSources = loadAllSources(workspaceRootPath)
+    const allSources = await this.policySources(managed)
     agent.setAllSources(allSources)
     sendSpan.mark('sources.loaded')
 
@@ -6143,7 +6256,18 @@ export class SessionManager implements ISessionManager {
       }
       sendSpan.mark('servers.applied')
     }
+    } catch (error) {
+      // Pre-dispatch failures must not leave a persisted/acknowledged session
+      // permanently processing. No reservation has been made at this point.
+      sendSpan.end()
+      if (managed.isProcessing && managed.processingGeneration === myGeneration) this.onProcessingStopped(sessionId, 'error')
+      throw error
+    }
 
+    let executionReceipt: ExecutionReceipt | undefined
+    // A stream ending without a terminal signal is not evidence of completion
+    // or cancellation. Preserve its reservation for approved reconciliation.
+    let executionStatus: 'complete' | 'failed' | 'interrupted' | 'unknown' = 'unknown'
     try {
       sessionLog.info('Starting chat for session:', sessionId)
       sessionLog.info('Workspace:', JSON.stringify(managed.workspace, null, 2))
@@ -6176,6 +6300,17 @@ export class SessionManager implements ISessionManager {
         managed.wasInterrupted = false
       }
 
+      const missingSkillMarkers = Array.from(invokedSkillSlugs)
+        .filter(slug => !effectiveMessage.includes(`[skill:${slug}]`))
+        .map(slug => `[skill:${slug}]`)
+      if (missingSkillMarkers.length > 0) {
+        effectiveMessage += `\n\n<system-reminder>Automatically selected skills for this request: ${missingSkillMarkers.join(' ')}. Read and follow each selected skill before asking questions or creating deliverables. Use only the skills relevant to the requested result.</system-reminder>`
+        sessionLog.info(`Invoked skills for session ${sessionId}: ${Array.from(invokedSkillSlugs).join(', ')}`)
+      } else if (useBuiltInDeliverableWorkflow) {
+        effectiveMessage += '\n\n<system-reminder>This conversation requests a business deliverable, but no installed skill safely matches the requested output. Use the built-in guided deliverable workflow. Do not claim that a skill ran. Record skillRouting.status as "builtin_fallback", use an empty skills array, and provide a concrete non-empty reason in deliverable-manifest.json.</system-reminder>'
+        sessionLog.info(`Using built-in deliverable workflow for session ${sessionId}: no safe skill match`)
+      }
+
       const messageBackendContext = resolveBackendContext({
         sessionConnectionSlug: managed.llmConnection,
         workspaceDefaultConnectionSlug: loadWorkspaceConfig(workspaceRootPath)?.defaults?.defaultLlmConnection,
@@ -6198,6 +6333,7 @@ export class SessionManager implements ISessionManager {
       }
 
       sendSpan.mark('chat.starting')
+      executionReceipt = await this.executionPolicy?.begin({...executionInput(), model:agent.getModel(),skills:[...invokedSkillSlugs]})
       const chatIterator = agent.chat(effectiveMessage, modelInputAttachments.attachments)
       sessionLog.info('Got chat iterator, starting iteration...')
 
@@ -6309,6 +6445,7 @@ export class SessionManager implements ISessionManager {
           }
 
           sendSpan.mark('chat.complete')
+          executionStatus = 'complete'
           sendSpan.end()
           this.onProcessingStopped(sessionId, 'complete')
           return  // Exit function, skip finally block (onProcessingStopped handles cleanup)
@@ -6326,6 +6463,7 @@ export class SessionManager implements ISessionManager {
         sendSpan.mark('chat.exit.already_stopped')
         sendSpan.end()
       } else if (managed.stopRequested) {
+        executionStatus = 'interrupted'
         sessionLog.info('Chat loop completed after stop request - events drained successfully')
         this.onProcessingStopped(sessionId, 'interrupted')
       } else {
@@ -6340,6 +6478,7 @@ export class SessionManager implements ISessionManager {
       )
 
       if (isAbortError) {
+        executionStatus = 'interrupted'
         // Extract abort reason if available (safety net for unexpected abort propagation)
         const reason = (error as DOMException).cause as AbortReason | undefined
 
@@ -6355,6 +6494,7 @@ export class SessionManager implements ISessionManager {
           this.onProcessingStopped(sessionId, 'interrupted')
         }
       } else {
+        executionStatus = 'failed'
         sessionLog.error('Error in chat:', error)
         sessionLog.error('Error message:', error instanceof Error ? error.message : String(error))
         sessionLog.error('Error stack:', error instanceof Error ? error.stack : 'No stack')
@@ -6374,6 +6514,8 @@ export class SessionManager implements ISessionManager {
         this.onProcessingStopped(sessionId, 'error')
       }
     } finally {
+      try { await executionReceipt?.complete(executionStatus) }
+      catch { sessionLog.error('ERP task settlement pending reconciliation; reservation retained') }
       // Only handle cleanup for unexpected exits (loop break without complete event)
       // Normal completion returns early after calling onProcessingStopped
       // Errors are handled in catch block
@@ -7244,6 +7386,9 @@ export class SessionManager implements ISessionManager {
   async setSessionProjectId(sessionId: string, projectId: string | null): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
+      if ((this.executionPolicy || this.accountIsolationRequired) && (managed.projectId ?? null) !== projectId) {
+        throw new Error('企业会话不能跨项目改绑或解绑，请在目标项目新建会话')
+      }
       managed.projectId = projectId ?? undefined
       this.setMetadataWriteGuard(managed)
 
@@ -7502,6 +7647,7 @@ export class SessionManager implements ISessionManager {
    * If no agent exists, creates a temporary one using the session's connection.
    */
   private async generateTitle(managed: ManagedSession, userMessage: string): Promise<void> {
+    if (this.executionPolicy) return
     sessionLog.info(`[generateTitle] Starting for session ${managed.id}`)
 
     // Use existing agent or create temporary one
@@ -8608,6 +8754,7 @@ export class SessionManager implements ISessionManager {
   // ============================================
 
   private async generateRemoteTransferSummary(managed: ManagedSession): Promise<string | null> {
+    if (this.executionPolicy) return null
     await this.ensureMessagesLoaded(managed)
 
     const messages = managed.messages

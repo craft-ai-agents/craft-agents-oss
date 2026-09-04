@@ -37,7 +37,7 @@ module.exports = {
   create(context) {
     // Allow direct calls in the interceptor implementation files
     const filename = context.filename || context.getFilename()
-    const basename = filename.split('/').pop() || ''
+    const basename = filename.split(/[\\/]/).pop() || ''
     if (basename === 'App.tsx' || basename === 'useLinkInterceptor.ts') {
       return {}
     }

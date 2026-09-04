@@ -14,7 +14,10 @@ import {
 } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { relative, isAbsolute } from 'node:path';
+import { CONFIG_DIR } from '../config/paths.ts';
 import matter from 'gray-matter';
+import { assertSkillPath, validateSkillSlug } from './account-library.ts';
 import type { LoadedSkill, SkillMetadata, SkillSource } from './types.ts';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
 import {
@@ -30,10 +33,15 @@ import {
 // ============================================================
 
 /** Global agent skills directory: ~/.agents/skills/ */
-export const GLOBAL_AGENT_SKILLS_DIR = join(homedir(), '.agents', 'skills');
+export const GLOBAL_AGENT_SKILLS_DIR = process.env.CRAFT_PUBLIC_SKILLS_DIR || join(homedir(), '.agents', 'skills');
 
 /** Project-level agent skills relative directory name */
 export const PROJECT_AGENT_SKILLS_DIR = '.agents/skills';
+
+function isAccountWorkspace(workspaceRoot: string): boolean {
+  const rel = relative(join(CONFIG_DIR, 'users'), workspaceRoot);
+  return !isAbsolute(rel) && !rel.startsWith('..') && /^[^\\/]+[\\/]workspace$/.test(rel);
+}
 
 /**
  * Normalize requiredSources frontmatter to a clean string array.
@@ -77,15 +85,21 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
     // Validate and extract optional icon field
     // Only accepts emoji or URL - rejects inline SVG and relative paths
     const icon = validateIconValue(parsed.data.icon, 'Skills');
+    const displayName = typeof parsed.data.metadata?.display_name === 'string'
+      ? parsed.data.metadata.display_name.trim()
+      : '';
 
     return {
       metadata: {
-        name: parsed.data.name as string,
+        name: displayName || parsed.data.name as string,
         description: parsed.data.description as string,
         globs: parsed.data.globs as string[] | undefined,
         alwaysAllow: parsed.data.alwaysAllow as string[] | undefined,
         icon,
         requiredSources: normalizeRequiredSources(parsed.data.requiredSources),
+        module: typeof parsed.data.metadata?.module === 'string' && parsed.data.metadata.module.trim()
+          ? parsed.data.metadata.module.trim()
+          : undefined,
       },
       body: parsed.content,
     };
@@ -105,8 +119,10 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
  * @param source - Where this skill is loaded from
  */
 function loadSkillFromDir(skillsDir: string, slug: string, source: SkillSource): LoadedSkill | null {
+  validateSkillSlug(slug);
   const skillDir = join(skillsDir, slug);
   const skillFile = join(skillDir, 'SKILL.md');
+  assertSkillPath(skillsDir, skillFile);
 
   // Check directory exists
   if (!existsSync(skillDir) || !statSync(skillDir).isDirectory()) {
@@ -158,9 +174,11 @@ function loadSkillsFromDir(skillsDir: string, source: SkillSource): LoadedSkill[
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
 
-      const skill = loadSkillFromDir(skillsDir, entry.name, source);
-      if (skill) {
-        skills.push(skill);
+      try {
+        const skill = loadSkillFromDir(skillsDir, entry.name, source);
+        if (skill) skills.push(skill);
+      } catch {
+        // One invalid directory must not hide the rest of the skill catalog.
       }
     }
   } catch {
@@ -196,6 +214,20 @@ export function loadWorkspaceSkills(workspaceRoot: string): LoadedSkill[] {
 
 const skillsCache = new Map<string, { skills: LoadedSkill[]; ts: number }>();
 const SKILLS_CACHE_TTL = 5 * 60_000; // 5 minutes
+let accountSkillRoots: { publicRoot: string; privateRoot: string } | null = null;
+// Server roots are keyed by workspace; a process-global desktop account must
+// never switch another tenant's execution catalog.
+const managedSkillRoots = new Map<string, { publicRoot: string; privateRoot: string }>();
+export function setWorkspaceSkillRoots(workspaceRoot: string, roots: { publicRoot: string; privateRoot: string }): void {
+  managedSkillRoots.set(workspaceRoot, roots);
+  invalidateSkillsCache();
+}
+
+/** Desktop execution uses only the signed-in account's cloud snapshot. */
+export function setAccountSkillRoots(roots: { publicRoot: string; privateRoot: string } | null): void {
+  accountSkillRoots = roots;
+  invalidateSkillsCache();
+}
 
 /** Invalidate the skills cache (call on working dir change or skill file events). */
 export function invalidateSkillsCache(): void {
@@ -214,6 +246,17 @@ export function invalidateSkillsCache(): void {
  * @param projectRoot - Optional project root (working directory) for project-level skills
  */
 export function loadAllSkills(workspaceRoot: string, projectRoot?: string): LoadedSkill[] {
+  const managed = managedSkillRoots.get(workspaceRoot);
+  if (managed) return loadSkillsFromDir(managed.publicRoot, 'global');
+  if (accountSkillRoots) {
+    const merged = new Map<string, LoadedSkill>();
+    for (const skill of loadSkillsFromDir(accountSkillRoots.publicRoot, 'global')) merged.set(skill.slug, skill);
+    for (const skill of loadSkillsFromDir(accountSkillRoots.privateRoot, 'workspace')) merged.set(skill.slug, skill);
+    return [...merged.values()];
+  }
+  // Account workspaces never discover skills from caller-controlled project
+  // directories (which could point at another tenant's private catalog).
+  if (isAccountWorkspace(workspaceRoot)) projectRoot = undefined;
   const cacheKey = `${workspaceRoot}::${projectRoot ?? ''}`;
   const now = Date.now();
   const cached = skillsCache.get(cacheKey);
@@ -255,6 +298,13 @@ export function loadAllSkills(workspaceRoot: string, projectRoot?: string): Load
  * @param projectRoot - Optional project root for project-level skills
  */
 export function loadSkillBySlug(workspaceRoot: string, slug: string, projectRoot?: string): LoadedSkill | null {
+  const managed = managedSkillRoots.get(workspaceRoot);
+  if (managed) return loadSkillFromDir(managed.publicRoot, slug, 'global');
+  if (accountSkillRoots) {
+    return loadSkillFromDir(accountSkillRoots.privateRoot, slug, 'workspace')
+      ?? loadSkillFromDir(accountSkillRoots.publicRoot, slug, 'global');
+  }
+  if (isAccountWorkspace(workspaceRoot)) projectRoot = undefined;
   // Highest priority: project-level
   if (projectRoot) {
     const projectSkillsDir = join(projectRoot, PROJECT_AGENT_SKILLS_DIR);
@@ -296,8 +346,11 @@ export function getSkillIconPath(workspaceRoot: string, slug: string): string | 
  * @param slug - Skill directory name
  */
 export function deleteSkill(workspaceRoot: string, slug: string): boolean {
+  validateSkillSlug(slug);
   const skillsDir = getWorkspaceSkillsPath(workspaceRoot);
   const skillDir = join(skillsDir, slug);
+  assertSkillPath(skillsDir, skillDir);
+  if (accountSkillRoots) throw new Error('请通过账号技能库删除技能');
 
   if (!existsSync(skillDir)) {
     return false;

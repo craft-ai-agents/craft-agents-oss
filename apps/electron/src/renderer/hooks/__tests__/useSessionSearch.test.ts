@@ -13,6 +13,20 @@ function makeSession(id: string, opts: Partial<SessionMeta> = {}): SessionMeta {
 }
 
 describe('computeCollapsedPagination', () => {
+  it('collapses all sessions older than the selected recency window into one group', () => {
+    const day = 24 * 60 * 60 * 1000
+    const sessions = [
+      makeSession('recent', { lastMessageAt: Date.now() - day }),
+      makeSession('older-1', { lastMessageAt: Date.now() - 40 * day }),
+      makeSession('older-2', { lastMessageAt: Date.now() - 90 * day }),
+    ]
+
+    const result = computeCollapsedPagination(sessions, 50, new Set(['date-older']), 'date', 30)
+
+    expect(result.paginatedItems.map(session => session.id)).toEqual(['recent'])
+    expect(result.collapsedGroupsMeta).toEqual([{ key: 'date-older', count: 2 }])
+  })
+
   it('does not hide items when current view has only one group and that group is collapsed', () => {
     const sessions = [
       makeSession('s1'),

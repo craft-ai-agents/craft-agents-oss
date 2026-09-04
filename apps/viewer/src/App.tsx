@@ -1,7 +1,7 @@
 /**
- * Craft Agent Session Viewer
+ * Jonwork Session Viewer
  *
- * A minimal web app for viewing Craft Agent session transcripts.
+ * A minimal web app for viewing Jonwork session transcripts.
  * Users can upload session JSON files or view shared sessions via URL.
  *
  * Routes:

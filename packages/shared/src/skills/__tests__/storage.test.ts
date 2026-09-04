@@ -201,6 +201,27 @@ Use linear tools.
     expect(skill!.metadata.requiredSources).toEqual(['linear']);
   });
 
+  it('should load the optional UI module from standard metadata', () => {
+    const skillDir = join(workspaceRoot, 'skills', 'grouped-skill');
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(join(skillDir, 'SKILL.md'), `---
+name: "Grouped Skill"
+description: "Skill assigned to a product interface module"
+metadata:
+  display_name: "分组技能"
+  module: "design-lab"
+---
+
+Run the design lab workflow.
+`);
+
+    const skill = loadSkill(workspaceRoot, 'grouped-skill');
+
+    expect(skill).not.toBeNull();
+    expect(skill!.metadata.name).toBe('分组技能');
+    expect(skill!.metadata.module).toBe('design-lab');
+  });
+
   it('should ignore invalid requiredSources entries', () => {
     const skillDir = join(workspaceRoot, 'skills', 'invalid-sources');
     mkdirSync(skillDir, { recursive: true });

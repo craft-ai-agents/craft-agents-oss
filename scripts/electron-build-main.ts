@@ -6,6 +6,7 @@
 import { spawn } from "bun";
 import { existsSync, readFileSync, statSync, mkdirSync } from "fs";
 import { join } from "path";
+import { DESKTOP_RELEASE } from '../packages/shared/src/deployment';
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const DIST_DIR = join(ROOT_DIR, "apps/electron/dist");
@@ -23,6 +24,7 @@ const WA_WORKER_OUTPUT = join(WA_WORKER_DIR, "dist/worker.cjs");
 
 // Load .env file if it exists
 function loadEnvFile(): void {
+  if (process.env.JONWORK_SKIP_LOCAL_ENV === '1' || DESKTOP_RELEASE.channel === 'production' || process.env.JONWORK_RELEASE === 'production') return;
   const envPath = join(ROOT_DIR, ".env");
   if (existsSync(envPath)) {
     const content = readFileSync(envPath, "utf-8");
@@ -60,8 +62,8 @@ function getBuildDefines(): string[] {
   ];
 
   return definedVars.map((varName) => {
-    const value = process.env[varName] || "";
-    return `--define:process.env.${varName}="${value}"`;
+    const value = varName.endsWith('_SECRET') ? "" : process.env[varName] || "";
+    return `--define:process.env.${varName}=${JSON.stringify(value)}`;
   });
 }
 
@@ -285,7 +287,7 @@ async function buildWhatsAppWorker(): Promise<void> {
       `--outfile=${WA_WORKER_OUTPUT}`,
       "--external:electron",
       // Baileys' runtime-optional features — wrapped in try/catch at the
-      // call site and not used by Craft Agent (we send text + documents, no
+      // call site and not used by Jonwork (we send text + documents, no
       // link previews, no inline image processing, no terminal QR).
       "--external:link-preview-js",
       "--external:qrcode-terminal",

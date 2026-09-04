@@ -15,7 +15,8 @@ import { SessionBadges } from "./SessionBadges"
 import { SessionProjectColorWrapper } from "./SessionProjectColorWrapper"
 import { hasTransferTargets } from "./transfer-targets"
 import { useProjectColorTreatment } from "@/hooks/useProjectColorTreatment"
-import { getSessionTitle, getSessionPreviewText, highlightMatch, hasUnreadMeta, shortTimeLocale } from "@/utils/session"
+import { getStateColor } from "@/config/session-status-config"
+import { getSessionStatus, getSessionTitle, getSessionPreviewText, highlightMatch, hasUnreadMeta, shortTimeLocale } from "@/utils/session"
 import { useSessionListContext } from "@/context/SessionListContext"
 import { useAppShellContext } from "@/context/AppShellContext"
 import { navigate, routes } from "@/lib/navigate"
@@ -88,6 +89,7 @@ export function SessionItem({
     : undefined
   const projectColor = boundProject?.color
   const projectName = boundProject?.name
+  const statusColor = getStateColor(getSessionStatus(item), ctx.sessionStatuses)
 
   const handleClick = (e: React.MouseEvent) => {
     ctx.onFocusZone()
@@ -117,7 +119,7 @@ export function SessionItem({
   }
 
   return (
-    <SessionProjectColorWrapper color={projectColor} treatment={projectColorTreatment}>
+    <SessionProjectColorWrapper color={statusColor} treatment={projectColorTreatment}>
     <EntityRow
       className="session-item"
       dataAttributes={{ 'data-session-id': item.id }}
@@ -128,10 +130,11 @@ export function SessionItem({
       // When a project stripe is drawn at the leading edge, suppress EntityRow's
       // own blue selection bar so they don't stack. The row's background tint
       // continues to convey "selected".
-      suppressSelectionBar={!!projectColor}
+      suppressSelectionBar={!!statusColor}
       onMouseDown={handleClick}
       buttonProps={{
         ...itemProps,
+        title,
         onKeyDown: (e: React.KeyboardEvent) => {
           ;(itemProps as { onKeyDown: (event: React.KeyboardEvent) => void }).onKeyDown(e)
           ctx.onKeyDown(e, item)
@@ -211,7 +214,10 @@ export function SessionItem({
         </>
       }
       title={ctx.searchQuery ? highlightMatch(title, ctx.searchQuery) : title}
-      titleClassName={cn("text-[13px]", item.isAsyncOperationOngoing && "animate-shimmer-text")}
+      titleClassName={cn(
+        "text-[13px] leading-5 whitespace-normal line-clamp-2",
+        item.isAsyncOperationOngoing && "animate-shimmer-text",
+      )}
       subtitle={previewText}
       titleSuffix={
         (projectName || hasMessagingBinding) ? (

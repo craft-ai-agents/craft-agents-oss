@@ -43,6 +43,9 @@ interface ClientConnection {
   ws: WebSocket
   workspaceId: string | null
   webContentsId: number | null
+  principalId: string | null
+  sessionCookie: string | null
+  authorizationRevoked?: boolean
   capabilities: Set<string>
   missedPongs: number
   alive: boolean
@@ -90,7 +93,13 @@ export interface WsRpcServerOptions {
    * Called with the Cookie header from the HTTP upgrade request.
    * If provided, a valid session cookie is accepted as an alternative to a bearer token.
    */
-  validateSessionCookie?: (cookieHeader: string | null) => Promise<boolean>
+  validateSessionCookie?: (cookieHeader: string | null) => Promise<string | null>
+  /** Rechecks expiry/revocation for previously authenticated cookies before RPC, push, replay and heartbeat. */
+  isSessionActive?: (cookieHeader: string | null, principalId: string) => boolean
+  /** Locks authenticated account clients to their private workspace. */
+  resolvePrincipalWorkspace?: (principalId: string) => string | null
+  /** Optionally filters/replaces push arguments for an authenticated account. */
+  transformPushForPrincipal?: (principalId: string, channel: string, args: any[]) => any[] | null
   /** Server identity stamp on outgoing events. Default: 'local' */
   serverId?: string
   /** TLS configuration. When provided, the server listens on wss:// instead of ws://. */
@@ -137,7 +146,10 @@ export class WsRpcServer implements RpcServer {
   private readonly requestedPort: number
   private readonly requireAuth: boolean
   private readonly validateToken: ((token: string) => Promise<boolean>) | null
-  private readonly validateSessionCookie: ((cookieHeader: string | null) => Promise<boolean>) | null
+  private readonly validateSessionCookie: ((cookieHeader: string | null) => Promise<string | null>) | null
+  private readonly isSessionActive: WsRpcServerOptions['isSessionActive']
+  private readonly resolvePrincipalWorkspace: ((principalId: string) => string | null) | null
+  private readonly transformPushForPrincipal: ((principalId: string, channel: string, args: any[]) => any[] | null) | null
   private readonly serverId: string
   private readonly tlsOptions: WsRpcTlsOptions | null
   private readonly serverVersion: string
@@ -152,6 +164,9 @@ export class WsRpcServer implements RpcServer {
     this.requireAuth = opts?.requireAuth ?? false
     this.validateToken = opts?.validateToken ?? null
     this.validateSessionCookie = opts?.validateSessionCookie ?? null
+    this.isSessionActive = opts?.isSessionActive
+    this.resolvePrincipalWorkspace = opts?.resolvePrincipalWorkspace ?? null
+    this.transformPushForPrincipal = opts?.transformPushForPrincipal ?? null
     this.serverId = opts?.serverId ?? 'local'
     this.serverVersion = opts?.serverVersion ?? ''
     this.tlsOptions = opts?.tls ?? null
@@ -191,24 +206,33 @@ export class WsRpcServer implements RpcServer {
     const timestamp = Date.now()
 
     for (const client of this.clients.values()) {
+      if (!this.isClientAuthorized(client)) continue
       if (!this.matchesTarget(client, target)) continue
-      this.bufferAndMaybeSendEvent(client, channel, args, timestamp, true)
+      const scopedArgs = client.principalId && this.transformPushForPrincipal
+        ? this.transformPushForPrincipal(client.principalId, channel, args)
+        : args
+      if (scopedArgs) this.bufferAndMaybeSendEvent(client, channel, scopedArgs, timestamp, true)
     }
 
     for (const { client } of this.disconnectedClients.values()) {
+      if (!this.isClientAuthorized(client)) continue
       if (!this.matchesTarget(client, target)) continue
-      this.bufferAndMaybeSendEvent(client, channel, args, timestamp, false)
+      const scopedArgs = client.principalId && this.transformPushForPrincipal
+        ? this.transformPushForPrincipal(client.principalId, channel, args)
+        : args
+      if (scopedArgs) this.bufferAndMaybeSendEvent(client, channel, scopedArgs, timestamp, false)
     }
   }
 
   hasClientCapability(clientId: string, capability: string): boolean {
     const client = this.clients.get(clientId)
-    return !!client && client.capabilities.has(capability)
+    return !!client && this.isClientAuthorized(client) && client.capabilities.has(capability)
   }
 
   findClientsWithCapability(capability: string, opts?: { workspaceId?: string }): string[] {
     const results: string[] = []
     for (const [clientId, client] of this.clients) {
+      if (!this.isClientAuthorized(client)) continue
       if (!client.capabilities.has(capability)) continue
       if (opts?.workspaceId !== undefined && client.workspaceId !== opts.workspaceId) continue
       results.push(clientId)
@@ -221,7 +245,7 @@ export class WsRpcServer implements RpcServer {
       const client = this.clients.get(clientId)
 
       // Check connection
-      if (!client) {
+      if (!client || !this.isClientAuthorized(client)) {
         const err = new Error(`Client not connected: ${clientId}`)
         ;(err as any).code = 'CLIENT_DISCONNECTED'
         reject(err)
@@ -426,18 +450,31 @@ export class WsRpcServer implements RpcServer {
           return
         }
 
-        // Auth check — bearer token OR session cookie (web UI)
+        let authenticatedCookie = upgradeRequestCookie
+        // Auth check — administrator bearer, account bearer, or web session.
         if (this.requireAuth) {
           let authenticated = false
+          let principalId: string | null = null
 
           // 1. Try bearer token (standard path)
           if (envelope.token && this.validateToken) {
             authenticated = await this.validateToken(envelope.token)
           }
 
+          // Native ERP clients send their account JWT in the handshake. Validate
+          // it through the SAME account/session checks, never as an admin token.
+          if (!authenticated && this.validateSessionCookie && typeof envelope.token === 'string'
+            && envelope.token.length <= 16_384 && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(envelope.token)) {
+            const cookie = `craft_session=${envelope.token}`
+            principalId = await this.validateSessionCookie(cookie)
+            authenticated = principalId !== null
+            if (authenticated) authenticatedCookie = cookie
+          }
+
           // 2. Fallback: try session cookie from HTTP upgrade request (web UI path)
           if (!authenticated && this.validateSessionCookie && upgradeRequestCookie) {
-            authenticated = await this.validateSessionCookie(upgradeRequestCookie)
+            principalId = await this.validateSessionCookie(upgradeRequestCookie)
+            authenticated = principalId !== null
           }
 
           if (!authenticated) {
@@ -446,7 +483,15 @@ export class WsRpcServer implements RpcServer {
             ws.close(4005, 'Auth failed')
             return
           }
+
+          const principalWorkspaceId = principalId && this.resolvePrincipalWorkspace
+            ? this.resolvePrincipalWorkspace(principalId)
+            : null
+          if (principalWorkspaceId) envelope.workspaceId = principalWorkspaceId
+          ;(envelope as MessageEnvelope & { authenticatedPrincipalId?: string | null }).authenticatedPrincipalId = principalId
         }
+
+        const authenticatedPrincipalId = (envelope as MessageEnvelope & { authenticatedPrincipalId?: string | null }).authenticatedPrincipalId ?? null
 
         // ── Reconnect attempt ──
         if (envelope.reconnectClientId && envelope.lastSeq != null) {
@@ -456,8 +501,11 @@ export class WsRpcServer implements RpcServer {
 
             // Identity must match (workspace + webContentsId)
             const identityMatch =
+              this.isClientAuthorized(prevClient) &&
+              (!authenticatedPrincipalId || prevClient.sessionCookie === authenticatedCookie) &&
               prevClient.workspaceId === (envelope.workspaceId ?? null) &&
-              prevClient.webContentsId === (envelope.webContentsId ?? null)
+              prevClient.webContentsId === (envelope.webContentsId ?? null) &&
+              prevClient.principalId === authenticatedPrincipalId
 
             if (identityMatch) {
               // Valid reconnect — prepare client state but do NOT add to
@@ -561,6 +609,8 @@ export class WsRpcServer implements RpcServer {
           ws,
           workspaceId: envelope.workspaceId ?? null,
           webContentsId: envelope.webContentsId ?? null,
+          principalId: authenticatedPrincipalId,
+          sessionCookie: authenticatedPrincipalId ? authenticatedCookie : null,
           capabilities: new Set(envelope.clientCapabilities ?? []),
           missedPongs: 0,
           alive: true,
@@ -568,6 +618,7 @@ export class WsRpcServer implements RpcServer {
           lastAckedSeq: 0,
           lastSentSeq: 0,
         }
+        if (!this.isClientAuthorized(client)) return
         this.clients.set(clientId, client)
         handshakeCompleted = true
 
@@ -605,11 +656,12 @@ export class WsRpcServer implements RpcServer {
         ws.close(4006, 'Unknown client')
         return
       }
+      if (!this.isClientAuthorized(client)) return
 
       if (envelope.type === 'request') {
         await this.onRequest(client, envelope)
       } else if (envelope.type === 'response') {
-        this.onClientResponse(envelope)
+        this.onClientResponse(envelope, client.id)
       } else if (envelope.type === 'sequence_ack') {
         const ackSeq = envelope.lastSeq
         if (typeof ackSeq === 'number' && ackSeq > client.lastAckedSeq) {
@@ -640,6 +692,7 @@ export class WsRpcServer implements RpcServer {
   private static readonly HANDLER_TIMEOUT_MS = 60_000
 
   private async onRequest(client: ClientConnection, envelope: MessageEnvelope): Promise<void> {
+    if (!this.isClientAuthorized(client)) return
     const { channel, id, args } = envelope
 
     if (!channel) {
@@ -657,16 +710,18 @@ export class WsRpcServer implements RpcServer {
       clientId: client.id,
       workspaceId: client.workspaceId,
       webContentsId: client.webContentsId,
+      principalId: client.principalId,
     }
 
+    let handlerTimer: ReturnType<typeof setTimeout> | undefined
     try {
       const result = await Promise.race([
         handler(ctx, ...(args ?? [])),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Handler timeout: ${channel} (${WsRpcServer.HANDLER_TIMEOUT_MS}ms)`)),
-            WsRpcServer.HANDLER_TIMEOUT_MS),
-        ),
+        new Promise<never>((_, reject) => {
+          handlerTimer = setTimeout(() => reject(new Error(`Handler timeout: ${channel} (${WsRpcServer.HANDLER_TIMEOUT_MS}ms)`)), WsRpcServer.HANDLER_TIMEOUT_MS)
+        }),
       ])
+      if (!this.isClientAuthorized(client)) return
       const response: MessageEnvelope = {
         id,
         type: 'response',
@@ -675,10 +730,13 @@ export class WsRpcServer implements RpcServer {
       }
       this.safeSend(client.ws, serializeEnvelope(response))
     } catch (err) {
+      if (!this.isClientAuthorized(client)) return
       const message = err instanceof Error ? err.message : String(err)
       const rawCode = (err as { code?: unknown } | null)?.code
       const code: ErrorCode = isErrorCode(rawCode) ? rawCode : 'HANDLER_ERROR'
       this.sendResponseError(client.ws, id, channel, code, message)
+    } finally {
+      if (handlerTimer) clearTimeout(handlerTimer)
     }
   }
 
@@ -689,6 +747,7 @@ export class WsRpcServer implements RpcServer {
   private startHeartbeat(): void {
     this.heartbeatTimer = setInterval(() => {
       for (const [, client] of this.clients) {
+        if (!this.isClientAuthorized(client)) continue
         // Skip sockets that are already closing/closed (e.g. terminated on a previous tick)
         if (client.ws.readyState !== client.ws.OPEN) continue
 
@@ -716,6 +775,13 @@ export class WsRpcServer implements RpcServer {
     ws.on('close', () => {
       transportLog.info('Client disconnected', { clientId: client.id })
       this.clients.delete(client.id)
+
+      if (client.authorizationRevoked) {
+        client.eventBuffer = []
+        this.rejectPendingInvokesForClient(client.id)
+        this.onClientDisconnected?.(client.id)
+        return
+      }
 
       // Retain buffer for potential reconnect
       const timer = setTimeout(() => {
@@ -816,7 +882,10 @@ export class WsRpcServer implements RpcServer {
   updateClientWorkspace(clientId: string, workspaceId: string): void {
     const client = this.clients.get(clientId)
     if (client) {
-      client.workspaceId = workspaceId
+      const lockedWorkspace = client.principalId && this.resolvePrincipalWorkspace
+        ? this.resolvePrincipalWorkspace(client.principalId)
+        : null
+      client.workspaceId = lockedWorkspace ?? workspaceId
     }
   }
 
@@ -851,9 +920,9 @@ export class WsRpcServer implements RpcServer {
     this.safeSend(ws, serializeEnvelope(envelope))
   }
 
-  private onClientResponse(envelope: MessageEnvelope): void {
+  private onClientResponse(envelope: MessageEnvelope, clientId: string): void {
     const pending = this.pendingInvokes.get(envelope.id)
-    if (!pending) return
+    if (!pending || pending.clientId !== clientId) return
 
     this.pendingInvokes.delete(envelope.id)
     clearTimeout(pending.timeout)
@@ -877,6 +946,21 @@ export class WsRpcServer implements RpcServer {
       pending.reject(err)
       this.pendingInvokes.delete(id)
     }
+  }
+
+  private isClientAuthorized(client: ClientConnection): boolean {
+    if (client.authorizationRevoked) return false
+    if (!client.principalId || !this.isSessionActive) return true
+    try {
+      if (this.isSessionActive(client.sessionCookie, client.principalId)) return true
+    } catch { /* Authorization-store errors fail closed, without exposing cookies. */ }
+    client.authorizationRevoked = true
+    client.eventBuffer = []
+    const retained = this.disconnectedClients.get(client.id)
+    if (retained) { clearTimeout(retained.timer); this.disconnectedClients.delete(client.id) }
+    this.rejectPendingInvokesForClient(client.id)
+    client.ws.close(4005, 'Session expired or revoked')
+    return false
   }
 
   private safeSend(ws: WebSocket, data: string): void {

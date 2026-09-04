@@ -1,5 +1,5 @@
 # =============================================================================
-# Craft Agents Server — multi-platform Docker image
+# Jonwork Server — multi-platform Docker image
 #
 # Build:
 #   docker buildx build -f Dockerfile.server -t craft-agent-server .
@@ -26,7 +26,7 @@
 FROM oven/bun:1.3-slim
 
 LABEL org.opencontainers.image.source="https://github.com/lukilabs/craft-agents-oss"
-LABEL org.opencontainers.image.description="Craft Agents Server — headless AI workflow server"
+LABEL org.opencontainers.image.description="Jonwork Server — headless AI workflow server"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 # Install system deps + Node.js (required by the WhatsApp worker subprocess;
@@ -108,6 +108,8 @@ ENV CRAFT_RPC_HOST=0.0.0.0
 ENV CRAFT_RPC_PORT=9100
 ENV CRAFT_WEBUI_DIR=/app/apps/webui/dist
 ENV CRAFT_BUNDLED_ASSETS_ROOT=/app/apps/electron
+# Product skills are shipped with the server, not tied to a developer's home directory.
+ENV CRAFT_PUBLIC_SKILLS_DIR=/app/public-skills
 # WhatsApp worker — Bun cannot run the CJS worker, so we point the adapter at
 # system `node` (installed above). If CRAFT_BUNDLED_ASSETS_ROOT changes, update
 # CRAFT_MESSAGING_WA_WORKER to match; the default in packages/server resolves

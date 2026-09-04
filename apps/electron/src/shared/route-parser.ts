@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'projects' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'projects' | 'settings' | 'canvas'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -63,7 +63,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'board', 'sources', 'skills', 'automations', 'projects', 'settings'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'board', 'sources', 'skills', 'automations', 'projects', 'settings', 'canvas'
 ]
 
 /**
@@ -98,6 +98,10 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   if (segments.length === 0) return null
 
   const first = segments[0]
+
+  if (first === 'canvas' && segments.length === 1) {
+    return { navigator: 'canvas', details: { type: 'canvas', id: 'canvas' } }
+  }
 
   // Kanban board — standalone route. A view of all sessions in board mode.
   // Encoded as its own prefix (not `allSessions/board`) so it never collides
@@ -182,6 +186,12 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   if (first === 'projects') {
     if (segments.length === 1) {
       return { navigator: 'projects', details: null }
+    }
+    if (segments[1] === 'assets' && segments.length === 2) {
+      return {
+        navigator: 'projects',
+        details: { type: 'projectAssets', id: 'assets' },
+      }
     }
     if (segments[1] === 'project' && segments[2]) {
       return {
@@ -290,6 +300,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
  * Build a compound route string from parsed state
  */
 export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
+  if (parsed.navigator === 'canvas') return 'canvas'
   if (parsed.navigator === 'settings') {
     if (!parsed.details) return 'settings'
     return `settings/${parsed.details.type}`
@@ -322,6 +333,7 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
 
   if (parsed.navigator === 'projects') {
     if (!parsed.details) return 'projects'
+    if (parsed.details.type === 'projectAssets') return 'projects/assets'
     return `projects/project/${parsed.details.id}`
   }
 
@@ -418,6 +430,9 @@ export function parseRoute(route: string): ParsedRoute | null {
  * Convert a parsed compound route to ParsedRoute format (type: 'view')
  */
 function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute {
+  if (compound.navigator === 'canvas') {
+    return { type: 'view', name: 'canvas', params: {} }
+  }
   // Settings
   if (compound.navigator === 'settings') {
     const subpage = compound.details?.type || 'app'
@@ -543,6 +558,9 @@ export function parseRouteToNavigationState(
  * Convert a ParsedCompoundRoute to NavigationState
  */
 function convertCompoundToNavigationState(compound: ParsedCompoundRoute): NavigationState {
+  if (compound.navigator === 'canvas') {
+    return { navigator: 'canvas', details: { type: 'canvas' } }
+  }
   // Settings
   if (compound.navigator === 'settings') {
     if (!compound.details) {
@@ -599,6 +617,9 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     if (!compound.details) {
       return { navigator: 'projects', details: null }
     }
+    if (compound.details.type === 'projectAssets') {
+      return { navigator: 'projects', details: { type: 'projectAssets' } }
+    }
     return {
       navigator: 'projects',
       details: { type: 'project', projectSlug: compound.details.id },
@@ -632,6 +653,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
   }
 
   switch (parsed.name) {
+    case 'canvas':
+      return { navigator: 'canvas', details: { type: 'canvas' } }
     case 'settings':
       return { navigator: 'settings', subpage: 'app' }
     case 'workspace':
@@ -768,6 +791,9 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
  * Convert NavigationState to ParsedCompoundRoute
  */
 function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundRoute {
+  if (state.navigator === 'canvas') {
+    return { navigator: 'canvas', details: { type: 'canvas', id: 'canvas' } }
+  }
   if (state.navigator === 'settings') {
     if (state.subpage === null) {
       return { navigator: 'settings', details: null }
@@ -804,7 +830,11 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
   if (state.navigator === 'projects') {
     return {
       navigator: 'projects',
-      details: state.details ? { type: 'project', id: state.details.projectSlug } : null,
+      details: state.details?.type === 'project'
+        ? { type: 'project', id: state.details.projectSlug }
+        : state.details?.type === 'projectAssets'
+          ? { type: 'projectAssets', id: 'assets' }
+          : null,
     }
   }
 

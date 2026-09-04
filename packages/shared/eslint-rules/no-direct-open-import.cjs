@@ -39,7 +39,7 @@ module.exports = {
   create(context) {
     // Allow the centralized wrapper file to import 'open'
     const filename = context.filename || context.getFilename()
-    const basename = filename.split('/').pop() || ''
+    const basename = filename.split(/[\\/]/).pop() || ''
     if (basename === 'open-url.ts') {
       return {}
     }

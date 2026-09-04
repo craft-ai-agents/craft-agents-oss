@@ -1,12 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="299px" height="300px" viewBox="0 0 299 300" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-    <title>craft_logo_c</title>
-    <g id="craft_logo_c" stroke="none" fill="none" fill-rule="evenodd" stroke-width="1">
-        <g id="Group">
-            <path d="M137.879,300.001 L137.875,300.001 C62.3239,300.001 0.966154,239.232 0.0117188,163.908 L2.56478e-10,162.126 L137.879,162.126 L137.879,300.001 Z" id="Path" fill="#06367A"></path>
-            <path d="M137.879,0 L137.875,0 C61.729,0 0,61.729 0,137.875 L0,137.878 L137.879,137.878 L137.879,0 Z" id="Path" fill="#FF51FF"></path>
-            <path d="M160.558,137.883 L160.561,137.883 C236.707,137.883 298.436,76.1537 298.436,0.00758561 L298.436,0.00562043 L160.558,0.00562043 L160.558,137.883 Z" id="Path" fill="#007CFF"></path>
-            <path d="M160.558,162.123 L160.561,162.123 C236.112,162.123 297.471,222.891 298.426,298.216 L298.436,299.998 L160.558,299.998 L160.558,162.123 Z" id="Path" fill="#0A377B"></path>
-        </g>
-    </g>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="surface" x1="72" y1="48" x2="438" y2="464" gradientUnits="userSpaceOnUse"><stop stop-color="#A78BFA"/><stop offset="0.52" stop-color="#8066D6"/><stop offset="1" stop-color="#5E4DB2"/></linearGradient>
+    <linearGradient id="accent" x1="350" y1="86" x2="442" y2="178" gradientUnits="userSpaceOnUse"><stop stop-color="#5EEAD4"/><stop offset="1" stop-color="#22D3EE"/></linearGradient>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="116" fill="url(#surface)"/>
+  <path d="M178 126H348V300C348 367.4 306.6 410 239 410C185.6 410 148.7 386.6 126 348L195 305C205.7 324.3 220.7 334 240 334C262 334 274 320.7 274 294V199H178V126Z" fill="white"/>
+  <path d="M400 72L410.9 106.1L445 117L410.9 127.9L400 162L389.1 127.9L355 117L389.1 106.1L400 72Z" fill="url(#accent)"/>
 </svg>

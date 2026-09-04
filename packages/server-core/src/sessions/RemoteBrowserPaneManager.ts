@@ -75,7 +75,7 @@ export class RemoteBrowserPaneManager implements IBrowserPaneManager {
       throw new CodedError(
         'BROWSER_NO_CAPABLE_CLIENT',
         'No connected desktop client supports browser tools for this session. ' +
-        'Open this workspace from the Craft Agent desktop app and try again.',
+        'Open this workspace from the Jonwork desktop app and try again.',
       )
     }
     if (!this.rpcServer.hasClientCapability(clientId, CLIENT_BROWSER_INVOKE)) {

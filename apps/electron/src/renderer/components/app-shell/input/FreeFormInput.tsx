@@ -85,6 +85,9 @@ import {
 import { WorkingDirectorySelector, formatPathForDisplay } from './WorkingDirectorySelector'
 import { CompactPermissionModeSelector } from './CompactPermissionModeSelector'
 import { CompactModelSelector } from './CompactModelSelector'
+import { ErpModelSelector } from './ErpModelSelector'
+import { useModelEntitlement } from '@/hooks/useModelEntitlement'
+import { maySelectModel, modelEntitlementLabel } from '@/lib/model-entitlement'
 import {
   formatTokenCount,
   groupConnectionsByProvider,
@@ -292,7 +295,7 @@ export function FreeFormInput({
   sessionFolderPath,
   sessionId,
   currentSessionStatus,
-  disableSend = false,
+  disableSend: requestedDisableSend = false,
   isEmptySession = false,
   contextStatus,
   followUpItems = [],
@@ -307,6 +310,9 @@ export function FreeFormInput({
   onRequestExpand,
 }: FreeFormInputProps) {
   const { t } = useTranslation()
+  const modelEntitlement = useModelEntitlement()
+  const managedModels = modelEntitlement.status !== 'unmanaged'
+  const disableSend = requestedDisableSend || !maySelectModel(modelEntitlement, currentModel)
 
   // Default rotating placeholders for onboarding/empty state (i18n-aware)
   const defaultPlaceholders = React.useMemo(() => [
@@ -1080,6 +1086,18 @@ export function FreeFormInput({
     fileInputRef.current?.click()
   }
 
+  // Allow the session-scoped deliverable workflow in the right dock to open
+  // this input's native attachment picker without duplicating upload logic.
+  React.useEffect(() => {
+    const handleOpenAttachmentPicker = (event: CustomEvent<{ sessionId?: string }>) => {
+      const targetSessionId = event.detail?.sessionId
+      if (!shouldHandleScopedInputEvent({ sessionId, isFocusedPanel, targetSessionId }) || disabled) return
+      fileInputRef.current?.click()
+    }
+    window.addEventListener('craft:open-attachment-picker', handleOpenAttachmentPicker as EventListener)
+    return () => window.removeEventListener('craft:open-attachment-picker', handleOpenAttachmentPicker as EventListener)
+  }, [disabled, isFocusedPanel, sessionId])
+
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
@@ -1585,6 +1603,11 @@ export function FreeFormInput({
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
+        {managedModels && !maySelectModel(modelEntitlement, currentModel) && (
+          <p role="status" className="px-3 py-2 text-xs text-muted-foreground">
+            {modelEntitlementLabel(modelEntitlement)}
+          </p>
+        )}
         {/* Inline Slash Command Autocomplete */}
         <InlineSlashCommand
           open={inlineSlash.isOpen}
@@ -1812,6 +1835,7 @@ export function FreeFormInput({
             />
           )}
           {enableCompactModelPicker && (
+            managedModels ? <ErpModelSelector policy={modelEntitlement} currentModel={currentModel} onModelChange={onModelChange} /> :
             <CompactModelSelector
               currentModel={currentModel}
               currentConnection={currentConnection}
@@ -2049,6 +2073,7 @@ export function FreeFormInput({
           <div className="flex items-center shrink-0">
           {/* 5. Model/Connection Selector - Hidden in compact mode (EditPopover embedding) */}
           {!compactMode && (
+          managedModels ? <ErpModelSelector policy={modelEntitlement} currentModel={currentModel} onModelChange={onModelChange} /> :
           <DropdownMenu open={modelDropdownOpen} onOpenChange={setModelDropdownOpen}>
             <Tooltip>
               <TooltipTrigger asChild>

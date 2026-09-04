@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * @craft-agent/server — standalone headless Craft Agent server.
+ * @craft-agent/server — standalone headless Jonwork server.
  *
  * Usage:
  *   CRAFT_SERVER_TOKEN=<secret> bun run packages/server/src/index.ts
@@ -21,6 +21,9 @@
  *   CRAFT_WEBUI_PASSWORD       — optional shorter password for web login (falls back to CRAFT_SERVER_TOKEN)
  *   CRAFT_WEBUI_SECURE_COOKIE  — optional true/false override for the session cookie Secure flag
  *   CRAFT_WEBUI_WS_URL         — optional browser-facing ws:// or wss:// URL returned by /api/config
+ *   CRAFT_WEBUI_ALLOW_REGISTRATION — optional true/false (default: false; bootstrap administrator first)
+ *   CRAFT_WEBUI_TRUSTED_PROXIES — comma-separated literal IPs/CIDRs of ingress proxies (default: none)
+ *   CRAFT_WEBUI_INITIAL_CREDITS — optional signup balance (default: 300)
  *   CRAFT_MESSAGING_WA_WORKER  — absolute path to worker.cjs (default: packages/messaging-whatsapp-worker/dist/worker.cjs)
  *   CRAFT_MESSAGING_NODE_BIN   — Node binary used to spawn the WhatsApp worker (default: node)
  */
@@ -31,7 +34,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { version as packageVersion } from '../package.json'
 import { enableDebug } from '@craft-agent/shared/utils/debug'
 import { bootstrapServer, startHealthHttpServer, generateServerToken } from '@craft-agent/server-core/bootstrap'
-import { validateSession, createWebuiHandler, nodeHttpAdapter } from '@craft-agent/server-core/webui'
+import { AccountStore, validateSession, extractSessionCookie, isEstablishedAccountSessionActive, createWebuiHandler, nodeHttpAdapter, ErpSsoClient, ssoConfig, ErpControlRuntime } from '@craft-agent/server-core/webui'
 import type { WebuiHandler } from '@craft-agent/server-core/webui'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { getWorkspaces } from '@craft-agent/shared/config'
@@ -48,6 +51,7 @@ import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@cra
 import { initModelRefreshService, setFetcherPlatform } from '@craft-agent/server-core/model-fetchers'
 import { setSearchPlatform, setImageProcessor } from '@craft-agent/server-core/services'
 import type { HandlerDeps } from '@craft-agent/server-core/handlers'
+import { AccountScopedRpcServer } from './account-rpc-policy'
 
 process.env.CRAFT_IS_PACKAGED ??= 'false'
 
@@ -117,6 +121,17 @@ const webuiEnabled = webuiDir && existsSync(webuiDir)
 const webuiSecureCookies = parseOptionalBooleanEnv('CRAFT_WEBUI_SECURE_COOKIE', process.env.CRAFT_WEBUI_SECURE_COOKIE)
 const webuiWsUrl = parseOptionalWebSocketUrl('CRAFT_WEBUI_WS_URL', process.env.CRAFT_WEBUI_WS_URL)
 const serverToken = process.env.CRAFT_SERVER_TOKEN
+const webuiAllowRegistration = parseOptionalBooleanEnv('CRAFT_WEBUI_ALLOW_REGISTRATION', process.env.CRAFT_WEBUI_ALLOW_REGISTRATION) ?? false
+const initialCredits = Number.parseInt(process.env.CRAFT_WEBUI_INITIAL_CREDITS ?? '300', 10)
+if (!Number.isSafeInteger(initialCredits) || initialCredits < 0) {
+  console.error('Invalid CRAFT_WEBUI_INITIAL_CREDITS: expected a non-negative integer.')
+  process.exit(1)
+}
+const accountStore = webuiEnabled ? new AccountStore({ initialCredits }) : null
+const erpSsoConfig = ssoConfig()
+if (erpSsoConfig && (!accountStore || !serverToken)) throw new Error('ERP SSO requires the WebUI account service')
+const erpControl = erpSsoConfig ? new ErpControlRuntime(new ErpSsoClient(erpSsoConfig), accountStore!) : undefined
+erpControl?.start()
 
 // ---------------------------------------------------------------------------
 // Create WebUI handler early so it can be embedded in the WsRpcServer.
@@ -146,6 +161,10 @@ if (webuiEnabled && serverToken) {
     wsPort: rpcPort,
     getHealthCheck: () => healthCheckFn?.() ?? { status: 'starting' },
     logger: { info: console.log, warn: console.warn, error: console.error } as any,
+    accountStore: accountStore ?? undefined,
+    erpControl,
+    allowRegistration: webuiAllowRegistration,
+    trustedProxies: process.env.CRAFT_WEBUI_TRUSTED_PROXIES?.split(',').map(value => value.trim()),
   })
 
   webuiNodeHandler = nodeHttpAdapter(webuiHandler.fetch)
@@ -172,8 +191,37 @@ const instance = await (async () => {
       // When web UI is enabled, accept JWT session cookies on WebSocket upgrade
       validateSessionCookie: webuiEnabled && serverToken
         ? async (cookieHeader) => {
+            const token = extractSessionCookie(cookieHeader)
+            if (token && accountStore?.isTokenRevoked(token)) return null
             const session = await validateSession(cookieHeader, serverToken)
-            return session !== null
+            if (session && accountStore && !accountStore.isSessionActive(session.sub, session.ver ?? 0)) return null
+            if (session && erpControl) {
+              try { if (!(await erpControl.policy(session.sub)).active) return null } catch { return null }
+            }
+            return session?.sub ?? null
+          }
+        : undefined,
+      isSessionActive: accountStore
+        ? (cookie, principalId) => isEstablishedAccountSessionActive(cookie, principalId, accountStore) && (!erpControl || erpControl.isActive(principalId))
+        : undefined,
+      resolvePrincipalWorkspace: accountStore
+        ? (principalId) => accountStore.getWorkspaceId(principalId)
+        : undefined,
+      transformPushForPrincipal: accountStore
+        ? (principalId, channel, args) => {
+            if (principalId === 'webui' || channel !== 'sessions:unreadSummaryChanged') return args
+            const workspaceId = accountStore.getWorkspaceId(principalId)
+            if (!workspaceId) return null
+            const summary = args[0] as {
+              byWorkspace?: Record<string, number>
+              hasUnreadByWorkspace?: Record<string, boolean>
+            } | undefined
+            const count = summary?.byWorkspace?.[workspaceId] ?? 0
+            return [{
+              totalUnreadSessions: count,
+              byWorkspace: { [workspaceId]: count },
+              hasUnreadByWorkspace: { [workspaceId]: summary?.hasUnreadByWorkspace?.[workspaceId] ?? false },
+            }]
           }
         : undefined,
       // Embed the WebUI HTTP handler on the WS server's port
@@ -204,7 +252,12 @@ const instance = await (async () => {
           oauthIdToken: oauth?.idToken,
         }
       }),
-      createSessionManager: () => new SessionManager(),
+      createSessionManager: () => {
+        const manager = new SessionManager()
+        if (accountStore) manager.requireIsolatedAccountExecution()
+        if (erpControl) manager.setExecutionPolicy(erpControl)
+        return manager
+      },
       bindRpcServer: (sm, server) => sm.setRpcServer(server),
       createHandlerDeps: ({ sessionManager, platform, oauthFlowStore }) => {
         messagingHandle = createMessagingBootstrap({
@@ -226,7 +279,12 @@ const instance = await (async () => {
           messagingRegistry: messagingHandle.registry,
         }
       },
-      registerAllRpcHandlers: registerCoreRpcHandlers,
+      registerAllRpcHandlers: (server, deps, serverContext) => {
+        const scopedServer = accountStore
+          ? new AccountScopedRpcServer(server, accountStore, deps.sessionManager, erpControl)
+          : server
+        registerCoreRpcHandlers(scopedServer, deps, serverContext)
+      },
       setSessionEventSink: (sessionManager, sink) => {
         if (!messagingHandle) {
           // createHandlerDeps always runs before setSessionEventSink, but be
@@ -312,7 +370,7 @@ const healthServer = await startHealthHttpServer({
 
 const serverProto = instance.protocol === 'wss' ? 'https' : 'http'
 console.log(`CRAFT_SERVER_URL=${instance.protocol}://${instance.host}:${instance.port}`)
-console.log(`CRAFT_SERVER_TOKEN=${instance.token}`)
+// Clients must receive tokens through configuration, never through service logs.
 if (webuiHandler) {
   console.log(`CRAFT_WEBUI_URL=${serverProto}://0.0.0.0:${instance.port}`)
 }

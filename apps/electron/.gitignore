@@ -1,5 +1,14 @@
 # Build artifacts for DMG packaging
 vendor/
+!vendor/
+vendor/*
+!vendor/infinite-canvas/
+!vendor/infinite-canvas/**
+vendor/infinite-canvas/web/node_modules/
+vendor/infinite-canvas/web/node_modules.partial/
+vendor/infinite-canvas/web/dist/
+vendor/infinite-canvas/web/dist.previous/
+vendor/infinite-canvas/web/tsconfig.tsbuildinfo
 packages/
 release/
 node_modules/@anthropic-ai/

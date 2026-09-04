@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { startWebuiHttpServer } from '../http-server'
+import { AccountStore } from '../accounts'
 
 const SECRET = 'test-server-secret'
 const PASSWORD = 'test-password'
@@ -29,6 +30,9 @@ async function createServer(overrides?: {
   publicWsUrl?: string
   wsProtocol?: 'ws' | 'wss'
   wsPort?: number
+  accountStore?: AccountStore
+  allowRegistration?: boolean
+  trustedProxies?: string[]
 }) {
   const server = await startWebuiHttpServer({
     port: 0,
@@ -41,6 +45,9 @@ async function createServer(overrides?: {
     wsPort: overrides?.wsPort ?? 9100,
     getHealthCheck: () => ({ status: 'ok' }),
     logger,
+    accountStore: overrides?.accountStore,
+    allowRegistration: overrides?.allowRegistration,
+    trustedProxies: overrides?.trustedProxies,
   })
 
   SERVERS.push(server)
@@ -122,7 +129,7 @@ describe('startWebuiHttpServer', () => {
   })
 
   it('infers secure cookies from proxy https headers when no override is set', async () => {
-    const { baseUrl } = await createServer({ wsProtocol: 'wss', wsPort: 9100 })
+    const { baseUrl } = await createServer({ wsProtocol: 'wss', wsPort: 9100, trustedProxies: ['127.0.0.1'] })
 
     const res = await fetch(`${baseUrl}/api/auth`, {
       method: 'POST',
@@ -138,7 +145,7 @@ describe('startWebuiHttpServer', () => {
   })
 
   it('derives a browser-facing websocket URL from forwarded public host headers', async () => {
-    const { baseUrl } = await createServer({ wsProtocol: 'wss', wsPort: 9100 })
+    const { baseUrl } = await createServer({ wsProtocol: 'wss', wsPort: 9100, trustedProxies: ['127.0.0.1'] })
 
     const authRes = await fetch(`${baseUrl}/api/auth`, {
       method: 'POST',
@@ -187,5 +194,100 @@ describe('startWebuiHttpServer', () => {
     expect(await configRes.json()).toEqual({
       wsUrl: 'wss://craft.example.com/ws',
     })
+  })
+
+  it('registers isolated roles and allows only admins to recharge users', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'jonwork-http-accounts-'))
+    TEMP_DIRS.push(root)
+    let workspaceNumber = 0
+    const accountStore = new AccountStore({
+      filePath: join(root, 'accounts.json'),
+      usersRoot: join(root, 'users'),
+      createWorkspace: () => ({ id: `ws-${++workspaceNumber}` }),
+    })
+    await accountStore.register('admin', 'test-password123', { bootstrap: true })
+    const { baseUrl } = await createServer({ accountStore, allowRegistration: true })
+
+    const adminRegistration = await fetch(`${baseUrl}/api/auth`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'admin', password: 'test-password123' }),
+    })
+    expect(adminRegistration.status).toBe(200)
+    const adminCookie = extractSessionCookie(adminRegistration)
+
+    const userRegistration = await fetch(`${baseUrl}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'normal-user', password: 'test-password123' }),
+    })
+    const userBody = await userRegistration.json() as any
+    expect(userBody.account.credits).toBe(300)
+    expect(userBody.account.role).toBe('user')
+    const userCookie = extractSessionCookie(userRegistration)
+
+    const denied = await fetch(`${baseUrl}/api/admin/users`, { headers: { cookie: userCookie } })
+    expect(denied.status).toBe(403)
+
+    const recharge = await fetch(`${baseUrl}/api/admin/users/${userBody.account.id}/recharge`, {
+      method: 'POST',
+      headers: { cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: 700 }),
+    })
+    expect(recharge.status).toBe(200)
+    expect(((await recharge.json()) as any).account.credits).toBe(1_000)
+  })
+
+  it('supports desktop bearer login, account lookup, and revocation on logout', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'jonwork-desktop-account-'))
+    TEMP_DIRS.push(root)
+    const accountStore = new AccountStore({
+      filePath: join(root, 'accounts.json'),
+      usersRoot: join(root, 'users'),
+      createWorkspace: () => ({ id: 'desktop-workspace' }),
+    })
+    await accountStore.register('desktop-user', 'password123')
+    const { baseUrl } = await createServer({ accountStore })
+
+    const login = await fetch(`${baseUrl}/api/auth/desktop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'desktop-user', password: 'password123' }),
+    })
+    expect(login.status).toBe(200)
+    const { accessToken } = await login.json() as { accessToken: string }
+    expect(accessToken).toBeTruthy()
+
+    const account = await fetch(`${baseUrl}/api/account`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    expect(account.status).toBe(200)
+    expect(((await account.json()) as any).username).toBe('desktop-user')
+
+    const charge = await fetch(`${baseUrl}/api/account/charge`, {
+      method: 'POST', headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ requestId: crypto.randomUUID() }),
+    })
+    const charged = await charge.json() as any
+    expect(charged.account.credits).toBe(299)
+    const refund = await fetch(`${baseUrl}/api/account/refund`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chargeId: charged.chargeId }),
+    })
+    expect(((await refund.json()) as any).account.credits).toBe(300)
+    expect((await fetch(`${baseUrl}/api/account/refund`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chargeId: charged.chargeId }),
+    })).status).toBe(200)
+
+    expect((await fetch(`${baseUrl}/api/auth/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })).status).toBe(204)
+    expect((await fetch(`${baseUrl}/api/account`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })).status).toBe(401)
   })
 })

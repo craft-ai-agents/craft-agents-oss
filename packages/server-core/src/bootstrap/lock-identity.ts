@@ -34,7 +34,8 @@ export function parseTasklistImageName(output: string): string | null {
  *   lines), and it works for dev shapes (`bun`, `electron`) the old substring
  *   heuristic missed.
  * - Legacy locks without `execName` fall back to that heuristic: treat the holder
- *   as ours only when its command line references craft.
+ *   as ours only when its command line references the current Jonwork name or
+ *   the legacy Craft name.
  * - An uninspectable process (both live inputs null) fails OPEN (not a match):
  *   PID reuse is the common case here, and a false "already running" silently
  *   and permanently bricks the app (#978). Single-instancing has independent
@@ -50,5 +51,5 @@ export function lockHolderMatchesLock(
     return liveExecName.toLowerCase() === lock.execName.toLowerCase()
   }
   if (!liveCommandLine) return false
-  return /craft/i.test(liveCommandLine)
+  return /(?:jonwork|craft)/i.test(liveCommandLine)
 }

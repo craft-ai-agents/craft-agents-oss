@@ -17,6 +17,8 @@
  */
 
 import '@sentry/electron/preload'
+import { DESKTOP_RELEASE } from '@craft-agent/shared/deployment'
+import { productionSetupBlocker } from '../shared/startup-readiness'
 import { contextBridge, ipcRenderer, shell, webUtils } from 'electron'
 import { WsRpcClient, type TransportConnectionState } from '../transport/client'
 import { RoutedClient } from '../transport/routed-client'
@@ -55,10 +57,11 @@ interface TransportClient extends RpcClient {
 
 const webContentsId: number = ipcRenderer.sendSync('__get-web-contents-id')
 const isClientOnly = !!process.env.CRAFT_SERVER_URL
+const managedConfig: RemoteServerConfig | null = ipcRenderer.sendSync('__get-managed-account-connection')
 
 let client: TransportClient
 
-if (isClientOnly) {
+if (isClientOnly && !managedConfig) {
   // ── Thin-client mode ───────────────────────────────────────────────────
   // Single WsRpcClient connected directly to the remote server.
   // No local server, no routing — all channels go to remote.
@@ -110,7 +113,7 @@ if (isClientOnly) {
   })
 
   // Check if the current workspace is remote (synchronous IPC during preload eval)
-  const remoteConfig: RemoteServerConfig | null = ipcRenderer.sendSync('__get-workspace-remote-config')
+  const remoteConfig: RemoteServerConfig | null = managedConfig ?? ipcRenderer.sendSync('__get-workspace-remote-config')
 
   let initialWorkspaceClient: WsRpcClient
   if (remoteConfig && typeof remoteConfig.url === 'string') {
@@ -121,8 +124,8 @@ if (isClientOnly) {
       webContentsId,
       autoReconnect: true,
       mode: 'remote',
-      clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
-      tlsRejectUnauthorized: false,
+      clientCapabilities: managedConfig ? [] : [...LOCAL_CLIENT_CAPABILITIES],
+      tlsRejectUnauthorized: managedConfig ? true : false,
     })
     initialWorkspaceClient.connect()
   } else {
@@ -130,10 +133,10 @@ if (isClientOnly) {
     initialWorkspaceClient = localClient
   }
 
-  const routedClient = new RoutedClient(localClient, initialWorkspaceClient)
+  const routedClient = new RoutedClient(localClient, initialWorkspaceClient, managedConfig?.remoteWorkspaceId)
 
   // Set workspace ID mapping if initial workspace is remote
-  if (remoteConfig) {
+  if (remoteConfig && !managedConfig) {
     routedClient.setWorkspaceMapping(workspaceId, remoteConfig.remoteWorkspaceId)
   }
 
@@ -192,6 +195,73 @@ client.handleCapability(CLIENT_BROWSER_INVOKE, async (req: BrowserCapabilityRequ
 const api = buildClientApi(client, CHANNEL_MAP, (ch) => client.isChannelAvailable(ch))
 
 ;(api as any).getRuntimeEnvironment = (): 'electron' | 'web' => 'electron'
+;(api as any).getDesktopAccount = () => ipcRenderer.invoke('desktop-account:get')
+;(api as any).loginDesktopAccountWithErp = (serverUrl: string) => ipcRenderer.invoke('desktop-account:sso', serverUrl)
+;(api as any).logoutDesktopAccount = () => ipcRenderer.invoke('desktop-account:logout')
+
+// Managed account skill metadata is read from ERP; execution stays on the server.
+;(api as ElectronAPI).getSkills = async () => {
+  const snapshot = await ipcRenderer.invoke('desktop-account:skills', 'list')
+  return snapshot.skills.map((bundle: any) => bundle.skill)
+}
+;(api as ElectronAPI).getAccountSkill = (slug) => ipcRenderer.invoke('desktop-account:skills', 'get', { slug })
+;(api as ElectronAPI).saveAccountSkill = async (input) => {
+  const bundle = await ipcRenderer.invoke('desktop-account:skills', 'save', input)
+  window.dispatchEvent(new Event('jonwork:skills-changed'))
+  return bundle
+}
+;(api as ElectronAPI).deleteSkill = async (_workspaceId, slug) => {
+  const bundle = await ipcRenderer.invoke('desktop-account:skills', 'get', { slug })
+  await ipcRenderer.invoke('desktop-account:skills', 'delete', { slug, expectedRevision: bundle.revision })
+  window.dispatchEvent(new Event('jonwork:skills-changed'))
+}
+;(api as ElectronAPI).onSkillsChanged = () => () => {}
+
+const sendMessageWithLocalSkills = api.sendMessage.bind(api)
+;(api as any).sendMessage = async (...args: Parameters<ElectronAPI['sendMessage']>) => {
+  if (managedConfig) {
+    const session = await ipcRenderer.invoke('desktop-account:get')
+    if (!session || session.account.executionMode !== 'server_only'
+      || session.account.workspaceId !== managedConfig.remoteWorkspaceId) throw new Error('请重新通过 ERP 登录')
+    args[4] = { ...args[4], requestId: args[4]?.requestId ?? args[4]?.optimisticMessageId ?? crypto.randomUUID() }
+    // No client-side charge/refund; reserve/settle and replay protection are server-owned.
+    const result = await sendMessageWithLocalSkills(...args)
+    window.dispatchEvent(new Event('jonwork:credits-changed'))
+    return result
+  }
+  if (DESKTOP_RELEASE.channel === 'production') {
+    const blocker = productionSetupBlocker(await api.getSetupNeeds())
+    if (blocker) throw new Error(blocker)
+  }
+  // Fail closed if the account library cannot be refreshed; never execute stale
+  // skills from another account or silently fall back to host-global skills.
+  await ipcRenderer.invoke('desktop-account:skills', 'sync')
+  const chargeId = await ipcRenderer.invoke('desktop-account:charge', crypto.randomUUID()) as string
+  try {
+    const result = await sendMessageWithLocalSkills(...args)
+    window.dispatchEvent(new Event('jonwork:credits-changed'))
+    return result
+  } catch (error) {
+    try {
+      await ipcRenderer.invoke('desktop-account:refund', chargeId)
+    } catch {
+      throw new Error(`任务发送失败，退款尚未确认。请勿重复提交，请联系管理员核对消费编号 ${chargeId}。`)
+    }
+    window.dispatchEvent(new Event('jonwork:credits-changed'))
+    throw error
+  }
+}
+
+if (managedConfig) {
+  ;(api as ElectronAPI).getSetupNeeds = async () => {
+    const connections = await api.listLlmConnectionsWithStatus()
+    const ready = connections.some(c => c.isAuthenticated)
+    return { needsBillingConfig: connections.length === 0, needsCredentials: !ready, isFullyConfigured: ready }
+  }
+  ;(api as ElectronAPI).deferSetup = async () => ({ success: true })
+  // Never hydrate another local account's drafts into a managed workspace.
+  ;(api as ElectronAPI).getAllDrafts = async () => ({})
+}
 
 // ---------------------------------------------------------------------------
 // Transport connection state logging (for remote connections)
@@ -437,6 +507,9 @@ client.onConnectionStateChanged((state) => {
 // from <input type="file"> or OS drag-drop. Returns null for Files fabricated from
 // Blobs (clipboard paste, web-drag) — those are content-only, no filesystem path.
 ;(api as ElectronAPI).getFilePath = (file: File) => {
+  // Managed uploads carry selected file content, not an OS path that the server
+  // could mistake for a path on its own machine or persist as a local draft.
+  if (managedConfig) return null
   try {
     return webUtils.getPathForFile(file) || null
   } catch {

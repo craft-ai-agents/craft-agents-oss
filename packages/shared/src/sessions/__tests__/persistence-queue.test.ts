@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'bun:test'
-import type { SessionHeader } from '../types'
-import { getHeaderMetadataSignature, mergeHeaderWithExternalMetadata } from '../persistence-queue'
+import type { SessionHeader, StoredSession } from '../types'
+import { getHeaderMetadataSignature, mergeHeaderWithExternalMetadata, SessionPersistenceQueue } from '../persistence-queue'
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 function makeHeader(overrides: Partial<SessionHeader> = {}): SessionHeader {
   return {
@@ -23,6 +26,49 @@ function makeHeader(overrides: Partial<SessionHeader> = {}): SessionHeader {
 }
 
 describe('session persistence header conflict helpers', () => {
+  it('rejects a failed durable write and retains it for explicit retry', async () => {
+    const root=mkdtempSync(join(tmpdir(),'session-write-failure-'))
+    const blocked=join(root,'workspace'), queue=new SessionPersistenceQueue(60000)
+    writeFileSync(blocked,'fixture: a file, not a workspace directory')
+    try {
+      queue.enqueue({...makeHeader(),workspaceRootPath:blocked,messages:[]} as StoredSession)
+      await expect(queue.flushAll()).rejects.toThrow('尚未确认保存')
+      expect(queue.pendingCount).toBe(1)
+      unlinkSync(blocked);mkdirSync(blocked)
+      await queue.flushAll()
+      expect(queue.pendingCount).toBe(0)
+      expect(JSON.parse(readFileSync(join(blocked,'sessions','s1','session.jsonl'),'utf8').split('\n')[0]!).id).toBe('s1')
+    } finally {queue.cancel('s1');rmSync(root,{recursive:true,force:true})}
+  })
+  it('flushAll waits for timer writes after they leave the pending map', async () => {
+    const queue=new SessionPersistenceQueue(0)
+    let enter!:()=>void, release!:()=>void
+    const started=new Promise<void>(resolve=>{enter=resolve})
+    const gate=new Promise<void>(resolve=>{release=resolve})
+    ;(queue as any).write=async(id:string)=>{(queue as any).pending.delete(id);enter();await gate}
+    queue.enqueue({id:'s1'} as StoredSession)
+    await started
+    let drained=false
+    const done=queue.flushAll().then(()=>{drained=true})
+    await Promise.resolve()
+    expect(drained).toBe(false)
+    release();await done
+    expect(drained).toBe(true)
+  })
+  it('serializes timer/explicit flush and replaces an existing session file', async () => {
+    const root=mkdtempSync(join(tmpdir(),'session-drain-test-'))
+    const queue=new SessionPersistenceQueue(0)
+    try {
+      const session={...makeHeader(),workspaceRootPath:root,messages:[]} as StoredSession
+      queue.enqueue(session)
+      await queue.flushAll()
+      queue.enqueue({...session,name:'updated'})
+      await Promise.all([queue.flush('s1'),queue.flushAll(),queue.flush('s1')])
+      const saved=JSON.parse(readFileSync(join(root,'sessions','s1','session.jsonl'),'utf8').split('\n')[0]!)
+      expect(saved.name).toBe('updated')
+      expect(queue.pendingCount).toBe(0)
+    } finally {await queue.flushAll();rmSync(root,{recursive:true,force:true})}
+  })
   it('metadata signature ignores non-metadata fields', () => {
     const a = makeHeader({ name: 'A', lastUsedAt: 100 })
     const b = makeHeader({ name: 'A', lastUsedAt: 999, messageCount: 42 })

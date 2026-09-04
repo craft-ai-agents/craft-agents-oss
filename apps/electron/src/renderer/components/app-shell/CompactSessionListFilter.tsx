@@ -12,7 +12,7 @@
  * - Hierarchical submenus collapse to a single flat list per section
  *   (Statuses, Labels). Tapping a row toggles include; tapping the trailing
  *   mode chip on an active row toggles include ↔ exclude.
- * - Pinned filters (from the route, e.g. flagged / state / label views) are
+ * - Pinned filters (from state / label routes) are
  *   shown as disabled rows with a check mark, matching the dropdown.
  * - The search input filters statuses + labels into a single combined view,
  *   reusing the same scoring helpers as the desktop dropdown
@@ -22,13 +22,8 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  Calendar,
   Check,
-  Flag,
-  Inbox,
-  Layers,
   ListFilter,
-  MailOpen,
   Search,
   X,
 } from 'lucide-react'
@@ -40,7 +35,6 @@ import {
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
-  DrawerClose,
 } from '@/components/ui/drawer'
 import { HeaderIconButton } from '@/components/ui/HeaderIconButton'
 import { LabelIcon } from '@/components/ui/label-icon'
@@ -53,7 +47,6 @@ import {
 import { findLabelById } from '@craft-agent/shared/labels'
 import type { LabelConfig } from '@craft-agent/shared/labels'
 import { type SessionStatus, type SessionStatusId } from '@/config/session-status-config'
-import type { ChatGroupingMode } from './SessionList'
 
 type FilterMode = 'include' | 'exclude'
 
@@ -80,10 +73,6 @@ interface CompactSessionListFilterProps {
   effectiveSessionStatuses: SessionStatus[]
   displayLabelConfigs: LabelConfig[]
   labelConfigs: LabelConfig[]
-  chatGroupingMode: ChatGroupingMode
-  setChatGroupingMode: (mode: ChatGroupingMode) => void
-  isStateSubView: boolean
-  onOpenSearch: () => void
 }
 
 export function CompactSessionListFilter({
@@ -95,10 +84,6 @@ export function CompactSessionListFilter({
   effectiveSessionStatuses,
   displayLabelConfigs,
   labelConfigs,
-  chatGroupingMode,
-  setChatGroupingMode,
-  isStateSubView,
-  onOpenSearch,
 }: CompactSessionListFilterProps) {
   const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
@@ -130,7 +115,6 @@ export function CompactSessionListFilter({
   const hasUserFilter = listFilter.size > 0 || labelFilter.size > 0
   const hasAnyFilter =
     hasUserFilter
-    || pinnedFilters.pinnedFlagged
     || !!pinnedFilters.pinnedStatusId
     || !!pinnedFilters.pinnedLabelId
 
@@ -301,43 +285,6 @@ export function CompactSessionListFilter({
             </div>
           )}
 
-          {!isSearching && !isStateSubView && (
-            <Section title={t('sidebar.group')} icon={<Layers className="h-3.5 w-3.5" />}>
-              <FilterRow
-                icon={<Calendar className="h-4 w-4" />}
-                label={t('sidebar.groupByDate')}
-                radioSelected={chatGroupingMode === 'date'}
-                onTap={() => setChatGroupingMode('date')}
-              />
-              <FilterRow
-                icon={<Inbox className="h-4 w-4" />}
-                label={t('sidebar.groupByStatus')}
-                radioSelected={chatGroupingMode === 'status'}
-                onTap={() => setChatGroupingMode('status')}
-              />
-              <FilterRow
-                icon={<MailOpen className="h-4 w-4" />}
-                label={t('sidebar.groupByUnread')}
-                radioSelected={chatGroupingMode === 'unread'}
-                onTap={() => setChatGroupingMode('unread')}
-              />
-            </Section>
-          )}
-
-          {!isSearching && (
-            <div className="px-2 pt-2">
-              <DrawerClose asChild>
-                <button
-                  type="button"
-                  onClick={onOpenSearch}
-                  className="w-full flex items-center gap-3 px-3 py-3 rounded-[10px] hover:bg-foreground/5 active:bg-foreground/10 transition-colors text-left"
-                >
-                  <Search className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="text-sm font-medium">{t('sidebar.search')}</span>
-                </button>
-              </DrawerClose>
-            </div>
-          )}
         </div>
       </DrawerContent>
     </Drawer>
@@ -371,7 +318,6 @@ function FilterRow({
   label,
   mode,
   pinned,
-  radioSelected,
   onTap,
   onModeTap,
 }: {
@@ -382,7 +328,6 @@ function FilterRow({
   label: React.ReactNode
   mode?: FilterMode
   pinned?: boolean
-  radioSelected?: boolean
   onTap?: () => void
   onModeTap?: () => void
 }) {
@@ -412,7 +357,6 @@ function FilterRow({
       {renderedIcon}
       <span className="flex-1 min-w-0 text-sm truncate">{label}</span>
       {pinned && <Check className="h-4 w-4 text-muted-foreground shrink-0" />}
-      {!pinned && radioSelected && <Check className="h-4 w-4 text-foreground/70 shrink-0" />}
       {!pinned && mode && (
         <button
           type="button"
@@ -449,7 +393,6 @@ function PinnedSummary({
   effectiveSessionStatuses: SessionStatus[]
   labelConfigs: LabelConfig[]
 }) {
-  const { t } = useTranslation()
   const pinnedStatus = pinnedFilters.pinnedStatusId
     ? effectiveSessionStatuses.find(s => s.id === pinnedFilters.pinnedStatusId)
     : null
@@ -457,14 +400,11 @@ function PinnedSummary({
     ? findLabelById(labelConfigs, pinnedFilters.pinnedLabelId)
     : null
 
-  if (!pinnedFilters.pinnedFlagged && !pinnedStatus && !pinnedLabel) return null
+  if (!pinnedStatus && !pinnedLabel) return null
 
   return (
     <div className="px-2 pt-1 pb-2">
       <div className="flex flex-wrap gap-1.5 px-1">
-        {pinnedFilters.pinnedFlagged && (
-          <PinnedChip icon={<Flag className="h-3.5 w-3.5" />} label={t('sidebar.flagged')} />
-        )}
         {pinnedStatus && (
           <PinnedChip
             icon={

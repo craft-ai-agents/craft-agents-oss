@@ -1,0 +1,101 @@
+@echo off
+setlocal
+pushd "%~dp0"
+if errorlevel 1 (
+  echo [Jonwork] Failed to enter the project directory.
+  pause
+  exit /b 1
+)
+
+where bun >nul 2>nul
+if errorlevel 1 (
+  echo [Jonwork] Bun was not found in PATH.
+  echo Install Bun, reopen the terminal, and try again.
+  pause
+  popd
+  exit /b 1
+)
+
+if /i "%~1"=="--check" goto check
+
+set "JONWORK_INSTALL_MARKER=%~dp0node_modules\.jonwork-install-complete"
+if not exist "%JONWORK_INSTALL_MARKER%" (
+  echo [Jonwork] Project dependencies are missing. Installing them now...
+  set "JONWORK_BUN_CACHE=%LOCALAPPDATA%\Jonwork\bun-cache"
+  if not exist "%JONWORK_BUN_CACHE%" mkdir "%JONWORK_BUN_CACHE%"
+  call bun install --no-save --backend=copyfile --cache-dir="%JONWORK_BUN_CACHE%"
+  if errorlevel 1 (
+    echo [Jonwork] Dependency installation failed. Existing instance was not closed.
+    pause
+    popd
+    exit /b 1
+  )
+  >"%JONWORK_INSTALL_MARKER%" echo Installed by start-jonwork.cmd
+  echo [Jonwork] Project dependencies installed.
+)
+
+set "JONWORK_LOCK=%USERPROFILE%\.craft-agent\.server.lock"
+set "JONWORK_PID="
+if exist "%JONWORK_LOCK%" for /f "tokens=2 delims=:," %%P in ('findstr /i "pid" "%JONWORK_LOCK%"') do set "JONWORK_PID=%%P"
+if defined JONWORK_PID set "JONWORK_PID=%JONWORK_PID: =%"
+if defined JONWORK_PID powershell.exe -NoProfile -Command "if (Get-Process -Id %JONWORK_PID% -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >nul 2>nul
+if defined JONWORK_PID if not errorlevel 1 (
+  echo [Jonwork] Closing the existing instance ^(PID %JONWORK_PID%^)...
+  powershell.exe -NoProfile -Command "$process = Get-Process -Id %JONWORK_PID% -ErrorAction SilentlyContinue; if ($process) { $null = $process.CloseMainWindow(); if (-not $process.WaitForExit(10000)) { Stop-Process -Id %JONWORK_PID% -Force } }"
+  powershell.exe -NoProfile -Command "$deadline = (Get-Date).AddSeconds(8); while ((Get-Date) -lt $deadline) { if (-not (Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue)) { exit 0 }; Start-Sleep -Milliseconds 200 }; exit 1" >nul 2>nul
+  if errorlevel 1 (
+    echo [Jonwork] Stopping the previous development server...
+    powershell.exe -NoProfile -Command "Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }"
+    powershell.exe -NoProfile -Command "$deadline = (Get-Date).AddSeconds(5); while ((Get-Date) -lt $deadline) { if (-not (Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue)) { exit 0 }; Start-Sleep -Milliseconds 200 }; exit 1" >nul 2>nul
+    if errorlevel 1 (
+      echo [Jonwork] Port 5173 is still occupied. Restart cancelled.
+      pause
+      popd
+      exit /b 1
+    )
+  )
+  echo [Jonwork] Previous instance stopped.
+)
+
+set "JONWORK_LOG_DIR=%~dp0logs"
+set "JONWORK_LOG=%JONWORK_LOG_DIR%\jonwork-dev-console.log"
+set "JONWORK_ERR_LOG=%JONWORK_LOG_DIR%\jonwork-dev-error.log"
+set "JONWORK_LAUNCH_PID_FILE=%JONWORK_LOG_DIR%\jonwork-dev-launch.pid"
+if not exist "%JONWORK_LOG_DIR%" mkdir "%JONWORK_LOG_DIR%"
+
+if /i "%~1"=="clean" goto clean
+
+echo [Jonwork] Starting the development environment...
+echo [Jonwork] Detailed log: %JONWORK_LOG%
+goto launch
+
+:clean
+echo [Jonwork] Rebuilding the frontend cache and starting...
+echo [Jonwork] Detailed log: %JONWORK_LOG%
+goto launch
+
+:launch
+powershell.exe -NoProfile -Command "$project = [IO.Path]::GetFullPath('%~dp0'); $bun = (Get-Command bun.exe -ErrorAction Stop).Source; $process = Start-Process -FilePath $bun -ArgumentList @('run', 'electron:dev') -WorkingDirectory $project -RedirectStandardOutput '%JONWORK_LOG%' -RedirectStandardError '%JONWORK_ERR_LOG%' -WindowStyle Hidden -PassThru; Set-Content -LiteralPath '%JONWORK_LAUNCH_PID_FILE%' -Value $process.Id -Encoding ascii"
+if errorlevel 1 goto launch_failed
+
+echo [Jonwork] Waiting for the interface to become ready...
+powershell.exe -NoProfile -Command "$pidFile = '%JONWORK_LAUNCH_PID_FILE%'; $processId = [int](Get-Content -LiteralPath $pidFile -ErrorAction Stop); $deadline = (Get-Date).AddSeconds(120); while ((Get-Date) -lt $deadline) { if (Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue) { exit 0 }; if (-not (Get-Process -Id $processId -ErrorAction SilentlyContinue)) { exit 1 }; Start-Sleep -Milliseconds 500 }; exit 2" >nul 2>nul
+if errorlevel 1 goto launch_failed
+
+echo [Jonwork] Interface started successfully. This launcher can now be closed.
+popd
+exit /b 0
+
+:check
+echo [Jonwork] Launcher check passed.
+popd
+exit /b 0
+
+:launch_failed
+echo.
+echo [Jonwork] The development environment failed to become ready.
+echo [Jonwork] Last log lines:
+powershell.exe -NoProfile -Command "Get-Content -LiteralPath '%JONWORK_LOG%' -Tail 15 -ErrorAction SilentlyContinue; Get-Content -LiteralPath '%JONWORK_ERR_LOG%' -Tail 15 -ErrorAction SilentlyContinue"
+pause
+popd
+exit /b 1

@@ -32,12 +32,14 @@ export function setupI18n(
 
   instance.init({
     resources,
-    fallbackLng: "en",
+    fallbackLng: "zh-Hans",
     supportedLngs: [...SUPPORTED_LANGUAGE_CODES],
     interpolation: { escapeValue: false },
     initImmediate: false, // synchronous init — resources are bundled inline
     detection: {
-      order: ["localStorage", "navigator"],
+      // Respect a saved selection, but default to Chinese instead of inheriting
+      // the browser/OS language on a fresh installation.
+      order: ["localStorage"],
       caches: ["localStorage"],
       lookupLocalStorage: "i18nextLng",
     },

@@ -39,8 +39,12 @@ describe('sanitizeAssetFilename', () => {
     expect(sanitizeAssetFilename('re\x00port\n\t.pdf')).toBe('report.pdf');
   });
 
-  it('strips path separators and leading dots so an upload stays in the assets dir', () => {
-    expect(sanitizeAssetFilename('..\\..\\etc\\passwd')).toBe('etcpasswd');
+  it('keeps only the final Windows path segment so an upload stays in the assets dir', () => {
+    expect(sanitizeAssetFilename('..\\..\\etc\\passwd')).toBe('passwd');
+  });
+
+  it('strips Unix traversal separators on every platform', () => {
+    expect(sanitizeAssetFilename('../../etc/passwd')).toBe('passwd');
   });
 
   it('falls back to a generated name when the input reduces to empty', () => {

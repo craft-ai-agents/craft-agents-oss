@@ -5,7 +5,7 @@ import { successResponse, errorResponse } from '../response.ts';
 export type CreateTaskArgs = CreateTaskInput;
 
 /**
- * create_task — create a Craft Agents Task (board card + task.yaml +
+ * create_task — create a Jonwork Task (board card + task.yaml +
  * orchestrator session) WITHOUT running it. All spec building (slug
  * derivation, node synthesis, schema validation) happens behind the injected
  * ctx.createTask callback where the task/schema primitives live — this

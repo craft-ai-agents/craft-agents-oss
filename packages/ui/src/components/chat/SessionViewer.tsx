@@ -49,7 +49,7 @@ export interface SessionViewerProps {
 }
 
 /**
- * CraftAgentLogo - The Craft Agent "C" logo for branding
+ * Jonwork app icon from the committed enterprise brand set.
  */
 function CraftAgentLogo({ className }: { className?: string }) {
   return (
@@ -59,12 +59,15 @@ function CraftAgentLogo({ className }: { className?: string }) {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <g transform="translate(3.4502, 3)" fill="currentColor">
-        <path
-          d="M3.17890888,3.6 L3.17890888,0 L16,0 L16,3.6 L3.17890888,3.6 Z M9.642,7.2 L9.64218223,10.8 L0,10.8 L0,3.6 L16,3.6 L16,7.2 L9.642,7.2 Z M3.17890888,18 L3.178,14.4 L0,14.4 L0,10.8 L16,10.8 L16,18 L3.17890888,18 Z"
-          fillRule="nonzero"
-        />
-      </g>
+      <defs>
+        <linearGradient id="jonwork-session-icon" x1="4" y1="3" x2="20" y2="22" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#A78BFA" />
+          <stop offset="1" stopColor="#6D4BD1" />
+        </linearGradient>
+      </defs>
+      <rect x="1" y="1" width="22" height="22" rx="6" fill="url(#jonwork-session-icon)" />
+      <path d="M15.8 6.3v7.1c0 3.1-1.8 4.8-4.7 4.8-2 0-3.5-.8-4.4-2.3l2.2-1.5c.5.8 1.1 1.2 2 1.2 1.2 0 1.8-.7 1.8-2.2V9H9.6V6.3h6.2Z" fill="white" />
+      <circle cx="18.6" cy="5.4" r="1.5" fill="#67E8F9" />
     </svg>
   )
 }

@@ -49,7 +49,12 @@ export interface ServerBootstrapOptions<TSessionManager, THandlerDeps> {
   /** TLS configuration. When provided, the server listens on wss:// instead of ws://. */
   tls?: WsRpcTlsOptions
   /** Cookie-based session validator for web UI auth on WebSocket upgrade. */
-  validateSessionCookie?: (cookieHeader: string | null) => Promise<boolean>
+  validateSessionCookie?: (cookieHeader: string | null) => Promise<string | null>
+  isSessionActive?: (cookieHeader: string | null, principalId: string) => boolean
+  /** Maps a WebUI account id to the only workspace it may connect to. */
+  resolvePrincipalWorkspace?: (principalId: string) => string | null
+  /** Optionally filters/replaces server push payloads per WebUI account. */
+  transformPushForPrincipal?: (principalId: string, channel: string, args: any[]) => any[] | null
   /**
    * Optional HTTP request handler for non-WebSocket requests on the RPC port.
    * When provided, the WsRpcServer serves HTTP (e.g. WebUI) on the same port.
@@ -374,6 +379,9 @@ export async function bootstrapServer<TSessionManager, THandlerDeps>(
     requireAuth: true,
     validateToken: async (t) => t === serverToken,
     validateSessionCookie: options.validateSessionCookie,
+    isSessionActive: options.isSessionActive,
+    resolvePrincipalWorkspace: options.resolvePrincipalWorkspace,
+    transformPushForPrincipal: options.transformPushForPrincipal,
     serverId: options.serverId ?? 'headless',
     serverVersion: options.serverVersion,
     tls: options.tls,
@@ -421,7 +429,7 @@ export async function bootstrapServer<TSessionManager, THandlerDeps>(
 
   modelRefreshService.startAll()
 
-  platform.logger.info(`Craft Agent server listening on ${wsServer.protocol}://${rpcHost}:${wsServer.port}`)
+  platform.logger.info(`Jonwork server listening on ${wsServer.protocol}://${rpcHost}:${wsServer.port}`)
 
   let stopped = false
   const stop = async (): Promise<void> => {

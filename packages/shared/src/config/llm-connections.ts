@@ -540,16 +540,16 @@ export function setModelSupportsImages(
  *   ?? connection-level `customEndpoint.supportsImages` default
  *   ?? false
  *
- * For non-`pi_compat` connections the renderer doesn't own the catalog — Pi SDK's
- * bundled provider definitions and Anthropic's API do. This helper conservatively
- * returns `true` there (we don't know better; the upstream decides). The
- * pre-flight banner gates on `pi_compat` separately, so this just reports what
- * the renderer can know with confidence.
+ * OAuth-backed chat transports do not accept image attachments in Jonwork. Gate
+ * them before submission so a user never gets a completed turn with no assistant
+ * response. For other non-`pi_compat` connections the renderer doesn't own the
+ * catalog, so the upstream provider remains authoritative.
  */
 export function modelSupportsImages(
-  connection: Pick<LlmConnection, 'providerType' | 'models' | 'customEndpoint'>,
+  connection: Pick<LlmConnection, 'providerType' | 'authType' | 'models' | 'customEndpoint'>,
   modelId: string,
 ): boolean {
+  if (connection.authType === 'oauth') return false;
   if (!isCompatProvider(connection.providerType)) return true;
 
   const entry = connection.models?.find(m =>

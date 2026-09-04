@@ -31,6 +31,7 @@ import { sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import type { ViewConfig } from "@craft-agent/shared/views"
 import type { SessionStatusId, SessionStatus } from "@/config/session-status-config"
 import { buildCollapsedGroupsScopeSuffix } from "@/utils/session-list-collapse"
+import { getSessionDateGroupKey, OLDER_SESSION_GROUP_KEY, type RecencyDays } from "./session-recency"
 
 export interface SessionListRow {
   item: SessionMeta
@@ -81,6 +82,8 @@ interface SessionListProps {
   onSetProjectId?: (sessionId: string, projectId: string | null) => void
   /** How to group sessions: 'date' (default) or 'status' */
   groupingMode?: ChatGroupingMode
+  /** Older date groups are aggregated into one collapsed bucket. */
+  olderThanDays?: RecencyDays
   /** Workspace ID for content search (optional - if not provided, content search is disabled) */
   workspaceId?: string
   /** Secondary status filter (status chips in "All Sessions" view) - for search result grouping */
@@ -140,6 +143,7 @@ export function SessionList({
   projects,
   onSetProjectId,
   groupingMode = 'date',
+  olderThanDays = 30,
   workspaceId,
   statusFilter,
   labelFilterMap,
@@ -179,14 +183,15 @@ export function SessionList({
 
   // Collapsed group keys (for collapsible group headers) — persisted per workspace/filter/grouping context
   const collapseScopeSuffix = useMemo(() => {
-    return buildCollapsedGroupsScopeSuffix({
+    return `${buildCollapsedGroupsScopeSuffix({
       workspaceId,
       currentFilter,
       groupingMode,
-    })
+    })}|recency=${olderThanDays ?? 'all'}`
   }, [
     workspaceId,
     groupingMode,
+    olderThanDays,
     currentFilter?.kind,
     currentFilter && 'stateId' in currentFilter ? currentFilter.stateId : undefined,
     currentFilter && 'labelId' in currentFilter ? currentFilter.labelId : undefined,
@@ -194,21 +199,29 @@ export function SessionList({
   ])
 
   const readCollapsedGroupsForScope = useCallback((scopeSuffix: string): Set<string> => {
+    const normalize = (keys: string[]): Set<string> => {
+      if (groupingMode === 'date' && olderThanDays !== null) {
+        // Recent date groups always start expanded. All history beyond the
+        // selected window is represented by one default-collapsed bucket.
+        return new Set([OLDER_SESSION_GROUP_KEY])
+      }
+      return new Set(keys)
+    }
+
     const scopedRaw = storage.getRaw(KEYS.collapsedSessionGroups, scopeSuffix)
     if (scopedRaw !== null) {
       try {
         const parsed = JSON.parse(scopedRaw)
-        return new Set(Array.isArray(parsed) ? parsed : [])
+        return normalize(Array.isArray(parsed) ? parsed : [])
       } catch {
-        return new Set()
+        return normalize([])
       }
     }
 
     // Legacy fallback: previous versions used a single global key with no scope suffix.
     // Use as migration source only when this scope has never been written.
-    const legacy = storage.get<string[]>(KEYS.collapsedSessionGroups, [])
-    return new Set(legacy)
-  }, [])
+    return normalize(storage.get<string[]>(KEYS.collapsedSessionGroups, []))
+  }, [groupingMode, olderThanDays])
 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => readCollapsedGroupsForScope(collapseScopeSuffix))
   const collapseScopeRef = useRef(collapseScopeSuffix)
@@ -262,6 +275,7 @@ export function SessionList({
     labelConfigs: labels,
     collapsedGroups,
     groupingMode,
+    olderThanDays,
     scrollViewportRef,
   })
 
@@ -455,16 +469,18 @@ export function SessionList({
 
     for (const row of rows) {
       const day = startOfDay(new Date(row.item.lastMessageAt || 0))
-      const groupKey = day.toISOString()
+      const groupKey = getSessionDateGroupKey(row.item.lastMessageAt || 0, olderThanDays)
 
       if (!groupsByKey.has(groupKey)) {
         groupsByKey.set(groupKey, {
           key: groupKey,
-          label: formatDateGroupLabel(day, t, i18n.resolvedLanguage ?? 'en'),
+          label: groupKey === OLDER_SESSION_GROUP_KEY
+            ? t('session.earlierThanDays', { count: olderThanDays })
+            : formatDateGroupLabel(day, t, i18n.resolvedLanguage ?? 'en'),
           items: [],
           collapsible: true,
         })
-        groupDates.set(groupKey, day)
+        groupDates.set(groupKey, groupKey === OLDER_SESSION_GROUP_KEY ? new Date(0) : day)
       }
       groupsByKey.get(groupKey)!.items.push(row)
     }
@@ -472,10 +488,12 @@ export function SessionList({
     // Insert collapsed placeholder groups (header-only, items: [])
     for (const meta of collapsedGroupsMeta) {
       if (!groupsByKey.has(meta.key)) {
-        const date = new Date(meta.key)
+        const date = meta.key === OLDER_SESSION_GROUP_KEY ? new Date(0) : new Date(meta.key)
         groupsByKey.set(meta.key, {
           key: meta.key,
-          label: formatDateGroupLabel(date, t, i18n.resolvedLanguage ?? 'en'),
+          label: meta.key === OLDER_SESSION_GROUP_KEY
+            ? t('session.earlierThanDays', { count: olderThanDays })
+            : formatDateGroupLabel(date, t, i18n.resolvedLanguage ?? 'en'),
           items: [],
           collapsible: true,
           collapsedCount: meta.count,
@@ -492,7 +510,7 @@ export function SessionList({
     const orderedGroups = orderedKeys.map(key => groupsByKey.get(key)!)
 
     // If only one group exists, disable collapsing — there's nothing to collapse into
-    if (orderedGroups.length === 1) {
+    if (orderedGroups.length === 1 && orderedGroups[0].key !== OLDER_SESSION_GROUP_KEY) {
       orderedGroups[0].collapsible = false
     }
 
@@ -500,7 +518,7 @@ export function SessionList({
       rows,
       groups: orderedGroups,
     }
-  }, [isSearchMode, matchingFilterItems, otherResultItems, flatItems, groupingMode, sessionStatuses, projects, collapsedGroupsMeta, t])
+  }, [isSearchMode, matchingFilterItems, otherResultItems, flatItems, groupingMode, olderThanDays, sessionStatuses, projects, collapsedGroupsMeta, t, i18n.resolvedLanguage])
 
   const flatRows = rowData.rows
 

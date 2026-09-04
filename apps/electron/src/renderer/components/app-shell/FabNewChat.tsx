@@ -31,10 +31,9 @@ export function FabNewChat({ onClick, className }: FabNewChatProps) {
         "fixed right-4 z-30 size-14 rounded-full",
         "bg-accent text-white",
         "flex items-center justify-center",
-        // Layered shadow: ambient drop + accent-tinted glow + subtle inner highlight
-        "shadow-[0_10px_30px_-8px_rgba(0,0,0,0.45),0_6px_18px_-6px_rgba(109,93,252,0.55),inset_0_1px_0_0_rgba(255,255,255,0.15)]",
+        "shadow-strong",
         "transition-all duration-150",
-        "hover:scale-105 hover:shadow-[0_14px_34px_-8px_rgba(0,0,0,0.5),0_8px_22px_-6px_rgba(109,93,252,0.65),inset_0_1px_0_0_rgba(255,255,255,0.2)]",
+        "hover:scale-105 hover:shadow-tinted",
         "active:scale-95",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         "bottom-[calc(env(safe-area-inset-bottom,0px)+1rem)]",

@@ -63,6 +63,18 @@ export interface WebApiOptions {
   workspaceId?: string
 }
 
+async function accountSkillRequest(path = '', method = 'GET', body?: unknown): Promise<any> {
+  const response = await fetch(`/api/account/skills${path}`, {
+    method, credentials: 'same-origin', cache: 'no-store',
+    headers: { 'Content-Type': 'application/json', ...(!path ? { 'X-Jonwork-Skills': 'metadata' } : {}) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
+  if (response.status === 204) return
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.error || '账号技能操作失败')
+  return data
+}
+
 export function createWebApi(options: WebApiOptions): {
   api: ElectronAPI
   client: WsRpcClient
@@ -85,6 +97,35 @@ export function createWebApi(options: WebApiOptions): {
 
   // Override LOCAL_ONLY methods with web-compatible implementations
   const webOverrides: Partial<ElectronAPI> = {
+    getSkills: async () => (await accountSkillRequest()).skills.map((bundle: any) => bundle.skill),
+    getAccountSkill: (slug) => accountSkillRequest(`/${encodeURIComponent(slug)}`),
+    saveAccountSkill: async ({ slug, content, expectedRevision }) => {
+      const bundle = await accountSkillRequest(`/${encodeURIComponent(slug)}`, 'PUT', { content, expectedRevision })
+      window.dispatchEvent(new Event('jonwork:skills-changed'))
+      return bundle
+    },
+    deleteSkill: async (_workspaceId, slug) => {
+      const bundle = await accountSkillRequest(`/${encodeURIComponent(slug)}`)
+      await accountSkillRequest(`/${encodeURIComponent(slug)}`, 'DELETE', { expectedRevision: bundle.revision })
+      window.dispatchEvent(new Event('jonwork:skills-changed'))
+    },
+    onSkillsChanged: () => () => {},
+    getDesktopAccount: () => Promise.resolve(null),
+    loginDesktopAccountWithErp: () => Promise.reject(new Error('Desktop account login is not available in WebUI')),
+    logoutDesktopAccount: () => Promise.resolve(),
+    getSetupNeeds: async () => {
+      const connections = await baseApi.listLlmConnectionsWithStatus()
+      const ready = connections.some(c => c.isAuthenticated)
+      return { needsBillingConfig: connections.length === 0, needsCredentials: !ready, isFullyConfigured: ready }
+    },
+    deferSetup: async () => ({ success: true }),
+    // Refresh the account balance after a billable message is accepted.
+    sendMessage: async (...args: Parameters<ElectronAPI['sendMessage']>) => {
+      args[4] = { ...args[4], requestId: args[4]?.requestId ?? args[4]?.optimisticMessageId ?? crypto.randomUUID() }
+      const result = await client.invoke('sessions:sendMessage', ...args)
+      window.dispatchEvent(new Event('jonwork:credits-changed'))
+      return result
+    },
     // Shell operations — use browser APIs
     openUrl: (url: string) => {
       const result = openExternalUrl(url)

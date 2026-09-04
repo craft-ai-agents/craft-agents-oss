@@ -8,8 +8,10 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { MAX_AUTH_BODY_BYTES, MAX_WEBUI_BODY_BYTES } from './request-limits'
+import type { HttpPeerContext } from './proxy-trust'
 
-type WebHandler = (req: Request) => Promise<Response> | Response
+type WebHandler = (req: Request, peer?: HttpPeerContext) => Promise<Response> | Response
 
 /**
  * Wrap a web-standard fetch handler as a Node HTTP request listener.
@@ -21,7 +23,8 @@ export function nodeHttpAdapter(
 ): (req: IncomingMessage, res: ServerResponse) => void {
   return (nodeReq, nodeRes) => {
     handleRequest(handler, nodeReq, nodeRes).catch((err) => {
-      console.error('[webui-adapter] Unhandled error:', err)
+      if (nodeRes.writableEnded) return
+      console.error('[webui-adapter] Request handling failed')
       if (!nodeRes.headersSent) {
         nodeRes.writeHead(500, { 'Content-Type': 'text/plain' })
       }
@@ -50,9 +53,28 @@ async function handleRequest(
   let body: Buffer | null = null
   if (nodeReq.method !== 'GET' && nodeReq.method !== 'HEAD') {
     const chunks: Buffer[] = []
-    for await (const chunk of nodeReq) {
-      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
-    }
+    const path = new URL(url).pathname
+    const limit = path.startsWith('/api/auth') || path.startsWith('/api/admin') ? MAX_AUTH_BODY_BYTES : MAX_WEBUI_BODY_BYTES
+    let size = 0
+    const timeout = setTimeout(() => {
+      if (!nodeRes.headersSent) nodeRes.writeHead(408, { Connection: 'close' })
+      nodeRes.end('Request body timeout')
+      nodeReq.destroy()
+    }, 15_000)
+    timeout.unref()
+    try {
+      for await (const chunk of nodeReq) {
+        const bytes = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
+        size += bytes.length
+        if (size > limit) {
+          nodeRes.writeHead(413, { Connection: 'close' })
+          nodeRes.end('Request body too large')
+          return
+        }
+        chunks.push(bytes)
+      }
+    } finally { clearTimeout(timeout) }
+    if (nodeRes.writableEnded) return
     body = Buffer.concat(chunks)
   }
 
@@ -62,7 +84,7 @@ async function handleRequest(
     body,
   })
 
-  const response = await handler(request)
+  const response = await handler(request, { remoteAddress: nodeReq.socket.remoteAddress })
 
   // Write web-standard Response back to Node ServerResponse.
   // Headers.forEach iterates each value separately, which correctly

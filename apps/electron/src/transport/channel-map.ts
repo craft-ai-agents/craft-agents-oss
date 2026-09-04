@@ -270,6 +270,7 @@ export const CHANNEL_MAP = {
   // Workspace images
   readWorkspaceImage: invoke(RPC_CHANNELS.workspace.READ_IMAGE),
   writeWorkspaceImage: invoke(RPC_CHANNELS.workspace.WRITE_IMAGE),
+  callCanvasTool: invoke(RPC_CHANNELS.canvas.CALL_TOOL),
 
   // Theme
   getAppTheme: invoke(RPC_CHANNELS.theme.GET_APP),

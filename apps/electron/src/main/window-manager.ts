@@ -161,7 +161,7 @@ export class WindowManager {
 
   /**
    * Apply the window-title policy across all managed windows:
-   *   1 window  → app name ("Craft Agents") on the lone window
+   *   1 window  → app name ("Jonwork") on the lone window
    *   ≥2 windows → workspace name on each window, app-name fallback when the
    *                workspace can't be resolved (e.g. onboarding window).
    *
@@ -230,7 +230,9 @@ export class WindowManager {
       minWidth: 800,
       minHeight: 600,
       show: false, // Don't show until ready-to-show event (faster perceived startup)
-      title: '',
+      // Set immediately so the native title bar never flashes Electron's
+      // executable name before refreshWindowTitles() applies its policy.
+      title: app.getName(),
       icon: iconExists ? iconPath : undefined,
       // macOS-specific: hidden title bar with inset traffic lights
       ...(isMac && {
@@ -299,7 +301,7 @@ export class WindowManager {
       })
     }
 
-    // The renderer's index.html ships with `<title>Craft Agents</title>`, so
+    // The renderer's index.html ships with `<title>Jonwork</title>`, so
     // without this Electron auto-syncs every window's title back to that on
     // load — clobbering the workspace-name policy applied below. Suppress the
     // default sync so setTitle() calls from refreshWindowTitles() stick.

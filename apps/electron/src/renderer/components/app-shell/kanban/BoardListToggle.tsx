@@ -53,7 +53,7 @@ function ToggleButton({
       aria-pressed={active}
       className={cn(
         'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors',
-        active ? 'bg-card text-foreground shadow-sm' : 'text-foreground/50 hover:text-foreground/80'
+        active ? 'bg-card text-foreground shadow-minimal' : 'text-foreground/50 hover:text-foreground/80'
       )}
     >
       <Icon className="h-3.5 w-3.5" strokeWidth={2} />

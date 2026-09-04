@@ -84,6 +84,13 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
   // Load initial state and check if update ready
   useEffect(() => {
     const checkAndNotify = async (info: UpdateInfo) => {
+      if (info.downloadState === 'error') {
+        toast.error(t('toast.failedToCheckUpdates'), {
+          id: UPDATE_TOAST_ID,
+          description: info.error || 'Unknown error',
+        })
+        return
+      }
       if (!info.available || !info.latestVersion) return
       if (info.downloadState !== 'ready') return
 
@@ -126,7 +133,11 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
       const info = await window.electronAPI.checkForUpdates()
       setUpdateInfo(info)
 
-      if (!info.available) {
+      if (info.downloadState === 'error') {
+        toast.error(t('toast.failedToCheckUpdates'), {
+          description: info.error || 'Unknown error',
+        })
+      } else if (!info.available) {
         toast.success(t('toast.upToDate'), {
           description: t('toast.versionIsLatest', { version: info.currentVersion }),
           duration: 3000,

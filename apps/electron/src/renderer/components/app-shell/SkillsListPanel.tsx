@@ -12,6 +12,16 @@ import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { useActiveWorkspace, useAppShellContext } from '@/context/AppShellContext'
 import { getFileManagerName } from '@/lib/platform'
 import type { LoadedSkill } from '../../../shared/types'
+import { groupSkillsByModule, type SkillModuleId } from './skill-module-groups'
+import { AccountSkillEditor } from '@/components/skills/AccountSkillEditor'
+
+const MODULE_LABEL_KEYS: Record<SkillModuleId, string> = {
+  'insight-proposal': 'skillsList.module.insightProposal',
+  'form-workbench': 'skillsList.module.formWorkbench',
+  'design-lab': 'skillsList.module.designLab',
+  'design-diagnostics': 'skillsList.module.designDiagnostics',
+  general: 'skillsList.module.general',
+}
 
 export interface SkillsListPanelProps {
   skills: LoadedSkill[]
@@ -42,11 +52,21 @@ export function SkillsListPanel({
   const [sendDialogOpen, setSendDialogOpen] = React.useState(false)
   const [sendResourceSlug, setSendResourceSlug] = React.useState<string | null>(null)
   const [sendResourceLabel, setSendResourceLabel] = React.useState('')
+  const skillGroups = React.useMemo(
+    () => groupSkillsByModule(skills).map(group => ({
+      key: group.key,
+      label: t(MODULE_LABEL_KEYS[group.key]),
+      items: group.items,
+      collapsible: true,
+    })),
+    [skills, t],
+  )
 
   return (
     <>
     <EntityPanel<LoadedSkill>
       items={skills}
+      groups={skillGroups}
       getId={(s) => s.slug}
       selection={skillSelection}
       selectedId={selectedSkillSlug}
@@ -61,7 +81,7 @@ export function SkillsListPanel({
           docKey="skills"
         >
           {workspaceRootPath && (
-            <EditPopover
+            window.electronAPI.saveAccountSkill ? <AccountSkillEditor trigger={<button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal">{t('skillsList.addSkill')}</button>} /> : <EditPopover
               align="center"
               trigger={
                 <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
@@ -78,6 +98,7 @@ export function SkillsListPanel({
         title: skill.metadata.name,
         badges: (
           <span className="flex items-center gap-1.5 min-w-0">
+            {skill.library === 'account' && <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-foreground/5 text-muted-foreground">{skill.visibility === 'public' ? '公共' : '私有 · 已同步'}</span>}
             {skill.source === 'project' && (
               <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-foreground/5 text-muted-foreground">
                 {t('skillsList.projectBadge')}
@@ -102,11 +123,11 @@ export function SkillsListPanel({
                 })
               }
             }}
-            canShowInFinder={canRevealLocally}
+            canShowInFinder={canRevealLocally && skill.library !== 'account'}
             onDelete={skill.source === 'workspace' ? () => onDeleteSkill(skill.slug) : undefined}
             canDelete={skill.source === 'workspace'}
             deleteLabel={skill.source === 'workspace' ? t('skillsList.deleteSkill') : t('skillsList.managedByProject')}
-            onSendToWorkspace={hasOtherWorkspaces && skill.source === 'workspace' ? () => {
+            onSendToWorkspace={hasOtherWorkspaces && skill.source === 'workspace' && skill.library !== 'account' ? () => {
               setSendResourceSlug(skill.slug)
               setSendResourceLabel(skill.metadata.name)
               setSendDialogOpen(true)

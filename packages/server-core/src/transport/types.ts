@@ -8,6 +8,8 @@ export interface RequestContext {
   clientId: string
   workspaceId: string | null
   webContentsId: number | null
+  /** Authenticated WebUI account id. Null for desktop/bearer-token clients. */
+  principalId?: string | null
 }
 
 export type HandlerFn = (ctx: RequestContext, ...args: any[]) => Promise<any> | any

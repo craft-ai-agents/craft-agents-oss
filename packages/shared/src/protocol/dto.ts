@@ -421,6 +421,8 @@ export type SessionEvent =
   | { type: 'working_directory_error'; sessionId: string; error: string }
 
 export interface SendMessageOptions {
+  /** Stable across transport retries; server persists acceptance to avoid double dispatch. */
+  requestId?: string
   skillSlugs?: string[]
   badges?: ContentBadge[]
   optimisticMessageId?: string

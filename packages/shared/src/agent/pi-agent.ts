@@ -18,6 +18,7 @@ import { createInterface, type Interface as ReadlineInterface } from 'node:readl
 import type { AgentEvent } from '@craft-agent/core/types';
 import type { FileAttachment } from '../utils/files.ts';
 import { getProxyEnvVars } from '../config/proxy-env.ts';
+import { withoutControlSecrets } from './control-env.ts';
 
 import type {
   BackendConfig,
@@ -43,7 +44,7 @@ import type { Workspace } from '../config/storage.ts';
 import { PiEventAdapter } from './backend/pi/event-adapter.ts';
 import { EventQueue } from './backend/event-queue.ts';
 
-// System prompt for Craft Agent context
+// System prompt for Jonwork context
 import { getSystemPrompt } from '../prompts/system.ts';
 import { getCoAuthorPreference } from '../config/preferences.ts';
 import { loadProjectById, getProjectAssetsPath, listProjectAssets, getProjectMemoryPath, loadProjectMemory } from '../projects/storage.ts';
@@ -129,7 +130,7 @@ function mapBrowserToolErrorCode(code: string): string | null {
     case 'BROWSER_NO_CAPABLE_CLIENT':
     case 'CAPABILITY_UNAVAILABLE':
       return 'No connected desktop client supports browser tools, or no client is currently connected. ' +
-        'Ask the user to open this workspace from the Craft Agent desktop app.';
+        'Ask the user to open this workspace from the Jonwork desktop app.';
     case 'CLIENT_DISCONNECTED':
       return 'The desktop client that owned this browser session disconnected. ' +
         'Ask the user to reconnect and retry.';
@@ -157,7 +158,7 @@ function mapBrowserToolErrorCode(code: string): string | null {
  * planning heuristics, config watching, usage tracking).
  */
 export class PiAgent extends BaseAgent {
-  protected backendName = 'Craft Agents Backend';
+  protected backendName = 'Jonwork Backend';
 
   // ============================================================
   // Subprocess State
@@ -487,7 +488,7 @@ export class PiAgent extends BaseAgent {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
-        ...process.env,
+        ...withoutControlSecrets(process.env),
         ...getProxyEnvVars(),
         ...this.config.envOverrides,
         ...awsEnv,
@@ -1101,7 +1102,7 @@ export class PiAgent extends BaseAgent {
    */
   private handleSubprocessEvent(event: Record<string, unknown>): void {
     // The subprocess sends Pi SDK AgentSessionEvent objects serialized as JSON.
-    // Feed them through PiEventAdapter to convert to Craft AgentEvents.
+    // Feed them through PiEventAdapter to convert to JonworkEvents.
 
     // Detect session MCP tool completions (same pattern as in-process version)
     const eventType = event.type as string;
@@ -2034,7 +2035,7 @@ export class PiAgent extends BaseAgent {
         this.config.workspace.rootPath,
         this.config.session?.workingDirectory,
         this.config.systemPromptPreset,
-        'Craft Agents Backend', // backendName
+        'Jonwork Backend', // backendName
         getCoAuthorPreference(), // respect user's includeCoAuthoredBy preference (#576)
         projectContext ?? undefined,
       );

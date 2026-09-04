@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN" class="font-sans">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="description" content="一个无限画布创作工具" />
+        <link rel="icon" href="./logo.svg" />
+        <title>无限画布</title>
+        <script>
+            try {
+                var s = JSON.parse(localStorage.getItem("infinite-canvas:theme_store") || "{}");
+                var host = window.parent !== window && window.parent.document.documentElement;
+                var t = host ? (host.classList.contains("dark") ? "dark" : "light") : (s.state && s.state.theme === "light" ? "light" : "dark");
+                localStorage.setItem("infinite-canvas:theme_store", JSON.stringify({ state: { theme: t }, version: 0 }));
+                document.documentElement.classList.toggle("dark", t === "dark");
+                document.documentElement.style.colorScheme = t;
+            } catch (e) {}
+        </script>
+      <script type="module" crossorigin src="./assets/index-DimTcdqI.js"></script>
+      <link rel="stylesheet" crossorigin href="./assets/index-Baxq_HLh.css">
+    </head>
+    <body class="bg-background text-foreground antialiased">
+        <div id="root"></div>
+        <script src="./config.js"></script>
+    </body>
+</html>

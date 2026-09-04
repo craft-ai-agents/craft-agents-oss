@@ -1,7 +1,7 @@
 {
-  "name": "Craft Agents",
-  "short_name": "Craft Agents",
-  "description": "AI agent interface",
+  "name": "Jonwork",
+  "short_name": "Jonwork",
+  "description": "AI workspace for getting work done",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#1F1F24",

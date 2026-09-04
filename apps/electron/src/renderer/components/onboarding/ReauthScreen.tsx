@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next"
 import { AlertCircle, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@craft-agent/ui"
-import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
 import { StepFormLayout } from "./primitives"
 
 interface ReauthScreenProps {
@@ -74,7 +73,7 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
                 ) : (
                   <>
                     <RefreshCw className="mr-2 size-4" />
-                    {t("onboarding.reauth.loginWithCraft")}
+                    重新登录 ERPNext
                   </>
                 )}
               </Button>

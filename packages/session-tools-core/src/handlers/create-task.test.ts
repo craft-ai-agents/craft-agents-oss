@@ -33,10 +33,10 @@ describe('handleCreateTask', () => {
 
     expect(result.isError).toBeFalsy();
     expect(calls).toHaveLength(1);
-    expect(calls[0].title).toBe('Fix login flow');
-    expect(calls[0].acceptanceCriteria).toBe('Login succeeds on first attempt');
+    expect(calls[0]!.title).toBe('Fix login flow');
+    expect(calls[0]!.acceptanceCriteria).toBe('Login succeeds on first attempt');
 
-    const payload = JSON.parse(result.content[0].text);
+    const payload = JSON.parse(result.content[0]!.text);
     expect(payload).toEqual({
       slug: 'my-task',
       orchestratorSessionId: 'sess-1',
@@ -50,7 +50,7 @@ describe('handleCreateTask', () => {
     const result = await handleCreateTask(ctx, { title: 'T', description: 'D' });
 
     expect(result.isError).toBeFalsy();
-    expect(JSON.parse(result.content[0].text).warnings).toEqual(['Unknown sources: nope']);
+    expect(JSON.parse(result.content[0]!.text).warnings).toEqual(['Unknown sources: nope']);
   });
 
   it('errors when the callback is not available (e.g. Codex MCP subprocess)', async () => {
@@ -58,7 +58,7 @@ describe('handleCreateTask', () => {
     const result = await handleCreateTask(ctx, { title: 'T', description: 'D' });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('not available');
+    expect(result.content[0]!.text).toContain('not available');
   });
 
   it('rejects a missing title or description without calling the backend', async () => {
@@ -66,11 +66,11 @@ describe('handleCreateTask', () => {
 
     const noTitle = await handleCreateTask(ctx, { title: '  ', description: 'D' });
     expect(noTitle.isError).toBe(true);
-    expect(noTitle.content[0].text).toContain('title');
+    expect(noTitle.content[0]!.text).toContain('title');
 
     const noDescription = await handleCreateTask(ctx, { title: 'T', description: '' });
     expect(noDescription.isError).toBe(true);
-    expect(noDescription.content[0].text).toContain('description');
+    expect(noDescription.content[0]!.text).toContain('description');
 
     expect(calls).toHaveLength(0);
   });
@@ -84,6 +84,6 @@ describe('handleCreateTask', () => {
 
     const result = await handleCreateTask(ctx, { title: 'T', description: 'D' });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Invalid task spec');
+    expect(result.content[0]!.text).toContain('Invalid task spec');
   });
 });

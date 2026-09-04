@@ -353,6 +353,11 @@ export default function AppSettingsPage() {
                       </Button>
                     </SettingsRow>
                   )}
+                  {isElectron && updateChecker.updateInfo?.downloadState === 'error' && (
+                    <SettingsRow label={t("settings.about.updateError")}>
+                      <span className="max-w-md text-sm text-destructive">{updateChecker.updateInfo.error}</span>
+                    </SettingsRow>
+                  )}
                 </SettingsCard>
               </SettingsSection>
             </div>

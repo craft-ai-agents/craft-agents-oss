@@ -57,6 +57,10 @@ pnpm-lock.yaml
 
 # Craft Agent local data (sessions, credentials, config)
 .craft-agent/
+.local-account-test/
+
+# Local desktop release/download smoke-test outputs
+apps/electron/release-download-test*/
 
 # SSH keys and secrets
 *.pem

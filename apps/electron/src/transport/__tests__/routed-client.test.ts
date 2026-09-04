@@ -58,6 +58,32 @@ const REMOTE_CHANNEL = RPC_CHANNELS.sessions.GET           // REMOTE_ELIGIBLE
 const SWITCH_CHANNEL = RPC_CHANNELS.window.SWITCH_WORKSPACE
 
 describe('RoutedClient', () => {
+  describe('ERP managed desktop', () => {
+    it('never switches to local execution or exposes a local workspace', async () => {
+      const local = stubClient()
+      const remote = stubClient({ invoke: mock(async () => 'managed') })
+      const routed = new RoutedClient(local, remote, 'erp-workspace')
+      expect(await routed.invoke(LOCAL_CHANNEL)).toBe('erp-workspace')
+      await routed.invoke(SWITCH_CHANNEL, 'erp-workspace')
+      await expect(routed.invoke(SWITCH_CHANNEL, 'local-workspace')).rejects.toThrow('ERP')
+      for (const channel of [RPC_CHANNELS.sessions.SEND_MESSAGE, RPC_CHANNELS.workspaces.GET,
+        RPC_CHANNELS.file.READ, RPC_CHANNELS.server.CREATE_WORKSPACE, RPC_CHANNELS.onboarding.GET_AUTH_STATE]) {
+        expect(await routed.invoke(channel)).toBe('managed')
+      }
+      expect(local.invoke).not.toHaveBeenCalled()
+    })
+    it('fails closed on remote errors and never registers native capabilities remotely', async () => {
+      const local = stubClient()
+      const remote = stubClient({ invoke: mock(async () => { throw new Error('offline') }) })
+      const routed = new RoutedClient(local, remote, 'erp-workspace')
+      routed.handleCapability('client:browser', async () => 'local')
+      expect(remote.handleCapability).not.toHaveBeenCalled()
+      await expect(routed.invoke(RPC_CHANNELS.sessions.SEND_MESSAGE)).rejects.toThrow('offline')
+      expect(local.invoke).not.toHaveBeenCalled()
+      await routed.invoke(RPC_CHANNELS.window.CLOSE)
+      expect(local.invoke).toHaveBeenCalledWith(RPC_CHANNELS.window.CLOSE)
+    })
+  })
   describe('routing', () => {
     it('routes LOCAL_ONLY invokes to localClient', async () => {
       const local = stubClient({ invoke: mock(async () => 'local-result') })

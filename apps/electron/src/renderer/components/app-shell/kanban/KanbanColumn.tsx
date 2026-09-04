@@ -7,6 +7,7 @@ import { type SessionStatus, getStatusIconStyle } from '@/config/session-status-
 import type { KanbanColumnColor } from '@/hooks/useKanbanColumnColors'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { SessionStatusMenu } from '@/components/ui/session-status-menu'
+import { cn } from '@/lib/utils'
 import { TaskTile } from './TaskTile'
 import { NewTaskComposer } from './NewTaskComposer'
 import type {
@@ -110,10 +111,12 @@ export function KanbanColumn({
 
       <div
         ref={setNodeRef}
-        className="flex flex-1 flex-col gap-2 overflow-y-auto rounded-lg p-2 transition-shadow"
+        className={cn(
+          'flex flex-1 flex-col gap-2 overflow-y-auto rounded-lg p-2 transition-shadow',
+          isOver && 'ring-2 ring-ring',
+        )}
         style={{
           backgroundColor: color?.tint,
-          boxShadow: isOver && color ? `inset 0 0 0 2px ${color.solid}` : undefined,
         }}
       >
         {onCreateTask && <NewTaskComposer onCreate={onCreateTask} />}
@@ -260,8 +263,7 @@ function ColumnHeader({
       <PopoverContent
         align="start"
         sideOffset={4}
-        className="dark w-64 space-y-3 border-border/50 bg-background/80 p-3 backdrop-blur-xl backdrop-saturate-150"
-        style={{ borderRadius: '8px', boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)' }}
+        className="dark w-64 space-y-3 rounded-[8px] border-border/50 bg-background/80 p-3 shadow-strong backdrop-blur-xl backdrop-saturate-150"
         data-no-dnd="true"
       >
         {onRename && (

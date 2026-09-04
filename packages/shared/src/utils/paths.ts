@@ -33,9 +33,9 @@ export function expandPath(inputPath: string, basePath?: string): string {
     return home;
   }
 
-  // Handle ~/ prefix
-  if (expanded.startsWith('~/')) {
-    expanded = join(home, expanded.slice(2));
+  // Also recover older Windows saves that normalized ~/ into ~\.
+  if (expanded.startsWith('~/') || expanded.startsWith('~\\')) {
+    expanded = join(home, normalizePath(expanded.slice(2)));
   }
 
   // Handle ${HOME} and $HOME variables
@@ -65,6 +65,12 @@ export function expandPath(inputPath: string, basePath?: string): string {
  */
 export function toPortablePath(absolutePath: string): string {
   if (!absolutePath) return absolutePath;
+  // Serialization can call this twice. Never normalize a portable home prefix
+  // into a Windows relative path that would subsequently resolve beneath cwd.
+  if (absolutePath === '~') return '~';
+  if (absolutePath.startsWith('~/') || absolutePath.startsWith('~\\')) {
+    return '~/' + normalizePath(absolutePath.slice(2));
+  }
 
   const home = homedir();
   const normalized = normalize(absolutePath);
@@ -79,11 +85,11 @@ export function toPortablePath(absolutePath: string): string {
   const homePrefixWin = home + '\\';
 
   if (normalized.startsWith(homePrefix)) {
-    return '~/' + normalized.slice(homePrefix.length);
+    return '~/' + normalizePath(normalized.slice(homePrefix.length));
   }
 
   if (normalized.startsWith(homePrefixWin)) {
-    return '~/' + normalized.slice(homePrefixWin.length);
+    return '~/' + normalizePath(normalized.slice(homePrefixWin.length));
   }
 
   // Path is outside home directory, keep as absolute

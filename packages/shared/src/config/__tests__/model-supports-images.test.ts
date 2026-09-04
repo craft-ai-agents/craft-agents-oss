@@ -60,6 +60,14 @@ describe('modelSupportsImages — pi_compat precedence', () => {
 })
 
 describe('modelSupportsImages — non-pi_compat fallthrough', () => {
+  it('returns false for OAuth connections because Jonwork cannot send image attachments over OAuth', () => {
+    const conn: LlmConnection = {
+      slug: 'oauth', name: 'OAuth', providerType: 'pi', authType: 'oauth',
+      models: ['gpt-5.6-luna'], piAuthProvider: 'github-copilot', createdAt: 1,
+    }
+    expect(modelSupportsImages(conn, 'gpt-5.6-luna')).toBe(false)
+  })
+
   it('returns true for anthropic regardless of override (renderer does not gate built-in catalogs)', () => {
     const conn: LlmConnection = {
       slug: 'a', name: 'a', providerType: 'anthropic', authType: 'api_key',

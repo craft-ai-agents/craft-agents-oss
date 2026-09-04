@@ -201,7 +201,7 @@ export function KanbanBoard({
           gone (it re-renders into the target), so a "fly back" would be wrong. */}
       <DragOverlay dropAnimation={null} style={{ zIndex: 'var(--z-floating-menu, 400)' }}>
         {activeTask ? (
-          <div className="cursor-grabbing rounded-lg shadow-dragging" style={{ transform: 'scale(1.025)' }}>
+          <div className="cursor-grabbing rounded-lg shadow-strong" style={{ transform: 'scale(1.025)' }}>
             <TaskTile
               task={activeTask}
               project={activeTask.projectId ? projectsById.get(activeTask.projectId) : undefined}

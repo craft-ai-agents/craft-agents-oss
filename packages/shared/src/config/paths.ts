@@ -1,5 +1,5 @@
 /**
- * Centralized path configuration for Craft Agent.
+ * Centralized path configuration for Jonwork.
  *
  * Supports multi-instance development via CRAFT_CONFIG_DIR environment variable.
  * When running from a numbered folder (e.g., craft-tui-agent-1), the detect-instance.sh
@@ -13,7 +13,11 @@
 
 import { homedir } from 'os';
 import { join } from 'path';
+import { DESKTOP_RELEASE } from '../deployment';
 
 // Allow override via environment variable for multi-instance dev
 // Falls back to default ~/.craft-agent/ for production and non-numbered dev folders
-export const CONFIG_DIR = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.craft-agent');
+// Production installs never implicitly open or overwrite the upstream profile.
+// Legacy paths remain opt-in; migrating customer data requires a verified backup.
+export const CONFIG_DIR = process.env.JONWORK_CONFIG_DIR || process.env.CRAFT_CONFIG_DIR
+  || join(homedir(), DESKTOP_RELEASE.channel === 'production' ? '.jonwork' : '.craft-agent');

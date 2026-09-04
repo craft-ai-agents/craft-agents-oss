@@ -14,9 +14,12 @@
 import { atom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
 import type { KanbanColumnId, TaskEditorTarget } from '@/components/app-shell/kanban/types'
+import type { RecencyDays } from '@/components/app-shell/session-recency'
 
 /** Selected project ids to filter the board by. Empty array = all projects. */
 export const kanbanProjectFilterAtom = atom<string[]>([])
+export const kanbanKeywordFilterAtom = atom<string>('')
+export const kanbanRecencyDaysAtom = atom<RecencyDays>(null)
 
 /**
  * The board pane's Task-editor overlay target (null = closed). An atom rather than

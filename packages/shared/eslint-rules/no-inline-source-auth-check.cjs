@@ -15,7 +15,9 @@
  * Allowed in:
  *   - storage.ts (where isSourceUsable is defined)
  *   - credential-manager.ts (state-setting operations, inverse check)
+ *   - token-refresh-manager.ts (state-setting operations)
  *   - server-builder.ts (documented exceptions for OAuth providers)
+ *   - tests (may assert the exact persisted state)
  *
  * Bad:
  *   source.config.isAuthenticated
@@ -48,14 +50,16 @@ module.exports = {
     const allowedFiles = [
       'storage.ts', // isSourceUsable is defined here
       'credential-manager.ts', // State-setting and inverse check
+      'token-refresh-manager.ts', // State-setting after refresh attempts
       'server-builder.ts', // OAuth provider checks (documented)
     ]
 
     const filename = context.filename || context.getFilename()
-    const basename = filename.split('/').pop() || ''
+    const normalizedFilename = filename.replace(/\\/g, '/')
+    const basename = normalizedFilename.split('/').pop() || ''
 
     // Allow in specific files
-    if (allowedFiles.includes(basename)) {
+    if (allowedFiles.includes(basename) || normalizedFilename.includes('/__tests__/')) {
       return {}
     }
 

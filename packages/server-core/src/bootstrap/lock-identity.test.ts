@@ -3,7 +3,7 @@ import { lockHolderMatchesLock, parseTasklistImageName } from './lock-identity.t
 
 describe('parseTasklistImageName', () => {
   it('extracts the image name from a CSV data row', () => {
-    expect(parseTasklistImageName('"Craft Agents.exe","1234","Console","1","150,000 K"')).toBe('Craft Agents.exe')
+    expect(parseTasklistImageName('"Jonwork.exe","1234","Console","1","150,000 K"')).toBe('Jonwork.exe')
   })
 
   it('returns null for the no-tasks INFO message', () => {
@@ -24,11 +24,11 @@ describe('lockHolderMatchesLock (#978)', () => {
   const lockWith = (execName?: string) => ({ pid: 1234, startedAt: 1_000, execName })
 
   it('matches on identical execName', () => {
-    expect(lockHolderMatchesLock(lockWith('Craft Agents.exe'), 'Craft Agents.exe', null)).toBe(true)
+    expect(lockHolderMatchesLock(lockWith('Jonwork.exe'), 'Jonwork.exe', null)).toBe(true)
   })
 
   it('matches execName case-insensitively', () => {
-    expect(lockHolderMatchesLock(lockWith('craft agents.exe'), 'Craft Agents.EXE', null)).toBe(true)
+    expect(lockHolderMatchesLock(lockWith('jonwork.exe'), 'Jonwork.EXE', null)).toBe(true)
   })
 
   it('matches dev shapes the legacy heuristic missed (bun holding the lock)', () => {
@@ -37,20 +37,21 @@ describe('lockHolderMatchesLock (#978)', () => {
 
   it('rejects a different executable even when its name contains "craft"', () => {
     // PID recycled onto e.g. a game process — must NOT keep the brick (#978)
-    expect(lockHolderMatchesLock(lockWith('Craft Agents.exe'), 'minecraft-launcher', null)).toBe(false)
+    expect(lockHolderMatchesLock(lockWith('Jonwork.exe'), 'minecraft-launcher', null)).toBe(false)
   })
 
   it('fails open when the live exec name cannot be determined', () => {
-    expect(lockHolderMatchesLock(lockWith('Craft Agents.exe'), null, null)).toBe(false)
+    expect(lockHolderMatchesLock(lockWith('Jonwork.exe'), null, null)).toBe(false)
   })
 
   it('ignores the command line when execName is recorded', () => {
     // cmdline mentions craft, but the executable is something else → recycled PID
-    expect(lockHolderMatchesLock(lockWith('Craft Agents.exe'), 'java', '/usr/bin/java -jar minecraft.jar')).toBe(false)
+    expect(lockHolderMatchesLock(lockWith('Jonwork.exe'), 'java', '/usr/bin/java -jar minecraft.jar')).toBe(false)
   })
 
   describe('legacy locks without execName', () => {
-    it('falls back to the craft-substring heuristic on the command line', () => {
+    it('falls back to the Jonwork-or-legacy-Craft heuristic on the command line', () => {
+      expect(lockHolderMatchesLock(lockWith(undefined), null, '/Applications/Jonwork.app/Contents/MacOS/Jonwork')).toBe(true)
       expect(lockHolderMatchesLock(lockWith(undefined), null, '/Applications/Craft Agents.app/Contents/MacOS/Craft Agents')).toBe(true)
       expect(lockHolderMatchesLock(lockWith(undefined), null, '/usr/libexec/swcd')).toBe(false)
     })

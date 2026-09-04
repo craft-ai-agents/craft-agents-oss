@@ -1,0 +1,22 @@
+name: Desktop production foundations
+on:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  desktop-regression:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile
+      - run: bun run validate:desktop-release
+      - run: bun run test:desktop-production
+      - run: bun run test:canvas-business
+      - run: bun run typecheck:electron
+      - run: bun test packages/server-core/src/webui/__tests__/accounts.test.ts packages/server-core/src/webui/__tests__/http-server.test.ts packages/server/src/account-rpc-policy.test.ts

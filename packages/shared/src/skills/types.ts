@@ -26,6 +26,8 @@ export interface SkillMetadata {
   icon?: string;
   /** Optional source slugs to auto-enable when this skill is invoked */
   requiredSources?: string[];
+  /** Optional product UI module used to group skills in the skills panel. */
+  module?: string;
 }
 
 /** Source of a loaded skill */
@@ -44,6 +46,10 @@ export const AGENTS_PLUGIN_NAME = '.agents';
  * A loaded skill with parsed content
  */
 export interface LoadedSkill {
+  /** Account library entries are cloud-owned, not editable through local paths. */
+  library?: 'account';
+  visibility?: 'public' | 'private';
+  readOnly?: boolean;
   /** Directory name (slug) */
   slug: string;
   /** Parsed metadata from YAML frontmatter */

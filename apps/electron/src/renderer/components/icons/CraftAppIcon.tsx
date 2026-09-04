@@ -1,4 +1,4 @@
-import craftLogo from "@/assets/craft_logo_c.svg"
+import jonworkMark from "@/assets/craft_logo_c.svg"
 
 interface CraftAppIconProps {
   className?: string
@@ -6,13 +6,13 @@ interface CraftAppIconProps {
 }
 
 /**
- * CraftAppIcon - Displays the Craft logo (colorful "C" icon)
+ * Compatibility component that displays the canonical Jonwork mark.
  */
 export function CraftAppIcon({ className, size = 64 }: CraftAppIconProps) {
   return (
     <img
-      src={craftLogo}
-      alt="Craft"
+      src={jonworkMark}
+      alt="Jonwork"
       width={size}
       height={size}
       className={className}

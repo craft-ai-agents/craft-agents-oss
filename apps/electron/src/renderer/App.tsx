@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useTheme } from '@/hooks/useTheme'
 import type { ThemeOverrides } from '@config/theme'
 import { useSetAtom, useStore, useAtomValue, useAtom } from 'jotai'
-import type { Session, Workspace, SessionEvent, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, SessionStatus, NewChatActionParams, ContentBadge, LlmConnectionWithStatus, PermissionModeState } from '../shared/types'
+import type { Session, Workspace, SessionEvent, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SessionStatus, NewChatActionParams, ContentBadge, LlmConnectionWithStatus, PermissionModeState } from '../shared/types'
 import type { SessionDraft, DraftAttachmentRef } from '@craft-agent/shared/config'
 import type { SessionOptions, SessionOptionUpdates } from './hooks/useSessionOptions'
 import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOptions'
@@ -12,8 +12,10 @@ import { useEventProcessor } from './event-processor'
 import type { AgentEvent, Effect } from './event-processor'
 import { AppShell } from '@/components/app-shell/AppShell'
 import type { AppShellContextType } from '@/context/AppShellContext'
-import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
-import { WorkspacePicker } from '@/components/workspace'
+import { ReauthScreen } from '@/components/onboarding'
+import { DesktopAccountLogin } from '@/components/onboarding/DesktopAccountLogin'
+import { DESKTOP_RELEASE } from '@craft-agent/shared/deployment'
+import { productionSetupBlocker } from '../shared/startup-readiness'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
 import { SplashScreen } from '@/components/SplashScreen'
 import { TooltipProvider } from '@craft-agent/ui'
@@ -21,7 +23,6 @@ import { FocusProvider } from '@/context/FocusContext'
 import { ModalProvider } from '@/context/ModalContext'
 import { DismissibleLayerProvider } from '@/context/DismissibleLayerContext'
 import { useWindowCloseHandler } from '@/hooks/useWindowCloseHandler'
-import { useOnboarding } from '@/hooks/useOnboarding'
 import { useNotifications } from '@/hooks/useNotifications'
 import { useSession } from '@/hooks/useSession'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
@@ -85,7 +86,7 @@ import { rendererLog } from '@/lib/logger'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
 
-type AppState = 'loading' | 'onboarding' | 'reauth' | 'workspace-picker' | 'ready'
+type AppState = 'loading' | 'account-login' | 'reauth' | 'ready' | 'startup-blocked'
 
 /** Type for the Jotai store returned by useStore() */
 type JotaiStore = ReturnType<typeof getDefaultStore>
@@ -287,9 +288,9 @@ export default function App() {
     })
   }, [])
 
-  // App state: loading -> check auth -> onboarding or ready
+  // App state: loading -> account login or the preconfigured workspace
   const [appState, setAppState] = useState<AppState>('loading')
-  const [setupNeeds, setSetupNeeds] = useState<SetupNeeds | null>(null)
+  const [startupError, setStartupError] = useState('')
 
   // Per-session Jotai atom setters for isolated updates
   // NOTE: No sessionsAtom - we don't store a Session[] array anywhere to prevent memory leaks
@@ -661,44 +662,51 @@ export default function App() {
     }
   }, [resolveDefaultConnectionSlug, windowWorkspaceId])
 
-  // Handle onboarding completion
-  const handleOnboardingComplete = useCallback(async () => {
+  const enterDefaultWorkspace = useCallback(async (preferredWorkspaceId?: string | null) => {
     try {
-      // Reload workspaces after onboarding
-      const ws = await window.electronAPI.getWorkspaces()
-      if (ws.length > 0) {
-        // Switch to workspace in-place (no window close/reopen)
-        await window.electronAPI.switchWorkspace(ws[0].id)
-        setWindowWorkspaceId(ws[0].id)
-        setWorkspaces(ws)
-      } else {
-        setWorkspaces(ws)
+      if (DESKTOP_RELEASE.channel === 'production') {
+        const blocker = productionSetupBlocker(await window.electronAPI.getSetupNeeds())
+        if (blocker) { setStartupError(blocker); setAppState('startup-blocked'); return }
       }
+      if (preferredWorkspaceId) {
+        try {
+          await window.electronAPI.switchWorkspace(preferredWorkspaceId)
+          setWindowWorkspaceId(preferredWorkspaceId)
+          setAppState('ready')
+          return
+        } catch (error) {
+          if (DESKTOP_RELEASE.channel === 'production') throw error
+          console.warn('[App] Preferred workspace is unavailable; using the server default:', error)
+        }
+      }
+
+      const available = await window.electronAPI.getServerWorkspaces()
+      let workspaceId = available[0]?.id ?? null
+      if (!workspaceId) {
+        const created = await window.electronAPI.createServerWorkspace('My Workspace')
+        workspaceId = created.id
+      }
+
+      await window.electronAPI.switchWorkspace(workspaceId)
+      setWindowWorkspaceId(workspaceId)
     } catch (error) {
-      console.error('[App] Failed to load workspaces after onboarding:', error)
-      // Still transition to ready — the app can recover via reconnect
+      if (DESKTOP_RELEASE.channel === 'production') {
+        setStartupError('企业模型或工作区初始化失败，请检查服务连接并重试。')
+        setAppState('startup-blocked')
+        return
+      }
+      // The main shell can surface a server/workspace connection error without
+      // forcing users through a workspace chooser.
+      console.error('[App] Failed to enter default workspace:', error)
     }
     setAppState('ready')
-  }, [])
+  }, [setWindowWorkspaceId])
 
-  // Onboarding hook — onConfigSaved fires immediately when billing is saved,
-  // ensuring connection state updates before the wizard closes.
-  const onboarding = useOnboarding({
-    onComplete: handleOnboardingComplete,
-    onConfigSaved: refreshLlmConnections,
-    initialSetupNeeds: setupNeeds || undefined,
-  })
-
-  // Reauth login handler - placeholder (reauth is not currently used)
+  // Expired managed sessions must re-enter through ERP SSO; the legacy Craft
+  // provider/login path is never used by a managed desktop release.
   const handleReauthLogin = useCallback(async () => {
-    // Re-check setup needs
-    const needs = await window.electronAPI.getSetupNeeds()
-    if (needs.isFullyConfigured) {
-      setAppState('ready')
-    } else {
-      setSetupNeeds(needs)
-      setAppState('onboarding')
-    }
+    await window.electronAPI.loginDesktopAccountWithErp(DESKTOP_RELEASE.accountServerUrl)
+    window.location.reload()
   }, [])
 
   // Reauth reset handler - open reset confirmation dialog
@@ -710,34 +718,55 @@ export default function App() {
   useEffect(() => {
     const initialize = async () => {
       try {
+        let accountWorkspaceId: string | null = null
+        if (window.electronAPI.getRuntimeEnvironment() === 'electron') {
+          let desktopAccount
+          try {
+            desktopAccount = await window.electronAPI.getDesktopAccount()
+          } catch (error) {
+            console.error('Desktop account service is unavailable:', error)
+            setAppState('account-login')
+            return
+          }
+          if (!desktopAccount) {
+            setAppState('account-login')
+            return
+          }
+          accountWorkspaceId = desktopAccount.account.workspaceId
+        }
         // Get this window's workspace ID (passed via URL query param from main process)
-        const wsId = await window.electronAPI.getWindowWorkspace()
+        const wsId = accountWorkspaceId ?? await window.electronAPI.getWindowWorkspace()
         setWindowWorkspaceId(wsId)
 
         const needs = await window.electronAPI.getSetupNeeds()
-        setSetupNeeds(needs)
 
-        if (needs.isFullyConfigured) {
-          // If no workspace is selected (thin client without CRAFT_WORKSPACE_ID),
-          // show workspace picker before entering the main app
-          if (!wsId) {
-            setAppState('workspace-picker')
-          } else {
-            setAppState('ready')
-          }
-        } else {
-          // New user or needs setup - show onboarding
-          setAppState('onboarding')
+        if (!needs.isFullyConfigured && DESKTOP_RELEASE.channel !== 'production') {
+          // Provider credentials are preconfigured for the managed Jonwork
+          // environment, so first launch must not stop at the legacy picker.
+          await window.electronAPI.deferSetup()
         }
+        await enterDefaultWorkspace(wsId ?? accountWorkspaceId)
       } catch (error) {
         console.error('Failed to check auth state:', error)
-        // If check fails, show onboarding to be safe
-        setAppState('onboarding')
+        if (DESKTOP_RELEASE.channel === 'production') {
+          setStartupError('启动检查未完成，请检查企业服务连接后重试。')
+          setAppState('startup-blocked')
+          return
+        }
+        // A transient setup-state failure must not reveal the legacy provider
+        // or workspace picker. The main shell surfaces real connection issues.
+        await enterDefaultWorkspace()
       }
     }
 
     initialize()
-  }, [])
+  }, [enterDefaultWorkspace, setWindowWorkspaceId])
+
+  const handleDesktopAccountLogout = useCallback(async () => {
+    await window.electronAPI.logoutDesktopAccount()
+    // Tear down authenticated transports and cached account state, across modes.
+    window.location.reload()
+  }, [initializeSessions])
 
   // Session selection state
   const [sessionSelection, setSession] = useSession()
@@ -1751,21 +1780,17 @@ export default function App() {
       initializeSessions([])
       setWorkspaces([])
       setWindowWorkspaceId(null)
-      // Reset setupNeeds to force fresh onboarding start
-      setSetupNeeds({
-        needsBillingConfig: true,
-        needsCredentials: true,
-        isFullyConfigured: false,
-      })
-      // Reset onboarding hook state
-      onboarding.reset()
-      setAppState('onboarding')
+      // Jonwork uses a managed default connection, so resetting local data must
+      // not send the user through the legacy provider or workspace pickers.
+      if (DESKTOP_RELEASE.channel !== 'production') await window.electronAPI.deferSetup()
+      const workspaceId = await window.electronAPI.getWindowWorkspace()
+      await enterDefaultWorkspace(workspaceId)
     } catch (error) {
       console.error('Reset failed:', error)
     } finally {
       setShowResetDialog(false)
     }
-  }, [onboarding, initializeSessions])
+  }, [enterDefaultWorkspace, initializeSessions, setWindowWorkspaceId])
 
   // Handle workspace selection
   // - Default: switch workspace in same window (in-window switching)
@@ -1833,11 +1858,6 @@ export default function App() {
     window.electronAPI.getWorkspaces().then(setWorkspaces)
   }, [])
 
-  // Handle cancel during onboarding
-  const handleOnboardingCancel = useCallback(() => {
-    onboarding.handleCancel()
-  }, [onboarding])
-
   // Build context value for AppShell component
   // This is memoized to prevent unnecessary re-renders
   // IMPORTANT: Must be before early returns to maintain consistent hook order
@@ -1882,7 +1902,7 @@ export default function App() {
     onOpenSettings: handleOpenSettings,
     onOpenKeyboardShortcuts: handleOpenKeyboardShortcuts,
     onOpenStoredUserPreferences: handleOpenStoredUserPreferences,
-    onReset: handleReset,
+    onReset: handleDesktopAccountLogout,
     // Session options
     onSessionOptionsChange: handleSessionOptionsChange,
     onInputChange: handleInputChange,
@@ -1963,6 +1983,25 @@ export default function App() {
     return <SplashScreen isExiting={false} />
   }
 
+  if (appState === 'account-login') {
+    return <DesktopAccountLogin onErpLogin={async (serverUrl) => {
+      await window.electronAPI.loginDesktopAccountWithErp(serverUrl)
+      window.location.reload()
+    }} />
+  }
+
+  if (appState === 'startup-blocked') {
+    return <div className="flex min-h-screen items-center justify-center bg-background p-6">
+      <div role="alert" className="max-w-md space-y-4 rounded-xl border p-6">
+        <h1 className="text-xl font-semibold">Jonwork 暂未准备就绪</h1>
+        <p>{startupError}</p>
+        <p className="text-sm text-muted-foreground">未删除本地项目，也未开始新的计费任务。配置检查不代表模型服务已通过真实调用验收。</p>
+        <button className="mr-4 underline" onClick={() => window.location.reload()}>重新检查</button>
+        <button className="underline" onClick={() => void handleDesktopAccountLogout()}>退出账号</button>
+      </div>
+    </div>
+  }
+
   // Reauth state - session expired, need to re-login
   // ModalProvider + WindowCloseHandler ensures X button works on Windows
   if (appState === 'reauth') {
@@ -1978,57 +2017,6 @@ export default function App() {
             open={showResetDialog}
             onConfirm={executeReset}
             onCancel={() => setShowResetDialog(false)}
-          />
-        </ModalProvider>
-      </DismissibleLayerProvider>
-    )
-  }
-
-  // Onboarding state
-  // ModalProvider + WindowCloseHandler ensures X button works on Windows
-  // (without this, the close IPC message has no listener and window stays open)
-  if (appState === 'onboarding') {
-    return (
-      <DismissibleLayerProvider>
-        <ModalProvider>
-          <WindowCloseHandler />
-          <OnboardingWizard
-            state={onboarding.state}
-            onContinue={onboarding.handleContinue}
-            onBack={onboarding.handleBack}
-            onSelectProvider={onboarding.handleSelectProvider}
-            onSkipSetup={onboarding.handleSkipSetup}
-            onSelectApiSetupMethod={onboarding.handleSelectApiSetupMethod}
-            onSubmitCredential={onboarding.handleSubmitCredential}
-            onSubmitLocalModel={onboarding.handleSubmitLocalModel}
-            onStartOAuth={onboarding.handleStartOAuth}
-            onFinish={onboarding.handleFinish}
-            isWaitingForCode={onboarding.isWaitingForCode}
-            onSubmitAuthCode={onboarding.handleSubmitAuthCode}
-            onCancelOAuth={onboarding.handleCancelOAuth}
-            copilotDeviceCode={onboarding.copilotDeviceCode}
-            onBrowseGitBash={onboarding.handleBrowseGitBash}
-            onUseGitBashPath={onboarding.handleUseGitBashPath}
-            onRecheckGitBash={onboarding.handleRecheckGitBash}
-            onClearError={onboarding.handleClearError}
-          />
-        </ModalProvider>
-      </DismissibleLayerProvider>
-    )
-  }
-
-  // Workspace picker — thin client with no workspace selected
-  if (appState === 'workspace-picker') {
-    return (
-      <DismissibleLayerProvider>
-        <ModalProvider>
-          <WindowCloseHandler />
-          <WorkspacePicker
-            onSelectWorkspace={async (id) => {
-              await window.electronAPI.switchWorkspace(id)
-              setWindowWorkspaceId(id)
-              setAppState('ready')
-            }}
           />
         </ModalProvider>
       </DismissibleLayerProvider>

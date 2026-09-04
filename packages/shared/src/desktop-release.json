@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "channel": "production",
+  "accountServerUrl": "https://v2.jonwork.com",
+  "allowCustomAccountServer": false,
+  "updatesEnabled": true,
+  "updateServerUrl": "https://v2.jonwork.com/desktop/updates/",
+  "sharingEnabled": false,
+  "shareServerUrl": ""
+}

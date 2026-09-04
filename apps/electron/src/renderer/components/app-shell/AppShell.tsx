@@ -5,12 +5,9 @@ import { useAtomValue, useStore } from "jotai"
 import { motion, AnimatePresence } from "motion/react"
 import {
   Archive,
-  Settings,
   ChevronRight,
   ChevronDown,
-  MoreHorizontal,
   RotateCw,
-  Flag,
   ListFilter,
   Tag,
   Check,
@@ -24,15 +21,15 @@ import {
   Globe,
   FolderOpen,
   Cake,
-  Calendar,
-  Layers,
   ListTodo,
   Clock,
   Radio,
   Bot,
   Info,
-  MailOpen,
   FolderKanban,
+  Files,
+  PanelRightOpen,
+  Shapes,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -66,10 +63,7 @@ import { SidebarMenu } from "./SidebarMenu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { FadingText } from "@/components/ui/fading-text"
 import {
-  Collapsible,
-  CollapsibleTrigger,
   AnimatedCollapsibleContent,
-  springTransition as collapsibleSpring,
 } from "@/components/ui/collapsible"
 import { SessionList, type ChatGroupingMode } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
@@ -78,6 +72,9 @@ import { PanelStackContainer } from "./PanelStackContainer"
 import { CompactSessionListFilter } from "./CompactSessionListFilter"
 import type { ChatDisplayHandle } from "./ChatDisplay"
 import { LeftSidebar } from "./LeftSidebar"
+import { SidebarSectionHeader } from "./SidebarSectionHeader"
+import { SessionSidebarFilters } from "./SessionSidebarFilters"
+import { CompactEntityFilter } from "./CompactEntityFilter"
 import { useSession } from "@/hooks/useSession"
 import { ensureSessionMessagesLoadedAtom } from "@/atoms/sessions"
 import { AppShellProvider, type AppShellContextType } from "@/context/AppShellContext"
@@ -94,6 +91,7 @@ import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/ato
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
 import { panelStackAtom, panelCountAtom, focusedPanelIdAtom, focusedSessionIdAtom, focusNextPanelAtom, focusPrevPanelAtom, parseSessionIdFromRoute } from "@/atoms/panel-stack"
+import { kanbanEditorTargetAtom, kanbanKeywordFilterAtom, kanbanProjectFilterAtom, kanbanRecencyDaysAtom } from "@/atoms/kanban"
 import { type SessionStatusId, type SessionStatus, statusConfigsToSessionStatuses } from "@/config/session-status-config"
 import { useStatuses } from "@/hooks/useStatuses"
 import { useLabels } from "@/hooks/useLabels"
@@ -117,11 +115,13 @@ import {
   isSkillsNavigation,
   isAutomationsNavigation,
   isProjectsNavigation,
+  isCanvasNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
+import { AccountSkillEditor } from '@/components/skills/AccountSkillEditor'
 import { AutomationsListPanel } from "../automations/AutomationsListPanel"
 import { ProjectsListPanel } from "./ProjectsListPanel"
 import { APP_EVENTS, AGENT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
@@ -145,9 +145,16 @@ import {
   RADIUS_EDGE,
   RADIUS_INNER,
 } from "./panel-constants"
+
+const SESSION_LIST_MIN_WIDTH = 260
+const SESSION_LIST_MAX_WIDTH = 640
+const SESSION_LIST_COMFORTABLE_WIDTH = 420
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
+import { RightWorkspaceDock } from "@/components/right-sidebar/RightWorkspaceDock"
+import type { RecencyDays } from "./session-recency"
+import { SidebarAccountMenu } from "./SidebarAccountMenu"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -542,10 +549,15 @@ function AppShellContent({
   const [sidebarWidth, setSidebarWidth] = React.useState(() => {
     return storage.get(storage.KEYS.sidebarWidth, 220)
   })
-  // Session list width in pixels (min 240, max 480)
+  // Session list width in pixels. Keep enough room for meaningful titles while
+  // still leaving the conversation as the dominant pane.
   const [sessionListWidth, setSessionListWidth] = React.useState(() => {
-    return storage.get(storage.KEYS.sessionListWidth, 300)
+    const persisted = storage.get(storage.KEYS.sessionListWidth, 320)
+    return Math.min(Math.max(persisted, SESSION_LIST_MIN_WIDTH), SESSION_LIST_MAX_WIDTH)
   })
+  // Keep the contextual dock in the default workspace layout on every launch.
+  // A manual close remains valid for the current runtime only.
+  const [rightDockVisible, setRightDockVisible] = React.useState(true)
 
   // Hides both sidebar and navigator (CMD+. toggle)
   // Seed from either focused window param or persisted preference, then keep it toggleable.
@@ -560,6 +572,7 @@ function AppShellContent({
   const shellWidth = useContainerWidth(shellRef)
   const MOBILE_THRESHOLD = 768
   const isAutoCompact = shellWidth > 0 && shellWidth < MOBILE_THRESHOLD
+  const isRightDockOverlay = shellWidth > 0 && shellWidth < 1200
 
   const effectiveSidebarAndNavigatorHidden = isSidebarAndNavigatorHidden || isAutoCompact
 
@@ -597,6 +610,10 @@ function AppShellContent({
   const panelStack = useAtomValue(panelStackAtom)
   const panelCount = useAtomValue(panelCountAtom)
   const focusedSessionId = useAtomValue(focusedSessionIdAtom)
+  const setKanbanEditorTarget = useSetAtom(kanbanEditorTargetAtom)
+  const setKanbanKeywordFilter = useSetAtom(kanbanKeywordFilterAtom)
+  const setKanbanRecencyDays = useSetAtom(kanbanRecencyDaysAtom)
+  const setKanbanProjectFilter = useSetAtom(kanbanProjectFilterAtom)
 
   // Navigate the focused panel to a session.
   // If the session is already open in another panel, focus that panel instead.
@@ -630,6 +647,7 @@ function AppShellContent({
   // Board view replaces the session-list navigator with the full-width Kanban panel,
   // so the navigator (and its resize handle) collapse to zero width while it's active.
   const isBoardView = isSessionsNavigation(navState) && navState.viewMode === 'board'
+  const isCanvasView = isCanvasNavigation(navState)
 
   // Derive source filter from navigation state (only when in sources navigator)
   const sourceFilter: SourceFilter | null = isSourcesNavigation(navState) ? navState.filter ?? null : null
@@ -684,6 +702,14 @@ function AppShellContent({
         for (const id of oldLabels) labels[id] = 'include'
         saved.allSessions = { statuses, labels }
       }
+    }
+    // Keep "All Sessions" as a reliable recovery view after startup. Transient
+    // filters can be applied again from the list header without hiding data on load.
+    saved.allSessions = {
+      statuses: {},
+      labels: {},
+      projects: {},
+      groupingMode: saved.allSessions?.groupingMode,
     }
     return saved
   })
@@ -812,24 +838,18 @@ function AppShellContent({
   // Search state for session list
   const [searchActive, setSearchActive] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
+  const [projectListKeyword, setProjectListKeyword] = React.useState('')
+  const [projectRecencyDays, setProjectRecencyDays] = React.useState<RecencyDays>(() => {
+    return null
+  })
 
-  // Grouping mode for chat list: per-view (stored in viewFiltersMap), forced to 'date' for state sub-views
-  const isStateSubView = sessionFilter?.kind === 'state'
+  React.useEffect(() => storage.set(storage.KEYS.projectListKeyword, projectListKeyword), [projectListKeyword])
+  React.useEffect(() => storage.set(storage.KEYS.projectRecencyDays, projectRecencyDays), [projectRecencyDays])
 
-  const chatGroupingMode: ChatGroupingMode = isStateSubView
-    ? 'date'
-    : (viewFiltersMap[sessionFilterKey ?? '']?.groupingMode ?? 'date')
-
-  const setChatGroupingMode = useCallback((mode: ChatGroupingMode) => {
-    setViewFiltersMap(prev => {
-      if (!sessionFilterKey) return prev
-      const existing = prev[sessionFilterKey] ?? { statuses: {}, labels: {} }
-      return {
-        ...prev,
-        [sessionFilterKey]: { ...existing, groupingMode: mode }
-      }
-    })
-  }, [sessionFilterKey])
+  // Grouping is intentionally fixed after simplifying the session filter menu
+  // to Status and Label only. This also prevents an old persisted grouping
+  // choice from leaving the list in a mode the user can no longer change.
+  const chatGroupingMode: ChatGroupingMode = 'date'
 
   // Ref for ChatDisplay navigation (exposed via forwardRef)
   const chatDisplayRef = React.useRef<ChatDisplayHandle>(null)
@@ -992,8 +1012,19 @@ function AppShellContent({
     // Load workspace-scoped state on BOTH initial mount AND workspace switch
     // This fixes CMD+R losing filters - previously only ran on workspace switch
     if (previousWorkspaceId !== activeWorkspaceId) {
-      const newViewFilters = storage.get<ViewFiltersMap>(storage.KEYS.viewFilters, {}, activeWorkspaceId)
+      const storedViewFilters = storage.get<ViewFiltersMap>(storage.KEYS.viewFilters, {}, activeWorkspaceId)
+      const newViewFilters: ViewFiltersMap = {
+        ...storedViewFilters,
+        allSessions: {
+          statuses: {},
+          labels: {},
+          projects: {},
+          groupingMode: storedViewFilters.allSessions?.groupingMode,
+        },
+      }
       setViewFiltersMap(newViewFilters)
+      setProjectListKeyword('')
+      setProjectRecencyDays(null)
 
       const newExpandedFolders = storage.get<string[]>(storage.KEYS.expandedFolders, [], activeWorkspaceId)
       setExpandedFolders(new Set(newExpandedFolders))
@@ -1168,7 +1199,6 @@ function AppShellContent({
 
   // Register focus zones
   const { zoneRef: sidebarRef, isFocused: sidebarFocused } = useFocusZone({ zoneId: 'sidebar' })
-
   // Global keyboard shortcuts using centralized action registry
   // Actions are defined in @/actions/definitions.ts
 
@@ -1185,6 +1215,28 @@ function AppShellContent({
   // Shift+Tab cycles permission mode through enabled modes (textarea handles its own, this handles when focus is elsewhere)
   // In multi-panel, targets the focused panel's session
   const effectiveSessionId = focusedSessionId ?? session.selected
+  // The right workspace is contextual rather than global. Only a selected
+  // session (including a task opened from the board) owns deliverables. Clear
+  // the scope on task/project/canvas overview pages so content from the last
+  // conversation cannot linger while the user is browsing another entity.
+  const rightDockSessionId = isSessionsNavigation(navState) && !isBoardView
+    ? effectiveSessionId
+    : null
+  const openedRightDockForSessionRef = React.useRef<string | null>(null)
+
+  // A concrete conversation owns the contextual brief/results dock. Open it
+  // whenever the user enters a different session, while still allowing them to
+  // close it manually for the remainder of the current session.
+  React.useEffect(() => {
+    const sessionId = isSessionsNavigation(navState) ? navState.details?.sessionId ?? null : null
+    if (!sessionId) {
+      openedRightDockForSessionRef.current = null
+      return
+    }
+    if (openedRightDockForSessionRef.current === sessionId) return
+    openedRightDockForSessionRef.current = sessionId
+    setRightDockVisible(true)
+  }, [navState])
 
   // Focus chat input for the target session only (multi-panel safe).
   const focusChatInputForSession = useCallback((targetSessionId?: string | null) => {
@@ -1340,8 +1392,13 @@ function AppShellContent({
           setSidebarHandleY(e.clientY - rect.top)
         }
       } else if (isResizing === 'session-list') {
-        const offset = isSidebarVisible ? sidebarWidth : 0
-        const newWidth = Math.min(Math.max(e.clientX - offset, 240), 480)
+        const navigatorStart = isSidebarVisible
+          ? sidebarWidth + PANEL_GAP
+          : PANEL_EDGE_INSET
+        const newWidth = Math.min(
+          Math.max(e.clientX - navigatorStart, SESSION_LIST_MIN_WIDTH),
+          SESSION_LIST_MAX_WIDTH,
+        )
         setSessionListWidth(newWidth)
         if (sessionListHandleRef.current) {
           const rect = sessionListHandleRef.current.getBoundingClientRect()
@@ -1358,6 +1415,8 @@ function AppShellContent({
         storage.set(storage.KEYS.sessionListWidth, sessionListWidth)
         setSessionListHandleY(null)
       }
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
       setIsResizing(null)
     }
 
@@ -1367,6 +1426,8 @@ function AppShellContent({
     return () => {
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
     }
   }, [
     isResizing,
@@ -1402,11 +1463,26 @@ function AppShellContent({
     : undefined
   React.useEffect(() => {
     if (!activeWorkspaceId) return
-    window.electronAPI.getSkills(activeWorkspaceId, activeSessionWorkingDirectory).then((loaded) => {
-      setSkills(loaded || [])
-    }).catch(err => {
-      console.error('[Chat] Failed to load skills:', err)
-    })
+    let active = true
+    setSkills([])
+    const refresh = () => {
+      window.electronAPI.getSkills(activeWorkspaceId, activeSessionWorkingDirectory).then((loaded) => {
+        if (active) setSkills(loaded || [])
+      }).catch(err => {
+        if (active) setSkills([])
+        console.error('[Chat] Failed to load skills:', err)
+      })
+    }
+    refresh()
+    window.addEventListener('jonwork:skills-changed', refresh)
+    window.addEventListener('focus', refresh)
+    const poll = window.setInterval(refresh, 30_000)
+    return () => {
+      active = false
+      window.removeEventListener('jonwork:skills-changed', refresh)
+      window.removeEventListener('focus', refresh)
+      window.clearInterval(poll)
+    }
   }, [activeWorkspaceId, activeSessionWorkingDirectory])
 
   // Filter session metadata by active workspace
@@ -1653,6 +1729,28 @@ function AppShellContent({
     return result
   }, [workspaceSessionMetas, activeSessionMetas, sessionFilter, listFilter, labelFilter, projectFilter, labelConfigs])
 
+  const sidebarSessionHistory = useMemo(() => {
+    const source = sessionFilter ? filteredSessionMetas : activeSessionMetas
+    return [...source]
+      .sort((a, b) => (b.lastMessageAt ?? b.createdAt ?? 0) - (a.lastMessageAt ?? a.createdAt ?? 0))
+      .slice(0, 8)
+  }, [activeSessionMetas, filteredSessionMetas, sessionFilter])
+
+  const sidebarSelectedLabelIds = useMemo(() => {
+    const labels = viewFiltersMap.allSessions?.labels ?? {}
+    return new Set(
+      Object.entries(labels)
+        .filter(([, mode]) => mode === 'include')
+        .map(([id]) => id),
+    )
+  }, [viewFiltersMap])
+
+  const sidebarActiveStatusId = useMemo(() => {
+    if (sessionFilter?.kind === 'archived') return 'archived'
+    const statuses = viewFiltersMap.allSessions?.statuses ?? {}
+    return Object.entries(statuses).find(([, mode]) => mode === 'include')?.[0] ?? null
+  }, [sessionFilter, viewFiltersMap])
+
   // Derive "pinned" (non-removable) filters from the current sessionFilter path.
   // These represent filters that are implicit in the current deeplink/route and
   // should be displayed as fixed chips in the filter bar that users cannot remove.
@@ -1701,7 +1799,14 @@ function AppShellContent({
     sessionStatuses: effectiveSessionStatuses,
     onSessionSourcesChange: handleSessionSourcesChange,
     onJumpToTaskSessions: handleJumpToTaskSessions,
-    rightSidebarButton: null,
+    rightSidebarButton: (
+      <HeaderIconButton
+        icon={<PanelRightOpen className="h-4 w-4" />}
+        tooltip={rightDockVisible ? t('rightDock.close') : t('rightDock.open')}
+        onClick={() => setRightDockVisible(value => !value)}
+        className={rightDockVisible ? 'bg-foreground/[0.05]' : undefined}
+      />
+    ),
     isCompactMode: isAutoCompact,
     // Search state for ChatDisplay highlighting
     sessionListSearchQuery: searchActive ? searchQuery : undefined,
@@ -1715,7 +1820,7 @@ function AppShellContent({
     automationTestResults,
     getAutomationHistory,
     onReplayAutomation: handleReplayAutomation,
-  }), [contextValue, handleDeleteSession, sources, skills, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, handleJumpToTaskSessions, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation])
+  }), [contextValue, handleDeleteSession, sources, skills, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, handleJumpToTaskSessions, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation, rightDockVisible, t])
 
   // Persist expanded folders to localStorage (workspace-scoped)
   React.useEffect(() => {
@@ -1762,7 +1867,50 @@ function AppShellContent({
   }, [collapsedItems, activeWorkspaceId])
 
   const handleAllSessionsClick = useCallback(() => {
+    setViewFiltersMap(prev => ({
+      ...prev,
+      allSessions: {
+        statuses: {},
+        labels: {},
+        projects: {},
+        groupingMode: prev.allSessions?.groupingMode,
+      },
+    }))
     navigate(routes.view.allSessions())
+  }, [])
+
+  const handleAllTasksClick = useCallback(() => {
+    setKanbanKeywordFilter('')
+    setKanbanRecencyDays(null)
+    const recentProject = projects.reduce<(typeof projects)[number] | undefined>(
+      (latest, project) => !latest || project.config.updatedAt > latest.config.updatedAt ? project : latest,
+      undefined,
+    )
+    setKanbanProjectFilter(recentProject ? [recentProject.config.id] : [])
+    navigate(routes.view.board())
+  }, [projects, setKanbanKeywordFilter, setKanbanProjectFilter, setKanbanRecencyDays])
+
+  const handleCanvasClick = useCallback(() => {
+    setRightDockVisible(false)
+    navigate(routes.view.canvas())
+  }, [])
+
+  const [canvasProjects, setCanvasProjects] = React.useState<Array<{ id: string; title: string; updatedAt: string }>>([])
+  const [activeCanvasProjectId, setActiveCanvasProjectId] = React.useState('')
+
+  React.useEffect(() => {
+    const handleCanvasProjects = (event: Event) => {
+      const detail = (event as CustomEvent<{ projects?: Array<{ id: string; title: string; updatedAt: string }>; activeProjectId?: string }>).detail
+      setCanvasProjects(detail?.projects || [])
+      setActiveCanvasProjectId(detail?.activeProjectId || '')
+    }
+    window.addEventListener('jonwork:canvas-projects', handleCanvasProjects)
+    return () => window.removeEventListener('jonwork:canvas-projects', handleCanvasProjects)
+  }, [])
+
+  const handleCanvasProjectClick = useCallback((projectId: string) => {
+    setRightDockVisible(false)
+    window.dispatchEvent(new CustomEvent('jonwork:canvas-project-open', { detail: { projectId } }))
   }, [])
 
   const handleFlaggedClick = useCallback(() => {
@@ -1825,8 +1973,59 @@ function AppShellContent({
 
   // Handler for projects view
   const handleProjectsClick = useCallback(() => {
+    setProjectListKeyword('')
+    setProjectRecencyDays(null)
     navigate(routes.view.projects())
   }, [])
+
+  const handleProjectAssetsClick = useCallback(() => {
+    navigate(routes.view.projectAssets())
+  }, [])
+
+  const handleSidebarStatusFilter = useCallback((statusId: string | null) => {
+    if (statusId === 'archived') {
+      handleArchivedClick()
+      return
+    }
+    setViewFiltersMap(prev => {
+      const existing = prev.allSessions
+      return {
+        ...prev,
+        allSessions: {
+          statuses: statusId ? { [statusId]: 'include' } : {},
+          labels: existing?.labels ?? {},
+          projects: existing?.projects ?? {},
+          groupingMode: existing?.groupingMode,
+        },
+      }
+    })
+    navigate(routes.view.allSessions())
+  }, [handleArchivedClick])
+
+  const handleSidebarLabelFilter = useCallback((labelId: string) => {
+    setViewFiltersMap(prev => {
+      const existing = prev.allSessions
+      const labels = { ...(existing?.labels ?? {}) }
+      if (labels[labelId] === 'include') delete labels[labelId]
+      else labels[labelId] = 'include'
+      return {
+        ...prev,
+        allSessions: {
+          statuses: existing?.statuses ?? {},
+          labels,
+          projects: existing?.projects ?? {},
+          groupingMode: existing?.groupingMode,
+        },
+      }
+    })
+    navigate(routes.view.allSessions())
+  }, [])
+
+  const handleNewTask = useCallback(() => {
+    const activeProjectId = [...projectFilter.entries()].find(([, mode]) => mode === 'include')?.[0]
+    setKanbanEditorTarget({ mode: 'create', initialProjectId: activeProjectId })
+    navigate(routes.view.board())
+  }, [projectFilter, setKanbanEditorTarget])
 
   const handleAutomationsScheduledClick = useCallback(() => {
     navigate(routes.view.automationsScheduled())
@@ -2094,36 +2293,26 @@ function AppShellContent({
   const unifiedSidebarItems = React.useMemo((): SidebarItem[] => {
     const result: SidebarItem[] = []
 
-    // 1. Sessions section: All Sessions (expandable) with status items, Flagged, Archived as children
+    // 1. Primary workspace destinations, in visual order.
+    result.push({ id: 'nav:canvas', type: 'nav', action: handleCanvasClick })
+    result.push({ id: 'nav:projects', type: 'nav', action: handleProjectsClick })
+    result.push({ id: 'nav:tasks', type: 'nav', action: handleAllTasksClick })
+    result.push({ id: 'nav:projectAssets', type: 'nav', action: handleProjectAssetsClick })
     result.push({ id: 'nav:allSessions', type: 'nav', action: handleAllSessionsClick })
-    for (const state of effectiveSessionStatuses) {
-      result.push({ id: `nav:state:${state.id}`, type: 'nav', action: () => handleSessionStatusClick(state.id) })
-    }
-    result.push({ id: 'nav:flagged', type: 'nav', action: handleFlaggedClick })
-    result.push({ id: 'nav:archived', type: 'nav', action: handleArchivedClick })
-
-    // 2. Labels section header + regular label tree for keyboard nav
-    result.push({ id: 'nav:labels', type: 'nav', action: () => handleLabelClick('__all__') })
-    // Flatten regular label tree for keyboard navigation (depth-first)
-    const flattenTree = (nodes: LabelTreeNode[]) => {
-      for (const node of nodes) {
-        if (node.label) {
-          result.push({ id: `nav:label:${node.fullId}`, type: 'nav', action: () => handleLabelClick(node.fullId) })
-        }
-        if (node.children.length > 0) flattenTree(node.children)
+    if (isExpanded('nav:sessions-section')) {
+      for (const item of sidebarSessionHistory) {
+        result.push({ id: `nav:session:${item.id}`, type: 'nav', action: () => navigateToSession(item.id) })
       }
     }
-    flattenTree(labelTree)
 
-    // 3. Sources, Skills, Settings
+    // 2. Resources
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
     result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
-    result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick() })
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
-  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleSessionStatusClick, effectiveSessionStatuses, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
+  }, [handleAllSessionsClick, handleAllTasksClick, handleCanvasClick, handleProjectsClick, handleProjectAssetsClick, sidebarSessionHistory, navigateToSession, isExpanded, handleSourcesClick, handleSkillsClick, handleAutomationsClick, handleWhatsNewClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2419,270 +2608,161 @@ function AppShellContent({
                 </div>
                 {/* Primary Nav: All Sessions (▸ Statuses, Flagged, Archived), Labels | Sources, Skills | Settings */}
                 {/* pb-4 provides clearance so the last item scrolls above the mask-fade-bottom gradient */}
-                <div className="flex-1 overflow-y-auto min-h-0 mask-fade-bottom pb-4">
+                <div className="flex flex-1 flex-col overflow-y-auto min-h-0 mask-fade-bottom pb-4">
                 <LeftSidebar
                   isCollapsed={false}
                   getItemProps={getSidebarItemProps}
                   focusedItemId={focusedSidebarItemId}
-                  links={[
-                    // --- Sessions Section ---
-                    // All Sessions: expandable with status children (sortable) + Flagged & Archived as trailing items
-                    {
-                      id: "nav:allSessions",
-                      title: t("sidebar.allSessions"),
-                      label: String(workspaceSessionMetas.length),
-                      icon: Inbox,
-                      variant: sessionFilter?.kind === 'allSessions' ? "default" : "ghost",
-                      onClick: handleAllSessionsClick,
-                      expandable: true,
-                      expanded: isExpanded('nav:allSessions'),
-                      onToggle: () => toggleExpanded('nav:allSessions'),
-                      contextMenu: {
-                        type: 'allSessions',
-                        onConfigureStatuses: openConfigureStatuses,
-                        onMarkAllRead: () => {
-                          if (!activeWorkspaceId) return
-                          // Optimistic: clear hasUnread on all workspace session metas
-                          setSessionMetaMap(prev => {
-                            const next = new Map(prev)
-                            for (const [id, meta] of next) {
-                              if (meta.workspaceId === activeWorkspaceId && meta.hasUnread) {
-                                next.set(id, { ...meta, hasUnread: false })
-                              }
-                            }
-                            return next
-                          })
-                          window.electronAPI.markAllSessionsRead(activeWorkspaceId)
-                        },
-                      },
-                      // Enable flat DnD reorder for status items
-                      sortable: { onReorder: handleStatusReorder },
-                      items: [
-                        // Status items (sortable via SortableStatusList)
-                        ...effectiveSessionStatuses.map(state => ({
-                          id: `nav:state:${state.id}`,
-                          title: t(`status.${state.id}`, state.label),
-                          label: String(sessionStatusCounts[state.id] || 0),
-                          icon: state.icon,
-                          iconColor: state.resolvedColor,
-                          iconColorable: state.iconColorable,
-                          variant: (sessionFilter?.kind === 'state' && sessionFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
-                          onClick: () => handleSessionStatusClick(state.id),
-                          contextMenu: {
-                            type: 'status' as const,
-                            statusId: state.id,
-                            onConfigureStatuses: openConfigureStatuses,
-                          },
-                        })),
-                        // Separator: SortableStatusList splits here — items after become non-sortable trailingItems
-                        { id: 'separator:states-flagged', type: 'separator' as const },
-                        // Flagged (trailing, non-sortable)
-                        {
-                          id: "nav:flagged",
-                          title: t("sidebar.flagged"),
-                          label: String(flaggedCount),
-                          icon: <Flag className="h-3.5 w-3.5" />,
-                          variant: (sessionFilter?.kind === 'flagged' ? "default" : "ghost") as "default" | "ghost",
-                          onClick: handleFlaggedClick,
-                        },
-                        // Archived (trailing, non-sortable)
-                        {
-                          id: "nav:archived",
-                          title: t("sidebar.archived"),
-                          label: archivedCount > 0 ? String(archivedCount) : undefined,
-                          icon: Archive,
-                          variant: (sessionFilter?.kind === 'archived' ? "default" : "ghost") as "default" | "ghost",
-                          onClick: handleArchivedClick,
-                        },
-                      ],
-                    },
-                    // Labels: navigable header (shows all labeled sessions) + hierarchical tree (drag-and-drop reorder + re-parent)
-                    {
-                      id: "nav:labels",
-                      title: t("sidebar.labels"),
-                      icon: Tag,
-                      // Only highlighted when "Labels" itself is selected (not sub-labels)
-                      variant: (sessionFilter?.kind === 'label' && sessionFilter.labelId === '__all__') ? "default" as const : "ghost" as const,
-                      // Clicking navigates to "all labeled sessions" view
-                      onClick: () => handleLabelClick('__all__'),
-                      expandable: true,
-                      expanded: isExpanded('nav:labels'),
-                      onToggle: () => toggleExpanded('nav:labels'),
-                      contextMenu: {
-                        type: 'labels' as const,
-                        onConfigureLabels: openConfigureLabels,
-                        onAddLabel: handleAddLabel,
-                      },
-                      items: buildLabelSidebarItems(labelTree),
-                    },
-                    // --- Separator ---
-                    { id: "separator:chats-sources", type: "separator" },
-                    // --- Sources & Skills Section ---
-                    {
-                      id: "nav:sources",
-                      title: t("sidebar.sources"),
-                      label: String(sources.length),
-                      icon: DatabaseZap,
-                      variant: (isSourcesNavigation(navState) && !sourceFilter) ? "default" : "ghost",
-                      onClick: handleSourcesClick,
-                      dataTutorial: "sources-nav",
-                      expandable: true,
-                      expanded: isExpanded('nav:sources'),
-                      onToggle: () => toggleExpanded('nav:sources'),
-                      contextMenu: {
-                        type: 'sources',
-                        onAddSource: () => openAddSource(),
-                      },
-                      items: [
-                        {
-                          id: "nav:sources:api",
-                          title: t("sidebar.apis"),
-                          label: String(sourceTypeCounts.api),
-                          icon: Globe,
-                          variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'api') ? "default" : "ghost",
-                          onClick: handleSourcesApiClick,
-                          contextMenu: {
-                            type: 'sources' as const,
-                            onAddSource: () => openAddSource('api'),
-                            sourceType: 'api',
-                          },
-                        },
-                        {
-                          id: "nav:sources:mcp",
-                          title: t("sidebar.mcps"),
-                          label: String(sourceTypeCounts.mcp),
-                          icon: <McpIcon className="h-3.5 w-3.5" />,
-                          variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'mcp') ? "default" : "ghost",
-                          onClick: handleSourcesMcpClick,
-                          contextMenu: {
-                            type: 'sources' as const,
-                            onAddSource: () => openAddSource('mcp'),
-                            sourceType: 'mcp',
-                          },
-                        },
-                        {
-                          id: "nav:sources:local",
-                          title: t("sidebar.localFolders"),
-                          label: String(sourceTypeCounts.local),
-                          icon: FolderOpen,
-                          variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'local') ? "default" : "ghost",
-                          onClick: handleSourcesLocalClick,
-                          contextMenu: {
-                            type: 'sources' as const,
-                            onAddSource: () => openAddSource('local'),
-                            sourceType: 'local',
-                          },
-                        },
-                      ],
-                    },
-                    {
-                      id: "nav:skills",
-                      title: t("sidebar.skills"),
-                      label: String(skills.length),
-                      icon: Zap,
-                      variant: isSkillsNavigation(navState) ? "default" : "ghost",
-                      onClick: handleSkillsClick,
-                      contextMenu: {
-                        type: 'skills',
-                        onAddSkill: openAddSkill,
-                      },
-                    },
-                    {
-                      id: "nav:projects",
-                      title: t("sidebar.projects"),
-                      label: String(projects.length),
-                      icon: FolderKanban,
-                      // Highlight only when on Projects view itself, not when a child is "active" (jumped-to filter)
-                      variant: isProjectsNavigation(navState) ? "default" : "ghost",
-                      onClick: handleProjectsClick,
-                      expandable: projects.length > 0,
-                      expanded: isExpanded('nav:projects'),
-                      onToggle: () => toggleExpanded('nav:projects'),
-                      contextMenu: {
-                        type: 'projects' as const,
-                        onAddProject: openAddProject,
-                      },
-                      items: projects.map(p => ({
-                        id: `nav:projects:${p.config.id}`,
-                        title: p.config.name,
-                        icon: FolderKanban,
-                        // Highlight when on allSessions view AND filter includes this project (the jump-to state)
-                        variant: (sessionFilter?.kind === 'allSessions' && projectFilter.get(p.config.id) === 'include') ? "default" as const : "ghost" as const,
-                        onClick: () => handleJumpToProjectSessions(p.config.id),
-                      })),
-                    },
-                    {
-                      id: "nav:automations",
-                      title: t("sidebar.automations"),
-                      label: String(automations.length),
-                      icon: ListTodo,
-                      variant: (isAutomationsNavigation(navState) && !automationFilter) ? "default" : "ghost",
-                      onClick: handleAutomationsClick,
-                      expandable: true,
-                      expanded: isExpanded('nav:automations'),
-                      onToggle: () => toggleExpanded('nav:automations'),
-                      contextMenu: {
-                        type: 'automations' as const,
-                        onAddAutomation: openAddAutomation,
-                      },
-                      items: [
-                        {
-                          id: "nav:automations:scheduled",
-                          title: t("sidebar.scheduled"),
-                          label: String(automationTypeCounts.scheduled),
-                          icon: Clock,
-                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'scheduled') ? "default" : "ghost",
-                          onClick: handleAutomationsScheduledClick,
-                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
-                        },
-                        {
-                          id: "nav:automations:event",
-                          title: t("sidebar.eventBased"),
-                          label: String(automationTypeCounts.event),
-                          icon: Radio,
-                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'event') ? "default" : "ghost",
-                          onClick: handleAutomationsEventClick,
-                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
-                        },
-                        {
-                          id: "nav:automations:agentic",
-                          title: t("sidebar.agentic"),
-                          label: String(automationTypeCounts.agentic),
-                          icon: Bot,
-                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'agentic') ? "default" : "ghost",
-                          onClick: handleAutomationsAgenticClick,
-                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
-                        },
-                      ],
-                    },
-                    // --- Separator ---
-                    { id: "separator:skills-settings", type: "separator" },
-                    // --- Settings ---
-                    {
-                      id: "nav:settings",
-                      title: t("sidebar.settings"),
-                      icon: Settings,
-                      variant: isSettingsNavigation(navState) ? "default" : "ghost",
-                      onClick: () => handleSettingsClick(),
-                    },
-                    // --- What's New ---
-                    {
-                      id: "nav:whats-new",
-                      title: t("sidebar.whatsNew"),
-                      icon: hasUnseenReleaseNotes ? (
-                        <span className="relative">
-                          <Cake className="h-3.5 w-3.5" />
-                          <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-accent" />
-                        </span>
-                      ) : Cake,
-                      variant: "ghost" as const,
-                      onClick: handleWhatsNewClick,
-                    },
-                  ]}
+                  links={[{
+                    id: 'nav:canvas',
+                    title: '无限画布',
+                    icon: Shapes,
+                    variant: 'ghost',
+                    onClick: handleCanvasClick,
+                    expandable: true,
+                    expanded: isCanvasView,
+                    onToggle: handleCanvasClick,
+                    items: canvasProjects.map((project) => ({
+                      id: `nav:canvas:${project.id}`,
+                      title: project.title,
+                      icon: Shapes,
+                      variant: activeCanvasProjectId === project.id ? 'default' : 'ghost',
+                      compact: true,
+                      onClick: () => handleCanvasProjectClick(project.id),
+                    })),
+                  }]}
                 />
+
+                <SidebarSectionHeader
+                  title={t('sidebar.projects')}
+                  icon={<FolderKanban className="h-3.5 w-3.5" />}
+                  className="mt-1"
+                  onClick={handleProjectsClick}
+                  active={isProjectsNavigation(navState) && !navState.details}
+                  navigationProps={getSidebarItemProps('nav:projects')}
+                  actions={
+                    <button type="button" onClick={openAddProject} className="rounded-md bg-accent/10 p-1 text-accent hover:bg-accent/20 hover:text-accent" aria-label={t('projectsList.addProject')}>
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  }
+                />
+
+                <SidebarSectionHeader
+                  title={t('rightDock.tasks')}
+                  icon={<ListTodo className="h-3.5 w-3.5" />}
+                  className="mt-1"
+                  onClick={handleAllTasksClick}
+                  active={isBoardView}
+                  navigationProps={getSidebarItemProps('nav:tasks')}
+                  actions={
+                    <button type="button" onClick={handleNewTask} className="rounded-md bg-accent/10 p-1 text-accent hover:bg-accent/20 hover:text-accent" aria-label={t('kanban.newTask')}>
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  }
+                />
+
+                <LeftSidebar
+                  isCollapsed={false}
+                  getItemProps={getSidebarItemProps}
+                  focusedItemId={focusedSidebarItemId}
+                  links={[{
+                    id: 'nav:projectAssets',
+                    title: t('sidebar.projectAssets'),
+                    icon: Files,
+                    variant: (isProjectsNavigation(navState) && navState.details?.type === 'projectAssets') ? 'default' : 'ghost',
+                    onClick: handleProjectAssetsClick,
+                  }]}
+                />
+
+                <SidebarSectionHeader
+                  title={t('rightDock.sessions')}
+                  icon={<Inbox className="h-3.5 w-3.5" />}
+                  className="mt-1"
+                  onClick={handleAllSessionsClick}
+                  active={isSessionsNavigation(navState) && !isBoardView}
+                  navigationProps={getSidebarItemProps('nav:allSessions')}
+                  expanded={isExpanded('nav:sessions-section')}
+                  onToggle={() => toggleExpanded('nav:sessions-section')}
+                  actions={
+                    <SessionSidebarFilters
+                      statuses={effectiveSessionStatuses}
+                      activeStatusId={sidebarActiveStatusId}
+                      flagged={sessionFilter?.kind === 'flagged'}
+                      labelTree={labelTree}
+                      selectedLabelIds={sidebarSelectedLabelIds}
+                      showFlagged={false}
+                      onSelectStatus={handleSidebarStatusFilter}
+                      onToggleFlagged={handleFlaggedClick}
+                      onToggleLabel={handleSidebarLabelFilter}
+                    />
+                  }
+                />
+                <AnimatedCollapsibleContent isOpen={isExpanded('nav:sessions-section')}>
+                <LeftSidebar
+                  isCollapsed={false}
+                  getItemProps={getSidebarItemProps}
+                  focusedItemId={focusedSidebarItemId}
+                  links={sidebarSessionHistory.map(item => {
+                    const status = effectiveSessionStatuses.find(candidate => candidate.id === (item.sessionStatus || 'todo'))
+                    return {
+                      id: `nav:session:${item.id}`,
+                      title: getSessionTitle(item),
+                      icon: status?.icon ?? Inbox,
+                      iconColor: status?.resolvedColor,
+                      iconColorable: status?.iconColorable,
+                      variant: (isSessionsNavigation(navState) && navState.details?.sessionId === item.id) ? 'default' as const : 'ghost' as const,
+                      onClick: () => navigateToSession(item.id),
+                      compact: true,
+                    }
+                  })}
+                />
+                </AnimatedCollapsibleContent>
+
+                <div className="mt-auto pt-1">
+                  <SidebarSectionHeader title={t('rightDock.resources')} className="border-t border-foreground/[0.05] pt-1" />
+                  <LeftSidebar
+                    isCollapsed={false}
+                    getItemProps={getSidebarItemProps}
+                    focusedItemId={focusedSidebarItemId}
+                    links={[
+                      {
+                        id: 'nav:sources',
+                        title: t('sidebar.sources'),
+                        label: String(sources.length),
+                        icon: DatabaseZap,
+                        variant: isSourcesNavigation(navState) ? 'default' as const : 'ghost' as const,
+                        onClick: handleSourcesClick,
+                      },
+                      {
+                        id: 'nav:skills',
+                        title: t('sidebar.skills'),
+                        label: String(skills.length),
+                        icon: Zap,
+                        variant: isSkillsNavigation(navState) ? 'default' as const : 'ghost' as const,
+                        onClick: handleSkillsClick,
+                      },
+                      {
+                        id: 'nav:automations',
+                        title: t('sidebar.automations'),
+                        label: String(automations.length),
+                        icon: ListTodo,
+                        variant: isAutomationsNavigation(navState) ? 'default' as const : 'ghost' as const,
+                        onClick: handleAutomationsClick,
+                      },
+                    ]}
+                  />
+                </div>
+
                 {/* Agent Tree: Hierarchical list of agents */}
                 {/* Agents section removed */}
                 </div>
+              </div>
+
+              <div className="shrink-0 border-t border-foreground/[0.06] px-2 pb-2 pt-2">
+                <SidebarAccountMenu
+                  onOpenSettings={() => handleSettingsClick()}
+                  onLogout={onReset}
+                />
               </div>
 
             </div>
@@ -2735,18 +2815,14 @@ function AppShellContent({
                         effectiveSessionStatuses={effectiveSessionStatuses}
                         displayLabelConfigs={displayLabelConfigs}
                         labelConfigs={labelConfigs}
-                        chatGroupingMode={chatGroupingMode}
-                        setChatGroupingMode={setChatGroupingMode}
-                        isStateSubView={isStateSubView}
-                        onOpenSearch={() => setSearchActive(true)}
                       />
                     ) : (
                     <DropdownMenu onOpenChange={(open) => { if (!open) { setFilterDropdownQuery(''); setFilterAltHeld(false) } }}>
                       <DropdownMenuTrigger asChild>
                         <HeaderIconButton
                           icon={<ListFilter className="h-4 w-4" />}
-                          className={(listFilter.size > 0 || labelFilter.size > 0 || projectFilter.size > 0) ? "bg-accent/5 text-accent rounded-[8px] shadow-tinted" : "rounded-[8px]"}
-                          style={(listFilter.size > 0 || labelFilter.size > 0 || projectFilter.size > 0) ? { '--shadow-color': 'var(--accent-rgb)' } as React.CSSProperties : undefined}
+                          className={(listFilter.size > 0 || labelFilter.size > 0) ? "bg-accent/5 text-accent rounded-[8px] shadow-tinted" : "rounded-[8px]"}
+                          style={(listFilter.size > 0 || labelFilter.size > 0) ? { '--shadow-color': 'var(--accent-rgb)' } as React.CSSProperties : undefined}
                         />
                       </DropdownMenuTrigger>
                       <StyledDropdownMenuContent
@@ -2773,13 +2849,12 @@ function AppShellContent({
                         {/* Header with title and clear button (only clears user-added filters, never pinned) */}
                         <div className="flex items-center justify-between px-2 py-1.5">
                           <span className="text-xs font-medium text-muted-foreground">{t("sidebar.filterChats")}</span>
-                          {(listFilter.size > 0 || labelFilter.size > 0 || projectFilter.size > 0) && (
+                          {(listFilter.size > 0 || labelFilter.size > 0) && (
                             <button
                               onClick={(e) => {
                                 e.preventDefault()
                                 setListFilter(new Map())
                                 setLabelFilter(new Map())
-                                setProjectFilter(new Map())
                               }}
                               className="text-xs text-muted-foreground hover:text-foreground"
                             >
@@ -2866,18 +2941,8 @@ function AppShellContent({
                             {/* === HIERARCHICAL MODE (default) === */}
 
                             {/* Active filter chips: pinned (non-removable) + user-added (removable) */}
-                            {(pinnedFilters.pinnedFlagged || pinnedFilters.pinnedStatusId || pinnedFilters.pinnedLabelId || listFilter.size > 0 || labelFilter.size > 0 || projectFilter.size > 0) && (
+                            {(pinnedFilters.pinnedStatusId || pinnedFilters.pinnedLabelId || listFilter.size > 0 || labelFilter.size > 0) && (
                               <>
-                                {/* Pinned: flagged */}
-                                {pinnedFilters.pinnedFlagged && (
-                                  <StyledDropdownMenuItem disabled>
-                                    <FilterMenuRow
-                                      icon={<Flag className="h-3.5 w-3.5" />}
-                                      label={t("sidebar.flagged")}
-                                      accessory={<Check className="h-3 w-3 text-muted-foreground" />}
-                                    />
-                                  </StyledDropdownMenuItem>
-                                )}
                                 {/* Pinned: status from state view */}
                                 {(() => {
                                   if (!pinnedFilters.pinnedStatusId) return null
@@ -2967,37 +3032,6 @@ function AppShellContent({
                                           onRemove={() => setLabelFilter(prev => {
                                             const next = new Map(prev)
                                             next.delete(labelId)
-                                            return next
-                                          })}
-                                        />
-                                      </StyledDropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                  )
-                                })}
-                                {/* User-added: selected projects with mode pill (include/exclude) */}
-                                {Array.from(projectFilter).map(([projectId, mode]) => {
-                                  const project = projectMenuOptions.find(p => p.id === projectId)
-                                  if (!project) return null
-                                  return (
-                                    <DropdownMenuSub key={`sel-project-${projectId}`}>
-                                      <StyledDropdownMenuSubTrigger onClick={(e) => { e.preventDefault(); setProjectFilter(prev => { const next = new Map(prev); next.delete(projectId); return next }) }}>
-                                        <FilterMenuRow
-                                          icon={<FolderKanban className="h-3.5 w-3.5" />}
-                                          label={project.name}
-                                          accessory={<FilterModeBadge mode={mode} />}
-                                        />
-                                      </StyledDropdownMenuSubTrigger>
-                                      <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
-                                        <FilterModeSubMenuItems
-                                          mode={mode}
-                                          onChangeMode={(newMode) => setProjectFilter(prev => {
-                                            const next = new Map(prev)
-                                            next.set(projectId, newMode)
-                                            return next
-                                          })}
-                                          onRemove={() => setProjectFilter(prev => {
-                                            const next = new Map(prev)
-                                            next.delete(projectId)
                                             return next
                                           })}
                                         />
@@ -3105,116 +3139,6 @@ function AppShellContent({
                               </StyledDropdownMenuSubContent>
                             </DropdownMenuSub>
 
-                            {/* Projects submenu - flat list of workspace projects */}
-                            {projectMenuOptions.length > 0 && (
-                              <DropdownMenuSub>
-                                <StyledDropdownMenuSubTrigger>
-                                  <FolderKanban className="h-3.5 w-3.5" />
-                                  <span className="flex-1">{t("sidebar.projects")}</span>
-                                </StyledDropdownMenuSubTrigger>
-                                <StyledDropdownMenuSubContent minWidth="min-w-[180px]">
-                                  {projectMenuOptions.map(project => {
-                                    const currentMode = projectFilter.get(project.id)
-                                    const isActive = !!currentMode
-                                    if (isActive) {
-                                      return (
-                                        <DropdownMenuSub key={project.id}>
-                                          <StyledDropdownMenuSubTrigger onClick={(e) => { e.preventDefault(); setProjectFilter(prev => { const next = new Map(prev); next.delete(project.id); return next }) }}>
-                                            <FilterMenuRow
-                                              icon={<FolderKanban className="h-3.5 w-3.5" />}
-                                              label={project.name}
-                                              accessory={<FilterModeBadge mode={currentMode} />}
-                                            />
-                                          </StyledDropdownMenuSubTrigger>
-                                          <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
-                                            <FilterModeSubMenuItems
-                                              mode={currentMode}
-                                              onChangeMode={(newMode) => setProjectFilter(prev => {
-                                                const next = new Map(prev)
-                                                next.set(project.id, newMode)
-                                                return next
-                                              })}
-                                              onRemove={() => setProjectFilter(prev => {
-                                                const next = new Map(prev)
-                                                next.delete(project.id)
-                                                return next
-                                              })}
-                                            />
-                                          </StyledDropdownMenuSubContent>
-                                        </DropdownMenuSub>
-                                      )
-                                    }
-                                    return (
-                                      <AltExcludeTooltip key={project.id} show={filterAltHeld}>
-                                        <StyledDropdownMenuItem
-                                          onClick={(e) => {
-                                            e.preventDefault()
-                                            setProjectFilter(prev => {
-                                              const next = new Map(prev)
-                                              if (next.has(project.id)) next.delete(project.id)
-                                              else next.set(project.id, e.altKey ? 'exclude' : 'include')
-                                              return next
-                                            })
-                                          }}
-                                        >
-                                          <FilterMenuRow
-                                            icon={<FolderKanban className="h-3.5 w-3.5" />}
-                                            label={project.name}
-                                          />
-                                        </StyledDropdownMenuItem>
-                                      </AltExcludeTooltip>
-                                    )
-                                  })}
-                                </StyledDropdownMenuSubContent>
-                              </DropdownMenuSub>
-                            )}
-
-                            {/* Group by submenu - hidden in state sub-views (always date there) */}
-                            {!isStateSubView && (
-                              <>
-                                <StyledDropdownMenuSeparator />
-                                <DropdownMenuSub>
-                                  <StyledDropdownMenuSubTrigger>
-                                    <Layers className="h-3.5 w-3.5" />
-                                    <span className="flex-1">{t("sidebar.group")}</span>
-                                  </StyledDropdownMenuSubTrigger>
-                                  <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
-                                    <StyledDropdownMenuItem onClick={() => setChatGroupingMode('date')}>
-                                      <Calendar className="h-3.5 w-3.5" />
-                                      <span className="flex-1">{t("sidebar.groupByDate")}</span>
-                                      {chatGroupingMode === 'date' && <Check className="h-3 w-3 text-muted-foreground" />}
-                                    </StyledDropdownMenuItem>
-                                    <StyledDropdownMenuItem onClick={() => setChatGroupingMode('status')}>
-                                      <Inbox className="h-3.5 w-3.5" />
-                                      <span className="flex-1">{t("sidebar.groupByStatus")}</span>
-                                      {chatGroupingMode === 'status' && <Check className="h-3 w-3 text-muted-foreground" />}
-                                    </StyledDropdownMenuItem>
-                                    <StyledDropdownMenuItem onClick={() => setChatGroupingMode('unread')}>
-                                      <MailOpen className="h-3.5 w-3.5" />
-                                      <span className="flex-1">{t("sidebar.groupByUnread")}</span>
-                                      {chatGroupingMode === 'unread' && <Check className="h-3 w-3 text-muted-foreground" />}
-                                    </StyledDropdownMenuItem>
-                                    {projectMenuOptions.length > 0 && (
-                                      <StyledDropdownMenuItem onClick={() => setChatGroupingMode('project')}>
-                                        <FolderKanban className="h-3.5 w-3.5" />
-                                        <span className="flex-1">{t("sidebar.groupByProject")}</span>
-                                        {chatGroupingMode === 'project' && <Check className="h-3 w-3 text-muted-foreground" />}
-                                      </StyledDropdownMenuItem>
-                                    )}
-                                  </StyledDropdownMenuSubContent>
-                                </DropdownMenuSub>
-                              </>
-                            )}
-
-                            <StyledDropdownMenuSeparator />
-                            <StyledDropdownMenuItem
-                              onClick={() => {
-                                setSearchActive(true)
-                              }}
-                            >
-                              <Search className="h-3.5 w-3.5" />
-                              <span className="flex-1">{t("sidebar.search")}</span>
-                            </StyledDropdownMenuItem>
                           </>
                         ) : (
                           <>
@@ -3426,7 +3350,7 @@ function AppShellContent({
                   )}
                   {/* Add Skill button (only for skills mode) */}
                   {isSkillsNavigation(navState) && activeWorkspace && (
-                    <EditPopover
+                    window.electronAPI.saveAccountSkill ? <AccountSkillEditor trigger={<HeaderIconButton icon={<Plus className="h-4 w-4" />} tooltip={t('sidebarMenu.addSkill')} data-tutorial="add-skill-button" />} /> : <EditPopover
                       trigger={
                         <HeaderIconButton
                           icon={<Plus className="h-4 w-4" />}
@@ -3451,11 +3375,19 @@ function AppShellContent({
                   )}
                   {/* Add Project button (only for projects mode) */}
                   {isProjectsNavigation(navState) && activeWorkspace && (
-                    <HeaderIconButton
-                      icon={<Plus className="h-4 w-4" />}
-                      tooltip={t("sidebarMenu.addProject")}
-                      onClick={openAddProject}
-                    />
+                    <>
+                      <CompactEntityFilter
+                        keyword={projectListKeyword}
+                        onKeywordChange={setProjectListKeyword}
+                        recencyDays={projectRecencyDays}
+                        onRecencyDaysChange={setProjectRecencyDays}
+                      />
+                      <HeaderIconButton
+                        icon={<Plus className="h-4 w-4" />}
+                        tooltip={t("sidebarMenu.addProject")}
+                        onClick={openAddProject}
+                      />
+                    </>
                   )}
                 </>
               }
@@ -3488,11 +3420,13 @@ function AppShellContent({
               /* Projects List */
               <ProjectsListPanel
                 projects={projects}
+                keyword={projectListKeyword}
+                recencyDays={projectRecencyDays}
                 workspaceId={activeWorkspaceId}
                 onProjectClick={(slug) => navigate(routes.view.projects(slug))}
                 onAddProject={openAddProject}
                 onJumpToSessions={handleJumpToProjectSessions}
-                selectedProjectSlug={isProjectsNavigation(navState) ? navState.details?.projectSlug ?? null : null}
+                selectedProjectSlug={isProjectsNavigation(navState) && navState.details?.type === 'project' ? navState.details.projectSlug : null}
               />
             )}
             {isAutomationsNavigation(navState) && (
@@ -3565,6 +3499,7 @@ function AppShellContent({
                   projects={projectMenuOptions}
                   onSetProjectId={handleSessionProjectChange}
                   groupingMode={chatGroupingMode}
+                  olderThanDays={null}
                   workspaceId={activeWorkspaceId ?? undefined}
                   statusFilter={listFilter}
                   labelFilterMap={labelFilter}
@@ -3583,18 +3518,44 @@ function AppShellContent({
             )}
             </div>
           }
-          navigatorWidth={isAutoCompact ? sessionListWidth : (effectiveSidebarAndNavigatorHidden || isBoardView ? 0 : sessionListWidth)}
+          navigatorWidth={isAutoCompact ? sessionListWidth : (effectiveSidebarAndNavigatorHidden || isBoardView || isCanvasView ? 0 : sessionListWidth)}
           isSidebarAndNavigatorHidden={effectiveSidebarAndNavigatorHidden}
-          isRightSidebarVisible={false}
+          isRightSidebarVisible={rightDockVisible && !isCanvasView && !isAutoCompact && !isRightDockOverlay}
           isCompact={isAutoCompact}
           isResizing={!!isResizing}
         />
+
+        {rightDockVisible && !isCanvasView && !isAutoCompact && (
+          <RightWorkspaceDock
+            activeSessionId={rightDockSessionId ?? null}
+            isProcessing={rightDockSessionId ? sessionMetaMap.get(rightDockSessionId)?.isProcessing : false}
+            onClose={() => setRightDockVisible(false)}
+            overlay={isRightDockOverlay}
+          />
+        )}
+
+        {!rightDockVisible && !isCanvasView && !isAutoCompact && (
+          <button
+            type="button"
+            onClick={() => setRightDockVisible(true)}
+            className="absolute right-3 top-2 z-panel flex h-8 w-8 items-center justify-center rounded-lg bg-background text-foreground/45 shadow-minimal hover:bg-foreground/[0.03] hover:text-foreground"
+            aria-label={t('rightDock.open')}
+            title={t('rightDock.open')}
+          >
+            <PanelRightOpen className="h-4 w-4" />
+          </button>
+        )}
 
         {/* Sidebar Resize Handle (absolute, hidden in focused mode) */}
         {!effectiveSidebarAndNavigatorHidden && (
         <div
           ref={resizeHandleRef}
-          onMouseDown={(e) => { e.preventDefault(); setIsResizing('sidebar') }}
+          onMouseDown={(e) => {
+            e.preventDefault()
+            document.body.style.cursor = 'col-resize'
+            document.body.style.userSelect = 'none'
+            setIsResizing('sidebar')
+          }}
           onMouseMove={(e) => {
             if (resizeHandleRef.current) {
               const rect = resizeHandleRef.current.getBoundingClientRect()
@@ -3613,8 +3574,9 @@ function AppShellContent({
             transition: isResizing === 'sidebar' ? undefined : 'left 0.15s ease-out',
           }}
         >
+          <div className="absolute inset-y-0 w-px bg-foreground/[0.06]" aria-hidden="true" />
           <div
-            className="h-full"
+            className="relative h-full"
             style={{
               ...getResizeGradientStyle(sidebarHandleY, resizeHandleRef.current?.clientHeight ?? null),
               width: PANEL_SASH_LINE_WIDTH,
@@ -3627,7 +3589,33 @@ function AppShellContent({
         {!effectiveSidebarAndNavigatorHidden && !isBoardView && (
         <div
           ref={sessionListHandleRef}
-          onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t('session.resizeSessionList')}
+          aria-valuemin={SESSION_LIST_MIN_WIDTH}
+          aria-valuemax={SESSION_LIST_MAX_WIDTH}
+          aria-valuenow={Math.round(sessionListWidth)}
+          tabIndex={0}
+          onMouseDown={(e) => {
+            e.preventDefault()
+            document.body.style.cursor = 'col-resize'
+            document.body.style.userSelect = 'none'
+            setIsResizing('session-list')
+          }}
+          onDoubleClick={() => {
+            setSessionListWidth(SESSION_LIST_COMFORTABLE_WIDTH)
+            storage.set(storage.KEYS.sessionListWidth, SESSION_LIST_COMFORTABLE_WIDTH)
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+            e.preventDefault()
+            const delta = e.key === 'ArrowLeft' ? -20 : 20
+            setSessionListWidth(current => {
+              const next = Math.min(Math.max(current + delta, SESSION_LIST_MIN_WIDTH), SESSION_LIST_MAX_WIDTH)
+              storage.set(storage.KEYS.sessionListWidth, next)
+              return next
+            })
+          }}
           onMouseMove={(e) => {
             if (sessionListHandleRef.current) {
               const rect = sessionListHandleRef.current.getBoundingClientRect()
@@ -3648,8 +3636,9 @@ function AppShellContent({
             transition: isResizing === 'session-list' ? undefined : 'left 0.15s ease-out',
           }}
         >
+          <div className="absolute inset-y-0 w-px bg-foreground/[0.08]" aria-hidden="true" />
           <div
-            className="h-full"
+            className="relative h-full"
             style={{
               ...getResizeGradientStyle(sessionListHandleY, sessionListHandleRef.current?.clientHeight ?? null),
               width: PANEL_SASH_LINE_WIDTH,
@@ -3769,7 +3758,7 @@ function AppShellContent({
             />
           ))}
           {/* Add Skill EditPopover */}
-          <EditPopover
+          {window.electronAPI.saveAccountSkill ? <AccountSkillEditor open={editPopoverOpen === 'add-skill'} onOpenChange={isOpen => setEditPopoverOpen(isOpen ? 'add-skill' : null)} /> : <EditPopover
             open={editPopoverOpen === 'add-skill'}
             onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'add-skill' : null)}
             modal={true}
@@ -3783,7 +3772,7 @@ function AppShellContent({
             side="bottom"
             align="start"
             {...getEditConfig('add-skill', activeWorkspace.rootPath)}
-          />
+          />}
           {/* Add Automation EditPopover - triggered from "Add Automation" context menu in automations */}
           <EditPopover
             open={editPopoverOpen === 'automation-config'}

@@ -424,6 +424,9 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.projects.DELETE_ASSET,
   RPC_CHANNELS.projects.CHANGED,
 
+  // canvas — project-backed visual workspace
+  RPC_CHANNELS.canvas.CALL_TOOL,
+
   // git — workspace filesystem
   RPC_CHANNELS.git.GET_BRANCH,
 

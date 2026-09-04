@@ -169,6 +169,9 @@ export {
   handleRenderTemplate,
   // Send Developer Feedback
   handleSendDeveloperFeedback,
+  // Integrated infinite canvas
+  handleGetCanvasContext,
+  handleApplyCanvasOps,
 } from './handlers/index.ts';
 
 export type {
@@ -187,6 +190,8 @@ export type {
   ScriptSandboxArgs,
   RenderTemplateArgs,
   SendDeveloperFeedbackArgs,
+  GetCanvasContextArgs,
+  ApplyCanvasOpsArgs,
 } from './handlers/index.ts';
 
 // Tool definitions — single source of truth
@@ -204,6 +209,9 @@ export {
   TransformDataSchema,
   ScriptSandboxSchema,
   RenderTemplateSchema,
+  GetCanvasContextSchema,
+  CanvasAgentOpSchema,
+  ApplyCanvasOpsSchema,
   // Browser tool schema
   BrowserToolSchema,
   // Developer feedback schema

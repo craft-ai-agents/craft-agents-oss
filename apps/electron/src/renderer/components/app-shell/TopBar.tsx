@@ -31,6 +31,7 @@ import { WorkspaceSwitcher } from "./WorkspaceSwitcher"
 import { CompactWorkspaceSwitcher } from "./CompactWorkspaceSwitcher"
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
 import { AppMenu } from "../AppMenu"
+import { navigate, routes } from "@/lib/navigate"
 
 const RIGHT_SLOT_FULL_BADGES_THRESHOLD = 420
 const RIGHT_SLOT_TWO_BADGES_THRESHOLD = 300
@@ -196,7 +197,7 @@ export function TopBar({
             </>
           )}
 
-          <div className="min-w-0 flex-1">
+          <div className={cn("min-w-0 flex-1", isCompact && "flex")}>
             {isCompact ? (
               <CompactWorkspaceSwitcher
                 workspaces={workspaces}
@@ -219,6 +220,17 @@ export function TopBar({
             )}
           </div>
         </div>
+        {isCompact && activeWorkspaceId && (
+          <nav aria-label="工作区导航" className="flex shrink-0 items-center gap-1 titlebar-no-drag">
+            <TopBarButton aria-label="全部会话" onClick={() => navigate(routes.view.allSessions())}>
+              <Icons.MessagesSquare className="h-[18px] w-[18px]" />
+            </TopBarButton>
+            <button type="button" onClick={() => navigate(routes.view.projects())}
+              className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-sm hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring">
+              <Icons.FolderOpen className="h-4 w-4" />项目
+            </button>
+          </nav>
+        )}
       </div>
 
       {/* === RIGHT: Browser strip + add + help === */}

@@ -5,6 +5,7 @@ import { existsSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from
 import { debug } from "../utils/debug";
 import { getProxyEnvVars } from "../config/proxy-env.ts";
 import { getGitBashPath } from "../config/storage.ts";
+import { withoutControlSecrets } from './control-env.ts';
 
 declare const CRAFT_AGENT_CLI_VERSION: string | undefined;
 
@@ -210,7 +211,7 @@ export function buildClaudeSubprocessEnv(
     delete env.AWS_BEARER_TOKEN_BEDROCK;
     delete env.ANTHROPIC_BEDROCK_BASE_URL;
 
-    return env;
+    return withoutControlSecrets(env);
 }
 
 /** Filename of the per-platform native Claude binary inside its npm package. */

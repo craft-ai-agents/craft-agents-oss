@@ -3,14 +3,40 @@
 
 $ErrorActionPreference = "Stop"
 
+# The internal channel is intentionally unsigned. Remove inherited signing
+# credentials from this child build process so a developer machine cannot
+# accidentally turn an internal artifact into an unreviewed signed release.
+$ReleaseProfile = Get-Content "$PSScriptRoot\..\..\..\packages\shared\src\desktop-release.json" -Raw | ConvertFrom-Json
+if ($ReleaseProfile.channel -eq 'internal') {
+    $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
+    foreach ($SigningVariable in @('CSC_LINK', 'WIN_CSC_LINK', 'CSC_NAME', 'WIN_CSC_KEY_PASSWORD', 'CSC_KEY_PASSWORD')) {
+        Remove-Item "Env:$SigningVariable" -ErrorAction SilentlyContinue
+    }
+    Write-Host "Building unsigned internal package (Windows SmartScreen warning expected)." -ForegroundColor Yellow
+}
+
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ElectronDir = Split-Path -Parent $ScriptDir
 $RootDir = Split-Path -Parent (Split-Path -Parent $ElectronDir)
 
+# Fail before cleanup/downloads when production configuration is incomplete.
+$ReleaseConfig = Get-Content -LiteralPath "$RootDir\packages\shared\src\desktop-release.json" -Raw | ConvertFrom-Json
+$ReleaseValidationArgs = @("$RootDir\scripts\validate-desktop-release.ts", '--platform=win32')
+if ($env:JONWORK_RELEASE -eq 'production' -or $ReleaseConfig.channel -eq 'production') { $ReleaseValidationArgs += '--production' }
+& bun @ReleaseValidationArgs
+if ($LASTEXITCODE -ne 0) { throw 'Desktop release validation failed' }
+
+function Assert-BuildOutputPath([string]$Target) {
+    $ResolvedTarget = [System.IO.Path]::GetFullPath($Target)
+    $BuildRoot = [System.IO.Path]::GetFullPath($ElectronDir).TrimEnd('\') + '\'
+    if (-not $ResolvedTarget.StartsWith($BuildRoot, [System.StringComparison]::OrdinalIgnoreCase)) { throw 'Refusing cleanup outside Electron build directory' }
+    if ((Test-Path -LiteralPath $ResolvedTarget) -and ((Get-Item -LiteralPath $ResolvedTarget -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint)) { throw 'Refusing cleanup of a linked build directory' }
+}
+
 # Configuration
 $BunVersion = "bun-v1.3.9"  # Pinned version for reproducible builds
 
-Write-Host "=== Building Craft Agents Windows Installer using electron-builder ===" -ForegroundColor Cyan
+Write-Host "=== Building Jonwork Windows Installer using electron-builder ===" -ForegroundColor Cyan
 
 # Debug: System information
 Write-Host ""
@@ -55,17 +81,7 @@ try {
 }
 Write-Host ""
 
-# 0. Kill any lingering processes that might lock files
-Write-Host "Killing any lingering node/npm processes..."
-$processesToKill = @('node', 'npm', 'electron', 'electron-builder')
-foreach ($procName in $processesToKill) {
-    Get-Process -Name $procName -ErrorAction SilentlyContinue | ForEach-Object {
-        Write-Host "  Killing $($_.ProcessName) (PID: $($_.Id))..." -ForegroundColor Yellow
-        Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
-    }
-}
-# Give processes time to fully terminate
-Start-Sleep -Seconds 2
+# Never kill unrelated customer/developer processes to work around a locked file.
 
 # 1. Clean previous build artifacts (with retry for locked files)
 Write-Host "Cleaning previous builds..."
@@ -76,11 +92,12 @@ $foldersToClean = @(
     "$ElectronDir\release"
 )
 foreach ($folder in $foldersToClean) {
+    Assert-BuildOutputPath $folder
     if (Test-Path $folder) {
         $retries = 3
         for ($i = 1; $i -le $retries; $i++) {
             try {
-                Remove-Item -Recurse -Force $folder -ErrorAction Stop
+                Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction Stop
                 break
             } catch {
                 if ($i -eq $retries) { throw }
@@ -95,7 +112,8 @@ foreach ($folder in $foldersToClean) {
 Write-Host "Installing dependencies..."
 Push-Location $RootDir
 try {
-    bun install
+    bun install --frozen-lockfile
+    if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
 } finally {
     Pop-Location
 }
@@ -243,6 +261,8 @@ foreach ($dep in @("interceptor-common.ts", "feature-flags.ts", "interceptor-req
 
 # 6. Build Electron app
 Write-Host "Building Electron app..."
+& bun "$RootDir\scripts\desktop-build-stamp.ts" begin
+if ($LASTEXITCODE -ne 0) { throw 'Build provenance initialization failed' }
 
 # Build main process with OAuth credentials
 Write-Host "  Building main process..."
@@ -264,14 +284,8 @@ $MainArgs = @(
 if ($env:GOOGLE_OAUTH_CLIENT_ID) {
     $MainArgs += "--define:process.env.GOOGLE_OAUTH_CLIENT_ID=`"'$env:GOOGLE_OAUTH_CLIENT_ID'`""
 }
-if ($env:GOOGLE_OAUTH_CLIENT_SECRET) {
-    $MainArgs += "--define:process.env.GOOGLE_OAUTH_CLIENT_SECRET=`"'$env:GOOGLE_OAUTH_CLIENT_SECRET'`""
-}
 if ($env:SLACK_OAUTH_CLIENT_ID) {
     $MainArgs += "--define:process.env.SLACK_OAUTH_CLIENT_ID=`"'$env:SLACK_OAUTH_CLIENT_ID'`""
-}
-if ($env:SLACK_OAUTH_CLIENT_SECRET) {
-    $MainArgs += "--define:process.env.SLACK_OAUTH_CLIENT_SECRET=`"'$env:SLACK_OAUTH_CLIENT_SECRET'`""
 }
 if ($env:MICROSOFT_OAUTH_CLIENT_ID) {
     $MainArgs += "--define:process.env.MICROSOFT_OAUTH_CLIENT_ID=`"'$env:MICROSOFT_OAUTH_CLIENT_ID'`""
@@ -329,6 +343,8 @@ try {
 }
 
 # 7. Package with electron-builder
+& bun "$RootDir\scripts\desktop-build-stamp.ts" finish
+if ($LASTEXITCODE -ne 0) { throw 'Build provenance verification failed' }
 Write-Host "Packaging app with electron-builder..."
 
 # Debug: Show bun.exe file info
@@ -423,6 +439,7 @@ while (-not $builderSuccess -and $builderRetry -lt $maxBuilderRetries) {
 
     # Clean release directory before each attempt to avoid stale files
     if (Test-Path "$ElectronDir\release") {
+        Assert-BuildOutputPath "$ElectronDir\release"
         Write-Host "  Cleaning release directory before attempt..."
         Remove-Item -Recurse -Force "$ElectronDir\release" -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 1
@@ -439,11 +456,7 @@ while (-not $builderSuccess -and $builderRetry -lt $maxBuilderRetries) {
         if ($builderRetry -lt $maxBuilderRetries) {
             Write-Host "  Waiting 10 seconds before retry..." -ForegroundColor Yellow
 
-            # Kill any processes that might be holding file locks
-            Get-Process -Name 'node', 'npm' -ErrorAction SilentlyContinue | ForEach-Object {
-                Write-Host "    Killing $($_.ProcessName) (PID: $($_.Id))..." -ForegroundColor Yellow
-                Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
-            }
+            Write-Host 'Build output is locked. Close only the relevant Jonwork build process; unrelated processes will not be stopped.'
 
             Start-Sleep -Seconds 10
         }

@@ -21,9 +21,12 @@ import {
   StyledContextMenuContent,
 } from '@/components/ui/styled-context-menu'
 import type { LoadedProject } from '@craft-agent/shared/projects/types'
+import { isWithinRecency, type RecencyDays } from './session-recency'
 
 export interface ProjectsListPanelProps {
   projects: LoadedProject[]
+  keyword?: string
+  recencyDays?: RecencyDays
   workspaceId: string
   onProjectClick: (slug: string) => void
   onAddProject?: () => void
@@ -35,6 +38,8 @@ export interface ProjectsListPanelProps {
 
 export function ProjectsListPanel({
   projects,
+  keyword = '',
+  recencyDays = 30,
   workspaceId,
   onProjectClick,
   onAddProject,
@@ -43,6 +48,14 @@ export function ProjectsListPanel({
   className,
 }: ProjectsListPanelProps) {
   const { t } = useTranslation()
+  const normalizedKeyword = keyword.trim().toLocaleLowerCase()
+  const visibleProjects = React.useMemo(() => projects
+    .filter(project => {
+      const matchesKeyword = !normalizedKeyword
+        || `${project.config.name} ${project.config.description ?? ''}`.toLocaleLowerCase().includes(normalizedKeyword)
+      return matchesKeyword && isWithinRecency(project.config.updatedAt, recencyDays)
+    })
+    .sort((a, b) => b.config.updatedAt - a.config.updatedAt), [normalizedKeyword, projects, recencyDays])
 
   const handleDelete = React.useCallback(async (project: LoadedProject) => {
     // Deleting a project rm -rf's its folder + all assets, so confirm first — mirrors the
@@ -57,15 +70,16 @@ export function ProjectsListPanel({
     }
   }, [workspaceId, t])
 
-  if (projects.length === 0) {
+  if (visibleProjects.length === 0) {
+    const isFilteredEmpty = projects.length > 0 && (normalizedKeyword.length > 0 || recencyDays !== null)
     return (
       <div className={cn('flex flex-col flex-1 min-h-0', className)}>
         <EntityListEmptyScreen
           icon={<FolderKanban />}
-          title={t('projectsList.empty')}
-          description={t('projectsList.emptyDescription')}
+          title={isFilteredEmpty ? t('session.noResultsInFilter') : t('projectsList.empty')}
+          description={isFilteredEmpty ? t('filters.keywordPlaceholder') : t('projectsList.emptyDescription')}
         >
-          {onAddProject && (
+          {!isFilteredEmpty && onAddProject && (
             <button
               type="button"
               onClick={onAddProject}
@@ -85,7 +99,7 @@ export function ProjectsListPanel({
       <ScrollArea className="flex-1">
         <div className="pb-2" data-list-role="projects">
           <div className="pt-1">
-            {projects.map((project, index) => (
+            {visibleProjects.map((project, index) => (
               <ProjectRow
                 key={project.config.slug}
                 project={project}

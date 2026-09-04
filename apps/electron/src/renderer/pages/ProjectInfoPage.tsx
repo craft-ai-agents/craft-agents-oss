@@ -39,7 +39,7 @@ export default function ProjectInfoPage({ projectSlug }: ProjectInfoPageProps) {
   const workspace = useActiveWorkspace()
   const workspaceId = workspace?.id
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
-  const { onCreateSession } = useAppShellContext()
+  const { onCreateSession, onOpenFile } = useAppShellContext()
 
   const [project, setProject] = useState<LoadedProject | null>(null)
   const [loading, setLoading] = useState(true)
@@ -179,8 +179,14 @@ export default function ProjectInfoPage({ projectSlug }: ProjectInfoPageProps) {
   const handleUpload = useCallback(async (file: File) => {
     if (!workspaceId || !project) return
     try {
+      if (file.size > 12 * 1024 * 1024) throw new Error('附件不能超过12MB')
       const arrayBuffer = await file.arrayBuffer()
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+      const bytes = new Uint8Array(arrayBuffer)
+      let binary = ''
+      for (let offset = 0; offset < bytes.length; offset += 8192) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192))
+      }
+      const base64 = btoa(binary)
       await window.electronAPI.uploadProjectAsset(workspaceId, project.config.slug, {
         filename: file.name,
         base64,
@@ -402,7 +408,7 @@ export default function ProjectInfoPage({ projectSlug }: ProjectInfoPageProps) {
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        onClick={() => window.electronAPI.openFile(project.folderPath)}
+                        onClick={() => onOpenFile(project.folderPath)}
                         className="shrink-0 inline-flex h-6 w-6 items-center justify-center rounded text-foreground/50 hover:text-foreground hover:bg-foreground/5 transition-colors"
                         aria-label={t('projectInfo.openLocation')}
                       >

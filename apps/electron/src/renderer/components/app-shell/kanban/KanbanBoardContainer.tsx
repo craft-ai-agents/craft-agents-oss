@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { sessionMetaMapAtom, updateSessionMetaAtom, type SessionMeta } from '@/atoms/sessions'
 import { projectsAtom } from '@/atoms/projects'
-import { kanbanProjectFilterAtom, kanbanColumnStatusAtom, kanbanEditorTargetAtom } from '@/atoms/kanban'
+import { kanbanProjectFilterAtom, kanbanColumnStatusAtom, kanbanEditorTargetAtom, kanbanKeywordFilterAtom, kanbanRecencyDaysAtom } from '@/atoms/kanban'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { useProjectColorTreatment } from '@/hooks/useProjectColorTreatment'
 import { useLabels } from '@/hooks/useLabels'
@@ -22,6 +22,8 @@ import { KANBAN_COLUMNS, statusToColumn } from './status-column'
 import { BoardListToggle } from './BoardListToggle'
 import { KanbanProjectFilter, type KanbanProjectFilterOption } from './KanbanProjectFilter'
 import { TaskEditor } from './TaskEditor'
+import { KanbanTaskFilter } from './KanbanTaskFilter'
+import { isWithinRecency } from '../session-recency'
 import { mergeSubtaskRows, type SpecNodeSummary, type SubtaskChildRow } from './subtask-merge'
 import type { SpecNode } from './task-spec-form'
 import type {
@@ -100,6 +102,8 @@ export function KanbanBoardContainer() {
   const metaMap = useAtomValue(sessionMetaMapAtom)
   const projects = useAtomValue(projectsAtom)
   const [projectFilter, setProjectFilter] = useAtom(kanbanProjectFilterAtom)
+  const keywordFilter = useAtomValue(kanbanKeywordFilterAtom)
+  const recencyDays = useAtomValue(kanbanRecencyDaysAtom)
   const [columnStatus, setColumnStatus] = useAtom(kanbanColumnStatusAtom)
   const treatment = useProjectColorTreatment()
   const updateSessionMeta = useSetAtom(updateSessionMetaAtom)
@@ -111,11 +115,16 @@ export function KanbanBoardContainer() {
   //  • on workspace switch, clear it — the previous workspace's project ids are meaningless here;
   //  • otherwise prune ids whose project no longer exists (e.g. after a delete) so the board can't
   //    stay filtered to nothing. Identity-preserving returns avoid needless re-renders/loops.
-  const prevWorkspaceRef = React.useRef(activeWorkspaceId)
+  const defaultProjectWorkspaceRef = React.useRef<string | null>(null)
   React.useEffect(() => {
-    if (prevWorkspaceRef.current !== activeWorkspaceId) {
-      prevWorkspaceRef.current = activeWorkspaceId
-      setProjectFilter(prev => (prev.length ? [] : prev))
+    if (!activeWorkspaceId) return
+
+    if (defaultProjectWorkspaceRef.current !== activeWorkspaceId && projects.length > 0) {
+      defaultProjectWorkspaceRef.current = activeWorkspaceId
+      const recentProject = projects.reduce((latest, project) =>
+        project.config.updatedAt > latest.config.updatedAt ? project : latest
+      )
+      setProjectFilter([recentProject.config.id])
       return
     }
     setProjectFilter(prev => {
@@ -153,7 +162,9 @@ export function KanbanBoardContainer() {
 
   // Every project (with or without a color) is selectable in the header filter.
   const projectOptions = React.useMemo<KanbanProjectFilterOption[]>(
-    () => projects.map(p => ({ id: p.config.id, name: p.config.name, color: p.config.color })),
+    () => [...projects]
+      .sort((a, b) => b.config.updatedAt - a.config.updatedAt)
+      .map(p => ({ id: p.config.id, name: p.config.name, color: p.config.color })),
     [projects]
   )
 
@@ -291,10 +302,14 @@ export function KanbanBoardContainer() {
   // Project filter: empty selection = show all. While a filter is active, tiles
   // with no project are hidden (an explicit "No project" option is a later add).
   const visibleTasks = React.useMemo(() => {
-    if (projectFilter.length === 0) return tasks
+    const normalizedKeyword = keywordFilter.trim().toLocaleLowerCase()
     const allow = new Set(projectFilter)
-    return tasks.filter(task => task.projectId !== undefined && allow.has(task.projectId))
-  }, [tasks, projectFilter])
+    return tasks.filter(task => {
+      if (allow.size > 0 && (task.projectId === undefined || !allow.has(task.projectId))) return false
+      if (normalizedKeyword && !task.title.toLocaleLowerCase().includes(normalizedKeyword)) return false
+      return isWithinRecency(task.lastMessageAt ?? task.createdAt, recencyDays)
+    })
+  }, [tasks, projectFilter, keywordFilter, recencyDays])
 
   const defaultSubtaskModel = modelToConnection.has(DEFAULT_MODEL) ? DEFAULT_MODEL : undefined
 
@@ -564,6 +579,7 @@ export function KanbanBoardContainer() {
           {projectOptions.length > 0 && (
             <KanbanProjectFilter projects={projectOptions} value={projectFilter} onChange={setProjectFilter} />
           )}
+          <KanbanTaskFilter />
           {usingProjectColumns && editingProject && (
             <span className="truncate text-[11px] text-foreground/45">
               {t('kanban.column.columnsFrom', { project: editingProject.config.name })}

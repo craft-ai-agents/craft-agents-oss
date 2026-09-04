@@ -1,4 +1,4 @@
-import { writeFile, rename, unlink } from 'fs/promises'
+import { writeFile, rename } from 'fs/promises'
 import { dirname } from 'path'
 import type { StoredSession, SessionHeader } from './types.js'
 import { getSessionFilePath, ensureSessionsDir, ensureSessionDir } from './storage.js'
@@ -77,7 +77,11 @@ class SessionPersistenceQueue {
     }
 
     const timer = setTimeout(() => {
-      void this.write(session.id)
+      // Timer-triggered writes must use the same serialization as explicit
+      // flushes, or both can concurrently rename the shared temporary file.
+      void this.flush(session.id).catch(() => {
+        console.error(`[PersistenceQueue] Session ${session.id} remains pending after a write failure`)
+      })
     }, this.debounceMs)
 
     this.pending.set(session.id, { data: session, timer })
@@ -148,7 +152,7 @@ class SessionPersistenceQueue {
       // the original session.jsonl remains intact.
       //
       // Update signature BEFORE the write so that fs.watch events fired
-      // during unlink/rename are correctly identified as self-writes.
+      // during rename are correctly identified as self-writes.
       // Without this, onSessionMetadataChange sees the stale signature
       // and reverts in-memory metadata on idle sessions.
       const finalSignature = getHeaderMetadataSignature(header)
@@ -156,12 +160,15 @@ class SessionPersistenceQueue {
 
       const tmpFile = filePath + '.tmp'
       await writeFile(tmpFile, lines.join('\n') + '\n', 'utf-8')
-      // On Windows, rename fails if target exists. Delete first for cross-platform compatibility.
-      try { await unlink(filePath) } catch { /* ignore if doesn't exist */ }
+      // Replace directly. Unlinking first would leave no recoverable original if
+      // rename fails or the process stops in between. Node supports file replacement.
       await rename(tmpFile, filePath)
       debug(`[PersistenceQueue] Wrote session ${sessionId}`)
     } catch (error) {
-      console.error(`[PersistenceQueue] Failed to write session ${sessionId}:`, error)
+      // Never acknowledge an unsaved message. Keep the newest pending snapshot
+      // for an explicit retry; a background timer must not spin on a full disk.
+      if (!this.pending.has(sessionId)) this.pending.set(sessionId, entry)
+      throw new Error('会话写入失败，尚未确认保存；请检查磁盘后重试', { cause: error })
     }
   }
 
@@ -171,15 +178,15 @@ class SessionPersistenceQueue {
    * to prevent race conditions on the shared .tmp file.
    */
   async flush(sessionId: string): Promise<void> {
-    const entry = this.pending.get(sessionId)
-    if (entry) {
-      clearTimeout(entry.timer)
-
-      // Wait for any in-progress write to complete first
+    for (;;) {
       const inProgress = this.writeInProgress.get(sessionId)
       if (inProgress) {
         await inProgress
+        continue
       }
+      const entry = this.pending.get(sessionId)
+      if (!entry) return
+      clearTimeout(entry.timer)
 
       // Start new write and track it
       const writePromise = this.write(sessionId)
@@ -188,7 +195,7 @@ class SessionPersistenceQueue {
       try {
         await writePromise
       } finally {
-        this.writeInProgress.delete(sessionId)
+        if (this.writeInProgress.get(sessionId) === writePromise) this.writeInProgress.delete(sessionId)
       }
     }
   }
@@ -210,8 +217,12 @@ class SessionPersistenceQueue {
    * Flush all pending sessions. Call this on app quit.
    */
   async flushAll(): Promise<void> {
-    const sessionIds = [...this.pending.keys()]
-    await Promise.all(sessionIds.map(id => this.flush(id)))
+    // A write removes itself from pending before I/O. Include in-flight writes
+    // so shutdown/backup cannot proceed while its rename is still unfinished.
+    while (this.pending.size || this.writeInProgress.size) {
+      const sessionIds = new Set([...this.pending.keys(), ...this.writeInProgress.keys()])
+      await Promise.all([...sessionIds].map(id => this.flush(id)))
+    }
   }
 
   /**

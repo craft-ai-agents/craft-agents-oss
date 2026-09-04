@@ -24,6 +24,9 @@ import {
   Info_Markdown,
 } from '@/components/info'
 import type { LoadedSkill } from '../../shared/types'
+import { AccountSkillEditor } from '@/components/skills/AccountSkillEditor'
+import { CANVAS_WORKFLOWS } from '@craft-agent/session-tools-core/canvas-workflows'
+import { queueCanvasWorkflow } from '@/components/canvas/canvas-launch'
 
 interface SkillInfoPageProps {
   skillSlug: string
@@ -37,7 +40,8 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const activeWorkspace = useActiveWorkspace()
-  const canRevealLocally = !activeWorkspace?.remoteServer
+  const canRevealLocally = !activeWorkspace?.remoteServer && skill?.library !== 'account'
+  const workflow = CANVAS_WORKFLOWS.find(item => `jonwork-${item.id}` === skillSlug)
 
   // Load skill data
   useEffect(() => {
@@ -67,6 +71,10 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
     }
 
     loadSkill()
+    const refresh = () => { void loadSkill() }
+    window.addEventListener('jonwork:skills-changed', refresh)
+    window.addEventListener('focus', refresh)
+    const poll = window.setInterval(refresh, 30_000)
 
     // Subscribe to skill changes
     const unsubscribe = window.electronAPI.onSkillsChanged?.((changedWorkspaceId, skills) => {
@@ -79,6 +87,9 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
 
     return () => {
       isMounted = false
+      window.removeEventListener('jonwork:skills-changed', refresh)
+      window.removeEventListener('focus', refresh)
+      window.clearInterval(poll)
       unsubscribe?.()
     }
   }, [workspaceId, skillSlug, workingDirectory])
@@ -119,7 +130,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
 
   // Get skill name for header
   const skillName = skill?.metadata.name || skillSlug
-  const canDeleteSkill = skill?.source === 'workspace'
+  const canDeleteSkill = skill?.source === 'workspace' && !skill?.readOnly
 
   // Format path to show just the skill-relative portion (skills/{slug}/)
   const formatPath = (path: string) => {
@@ -175,11 +186,12 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
           />
 
           {/* Metadata */}
+          {workflow && <Info_Section title="开始业务操作"><div className="space-y-2 p-4 text-sm"><p>{workflow.inputs}</p><p className="text-muted-foreground">进入画布后，填写材料与要求、确认需求，再生成真实成果。可查看版本、批准或继续修改。</p><button className="rounded bg-foreground px-4 py-2 text-background" onClick={() => { queueCanvasWorkflow(workspaceId, workflow.id); navigate(routes.view.canvas()) }}>打开{workflow.name}操作台</button></div></Info_Section>}
           <Info_Section
             title={t('skillInfo.metadata')}
             actions={
               // EditPopover for AI-assisted metadata editing (name, description in frontmatter)
-              <EditPopover
+              skill.library === 'account' ? (!skill.readOnly && <AccountSkillEditor slug={skill.slug} trigger={<EditButton />} />) : <EditPopover
                 trigger={<EditButton />}
                 {...getEditConfig('skill-metadata', skill.path)}
                 secondaryAction={{
@@ -196,7 +208,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
                 {skill.metadata.description}
               </Info_Table.Row>
               <Info_Table.Row label={t('common.source')}>
-                {skill.source === 'project' ? t('skillInfo.sourceProject') :
+                {skill.library === 'account' ? (skill.visibility === 'public' ? '公共技能（只读）' : '我的私有技能（账号同步）') : skill.source === 'project' ? t('skillInfo.sourceProject') :
                  skill.source === 'global' ? t('skillInfo.sourceGlobal') :
                  t('skillInfo.sourceWorkspace')}
               </Info_Table.Row>
@@ -259,7 +271,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
             title={t('skillInfo.instructions')}
             actions={
               // EditPopover for AI-assisted editing with "Edit File" as secondary action
-              <EditPopover
+              skill.library === 'account' ? (!skill.readOnly && <AccountSkillEditor slug={skill.slug} trigger={<EditButton />} />) : <EditPopover
                 trigger={<EditButton />}
                 {...getEditConfig('skill-instructions', skill.path)}
                 secondaryAction={{

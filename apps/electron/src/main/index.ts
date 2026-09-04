@@ -4,6 +4,7 @@ import { loadShellEnv } from './shell-env'
 loadShellEnv()
 
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
+import { registerDesktopAccountHandlers } from './desktop-account'
 import { createHash, randomUUID } from 'crypto'
 import { hostname, homedir } from 'os'
 import * as Sentry from '@sentry/electron/main'
@@ -224,9 +225,16 @@ let messagingHandle: MessagingBootstrapHandle | null = null
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
 
-// Set app name early (before app.whenReady) to ensure correct macOS menu bar title
-// Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Craft Agents [1]")
-app.setName(process.env.CRAFT_APP_NAME || 'Craft Agents')
+const APP_NAME = process.env.CRAFT_APP_NAME || 'Jonwork'
+const WINDOWS_APP_USER_MODEL_ID = 'com.jonwork.desktop'
+
+// Set the product identity before app.whenReady() so native window chrome,
+// taskbar grouping, notifications, and installed shortcuts all resolve to the
+// same Jonwork application.
+app.setName(APP_NAME)
+if (process.platform === 'win32') {
+  app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID)
+}
 
 // Register as default protocol client for craftagents:// URLs
 // This must be done before app.whenReady() on some platforms
@@ -380,6 +388,7 @@ async function createInitialWindows(): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  await registerDesktopAccountHandlers()
   // Export packaged state as env var so logger.ts (and headless Bun) don't need 'electron'
   process.env.CRAFT_IS_PACKAGED = app.isPackaged ? 'true' : 'false'
 
@@ -1127,7 +1136,7 @@ app.whenReady().then(async () => {
         type: 'error',
         title: 'Update failed',
         message: 'The update could not be installed.',
-        detail: 'Craft Agents will restart now. The update will be retried on the next launch.',
+        detail: 'Jonwork will restart now. The update will be retried on the next launch.',
       })
       app.relaunch()
       app.exit(0)

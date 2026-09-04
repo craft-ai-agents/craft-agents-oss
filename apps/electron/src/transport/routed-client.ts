@@ -14,6 +14,7 @@ import type { WsRpcClient, TransportConnectionState } from './client'
 import type { RpcClient } from '@craft-agent/server-core/transport'
 import type { RemoteServerConfig } from '@craft-agent/core/types'
 import { isLocalOnly, RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { isManagedNativeChannel, managedWorkspaceResult } from './managed-desktop-policy'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -63,6 +64,7 @@ export class RoutedClient implements RpcClient {
   constructor(
     private readonly localClient: WsRpcClient,
     initialWorkspaceClient: WsRpcClient,
+    private readonly managedWorkspaceId?: string,
   ) {
     this.workspaceClient = initialWorkspaceClient
     this.bindConnectionState()
@@ -93,7 +95,11 @@ export class RoutedClient implements RpcClient {
   // -------------------------------------------------------------------------
 
   async invoke(channel: string, ...args: any[]): Promise<any> {
-    const isLocal = isLocalOnly(channel)
+    if (this.managedWorkspaceId) {
+      const result = managedWorkspaceResult(channel, args, this.managedWorkspaceId)
+      if (result) return result.value
+    }
+    const isLocal = this.isLocal(channel)
     const target = isLocal ? this.localClient : this.workspaceClient
 
     // Translate local workspace IDs → remote workspace IDs for remote-routed calls.
@@ -115,7 +121,7 @@ export class RoutedClient implements RpcClient {
     const result = await target.invoke(channel, ...translatedArgs)
 
     // Intercept SWITCH_WORKSPACE response to swap workspace client
-    if (channel === RPC_CHANNELS.window.SWITCH_WORKSPACE) {
+    if (!this.managedWorkspaceId && channel === RPC_CHANNELS.window.SWITCH_WORKSPACE) {
       this.handleWorkspaceSwitch(result as WorkspaceSwitchResult)
     }
 
@@ -123,7 +129,7 @@ export class RoutedClient implements RpcClient {
   }
 
   on(channel: string, callback: (...args: any[]) => void): () => void {
-    if (isLocalOnly(channel)) {
+    if (this.isLocal(channel)) {
       return this.localClient.on(channel, callback)
     }
 
@@ -149,7 +155,7 @@ export class RoutedClient implements RpcClient {
     this.capabilities.set(channel, handler)
     // Register on both clients — either server can invoke capabilities
     this.localClient.handleCapability(channel, handler)
-    if (this.workspaceClient !== this.localClient) {
+    if (!this.managedWorkspaceId && this.workspaceClient !== this.localClient) {
       this.workspaceClient.handleCapability(channel, handler)
     }
   }
@@ -159,7 +165,7 @@ export class RoutedClient implements RpcClient {
   // -------------------------------------------------------------------------
 
   isChannelAvailable(channel: string): boolean {
-    const target = isLocalOnly(channel) ? this.localClient : this.workspaceClient
+    const target = this.isLocal(channel) ? this.localClient : this.workspaceClient
     return target.isChannelAvailable(channel)
   }
 
@@ -175,6 +181,10 @@ export class RoutedClient implements RpcClient {
 
   reconnectNow(): void {
     this.workspaceClient.reconnectNow()
+  }
+
+  private isLocal(channel: string): boolean {
+    return this.managedWorkspaceId ? isManagedNativeChannel(channel) : isLocalOnly(channel)
   }
 
   // -------------------------------------------------------------------------

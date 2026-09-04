@@ -13,7 +13,7 @@ import { getSystemPrompt, formatProjectContextForPrompt } from '../system'
 import type { ProjectPromptContext } from '../../projects/types.ts'
 
 const GIT_CONVENTIONS_HEADING = '## Git Conventions'
-const CO_AUTHOR_TRAILER = 'Co-Authored-By: Craft Agent <agents-noreply@craft.do>'
+const CO_AUTHOR_TRAILER = 'Co-Authored-By: Jonwork <agents-noreply@craft.do>'
 
 describe('system prompt guidance', () => {
   it('uses backend-neutral debug log querying guidance (rg/grep via Bash)', () => {
@@ -35,6 +35,24 @@ describe('system prompt guidance', () => {
 
     expect(prompt).toContain('The subtask needs file/shell tools (for example, Read or Bash)')
     expect(prompt).not.toContain('The subtask needs tools (Read, Bash, Grep)')
+  })
+
+  it('requires guided intake and file-backed deliverables for business outcomes', () => {
+    const prompt = getSystemPrompt(undefined, undefined, '/tmp/workspace', '/tmp/workspace')
+
+    expect(prompt).toContain('## Guided Deliverable Workflow')
+    expect(prompt).toContain('gather them progressively using ordinary language')
+    expect(prompt).toContain('Do not impose a fixed number of questions or rounds')
+    expect(prompt).toContain('deliverable-brief.md')
+    expect(prompt).toContain('deliverable-manifest.json')
+    expect(prompt).toContain('do not finish with chat text alone')
+    expect(prompt).toContain('Select skills first')
+    expect(prompt).toContain('Validate and repair')
+    expect(prompt).toContain('"schemaVersion": 2')
+    expect(prompt).toContain('explicit approval')
+    expect(prompt).toContain('exists and is non-empty')
+    expect(prompt).toContain('passing evidence')
+    expect(prompt).toContain('skillRouting.status: "builtin_fallback"')
   })
 })
 
@@ -86,7 +104,7 @@ describe('includeCoAuthoredBy handling', () => {
       '/tmp/workspace',
       '/tmp/workspace',
       undefined,
-      'Craft Agents Backend'
+      'Jonwork Backend'
       // 7th arg omitted — must not regress to `true` default
     )
 

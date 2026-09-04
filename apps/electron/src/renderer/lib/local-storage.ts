@@ -22,12 +22,20 @@ export const KEYS = {
   collapsedSidebarItems: 'collapsed-sidebar-items',
   chatGroupingMode: 'chat-grouping-mode', // How to group chats: 'date' | 'status'
   collapsedSessionGroups: 'collapsed-session-groups', // Collapsed group keys in session list
+  projectListKeyword: 'project-list-keyword',
+  projectRecencyDays: 'project-recency-days',
 
   // Focus mode
   focusModeEnabled: 'focus-mode-enabled',
 
   // Session files panel state
   sessionFilesExpandedFolders: 'session-files-expanded', // Expanded folders in session files tree (keyed by sessionId)
+
+  // Codex-style right workspace dock
+  rightDockVisible: 'right-dock-visible',
+  rightDockWidth: 'right-dock-width',
+  rightDockTabs: 'right-dock-tabs',
+  rightDockActiveTab: 'right-dock-active-tab',
 
   // Theme
   theme: 'theme',

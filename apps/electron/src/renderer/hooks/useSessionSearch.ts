@@ -9,6 +9,7 @@ import { getSessionTitle, getSessionStatus } from "@/utils/session"
 import type { SessionMeta } from "@/atoms/sessions"
 import type { ViewConfig } from "@craft-agent/shared/views"
 import type { SessionFilter } from "@/contexts/NavigationContext"
+import { getSessionDateGroupKey, type RecencyDays } from "@/components/app-shell/session-recency"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -57,6 +58,8 @@ export interface UseSessionSearchOptions {
   collapsedGroups?: Set<string>
   /** Grouping mode — needed to compute group keys for collapse-aware pagination */
   groupingMode?: 'date' | 'status' | 'unread' | 'project'
+  /** Date grouping rolls sessions older than this window into one bucket. */
+  olderThanDays?: RecencyDays
   /** Ref to the ScrollArea viewport element — used for scroll-based pagination */
   scrollViewportRef?: React.RefObject<HTMLDivElement>
 }
@@ -122,11 +125,15 @@ function groupSessionsByDate(sessions: SessionMeta[]): DateGroup[] {
     }))
 }
 
-function getCollapseGroupKey(item: SessionMeta, groupingMode?: 'date' | 'status' | 'unread' | 'project'): string {
+function getCollapseGroupKey(
+  item: SessionMeta,
+  groupingMode?: 'date' | 'status' | 'unread' | 'project',
+  olderThanDays: RecencyDays = null,
+): string {
   if (groupingMode === 'status') return `status-${getSessionStatus(item)}`
   if (groupingMode === 'unread') return item.hasUnread ? 'unread-yes' : 'unread-no'
   if (groupingMode === 'project') return `project-${(item as { projectId?: string }).projectId ?? '__none__'}`
-  return startOfDay(new Date(item.lastMessageAt || 0)).toISOString()
+  return getSessionDateGroupKey(item.lastMessageAt || 0, olderThanDays)
 }
 
 export interface CollapsedPaginationResult {
@@ -140,6 +147,7 @@ export function computeCollapsedPagination(
   displayLimit: number,
   collapsedGroups?: Set<string>,
   groupingMode?: 'date' | 'status' | 'unread' | 'project',
+  olderThanDays: RecencyDays = null,
 ): CollapsedPaginationResult {
   // Fast path: no collapse state → original slice
   if (!collapsedGroups || collapsedGroups.size === 0) {
@@ -150,11 +158,11 @@ export function computeCollapsedPagination(
     }
   }
 
-  const groupKeysInView = new Set(items.map(item => getCollapseGroupKey(item, groupingMode)))
+  const groupKeysInView = new Set(items.map(item => getCollapseGroupKey(item, groupingMode, olderThanDays)))
 
   // Safety guard: don't allow collapse state to hide the entire list when only one
   // group exists in the current filtered view (there would be no meaningful collapse UX).
-  if (groupKeysInView.size <= 1) {
+  if (groupKeysInView.size <= 1 && !groupKeysInView.has('date-older')) {
     return {
       paginatedItems: items.slice(0, displayLimit),
       hasMore: displayLimit < items.length,
@@ -178,7 +186,7 @@ export function computeCollapsedPagination(
   const collapsedCounts = new Map<string, number>()
 
   for (const item of items) {
-    const groupKey = getCollapseGroupKey(item, groupingMode)
+    const groupKey = getCollapseGroupKey(item, groupingMode, olderThanDays)
 
     if (effectiveCollapsedKeys.has(groupKey)) {
       collapsedCounts.set(groupKey, (collapsedCounts.get(groupKey) || 0) + 1)
@@ -297,6 +305,7 @@ export function useSessionSearch({
   labelConfigs,
   collapsedGroups,
   groupingMode,
+  olderThanDays = 30,
   scrollViewportRef,
 }: UseSessionSearchOptions): UseSessionSearchResult {
 
@@ -482,8 +491,8 @@ export function useSessionSearch({
   // paginatedItems (and therefore flatItems / keyboard nav). Their counts are
   // returned as collapsedGroupsMeta so the renderer can show header-only groups.
   const { paginatedItems, hasMore, collapsedGroupsMeta } = useMemo(() => {
-    return computeCollapsedPagination(searchFilteredItems, displayLimit, collapsedGroups, groupingMode)
-  }, [searchFilteredItems, displayLimit, collapsedGroups, groupingMode])
+    return computeCollapsedPagination(searchFilteredItems, displayLimit, collapsedGroups, groupingMode, olderThanDays)
+  }, [searchFilteredItems, displayLimit, collapsedGroups, groupingMode, olderThanDays])
 
   const loadMore = useCallback(() => {
     setDisplayLimit(prev => Math.min(prev + BATCH_SIZE, searchFilteredItems.length))

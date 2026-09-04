@@ -1,12 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-    <title>favicon</title>
-    <defs>
-        <path d="M0,0 L24,0 L24,24 L0,24 L0,0 Z" id="path-1"></path>
-    </defs>
-    <g id="favicon" stroke="none" fill="none" xlink:href="#path-1" fill-rule="evenodd" stroke-width="1">
-        <g id="Group" transform="translate(3.4502, 3)" fill="#9570BE">
-            <path d="M3.17890888,3.6 L3.17890888,0 L16,0 L16,3.6 L3.17890888,3.6 Z M9.642,7.2 L9.64218223,10.8 L0,10.8 L0,3.6 L16,3.6 L16,7.2 L9.642,7.2 Z M3.17890888,18 L3.178,14.4 L0,14.4 L0,10.8 L16,10.8 L16,18 L3.17890888,18 Z" id="Combined-Shape" fill-rule="nonzero"></path>
-        </g>
-    </g>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="surface" x1="72" y1="48" x2="438" y2="464" gradientUnits="userSpaceOnUse"><stop stop-color="#A78BFA"/><stop offset="0.52" stop-color="#8066D6"/><stop offset="1" stop-color="#5E4DB2"/></linearGradient>
+    <linearGradient id="accent" x1="350" y1="86" x2="442" y2="178" gradientUnits="userSpaceOnUse"><stop stop-color="#5EEAD4"/><stop offset="1" stop-color="#22D3EE"/></linearGradient>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="116" fill="url(#surface)"/>
+  <path d="M178 126H348V300C348 367.4 306.6 410 239 410C185.6 410 148.7 386.6 126 348L195 305C205.7 324.3 220.7 334 240 334C262 334 274 320.7 274 294V199H178V126Z" fill="white"/>
+  <path d="M400 72L410.9 106.1L445 117L410.9 127.9L400 162L389.1 127.9L355 117L389.1 106.1L400 72Z" fill="url(#accent)"/>
 </svg>

@@ -7,7 +7,9 @@
  * - Rate limiting: per-IP brute-force protection on /api/auth
  */
 
-import { SignJWT, jwtVerify } from 'jose'
+import { SignJWT, jwtVerify, decodeJwt } from 'jose'
+import { randomUUID } from 'node:crypto'
+import type { AccountStore } from './accounts'
 
 // ---------------------------------------------------------------------------
 // JWT helpers (via jose library)
@@ -19,12 +21,14 @@ export interface JwtPayload {
   sub: string
   iat: number
   exp: number
+  ver?: number
 }
 
 export async function signJwt(payload: JwtPayload, secret: string): Promise<string> {
   const key = new TextEncoder().encode(secret)
-  return new SignJWT({ sub: payload.sub } as Record<string, unknown>)
+  return new SignJWT({ sub: payload.sub, ver: payload.ver ?? 0 } as Record<string, unknown>)
     .setProtectedHeader({ alg: 'HS256' })
+    .setJti(randomUUID())
     .setIssuedAt(payload.iat)
     .setExpirationTime(payload.exp)
     .sign(key)
@@ -34,19 +38,33 @@ export async function verifyJwt(token: string, secret: string): Promise<JwtPaylo
   try {
     const key = new TextEncoder().encode(secret)
     const { payload } = await jwtVerify(token, key, { algorithms: ['HS256'] })
+    if (typeof payload.sub !== 'string' || !payload.sub || !Number.isSafeInteger(payload.iat) || !Number.isSafeInteger(payload.exp)
+      || (payload.ver !== undefined && (!Number.isSafeInteger(payload.ver) || Number(payload.ver) < 0))) return null
     return {
       sub: payload.sub as string,
       iat: payload.iat as number,
       exp: payload.exp as number,
+      ver: (payload.ver as number | undefined) ?? 0,
     }
   } catch {
     return null
   }
 }
 
-export async function createSessionToken(secret: string): Promise<string> {
+export async function createSessionToken(secret: string, subject = 'webui', authVersion = 0): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
-  return signJwt({ sub: 'webui', iat: now, exp: now + JWT_EXPIRY_SECONDS }, secret)
+  return signJwt({ sub: subject, iat: now, exp: now + JWT_EXPIRY_SECONDS, ver: authVersion }, secret)
+}
+
+/** Supplemental revocation check ONLY for an already signature-verified WS cookie. Never use to authenticate a new connection. */
+export function isEstablishedAccountSessionActive(cookie: string | null, principalId: string, accounts: AccountStore): boolean {
+  try {
+    const token = extractSessionCookie(cookie)
+    if (!token || accounts.isTokenRevoked(token)) return false
+    const claims = decodeJwt(token)
+    return claims.sub === principalId && typeof claims.exp === 'number' && claims.exp > Date.now() / 1000
+      && accounts.isSessionActive(principalId, (claims.ver as number | undefined) ?? 0)
+  } catch { return false }
 }
 
 // ---------------------------------------------------------------------------

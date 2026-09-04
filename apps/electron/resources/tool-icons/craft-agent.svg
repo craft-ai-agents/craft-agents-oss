@@ -1,10 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="g" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#7C3AED"/>
-      <stop offset="1" stop-color="#06B6D4"/>
-    </linearGradient>
+    <linearGradient id="surface" x1="72" y1="48" x2="438" y2="464" gradientUnits="userSpaceOnUse"><stop stop-color="#A78BFA"/><stop offset="0.52" stop-color="#8066D6"/><stop offset="1" stop-color="#5E4DB2"/></linearGradient>
+    <linearGradient id="accent" x1="350" y1="86" x2="442" y2="178" gradientUnits="userSpaceOnUse"><stop stop-color="#5EEAD4"/><stop offset="1" stop-color="#22D3EE"/></linearGradient>
   </defs>
-  <rect x="6" y="6" width="52" height="52" rx="14" fill="url(#g)"/>
-  <path d="M20 32c0-6.627 5.373-12 12-12h12v8H32a4 4 0 000 8h6v8h-6c-6.627 0-12-5.373-12-12z" fill="white"/>
+  <rect x="24" y="24" width="464" height="464" rx="116" fill="url(#surface)"/>
+  <path d="M178 126H348V300C348 367.4 306.6 410 239 410C185.6 410 148.7 386.6 126 348L195 305C205.7 324.3 220.7 334 240 334C262 334 274 320.7 274 294V199H178V126Z" fill="white"/>
+  <path d="M400 72L410.9 106.1L445 117L410.9 127.9L400 162L389.1 127.9L355 117L389.1 106.1L400 72Z" fill="url(#accent)"/>
 </svg>
