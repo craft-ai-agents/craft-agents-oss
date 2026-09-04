@@ -7,7 +7,14 @@ import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } 
 import { registerDesktopAccountHandlers } from './desktop-account'
 import { createHash, randomUUID } from 'crypto'
 import { hostname, homedir } from 'os'
+import { isAbsolute } from 'path'
 import * as Sentry from '@sentry/electron/main'
+
+const developmentUserDataDir = process.env.JONWORK_DESKTOP_USER_DATA_DIR
+if (!app.isPackaged && developmentUserDataDir) {
+  if (!isAbsolute(developmentUserDataDir)) throw new Error('JONWORK_DESKTOP_USER_DATA_DIR must be an absolute path')
+  app.setPath('userData', developmentUserDataDir)
+}
 
 // Initialize Sentry error tracking as early as possible after app import.
 // Only enabled in production (packaged) builds to avoid noise during development.
