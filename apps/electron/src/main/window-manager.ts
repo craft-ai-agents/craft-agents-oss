@@ -262,15 +262,21 @@ export class WindowManager {
       }
     })
 
-    import('@craft-agent/shared/config/storage')
-      .then(({ getDefaultZoomLevel }) => {
-        if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
-          window.webContents.setZoomFactor(getDefaultZoomLevel() / 100)
-        }
-      })
-      .catch((error) => {
-        windowLog.warn('Failed to apply default zoom level:', error)
-      })
+    // Apply after each load commits — a zoom factor set before navigation is
+    // reset by Chromium when the load commits, so applying at creation time
+    // silently did nothing. (In thin-client mode the preload also applies the
+    // server-stored value via webFrame; both paths agree.)
+    window.webContents.on('did-finish-load', () => {
+      import('@craft-agent/shared/config/storage')
+        .then(({ getDefaultZoomLevel }) => {
+          if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+            window.webContents.setZoomFactor(getDefaultZoomLevel() / 100)
+          }
+        })
+        .catch((error) => {
+          windowLog.warn('Failed to apply default zoom level:', error)
+        })
+    })
 
     // Show window when first paint is ready (faster perceived startup)
     window.once('ready-to-show', () => {
