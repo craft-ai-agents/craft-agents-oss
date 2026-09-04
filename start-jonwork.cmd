@@ -90,6 +90,7 @@ echo [Jonwork] Detailed log: %JONWORK_LOG%
 goto launch
 
 :clean
+set "JONWORK_CLEAN_VITE_CACHE=true"
 echo [Jonwork] Rebuilding the frontend cache and starting...
 echo [Jonwork] Detailed log: %JONWORK_LOG%
 goto launch
@@ -102,7 +103,8 @@ echo [Jonwork] Waiting for the interface to become ready...
 powershell.exe -NoProfile -Command "$pidFile = '%JONWORK_LAUNCH_PID_FILE%'; $processId = [int](Get-Content -LiteralPath $pidFile -ErrorAction Stop); $deadline = (Get-Date).AddSeconds(120); while ((Get-Date) -lt $deadline) { if (Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue) { exit 0 }; if (-not (Get-Process -Id $processId -ErrorAction SilentlyContinue)) { exit 1 }; Start-Sleep -Milliseconds 500 }; exit 2" >nul 2>nul
 if errorlevel 1 goto launch_failed
 
-echo [Jonwork] Interface started successfully. This launcher can now be closed.
+echo [Jonwork] Development server is ready. The desktop window is loading.
+echo [Jonwork] This launcher can now be closed.
 popd
 exit /b 0
 

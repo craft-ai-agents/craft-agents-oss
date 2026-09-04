@@ -420,7 +420,13 @@ async function main(): Promise<void> {
   // Setup
   detectInstance();
   loadEnvFile();
-  cleanViteCache();
+  const shouldCleanViteCache = process.argv.includes("--clean")
+    || process.env.JONWORK_CLEAN_VITE_CACHE === "true";
+  if (shouldCleanViteCache) {
+    cleanViteCache();
+  } else {
+    console.log("♻️  Reusing Vite cache (run start-jonwork.cmd clean to rebuild)");
+  }
 
   // Ensure dist directory exists
   if (!existsSync(DIST_DIR)) {
