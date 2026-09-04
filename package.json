@@ -69,7 +69,7 @@
     "electron:build": "bun run scripts/desktop-build-stamp.ts begin && bun run canvas:build && bun run electron:build:main && bun run electron:build:preload && bun run electron:build:renderer && bun run electron:build:resources && bun run electron:build:assets && bun run scripts/desktop-build-stamp.ts finish",
     "electron:start": "bun run electron:build && electron apps/electron",
     "electron:dev": "bun run scripts/electron-dev.ts",
-    "electron:dev:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/electron-local.ps1",
+    "electron:dev:local": "cmd /c start-jonwork.cmd",
     "electron:dev:test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/electron-test.ps1",
     "electron:dev:terminal": "bun run scripts/electron-dev.ts --terminal",
     "electron:dev:menu": "bash scripts/electron-dev.sh",

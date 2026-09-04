@@ -34,7 +34,27 @@ if not exist "%JONWORK_INSTALL_MARKER%" (
   echo [Jonwork] Project dependencies installed.
 )
 
-set "JONWORK_LOCK=%USERPROFILE%\.craft-agent\.server.lock"
+set "JONWORK_SERVER_URL=http://127.0.0.1:9100"
+for %%I in ("%~dp0..\.jonwork-desktop-profiles\local") do set "JONWORK_PROFILE_ROOT=%%~fI"
+set "JONWORK_CONFIG_DIR=%JONWORK_PROFILE_ROOT%"
+set "CRAFT_CONFIG_DIR=%JONWORK_PROFILE_ROOT%"
+set "JONWORK_DESKTOP_USER_DATA_DIR=%JONWORK_PROFILE_ROOT%\electron-user-data"
+set "VITE_JONWORK_DESKTOP_MODE=local"
+set "VITE_JONWORK_ACCOUNT_SERVER_URL=%JONWORK_SERVER_URL%"
+set "CRAFT_DEBUG=true"
+
+echo [Jonwork] Checking the local backend at %JONWORK_SERVER_URL%...
+powershell.exe -NoProfile -Command "try { $policy = Invoke-RestMethod -Uri '%JONWORK_SERVER_URL%/api/auth/policy' -TimeoutSec 5 } catch { Write-Error 'The local Jonwork backend is not running. Start it with: bun run server:dev:webui'; exit 1 }; if ($policy.sso -eq $true) { Write-Error 'The local backend returned an ERP SSO policy. Check that port 9100 points to the local service.'; exit 1 }"
+if errorlevel 1 (
+  echo [Jonwork] Local backend validation failed. Existing instance was not closed.
+  pause
+  popd
+  exit /b 1
+)
+echo [Jonwork] Local backend validation passed.
+if /i "%~1"=="--validate-only" goto validate
+
+set "JONWORK_LOCK=%JONWORK_PROFILE_ROOT%\.server.lock"
 set "JONWORK_PID="
 if exist "%JONWORK_LOCK%" for /f "tokens=2 delims=:," %%P in ('findstr /i "pid" "%JONWORK_LOCK%"') do set "JONWORK_PID=%%P"
 if defined JONWORK_PID set "JONWORK_PID=%JONWORK_PID: =%"
@@ -88,6 +108,11 @@ exit /b 0
 
 :check
 echo [Jonwork] Launcher check passed.
+popd
+exit /b 0
+
+:validate
+echo [Jonwork] Launcher and local backend check passed.
 popd
 exit /b 0
 
