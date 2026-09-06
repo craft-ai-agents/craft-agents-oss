@@ -2,7 +2,7 @@ export { startWebuiHttpServer, createWebuiHandler, type WebuiHttpServerOptions, 
 export { nodeHttpAdapter } from './node-adapter'
 export { validateSession, extractSessionCookie, isEstablishedAccountSessionActive } from './auth'
 export { AccountStore, DEFAULT_SIGNUP_CREDITS, DEFAULT_MESSAGE_CREDIT_COST, type PublicAccount, type AccountRole } from './accounts'
-export { ErpSsoClient, ssoConfig } from './erp-sso'
+export { ErpSsoClient, ssoConfig, resolveManagedDefaultModel } from './erp-sso'
 export { ErpControlRuntime } from './erp-control-runtime'
 export { rejectUnisolatedAgentExecution } from './execution-isolation'
 export { advanceCanvasModel, type CanvasModelBilling } from './canvas-model'
