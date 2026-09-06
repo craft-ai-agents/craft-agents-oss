@@ -3,7 +3,7 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { AccountScopedRpcServer } from './account-rpc-policy'
 import { resolve } from 'node:path'
 
-function harness(managed = false) {
+function harness(managed = false, managedPolicy: any = {active:true,models:['test-model']}) {
   const handlers = new Map<string, Function>()
   let credits = 2
   const account = { id: 'user-1', username: 'alice', credits, workspaceId: 'ws-1', createdAt: 1 }
@@ -26,7 +26,7 @@ function harness(managed = false) {
     credit: async () => { credits++ },
   } as any
   const sessions = { getSessions: () => [{ id: 'mine', workspaceId: 'ws-1' }, { id: 'theirs', workspaceId: 'ws-2' }] }
-  const control = managed ? {policy:async()=>({active:true,models:['test-model']}),catalog:async()=>[],allowedSources:async()=>[],acceptMessage:async(_account:string,_args:any[],dispatch:()=>Promise<any>)=>dispatch()} as any : undefined
+  const control = managed ? {policy:async()=>managedPolicy,catalog:async()=>[],allowedSources:async()=>[],acceptMessage:async(_account:string,_args:any[],dispatch:()=>Promise<any>)=>dispatch()} as any : undefined
   return { server: new AccountScopedRpcServer(inner, accounts, sessions, control), handlers, getCredits: () => credits }
 }
 
@@ -38,11 +38,11 @@ describe('AccountScopedRpcServer', () => {
     expect(await handlers.get(RPC_CHANNELS.window.SWITCH_WORKSPACE)!(ctx,'ws-1')).toEqual({workspaceId:'ws-1'})
     await expect(handlers.get(RPC_CHANNELS.window.SWITCH_WORKSPACE)!(ctx,'ws-2')).rejects.toThrow('无权')
   })
-  it('managed accounts use only the execution ledger and cannot read server credentials', async () => {
+  it('managed accounts dispatch through the ERP policy and cannot read server credentials', async () => {
     const {server,handlers,getCredits}=harness(true)
     const ctx={clientId:'c',principalId:'user-1',workspaceId:'ws-1'}
     server.handle(RPC_CHANNELS.sessions.SEND_MESSAGE,async()=>({accepted:true}))
-    await expect(handlers.get(RPC_CHANNELS.sessions.SEND_MESSAGE)!(ctx,'mine','hello')).rejects.toThrow('用户及项目级隔离')
+    expect(await handlers.get(RPC_CHANNELS.sessions.SEND_MESSAGE)!(ctx,'mine','hello')).toEqual({accepted:true})
     expect(getCredits()).toBe(2)
     for(const channel of [RPC_CHANNELS.llmConnections.GET_API_KEY,RPC_CHANNELS.settings.SET_SERVER_CONFIG,RPC_CHANNELS.workspaces.CREATE]) {
       server.handle(channel,async()=>{throw Error('must not reach handler')})
@@ -64,6 +64,16 @@ describe('AccountScopedRpcServer', () => {
     await expect(handlers.get(RPC_CHANNELS.canvas.CALL_TOOL)!(ctx,'ws-1','get_infinite_canvas_state',{projectId:'canvas-a'})).rejects.toThrow('无权绑定')
     await expect(handlers.get(RPC_CHANNELS.sessions.SET_MODEL)!(ctx,'mine','ws-1','forbidden')).rejects.toThrow('模型')
     expect(await handlers.get(RPC_CHANNELS.sessions.SET_MODEL)!(ctx,'mine','ws-1','test-model')).toBe(true)
+  })
+  it('projects the centrally selected DeepSeek model as the managed UI default',async()=>{
+    const deepseek='pi/deepseek-v4-pro'
+    const {server,handlers}=harness(true,{active:true,models:['claude-opus-4-8',deepseek],default_model:deepseek})
+    server.handle(RPC_CHANNELS.llmConnections.LIST_WITH_STATUS,async()=>[
+      {slug:'anthropic',name:'Anthropic',models:[{id:'claude-opus-4-8',name:'Opus 4.8'}],defaultModel:'claude-opus-4-8',isDefault:true},
+      {slug:'deepseek',name:'DeepSeek',models:[{id:deepseek,name:'DeepSeek V4 Pro'}],defaultModel:deepseek,isDefault:false},
+    ])
+    const result=await handlers.get(RPC_CHANNELS.llmConnections.LIST_WITH_STATUS)!({clientId:'c',principalId:'user-1',workspaceId:'ws-1'})
+    expect(result.find((connection:any)=>connection.isDefault)).toMatchObject({slug:'deepseek',defaultModel:deepseek})
   })
   it('blocks skill workspace spoofing, local editors and file-path bypasses', async () => {
     const { server, handlers } = harness()
@@ -120,6 +130,6 @@ describe('AccountScopedRpcServer', () => {
     await expect(handlers.get(RPC_CHANNELS.projects.DELETE)!(ctx,'ws-1','mine')).rejects.toThrow('归档')
     await expect(handlers.get(RPC_CHANNELS.canvas.CALL_TOOL)!(ctx,'ws-1','get_infinite_canvas_state',{})).rejects.toThrow('禁止回退')
     await expect(handlers.get(RPC_CHANNELS.canvas.CALL_TOOL)!(ctx,'ws-1','bind_infinite_canvas_session',{projectId:'canvas-a',sessionId:'theirs'})).rejects.toThrow('无权')
-    for(const channel of [RPC_CHANNELS.sessions.RESPOND_TO_PERMISSION,RPC_CHANNELS.sessions.RESPOND_TO_CREDENTIAL]) await expect(handlers.get(channel)!(ctx,'mine')).rejects.toThrow('用户及项目级隔离')
+    for(const channel of [RPC_CHANNELS.sessions.RESPOND_TO_PERMISSION,RPC_CHANNELS.sessions.RESPOND_TO_CREDENTIAL]) await expect(handlers.get(channel)!(ctx,'mine')).rejects.toThrow('unsafe handler reached')
   })
 })

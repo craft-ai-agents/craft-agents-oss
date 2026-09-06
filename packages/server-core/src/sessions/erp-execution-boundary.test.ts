@@ -25,14 +25,15 @@ describe('SessionManager ERP execution boundary', () => {
     const session=createManagedSession({id:'fixture-session',name:'Fixture',model:'fixture-model'},workspace as never,{messagesLoaded:true})
     ;(sm as any).sessions.set(session.id,session)
     setWorkspaceSkillRoots(root,{publicRoot:join(root,'empty-public'),privateRoot:join(root,'empty-private')})
-    let dispatched=0;let active=true;let authorized=0;let isolationBlocked=false
+    let dispatched=0;let active=true;let authorized=0;let isolationBlocked=false;let centralDefault='fixture-model'
     const agent={setAllSources(){},getModel:()=> 'fixture-model',getSessionId:()=>undefined,
       async *chat(){dispatched++;yield {type:'complete'}}}
     ;(sm as any).getOrCreateAgent=async()=>agent
     sm.setExecutionPolicy({
-      // Provider/ledger unit fixture only. Production ErpControlRuntime always
-      // rejects SDK execution until a real isolated executor replaces its gate.
+      // Provider/ledger fixture; individual tests can still simulate an
+      // unavailable isolation policy before any durable or billable work.
       assertAgentExecution:()=>{if(isolationBlocked) rejectUnisolatedAgentExecution()},
+      defaultModel:async()=>centralDefault,
       prepare:async()=>{},allowedSources:async()=>[],
       authorize:async()=>{authorized++;if(!active) throw Error('ERP disabled')},
       begin:async()=>{
@@ -41,7 +42,7 @@ describe('SessionManager ERP execution boundary', () => {
         return {complete:async status=>{ledger.finish('account','task',status==='unknown'?0:2,status)}}
       },
     })
-    return {sm,ledger,session,agent,blockIsolation:()=>{isolationBlocked=true},setActive:(v:boolean)=>active=v,dispatched:()=>dispatched,authorized:()=>authorized}
+    return {sm,ledger,session,agent,blockIsolation:()=>{isolationBlocked=true},setActive:(v:boolean)=>active=v,setCentralDefault:(v:string)=>centralDefault=v,dispatched:()=>dispatched,authorized:()=>authorized}
   }
   it('blocks unisolated direct/internal sends before ACK, credentials, persistence or billing',async()=>{
     const f=fixture();f.blockIsolation();let ack=false
@@ -79,6 +80,11 @@ describe('SessionManager ERP execution boundary', () => {
     await expect(f.sm.sendMessage(f.session.id,'hello',undefined,undefined,undefined,undefined,undefined,()=>{ack=true})).rejects.toThrow('ERP disabled')
     expect(ack).toBe(false);expect(f.dispatched()).toBe(0)
     expect(f.ledger.balance('account')).toMatchObject({available:10,reserved:0})
+  })
+  it('rebases an empty pre-existing session onto the current central model default',async()=>{
+    const f=fixture();f.session.model='claude-opus-4-8';f.setCentralDefault('pi/deepseek-v4-pro')
+    await f.sm.sendMessage(f.session.id,'hello')
+    expect(f.session.model).toBe('pi/deepseek-v4-pro')
   })
   it('reserves before the provider and settles from the real terminal path',async()=>{
     const f=fixture();let heldAtDispatch=0

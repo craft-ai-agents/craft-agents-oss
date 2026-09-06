@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { ControlLedger } from '../control-ledger'
 import { AccountDatabaseFile } from '../account-database'
-import { ErpSsoClient, ssoConfig, accessSnapshot, type AccessSnapshot } from '../erp-sso'
+import { ErpSsoClient, ssoConfig, accessSnapshot, resolveManagedDefaultModel, type AccessSnapshot } from '../erp-sso'
 import { ErpControlRuntime } from '../erp-control-runtime'
 import { AccountStore } from '../accounts'
 import { createWebuiHandler } from '../http-server'
@@ -15,9 +15,9 @@ const roots:string[]=[]
 afterEach(()=>{for(const root of roots.splice(0)){if(!resolve(root).startsWith(resolve(tmpdir())))throw Error('Unsafe cleanup');rmSync(root,{recursive:true,force:true})}})
 function temp(){const r=mkdtempSync(join(tmpdir(),'erp-v2-test-'));roots.push(r);return r}
 const account='erp-0123456789abcdef01234567'; const member='fixture-member'
-const policy:AccessSnapshot={schema_version:2,member_id:member,account_id:account,tenant_id:'customer-a',active:true,role:'user',models:['test-model'],skills:[],sources:[],task_price:2,max_concurrency:1,ttl_seconds:60,policy_version:'a'.repeat(64),pricing_version:'fixed-task-v1',execution_mode:'server_only',desktop_channel:'internal'}
+const policy:AccessSnapshot={schema_version:2,member_id:member,account_id:account,login_email:'User.Name+design@example.com',tenant_id:'customer-a',active:true,role:'user',models:['test-model'],skills:[],sources:[],task_price:2,max_concurrency:1,ttl_seconds:60,policy_version:'a'.repeat(64),pricing_version:'fixed-task-v1',execution_mode:'server_only',desktop_channel:'internal'}
 function fixture(){
-  const root=temp();const calls:Array<{method:string;body:any}>=[];let down=false;let active=true;let role:AccessSnapshot['role']='user';let desktopChannel:AccessSnapshot['desktop_channel']='internal'
+  const root=temp();const calls:Array<{method:string;body:any}>=[];const workspaceNames:string[]=[];let down=false;let active=true;let role:AccessSnapshot['role']='user';let desktopChannel:AccessSnapshot['desktop_channel']='internal'
   const request=(async(input:string|URL|Request,init:RequestInit={})=>{
     const url=new URL(String(input)); const method=url.pathname.split('.').pop()!;const body=typeof init.body==='string'?JSON.parse(init.body):{}
     calls.push({method,body})
@@ -32,15 +32,15 @@ function fixture(){
     return Response.json({message:{accepted:true}})
   })as typeof fetch
   const client=new ErpSsoClient({erp:'https://erp.example',origin:'https://craft.example',clientId:'test-client',serviceUser:'service@example.invalid',apiKey:'test-key',apiSecret:'test-secret'},request)
-  const store=new AccountStore({filePath:join(root,'accounts.json'),usersRoot:join(root,'users'),createWorkspace:({name})=>({id:name})})
+  const store=new AccountStore({filePath:join(root,'accounts.json'),usersRoot:join(root,'users'),createWorkspace:({name})=>{workspaceNames.push(name);return{id:name}}})
   const ledger=new ControlLedger(join(root,'ledger.json'));const runtime=new ErpControlRuntime(client,store,ledger)
-  return{root,client,store,ledger,runtime,calls,setDown(v:boolean){down=v},setActive(v:boolean){active=v},setRole(v:AccessSnapshot['role']){role=v},setDesktopChannel(v:AccessSnapshot['desktop_channel']){desktopChannel=v}}
+  return{root,client,store,ledger,runtime,calls,workspaceNames,setDown(v:boolean){down=v},setActive(v:boolean){active=v},setRole(v:AccessSnapshot['role']){role=v},setDesktopChannel(v:AccessSnapshot['desktop_channel']){desktopChannel=v}}
 }
 
 describe('ERP SSO and reliable business integration',()=>{
-  it('production policy refuses shared-process agent execution independently of ERP entitlement',async()=>{
+  it('production policy enables the project-scoped agent runtime without touching the ledger',async()=>{
     const f=fixture();await f.runtime.provision({member_id:member,account_id:account})
-    expect(()=>f.runtime.assertAgentExecution()).toThrow('用户及项目级隔离')
+    expect(()=>f.runtime.assertAgentExecution()).not.toThrow()
     expect(f.ledger.balance(account)).toMatchObject({available:10,reserved:0,sequence:1})
   })
   it('uses stable server provider reservations, original prices and rejects duplicate creation',async()=>{
@@ -62,11 +62,22 @@ describe('ERP SSO and reliable business integration',()=>{
     expect(ssoConfig({})).toBeUndefined()
     expect(()=>ssoConfig({JONWORK_SSO_ERP_URL:'https://erp.example'})).toThrow()
     expect(()=>accessSnapshot({...policy,models:['*']})).toThrow()
+    expect(()=>accessSnapshot({...policy,login_email:'not-an-email'})).toThrow()
+    expect(accessSnapshot(policy).login_email).toBe('user.name+design@example.com')
     expect(accessSnapshot({...policy,role:'admin'}).role).toBe('admin')
     expect(()=>accessSnapshot({...policy,role:'owner'})).toThrow()
   })
+  it('uses the ERP default model, with DeepSeek as the backward-compatible product default',()=>{
+    const models=['claude-opus-4-8','pi/deepseek-v4-pro','pi/deepseek-v4-flash']
+    expect(resolveManagedDefaultModel({...policy,models})).toBe('pi/deepseek-v4-pro')
+    expect(resolveManagedDefaultModel({...policy,models,default_model:'pi/deepseek-v4-flash'})).toBe('pi/deepseek-v4-flash')
+    expect(accessSnapshot({...policy,models,default_model:'pi/deepseek-v4-flash'}).default_model).toBe('pi/deepseek-v4-flash')
+    expect(()=>accessSnapshot({...policy,models,default_model:'pi/not-authorized'})).toThrow()
+  })
   it('binds OAuth state to browser, uses PKCE, and consumes callback once',async()=>{
-    const f=fixture();const flow=f.client.start();const url=new URL(flow.url)
+    const f=fixture();const flow=f.client.start();const loginUrl=new URL(flow.url)
+    expect(loginUrl.pathname).toBe('/email-login')
+    const url=new URL(loginUrl.searchParams.get('redirect-to')!,loginUrl.origin)
     expect(url.searchParams.get('code_challenge_method')).toBe('S256')
     await expect(f.client.complete(url.searchParams.get('state')!,'test-code','wrong-browser')).rejects.toThrow()
     expect(f.calls).toHaveLength(0)
@@ -78,15 +89,18 @@ describe('ERP SSO and reliable business integration',()=>{
     const f=fixture();const verifier=randomBytes(32).toString('base64url');const challenge=createHash('sha256').update(verifier).digest('base64url')
     const device=f.client.startDevice(challenge);const flow=f.client.start(device.device)
     expect(f.client.poll(device.device,verifier)).toBeNull()
-    await f.client.complete(new URL(flow.url).searchParams.get('state')!,'code',flow.browser)
+    const loginUrl=new URL(flow.url);const oauthUrl=new URL(loginUrl.searchParams.get('redirect-to')!,loginUrl.origin)
+    await f.client.complete(oauthUrl.searchParams.get('state')!,'code',flow.browser)
     expect(()=>f.client.poll(device.device,'z'.repeat(43))).toThrow()
     expect(f.client.poll(device.device,verifier)?.account_id).toBe(account)
     expect(()=>f.client.poll(device.device,verifier)).toThrow()
   })
   it('provisions a normal user idempotently without legacy credit import or password login',async()=>{
     const f=fixture();const a=await f.runtime.provision({member_id:member,account_id:account})
-    expect(a.role).toBe('user');expect(a.credits).toBe(10)
+    expect(f.workspaceNames).toEqual(['customer-a 企业工作区'])
+    expect(a.role).toBe('user');expect(a.credits).toBe(10);expect(a.username).toBe('user.name+design@example.com')
     await f.runtime.provision({member_id:member,account_id:account})
+    expect(f.workspaceNames).toEqual(['customer-a 企业工作区','customer-a 企业工作区'])
     expect(f.store.listAccounts()).toHaveLength(1);expect(f.ledger.balance(account).available).toBe(10)
     await expect(f.store.charge(account,'test-request-0001')).rejects.toThrow()
     await expect(f.store.credit(account,10)).rejects.toThrow()
@@ -203,6 +217,9 @@ describe('ERP SSO and reliable business integration',()=>{
     const h=createWebuiHandler({webuiDir:f.root,secret,wsProtocol:'ws',wsPort:1,accountStore:f.store,erpControl:f.runtime,getHealthCheck:()=>({status:'ok'}),logger:{info(){},warn(){},error(){}}as any})
     try{
       const policyResponse=await h.fetch(new Request('https://craft.example/api/auth/policy'));expect((await policyResponse.json() as any).sso).toBe(true)
+      const failedCallback=await h.fetch(new Request('https://craft.example/api/auth/sso/callback?code=expired&state=expired'))
+      expect(failedCallback.status).toBe(403);expect(failedCallback.headers.get('content-type')).toContain('text/html')
+      const failedPage=await failedCallback.text();expect(failedPage).toContain('重新登录');expect(failedPage).toContain('刷新重试');expect(failedPage).toContain('返回登录页')
       const token=await createSessionToken(secret,a.id)
       const response=await h.fetch(new Request('https://craft.example/api/account',{headers:{Authorization:`Bearer ${token}`}}))
       expect((await response.json() as any).credits).toBe(10)

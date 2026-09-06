@@ -553,6 +553,13 @@ export class PiAgent extends BaseAgent {
       sessionPath,
       workingDirectory,
       plansFolderPath,
+      projectToolRoot: this.config.envOverrides?.JONWORK_PROJECT_TOOL_ROOT,
+      projectReadRoots: (() => {
+        try {
+          const value = JSON.parse(this.config.envOverrides?.JONWORK_PROJECT_READ_ROOTS ?? '[]');
+          return Array.isArray(value) && value.every(item => typeof item === 'string') ? value : [];
+        } catch { return []; }
+      })(),
       miniModel: this.config.miniModel,
       providerType: this.config.providerType,
       authType: this.config.authType,

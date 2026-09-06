@@ -90,7 +90,7 @@ import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/share
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
 import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta, type TokenUsage } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
-import { hasDeliverableSkillIntent, loadAllSkills, loadSkillBySlug, invalidateSkillsCache, matchSkillsForConversation, assertSkillPath, type LoadedSkill } from '@craft-agent/shared/skills'
+import { hasDeliverableSkillIntent, loadAllSkills, loadSkillBySlug, invalidateSkillsCache, matchSkillsForConversation, assertSkillPath, getWorkspaceSkillRoots, type LoadedSkill } from '@craft-agent/shared/skills'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
@@ -1209,7 +1209,7 @@ export class SessionManager implements ISessionManager {
   /** One-way startup guard for every multi-account host, including legacy login. */
   requireIsolatedAccountExecution(): void { this.accountIsolationRequired = true }
   private assertAgentExecutionIsolation(): void {
-    if (this.accountIsolationRequired) rejectUnisolatedAgentExecution()
+    if (this.accountIsolationRequired && !this.executionPolicy) rejectUnisolatedAgentExecution()
     this.executionPolicy?.assertAgentExecution()
   }
   private assertAgentContextTarget(origin: ManagedSession, targetId: string): void {
@@ -3375,6 +3375,14 @@ export class SessionManager implements ISessionManager {
   private async getOrCreateAgent(managed: ManagedSession): Promise<AgentInstance> {
     // Also guard callers that bypass sendMessage (resume/automation/internal tools).
     this.assertAgentExecutionIsolation()
+    // Managed Pi exposes only project-scoped file tools. Let those bounded tools
+    // run without interactive desktop permission prompts, which WebUI cannot
+    // safely service as host-level approvals.
+    if (this.executionPolicy && managed.permissionMode !== 'allow-all') {
+      managed.permissionMode = 'allow-all'
+      setPermissionMode(managed.id, 'allow-all', { changedBy: 'system' })
+      this.persistSession(managed)
+    }
     // Refresh runtime config in-place when the connection has drifted since
     // the agent was created. May null out `managed.agent` if the in-place
     // refresh fails, in which case the create branch below rebuilds it.
@@ -3461,8 +3469,17 @@ export class SessionManager implements ISessionManager {
 
       // Per-session env overrides
       const miniModel = connection ? (getMiniModel(connection) ?? connection.defaultModel) : undefined
+      const managedSkillRoots = this.executionPolicy ? getWorkspaceSkillRoots(managed.workspace.rootPath) : null
       const envOverrides: Record<string, string> = {
         CRAFT_WORKSPACE_PATH: managed.workspace.rootPath,
+        // The Pi subprocess uses this server-owned root to expose only
+        // project-scoped file tools and to disable Bash/proxy tools.
+        ...(this.executionPolicy && managed.workingDirectory
+          ? { JONWORK_PROJECT_TOOL_ROOT: managed.workingDirectory }
+          : {}),
+        ...(managedSkillRoots
+          ? { JONWORK_PROJECT_READ_ROOTS: JSON.stringify([managedSkillRoots.publicRoot]) }
+          : {}),
         // Pass mini model to SDK subprocess so built-in tools like WebFetch
         // use the correct model for summarization (instead of hardcoded Haiku)
         ...(miniModel ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: miniModel } : {}),
@@ -5873,6 +5890,19 @@ export class SessionManager implements ISessionManager {
     }
     // Before persistence, ACK, skills, model credentials or SDK initialization.
     this.assertAgentExecutionIsolation()
+    await this.ensureMessagesLoaded(managed)
+    // An empty session created before a central default change has no context to
+    // preserve. Rebase it at first send so today's DeepSeek policy takes effect
+    // without forcing users to recreate the blank conversation.
+    if (this.executionPolicy && managed.messages.length === 0) {
+      const centralDefault = await this.executionPolicy.defaultModel?.(managed.workspace.id)
+      if (centralDefault && managed.model !== centralDefault) {
+        managed.model = centralDefault
+        managed.llmConnection = undefined
+        managed.connectionLocked = false
+        this.sendEvent({ type: 'session_model_changed', sessionId, model: centralDefault }, managed.workspace.id)
+      }
+    }
     this.setLastMessageClientId(sessionId, rpcContext?.callerClientId)
     const executionInput = () => ({ workspaceId: managed.workspace.id,
       model: resolveBackendContext({sessionConnectionSlug:managed.llmConnection,
@@ -5882,6 +5912,12 @@ export class SessionManager implements ISessionManager {
     // All callers (RPC, automation, queued messages and retries) pass this gate.
     await this.executionPolicy?.authorize(executionInput())
     await this.executionPolicy?.prepare(managed.workspace.id)
+    // ERP skill bundles are immutable/versioned and may be revoked between
+    // turns. Recreate an idle managed subprocess so its read-only roots always
+    // match the freshly authorized catalog. Never disrupt an in-flight turn.
+    if (this.executionPolicy && managed.agent && !managed.isProcessing) {
+      await this.disposeManagedAgentRuntime(managed, 'ERP policy refresh')
+    }
 
     // Source-activation auto-retry dedup (craft-agents-oss#804). When the server
     // has just scheduled or committed a "[<slug> activated]" retry, drop a matching
@@ -5897,9 +5933,6 @@ export class SessionManager implements ISessionManager {
     // This acts as a safety valve - if the user moves on, we don't want to
     // auto-execute an old plan later.
     await clearStoredPendingPlanExecution(managed.workspace.rootPath, sessionId)
-
-    // Ensure messages are loaded before we try to add new ones
-    await this.ensureMessagesLoaded(managed)
 
     // If currently processing, behavior depends on the connection's
     // `midStreamBehavior` (resolved via {@link resolveMidStreamBehavior},

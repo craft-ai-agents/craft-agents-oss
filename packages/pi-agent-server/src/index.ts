@@ -88,6 +88,7 @@ import { createSearchTool } from './tools/search/create-search-tool.ts';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
 import { applySystemPromptOverride } from './system-prompt-override.ts';
 import { adaptCredentialForPiSdk, type PiCredential } from './adapt-credential.ts';
+import { assertManagedProjectToolInput } from './project-tool-isolation.ts';
 
 // ============================================================
 // Types — JSONL Protocol
@@ -105,6 +106,10 @@ interface InitMessage {
   sessionPath: string;
   workingDirectory: string;
   plansFolderPath: string;
+  /** Server-owned filesystem scope for managed enterprise sessions. */
+  projectToolRoot?: string;
+  /** Verified ERP skill caches exposed read-only to managed file tools. */
+  projectReadRoots?: string[];
   miniModel?: string;
   agentDir?: string;
   providerType?: string;
@@ -604,19 +609,24 @@ async function ensureSession(): Promise<AgentSession> {
   //     our hooked versions take effect (permissions + large-response summarization).
   //   - Do NOT pass tool *objects* to `tools` — `allowedToolNames = new Set(options.tools)`
   //     then `.has(name)` returns false for every string lookup → zero tools active.
+  const managedProjectMode = !!initConfig.projectToolRoot;
   const builtinDefs = [
     createReadToolDefinition(cwd),
-    createBashToolDefinition(cwd),
+    ...(!managedProjectMode ? [createBashToolDefinition(cwd)] : []),
     createEditToolDefinition(cwd),
     createWriteToolDefinition(cwd),
     createGrepToolDefinition(cwd),
     createFindToolDefinition(cwd),
     createLsToolDefinition(cwd),
   ];
-  const proxyTools = buildProxyTools();
-  const wrappedAll = wrapToolsWithHooks([...builtinDefs, ...webTools, ...proxyTools]);
+  // Managed sessions intentionally omit Bash, web, browser/session proxies and
+  // arbitrary source tools. The current business workflow can converse and
+  // create deliverables using project-scoped file tools.
+  const activeWebTools = managedProjectMode ? [] : webTools;
+  const proxyTools = managedProjectMode ? [] : buildProxyTools();
+  const wrappedAll = wrapToolsWithHooks([...builtinDefs, ...activeWebTools, ...proxyTools]);
   const toolAllowlist = wrappedAll.map(t => t.name);
-  debugLog(`Session tools: ${builtinDefs.length} builtin + ${webTools.length} web + ${proxyTools.length} proxy = ${wrappedAll.length} total`);
+  debugLog(`Session tools: ${builtinDefs.length} builtin + ${activeWebTools.length} web + ${proxyTools.length} proxy = ${wrappedAll.length} total`);
 
   // Build session options
   const sessionOptions: CreateAgentSessionOptions = {
@@ -797,6 +807,9 @@ function wrapSingleTool(tool: ToolDefinition<any, any>): ToolDefinition<any, any
 
     // Send to main process for permission checking + transforms
     inputObj = await requestPreToolUseApproval(sdkToolName, inputObj, toolCallId);
+
+    // Validate after main-process transforms so no rewrite can widen scope.
+    assertManagedProjectToolInput(initConfig?.projectToolRoot, initConfig?.projectReadRoots, sdkToolName, inputObj);
 
     // Metadata is for Craft UI only. Keep a final defensive strip here so the
     // upstream Pi tool implementation always receives clean executable args,

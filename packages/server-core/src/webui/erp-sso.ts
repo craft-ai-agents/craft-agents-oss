@@ -1,15 +1,28 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 
 export interface AccessSnapshot {
-  schema_version: 2; member_id: string; account_id: string; tenant_id: string; active: boolean; role: 'admin' | 'user'
+  schema_version: 2; member_id: string; account_id: string; login_email: string; tenant_id: string; active: boolean; role: 'admin' | 'user'
   models: string[]; skills: string[]; sources: string[]; task_price: number; max_concurrency: number
+  default_model?: string
   ttl_seconds: number; policy_version: string; pricing_version: 'fixed-task-v1'; execution_mode: 'server_only'
   desktop_channel: '' | 'internal'
+}
+export const DEFAULT_MANAGED_MODEL = 'pi/deepseek-v4-pro'
+
+/** ERP owns the explicit default. Older snapshots remain compatible and use the
+ * product default, then another authorized DeepSeek model, then the first model. */
+export function resolveManagedDefaultModel(policy: Pick<AccessSnapshot, 'models' | 'default_model'>): string | undefined {
+  return policy.default_model
+    ?? (policy.models.includes(DEFAULT_MANAGED_MODEL) ? DEFAULT_MANAGED_MODEL : undefined)
+    ?? policy.models.find(model => model.toLocaleLowerCase('en-US').includes('deepseek'))
+    ?? policy.models[0]
 }
 export interface ErpSsoConfig { erp: string; origin: string; clientId: string; clientSecret?: string; serviceUser: string; apiKey: string; apiSecret: string }
 const random = () => randomBytes(32).toString('base64url')
 const hash = (s: string) => createHash('sha256').update(s).digest('base64url')
 const validId = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,139}$/.test(s)
+const validEmail = (s: unknown): s is string => typeof s === 'string' && s.length <= 254 && /^[^\s@]+@[^\s@]+$/.test(s)
+const validPolicyItem = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z0-9][A-Za-z0-9_./:@+-]{0,127}$/.test(s)
 function origin(s: string) { const u = new URL(s); if (u.username || u.password || u.search || u.hash || u.pathname !== '/' || (u.protocol !== 'https:' && !(u.protocol === 'http:' && ['127.0.0.1', '[::1]'].includes(u.hostname)))) throw new Error('SSO requires HTTPS origins (loopback HTTP only for tests)'); return u.origin }
 export function ssoConfig(env = process.env): ErpSsoConfig | undefined {
   const names = ['JONWORK_SSO_ERP_URL', 'JONWORK_SSO_ORIGIN', 'JONWORK_SSO_CLIENT_ID', 'JONWORK_SSO_SERVICE_USER', 'JONWORK_SSO_API_KEY', 'JONWORK_SSO_API_SECRET'] as const
@@ -20,15 +33,16 @@ export function ssoConfig(env = process.env): ErpSsoConfig | undefined {
 }
 export function accessSnapshot(value: unknown): AccessSnapshot {
   const p = value as AccessSnapshot
-  if (!p || p.schema_version !== 2 || !validId(p.member_id) || !validId(p.account_id) || typeof p.tenant_id !== 'string'
+  if (!p || p.schema_version !== 2 || !validId(p.member_id) || !validId(p.account_id) || !validEmail(p.login_email) || typeof p.tenant_id !== 'string'
     || !['admin', 'user'].includes(p.role) || typeof p.active !== 'boolean' || p.execution_mode !== 'server_only' || p.pricing_version !== 'fixed-task-v1'
     || !['', 'internal'].includes(p.desktop_channel)
     || !Number.isSafeInteger(p.task_price) || p.task_price < 1 || p.task_price > 1000000
     || !Number.isSafeInteger(p.max_concurrency) || p.max_concurrency < 1 || p.max_concurrency > 100
     || !Number.isSafeInteger(p.ttl_seconds) || p.ttl_seconds < 1 || p.ttl_seconds > 60 || !/^[a-f0-9]{64}$/.test(p.policy_version)
-    || [p.models, p.skills, p.sources].some(v => !Array.isArray(v) || v.length > 200 || new Set(v).size !== v.length || v.some(s => typeof s !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_./:@+-]{0,127}$/.test(s)))) throw new Error('Invalid ERP access snapshot')
-  return { schema_version: 2, member_id: p.member_id, account_id: p.account_id, tenant_id: p.tenant_id, active: p.active, role: p.role,
-    models: p.models, skills: p.skills, sources: p.sources, task_price: p.task_price, max_concurrency: p.max_concurrency,
+    || (p.default_model !== undefined && (!validPolicyItem(p.default_model) || !p.models?.includes(p.default_model)))
+    || [p.models, p.skills, p.sources].some(v => !Array.isArray(v) || v.length > 200 || new Set(v).size !== v.length || v.some(s => !validPolicyItem(s)))) throw new Error('Invalid ERP access snapshot')
+  return { schema_version: 2, member_id: p.member_id, account_id: p.account_id, login_email: p.login_email.trim().toLocaleLowerCase('en-US'), tenant_id: p.tenant_id, active: p.active, role: p.role,
+    models: p.models, ...(p.default_model ? {default_model:p.default_model} : {}), skills: p.skills, sources: p.sources, task_price: p.task_price, max_concurrency: p.max_concurrency,
     ttl_seconds: p.ttl_seconds, policy_version: p.policy_version, pricing_version: p.pricing_version, execution_mode: p.execution_mode,
     desktop_channel: p.desktop_channel }
 }
@@ -58,7 +72,12 @@ export class ErpSsoClient {
     const u = new URL('/api/method/frappe.integrations.oauth2.authorize', this.config.erp)
     u.search = new URLSearchParams({ client_id: this.config.clientId, response_type: 'code', redirect_uri: this.callback,
       scope: 'openid', state, code_challenge: hash(verifier), code_challenge_method: 'S256' }).toString()
-    return { url: u.href, browser }
+    // Always pass through the passwordless email page. Going directly to the
+    // OAuth endpoint would silently reuse an unrelated ERP browser session and
+    // skip email verification altogether.
+    const login = new URL('/email-login', this.config.erp)
+    login.searchParams.set('redirect-to', `${u.pathname}${u.search}`)
+    return { url: login.href, browser }
   }
   get callback() { return `${this.config.origin}/api/auth/sso/callback` }
   private async json(url: string, init: RequestInit) {
@@ -77,7 +96,7 @@ export class ErpSsoClient {
     if (this.config.clientSecret) body.set('client_secret', this.config.clientSecret)
     const token = await this.json(`${this.config.erp}/api/method/frappe.integrations.oauth2.get_token`, { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body })
     if (typeof token.access_token !== 'string' || !token.access_token || token.token_type?.toLowerCase() !== 'bearer') throw new Error('Invalid ERP token response')
-    const profile = await this.json(`${this.config.erp}/api/method/jonwork.integration.my_identity?instance=${encodeURIComponent(this.config.serviceUser)}`,
+    const profile = await this.json(`${this.config.erp}/api/method/jonwork_control.integration.my_identity?instance=${encodeURIComponent(this.config.serviceUser)}`,
       { headers: {Authorization: `Bearer ${token.access_token}`} })
     const identity = profile.message
     if (!validId(identity?.member_id) || !validId(identity?.account_id)) throw new Error('ERP account not provisioned')
@@ -94,7 +113,7 @@ export class ErpSsoClient {
   }
   async call(method: string, params: Record<string, unknown> = {}): Promise<any> {
     if (!['get_access_snapshot','pending_grants','pending_resolutions','ingest_event','heartbeat','resources','resource_bundle'].includes(method)) throw new Error('Unsupported ERP method')
-    const result = await this.json(`${this.config.erp}/api/method/jonwork.integration.${method}`, {
+    const result = await this.json(`${this.config.erp}/api/method/jonwork_control.integration.${method}`, {
       method:'POST', headers: {Authorization:`token ${this.config.apiKey}:${this.config.apiSecret}`, 'Content-Type':'application/json'}, body: JSON.stringify(params) })
     if (!Object.hasOwn(result, 'message')) throw new Error('Invalid ERP response')
     return result.message

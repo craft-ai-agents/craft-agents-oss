@@ -87,19 +87,19 @@ try {
   registerSessionsHandlers(scoped,{sessionManager:sm,platform:{logger:{info(){},warn(){},error(){}}}} as any)
   wsClient=new WsRpcClient(`ws://127.0.0.1:${wsServer.port}`,{token:desktop.accessToken,workspaceId:account.workspaceId,autoReconnect:false,clientCapabilities:[]})
   wsClient.connect()
-  stage='websocket-isolation-denial'
+  stage='websocket-project-isolated-execution'
   const args=[managed.id,'fixture task',null,null,{requestId:'live-acceptance-request'}]
-  await assert.rejects(wsClient.invoke('sessions:sendMessage',...args),/用户及项目级隔离/)
-  await assert.rejects(wsClient.invoke('sessions:sendMessage',...args),/用户及项目级隔离/)
-  stage='internal-isolation-denial-and-mirror'
-  await assert.rejects(sm.sendMessage(managed.id,'internal retry'),/用户及项目级隔离/)
+  assert.equal((await wsClient.invoke('sessions:sendMessage',...args) as any).accepted,true)
+  assert.equal((await wsClient.invoke('sessions:sendMessage',...args) as any).accepted,true)
+  stage='internal-project-isolated-execution-and-mirror'
+  await sm.sendMessage(managed.id,'internal retry')
   await runtime.sync()
-  assert.equal(dispatched,0);assert.equal(held,0);assert.equal(managed.messages.length,0)
+  assert.equal(dispatched,2);assert.equal(held,2);assert.ok(managed.messages.length>0)
   assert.equal(runtime.ledger.balance(account.id).pending,0)
-  assert.deepEqual(bench('inspect',[config.tag]),{available:10,reserved:0,sequence:1,online:true})
+  assert.deepEqual(bench('inspect',[config.tag]),{available:6,reserved:0,sequence:5,online:true})
   const replay=await fetch(consent.location,{redirect:'manual',headers:{Cookie:cookie}})
   assert.equal(replay.status,403)
-  console.log('PASS: real ERP HTTP + desktop device PKCE + account-bearer WebSocket + direct SessionManager isolation denial + retries do not execute or debit + ERP grant mirror/heartbeat. Shared-process agent execution is intentionally unavailable; no sandbox or paid-provider acceptance claimed.')
+  console.log('PASS: real ERP HTTP + desktop device PKCE + account-bearer WebSocket + project-scoped managed execution + request deduplication + ERP grant mirror/heartbeat. Provider remains a test double; no paid-provider acceptance claimed.')
 } catch (error) {
   // Never leak temporary OAuth codes, tokens, cookies, API keys or raw errors.
   console.error(`FAIL: local ERP/Craft acceptance at ${stage}; sensitive error details suppressed.`)
