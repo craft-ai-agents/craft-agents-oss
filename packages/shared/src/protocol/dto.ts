@@ -770,6 +770,7 @@ export interface ClaudeOAuthResult {
 export type TestAutomationAction =
   | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel }
   | { type: 'webhook'; url: string; method?: string; headers?: Record<string, string>; bodyFormat?: 'json' | 'form' | 'raw'; body?: unknown; captureResponse?: boolean; auth?: { type: 'basic'; username: string; password: string } | { type: 'bearer'; token: string } }
+  | { type: 'script'; script: string; args?: string[]; runtime?: 'bun' | 'node' | 'python3'; timeoutMs?: number; page?: string }
 
 export interface TestAutomationPayload {
   workspaceId: string
@@ -785,6 +786,7 @@ export interface TestAutomationPayload {
 export type TestAutomationActionResult =
   | { type: 'prompt'; success: boolean; stderr?: string; sessionId?: string; duration: number }
   | { type: 'webhook'; success: boolean; url: string; statusCode: number; error?: string; duration: number }
+  | { type: 'script'; success: boolean; script: string; exitCode: number | null; stdout?: string; error?: string; duration: number }
 
 export interface TestAutomationResult {
   actions: TestAutomationActionResult[]

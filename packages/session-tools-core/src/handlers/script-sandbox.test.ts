@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'bun:test';
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -6,6 +6,20 @@ import type { SessionToolContext } from '../context.ts';
 import { handleScriptSandbox } from './script-sandbox.ts';
 
 describe('script_sandbox', () => {
+// Pin dev-mode runtime resolution for the duration of this suite. These tests
+// assert dev behavior (PATH fallback allowed); when the suite itself runs
+// under a packaged Craft Agents host (agent Bash sessions inherit
+// CRAFT_IS_PACKAGED=true), resolveScriptRuntime would otherwise flip into
+// packaged-mode hardening and change the outcomes.
+const SAVED_IS_PACKAGED = process.env.CRAFT_IS_PACKAGED;
+beforeAll(() => {
+  process.env.CRAFT_IS_PACKAGED = '0';
+});
+afterAll(() => {
+  if (SAVED_IS_PACKAGED === undefined) delete process.env.CRAFT_IS_PACKAGED;
+  else process.env.CRAFT_IS_PACKAGED = SAVED_IS_PACKAGED;
+});
+
   let rootDir: string;
   let sessionDir: string;
   let dataDir: string;

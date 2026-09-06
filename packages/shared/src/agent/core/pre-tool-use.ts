@@ -39,12 +39,12 @@ import { AGENTS_PLUGIN_NAME } from '../../skills/types.ts';
 import { GLOBAL_AGENT_SKILLS_DIR, PROJECT_AGENT_SKILLS_DIR } from '../../skills/storage.ts';
 import {
   shouldAllowToolInMode,
-  isApiEndpointAllowed,
   isReadOnlyBashCommandWithConfig,
   getPermissionModeDiagnostics,
   PERMISSION_MODE_CONFIG,
   type PermissionMode,
 } from '../mode-manager.ts';
+import { evaluateApiEndpointPolicy, evaluateMcpToolPolicy } from '../source-policy.ts';
 import { permissionsConfigCache, type PermissionsContext } from '../permissions-config.ts';
 import type { PrerequisiteCheckResult } from './prerequisite-manager.ts';
 import { rewriteBashWithRtk } from './rtk-rewrite.ts';
@@ -1085,25 +1085,22 @@ export function shouldPromptInAskMode(
 
   // --- MCP mutations ---
   if (toolName.startsWith('mcp__')) {
-    // Check if it would be blocked in safe mode (= it's a mutation)
-    const safeModeResult = shouldAllowToolInMode(
-      toolName, input, 'safe', { plansFolderPath }
-    );
-    if (!safeModeResult.allowed) {
-      // It's a mutation — check whitelist
-      if (permissionManager.isCommandWhitelisted(toolName)) {
-        onDebug?.(`Auto-allowing "${toolName}" (previously approved)`);
-        return null;
-      }
-      const serverAndTool = toolName.replace('mcp__', '').replace(/__/g, '/');
-      return {
-        promptType: 'mcp_mutation',
-        description: `MCP: ${serverAndTool}`,
-        command: toolName,
-      };
+    // Freestanding policy: blocked-in-safe-mode = mutation (shared with the Pages action bridge)
+    const policy = evaluateMcpToolPolicy(toolName, input, { plansFolderPath });
+    if (policy.decision === 'allow') {
+      // Read-only MCP tool — no prompt needed
+      return null;
     }
-    // Read-only MCP tool — no prompt needed
-    return null;
+    // It's a mutation — check session whitelist
+    if (permissionManager.isCommandWhitelisted(toolName)) {
+      onDebug?.(`Auto-allowing "${toolName}" (previously approved)`);
+      return null;
+    }
+    return {
+      promptType: 'mcp_mutation',
+      description: policy.description,
+      command: toolName,
+    };
   }
 
   // --- API mutations ---
@@ -1111,27 +1108,28 @@ export function shouldPromptInAskMode(
     const method = ((input?.method as string) || 'GET').toUpperCase();
     const path = input?.path as string | undefined;
 
-    if (method !== 'GET') {
-      const apiDescription = `${method} ${path || ''}`;
-
-      // Check permissions.json whitelist
-      if (isApiEndpointAllowed(method, path, permissionsContext)) {
-        onDebug?.(`Auto-allowing API "${apiDescription}" (whitelisted in permissions.json)`);
-        return null;
+    // Freestanding policy: GET / allowlisted endpoints (shared with the Pages action bridge)
+    const policy = evaluateApiEndpointPolicy(method, path, permissionsContext);
+    if (policy.decision === 'allow') {
+      if (policy.reason === 'endpoint-allowlisted') {
+        onDebug?.(`Auto-allowing API "${method} ${path || ''}" (whitelisted in permissions.json)`);
       }
-
-      // Check session whitelist
-      if (permissionManager.isCommandWhitelisted(apiDescription)) {
-        onDebug?.(`Auto-allowing API "${apiDescription}" (previously approved)`);
-        return null;
-      }
-
-      return {
-        promptType: 'api_mutation',
-        description: `API: ${apiDescription}`,
-        command: apiDescription,
-      };
+      return null;
     }
+
+    const apiDescription = policy.description;
+
+    // Check session whitelist
+    if (permissionManager.isCommandWhitelisted(apiDescription)) {
+      onDebug?.(`Auto-allowing API "${apiDescription}" (previously approved)`);
+      return null;
+    }
+
+    return {
+      promptType: 'api_mutation',
+      description: `API: ${apiDescription}`,
+      command: apiDescription,
+    };
   }
 
   return null;

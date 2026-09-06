@@ -64,7 +64,10 @@ function getPlatformRuntimeDir(): string {
 
 function inferPackagedMode(ctx?: ResolveScriptRuntimeContext): boolean {
   if (typeof ctx?.isPackaged === 'boolean') return ctx.isPackaged;
-  return process.env.CRAFT_IS_PACKAGED === '1';
+  // Both encodings are live: Electron main sets '1' at startup but re-sets
+  // 'true' at app-ready (the logger/headless contract). Accepting only '1'
+  // silently disabled packaged-mode hardening after app-ready.
+  return process.env.CRAFT_IS_PACKAGED === '1' || process.env.CRAFT_IS_PACKAGED === 'true';
 }
 
 function getProcessResourcesPath(): string | undefined {

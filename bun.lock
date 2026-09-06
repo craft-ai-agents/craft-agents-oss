@@ -5,7 +5,7 @@
     "": {
       "name": "craft-agent",
       "dependencies": {
-        "@anthropic-ai/claude-agent-sdk": "0.3.220",
+        "@anthropic-ai/claude-agent-sdk": "0.3.258",
         "@anthropic-ai/sdk": "^0.100.0",
         "@dnd-kit/dom": "^0.4.0-beta-20260227032529",
         "@dnd-kit/helpers": "^0.4.0-beta-20260227032529",
@@ -116,7 +116,7 @@
     },
     "apps/cli": {
       "name": "@craft-agent/cli",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "bin": {
         "craft-cli": "src/index.ts",
       },
@@ -132,7 +132,7 @@
     },
     "apps/docs-site": {
       "name": "craft-agents-docs-site",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "dependencies": {
         "@astrojs/starlight": "^0.36.0",
         "astro": "^5.6.0",
@@ -143,7 +143,7 @@
     },
     "apps/electron": {
       "name": "@craft-agent/electron",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/messaging-gateway": "workspace:*",
@@ -195,7 +195,7 @@
     },
     "apps/marketing": {
       "name": "@craft-agent/marketing",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "dependencies": {
         "@craft-agent/ui": "workspace:*",
         "@paper-design/shaders-react": "^0.0.70",
@@ -218,7 +218,7 @@
     },
     "apps/viewer": {
       "name": "@craft-agent/viewer",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/ui": "workspace:*",
@@ -246,7 +246,7 @@
     },
     "apps/webui": {
       "name": "@craft-agent/webui",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "dependencies": {
         "@craft-agent/shared": "workspace:*",
         "@craft-agent/ui": "workspace:*",
@@ -261,18 +261,18 @@
     },
     "packages/core": {
       "name": "@craft-agent/core",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "devDependencies": {
         "@types/uuid": "^11.0.0",
       },
       "peerDependencies": {
-        "@anthropic-ai/claude-agent-sdk": "0.3.220",
+        "@anthropic-ai/claude-agent-sdk": "0.3.258",
         "@modelcontextprotocol/sdk": ">=1.29.0",
       },
     },
     "packages/craft-agents-commands": {
       "name": "@craft-agent/craft-agents-commands",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "dependencies": {
         "@craft-agent/shared": "workspace:*",
       },
@@ -283,7 +283,7 @@
     },
     "packages/craft-cli": {
       "name": "@craft-agent/craft-cli",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "dependencies": {
         "@craft-agent/craft-agents-commands": "workspace:*",
         "@craft-agent/shared": "workspace:*",
@@ -295,7 +295,7 @@
     },
     "packages/messaging-gateway": {
       "name": "@craft-agent/messaging-gateway",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/messaging-whatsapp-worker": "workspace:*",
@@ -311,7 +311,7 @@
     },
     "packages/messaging-whatsapp-worker": {
       "name": "@craft-agent/messaging-whatsapp-worker",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "dependencies": {
         "@whiskeysockets/baileys": "^6.7.0",
       },
@@ -322,7 +322,7 @@
     },
     "packages/pi-agent-server": {
       "name": "@craft-agent/pi-agent-server",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "bin": {
         "pi-agent-server": "./dist/index.js",
       },
@@ -342,7 +342,7 @@
     },
     "packages/server": {
       "name": "@craft-agent/server",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "bin": {
         "craft-server": "src/index.ts",
       },
@@ -360,7 +360,7 @@
     },
     "packages/server-core": {
       "name": "@craft-agent/server-core",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/shared": "workspace:*",
@@ -376,7 +376,7 @@
     },
     "packages/session-mcp-server": {
       "name": "@craft-agent/session-mcp-server",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "bin": {
         "session-mcp-server": "./dist/index.js",
       },
@@ -392,7 +392,7 @@
     },
     "packages/session-tools-core": {
       "name": "@craft-agent/session-tools-core",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "dependencies": {
         "beautiful-mermaid": "*",
         "gray-matter": "^4.0.3",
@@ -405,7 +405,7 @@
     },
     "packages/shared": {
       "name": "@craft-agent/shared",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/session-tools-core": "workspace:*",
@@ -429,14 +429,14 @@
         "@types/uuid": "^11.0.0",
       },
       "peerDependencies": {
-        "@anthropic-ai/claude-agent-sdk": "0.3.220",
+        "@anthropic-ai/claude-agent-sdk": "0.3.258",
         "@modelcontextprotocol/sdk": ">=1.29.0",
         "zod": ">=4.0.0",
       },
     },
     "packages/ui": {
       "name": "@craft-agent/ui",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/shared": "workspace:*",
@@ -499,23 +499,23 @@
 
     "@adiwajshing/keyed-db": ["@adiwajshing/keyed-db@0.2.4", "", {}, "sha512-yprSnAtj80/VKuDqRcFFLDYltoNV8tChNwFfIgcf6PGD4sjzWIBgs08pRuTqGH5mk5wgL6PBRSsMCZqtZwzFEw=="],
 
-    "@anthropic-ai/claude-agent-sdk": ["@anthropic-ai/claude-agent-sdk@0.3.220", "", { "optionalDependencies": { "@anthropic-ai/claude-agent-sdk-darwin-arm64": "0.3.220", "@anthropic-ai/claude-agent-sdk-darwin-x64": "0.3.220", "@anthropic-ai/claude-agent-sdk-linux-arm64": "0.3.220", "@anthropic-ai/claude-agent-sdk-linux-arm64-musl": "0.3.220", "@anthropic-ai/claude-agent-sdk-linux-x64": "0.3.220", "@anthropic-ai/claude-agent-sdk-linux-x64-musl": "0.3.220", "@anthropic-ai/claude-agent-sdk-win32-arm64": "0.3.220", "@anthropic-ai/claude-agent-sdk-win32-x64": "0.3.220" }, "peerDependencies": { "@anthropic-ai/sdk": ">=0.93.0", "@modelcontextprotocol/sdk": "^1.29.0", "zod": "^4.0.0" } }, "sha512-glc7SdwPkOkLw8oxwLo9PKTdLJGqW/PIR4urWXFoRtX9YllwozsEVc5Tc1+EvLSkfrsxPJqQWqOgpjUOQXf1oA=="],
+    "@anthropic-ai/claude-agent-sdk": ["@anthropic-ai/claude-agent-sdk@0.3.258", "", { "optionalDependencies": { "@anthropic-ai/claude-agent-sdk-darwin-arm64": "0.3.258", "@anthropic-ai/claude-agent-sdk-darwin-x64": "0.3.258", "@anthropic-ai/claude-agent-sdk-linux-arm64": "0.3.258", "@anthropic-ai/claude-agent-sdk-linux-arm64-musl": "0.3.258", "@anthropic-ai/claude-agent-sdk-linux-x64": "0.3.258", "@anthropic-ai/claude-agent-sdk-linux-x64-musl": "0.3.258", "@anthropic-ai/claude-agent-sdk-win32-arm64": "0.3.258", "@anthropic-ai/claude-agent-sdk-win32-x64": "0.3.258" }, "peerDependencies": { "@anthropic-ai/sdk": ">=0.93.0", "@modelcontextprotocol/sdk": "^1.29.0", "zod": "^4.0.0" } }, "sha512-RxJ5fSPCGCxX5qO/b4IPXhldvtLHeYBAzTUJ4eOzO+gTrepZQSDmwSlQD6nnoEquKGJzOMHCjhdEtBfDjbDWUg=="],
 
-    "@anthropic-ai/claude-agent-sdk-darwin-arm64": ["@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.220", "", { "os": "darwin", "cpu": "arm64" }, "sha512-7VxlbEosK7DODiOnsjoVd0DSJzbnaPrM2jelMHI0y8zx1UnLS3WC6EFUXbvy74F2sXqEznh2tzn7EKWInaRN6Q=="],
+    "@anthropic-ai/claude-agent-sdk-darwin-arm64": ["@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.258", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Hrhzc9WVGSid+DghdTcpVr/8fyXnTD6KeSlDpKx6Wru47J/Nq7RTYiZJt+cex+O2ehaHMEcuYEgoqJ3K/X9NlA=="],
 
-    "@anthropic-ai/claude-agent-sdk-darwin-x64": ["@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.220", "", { "os": "darwin", "cpu": "x64" }, "sha512-X9RwDsSmbF6ultKZroaip+DL8WRgC64gHbrAwrRlAFSPNZV7zmJyP2ur8rW7KrxqmtuehdMMkw8+SAC/6hD2PA=="],
+    "@anthropic-ai/claude-agent-sdk-darwin-x64": ["@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.258", "", { "os": "darwin", "cpu": "x64" }, "sha512-AVqxGX4988J5cS+TMqIzH85+sbsLhJu5Ou9TIALcO/v2Z9ze8GK4vX2ydAYvU/SRnjTvEaiITX+Xcm5afP1IbQ=="],
 
-    "@anthropic-ai/claude-agent-sdk-linux-arm64": ["@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.220", "", { "os": "linux", "cpu": "arm64" }, "sha512-WkROPwWskqhKR9XgnmseHQ6rLi9zM9qt57IWoToIjL/eXOqDWipp7JXZ1L5ud+LrA42dunHPZfBwD/vXZ+A7LA=="],
+    "@anthropic-ai/claude-agent-sdk-linux-arm64": ["@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.258", "", { "os": "linux", "cpu": "arm64" }, "sha512-Jj3K1Ip7WpyMouZCjd7kgV3KswUBF62WAnyG0iaYvKZJvXgYKbIAkjcQ2F2Rx5ZuRUNWAVncE9LeHmdIdx78VQ=="],
 
-    "@anthropic-ai/claude-agent-sdk-linux-arm64-musl": ["@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.220", "", { "os": "linux", "cpu": "arm64" }, "sha512-OHoZOZ8Cf2TBr6oXIXPwyvUxj9jrq2w8E4poA8dMpacXszcPSPiCQCMuuOh4aWJzfeJE1+TtWxhKMVb2csXyZQ=="],
+    "@anthropic-ai/claude-agent-sdk-linux-arm64-musl": ["@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.258", "", { "os": "linux", "cpu": "arm64" }, "sha512-I/BLt2vdvqK2B2px526U1lw7Rv+SI+Ld22+wLwu8gLRQk5SYhSW9dmMYEO+GCeF7vQzfzJvMQ4IzbbY+aSGACg=="],
 
-    "@anthropic-ai/claude-agent-sdk-linux-x64": ["@anthropic-ai/claude-agent-sdk-linux-x64@0.3.220", "", { "os": "linux", "cpu": "x64" }, "sha512-tkTJFnpR9VifvWX2fmkCAPkT6+8Wk/gVu8B5jsVekKZPiZoWRHmMXO30BnZn+f0TZhgYP+82PSX3S8crH1kn+w=="],
+    "@anthropic-ai/claude-agent-sdk-linux-x64": ["@anthropic-ai/claude-agent-sdk-linux-x64@0.3.258", "", { "os": "linux", "cpu": "x64" }, "sha512-2MJeFVJM/3xwZASP3yn2OuQ9RHIoS30DC/B7oG1XPYcbToPLH4QIfCPLWbSQfqCdp+NEBupLMM9BWpDz4s8Q0g=="],
 
-    "@anthropic-ai/claude-agent-sdk-linux-x64-musl": ["@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.220", "", { "os": "linux", "cpu": "x64" }, "sha512-K+FWj+LcGhC1Z7wqeWoLxm1iemcba5xKpLLFVwYm4V6HyMx3ruYd/2r2TiQtjT+JWeNFWIys0ScHiItR6vWAiA=="],
+    "@anthropic-ai/claude-agent-sdk-linux-x64-musl": ["@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.258", "", { "os": "linux", "cpu": "x64" }, "sha512-sM7GzRyrOpFhwMn2Ng8nLiWK6cc04uCEu3Zh9mrJS2r3iQu1TryHKoPTjc2Ip0N75sHmwhNodgoRs8NtG1Gkkw=="],
 
-    "@anthropic-ai/claude-agent-sdk-win32-arm64": ["@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.220", "", { "os": "win32", "cpu": "arm64" }, "sha512-rIwgq0UwQExWl6KrHUyC4w5KwpL9l6nd95aUTx6RitexaAuEw//xtfTVLnuE4hDDQZFkzEwpdKc3nxDWoGcUbA=="],
+    "@anthropic-ai/claude-agent-sdk-win32-arm64": ["@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.258", "", { "os": "win32", "cpu": "arm64" }, "sha512-n/Vf6oXAo9EZVSSM5+9d+8dFrUrX9cbgSHK/1njkvykWAN5xsfBbikJYqwhbW84GCYkpXYM+gGNZe23h0fHldw=="],
 
-    "@anthropic-ai/claude-agent-sdk-win32-x64": ["@anthropic-ai/claude-agent-sdk-win32-x64@0.3.220", "", { "os": "win32", "cpu": "x64" }, "sha512-MuOuXhbr66HlGaWXD2f3w0k2PsvmnbkwcUZ0dAe2poFLdl72GC2dapwwOBefxm9QmoNqk9+jmv/dSKGOVWyvLw=="],
+    "@anthropic-ai/claude-agent-sdk-win32-x64": ["@anthropic-ai/claude-agent-sdk-win32-x64@0.3.258", "", { "os": "win32", "cpu": "x64" }, "sha512-UDbXE6n37ZMUogVVYEWX901NNmbyXUv1VvGYN/vfOiIWKUJXCAypam71dBlYFhlAhVX28qCd64w+pTZDYQfYQA=="],
 
     "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.100.0", "", { "dependencies": { "json-schema-to-ts": "^3.1.1", "standardwebhooks": "^1.0.0" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-cAm3aXm6qAiHIvHxyIIGd6tVmsD2gDqlc2h0R20ijNUzGgVnIN822bit4mKbF6CkuV7qIrLQIPoAepHEpanrQQ=="],
 

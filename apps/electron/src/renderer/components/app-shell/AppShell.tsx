@@ -30,6 +30,7 @@ import {
   Files,
   PanelRightOpen,
   Shapes,
+  PanelsTopLeft,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -116,6 +117,7 @@ import {
   isAutomationsNavigation,
   isProjectsNavigation,
   isCanvasNavigation,
+  isPagesNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
@@ -648,6 +650,7 @@ function AppShellContent({
   // so the navigator (and its resize handle) collapse to zero width while it's active.
   const isBoardView = isSessionsNavigation(navState) && navState.viewMode === 'board'
   const isCanvasView = isCanvasNavigation(navState)
+  const isPagesView = isPagesNavigation(navState)
 
   // Derive source filter from navigation state (only when in sources navigator)
   const sourceFilter: SourceFilter | null = isSourcesNavigation(navState) ? navState.filter ?? null : null
@@ -1895,6 +1898,10 @@ function AppShellContent({
     navigate(routes.view.canvas())
   }, [])
 
+  const handlePagesClick = useCallback(() => {
+    navigate(routes.view.pages())
+  }, [])
+
   const [canvasProjects, setCanvasProjects] = React.useState<Array<{ id: string; title: string; updatedAt: string }>>([])
   const [activeCanvasProjectId, setActiveCanvasProjectId] = React.useState('')
 
@@ -2298,6 +2305,7 @@ function AppShellContent({
     result.push({ id: 'nav:projects', type: 'nav', action: handleProjectsClick })
     result.push({ id: 'nav:tasks', type: 'nav', action: handleAllTasksClick })
     result.push({ id: 'nav:projectAssets', type: 'nav', action: handleProjectAssetsClick })
+    result.push({ id: 'nav:pages', type: 'nav', action: handlePagesClick })
     result.push({ id: 'nav:allSessions', type: 'nav', action: handleAllSessionsClick })
     if (isExpanded('nav:sessions-section')) {
       for (const item of sidebarSessionHistory) {
@@ -2312,7 +2320,7 @@ function AppShellContent({
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
-  }, [handleAllSessionsClick, handleAllTasksClick, handleCanvasClick, handleProjectsClick, handleProjectAssetsClick, sidebarSessionHistory, navigateToSession, isExpanded, handleSourcesClick, handleSkillsClick, handleAutomationsClick, handleWhatsNewClick])
+  }, [handleAllSessionsClick, handleAllTasksClick, handleCanvasClick, handleProjectsClick, handleProjectAssetsClick, handlePagesClick, sidebarSessionHistory, navigateToSession, isExpanded, handleSourcesClick, handleSkillsClick, handleAutomationsClick, handleWhatsNewClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2740,6 +2748,13 @@ function AppShellContent({
                         icon: Zap,
                         variant: isSkillsNavigation(navState) ? 'default' as const : 'ghost' as const,
                         onClick: handleSkillsClick,
+                      },
+                      {
+                        id: 'nav:pages',
+                        title: t('sidebar.pages'),
+                        icon: PanelsTopLeft,
+                        variant: isPagesView ? 'default' as const : 'ghost' as const,
+                        onClick: handlePagesClick,
                       },
                       {
                         id: 'nav:automations',
@@ -3518,7 +3533,7 @@ function AppShellContent({
             )}
             </div>
           }
-          navigatorWidth={isAutoCompact ? sessionListWidth : (effectiveSidebarAndNavigatorHidden || isBoardView || isCanvasView ? 0 : sessionListWidth)}
+          navigatorWidth={isAutoCompact ? sessionListWidth : (effectiveSidebarAndNavigatorHidden || isBoardView || isCanvasView || isPagesView ? 0 : sessionListWidth)}
           isSidebarAndNavigatorHidden={effectiveSidebarAndNavigatorHidden}
           isRightSidebarVisible={rightDockVisible && !isCanvasView && !isAutoCompact && !isRightDockOverlay}
           isCompact={isAutoCompact}
@@ -3585,8 +3600,8 @@ function AppShellContent({
         </div>
         )}
 
-        {/* Session List Resize Handle (absolute, hidden in focused mode and board view) */}
-        {!effectiveSidebarAndNavigatorHidden && !isBoardView && (
+        {/* Session List Resize Handle (absolute, hidden in focused mode and full-width views) */}
+        {!effectiveSidebarAndNavigatorHidden && !isBoardView && !isCanvasView && !isPagesView && (
         <div
           ref={sessionListHandleRef}
           role="separator"

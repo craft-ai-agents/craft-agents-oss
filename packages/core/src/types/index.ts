@@ -65,3 +65,23 @@ export type {
   ActiveSessionInfo,
 } from './server.ts';
 
+// Page types (workspace-scoped mini dashboards)
+export type {
+  PageKind,
+  PageScriptRuntime,
+  PageRefreshSpec,
+  PageRefreshStatus,
+  PageSeriesPoint,
+  PageDataSnapshot,
+  PageActionHttpMethod,
+  PageActionDescriptor,
+  PageActionGrant,
+  PageRenderLease,
+  PageActionInvocation,
+  PageActionRequest,
+  PageActionResult,
+  PageShareInfo,
+  PageThumbnailInfo,
+  PageConfig,
+} from './page.ts';
+

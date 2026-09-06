@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/shared",
-  "version": "0.12.1",
+  "version": "0.13.1",
   "license": "Apache-2.0",
   "description": "Shared business logic for Jonwork - agent, auth, config, credentials, MCP integration",
   "type": "module",
@@ -30,12 +30,16 @@
     "./sessions": "./src/sessions/index.ts",
     "./projects": "./src/projects/index.ts",
     "./projects/types": "./src/projects/types.ts",
+    "./pages": "./src/pages/index.ts",
+    "./pages/types": "./src/pages/types.ts",
+    "./pages/data-store": "./src/pages/data-store.ts",
     "./sources": "./src/sources/index.ts",
     "./sources/types": "./src/sources/types.ts",
     "./skills": "./src/skills/index.ts",
     "./workspaces": "./src/workspaces/index.ts",
     "./utils": "./src/utils/index.ts",
     "./utils/toolNames": "./src/utils/toolNames.ts",
+    "./utils/redaction": "./src/utils/redaction.ts",
     "./utils/logo": "./src/utils/logo.ts",
     "./utils/service-url": "./src/utils/service-url.ts",
     "./utils/icon": "./src/utils/icon.ts",
@@ -87,7 +91,7 @@
     "@earendil-works/pi-coding-agent": "0.81.1"
   },
   "peerDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.220",
+    "@anthropic-ai/claude-agent-sdk": "0.3.258",
     "@modelcontextprotocol/sdk": ">=1.29.0",
     "zod": ">=4.0.0"
   },

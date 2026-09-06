@@ -1,6 +1,6 @@
 {
   "name": "craft-agent",
-  "version": "0.12.1",
+  "version": "0.13.1",
   "license": "Apache-2.0",
   "description": "Claude Code-like agent for Craft documents",
   "type": "module",
@@ -22,9 +22,12 @@
   "scripts": {
     "test": "bun test && for f in $(find . -name '*.isolated.ts' -not -path './node_modules/*'); do bun test \"$f\" || exit 1; done",
     "typecheck": "bun run typecheck:shared",
+    "pages-worker:dev": "cd workers/pages && bun run dev",
+    "pages-worker:test": "cd workers/pages && bun test",
+    "pages-worker:deploy": "cd workers/pages && bun run deploy",
     "typecheck:shared": "cd packages/shared && bun run tsc --noEmit",
     "typecheck:staged": "bash scripts/typecheck-staged.sh",
-    "typecheck:all": "cd packages/core && bun run tsc --noEmit && cd ../shared && bun run tsc --noEmit && cd ../server-core && bun run tsc --noEmit && cd ../server && bun run tsc --noEmit && cd ../session-tools-core && bun run tsc --noEmit && cd ../pi-agent-server && bun run typecheck && cd ../../apps/electron && bun run typecheck && cd ../../packages/ui && bun run tsc --noEmit",
+    "typecheck:all": "cd packages/core && bun run tsc --noEmit && cd ../shared && bun run tsc --noEmit && cd ../server-core && bun run tsc --noEmit && cd ../server && bun run tsc --noEmit && cd ../session-tools-core && bun run tsc --noEmit && cd ../pi-agent-server && bun run typecheck && cd ../../apps/electron && bun run typecheck && cd ../../packages/ui && bun run tsc --noEmit && cd ../../workers/pages && bun run typecheck",
     "server:start": "bun run packages/server/src/index.ts",
     "server:dev": "bun run server:build:subprocess && CRAFT_DEBUG=true CRAFT_BUNDLED_ASSETS_ROOT=$PWD/apps/electron bun run packages/server/src/index.ts",
     "server:build": "bun run scripts/build-server.ts",
@@ -147,7 +150,7 @@
     "vite": "^6.2.4"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.220",
+    "@anthropic-ai/claude-agent-sdk": "0.3.258",
     "@anthropic-ai/sdk": "^0.100.0",
     "@dnd-kit/dom": "^0.4.0-beta-20260227032529",
     "@dnd-kit/helpers": "^0.4.0-beta-20260227032529",

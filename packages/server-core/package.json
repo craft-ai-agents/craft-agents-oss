@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/server-core",
-  "version": "0.12.1",
+  "version": "0.13.1",
   "license": "Apache-2.0",
   "description": "Reusable headless server infrastructure for Jonwork",
   "type": "module",

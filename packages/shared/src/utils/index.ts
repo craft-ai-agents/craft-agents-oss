@@ -1,5 +1,7 @@
 export * from './debug.ts';
 export * from './files.ts';
+export * from './redaction.ts';
+export * from './slug.ts';
 export * from './open-url.ts';
 export * from './url-safety.ts';
 export * from './cli-icon-resolver.ts';

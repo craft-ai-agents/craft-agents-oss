@@ -60,12 +60,24 @@ const BLOCKED_ENV_VARS = [
 ];
 
 /**
+ * Per-call options for PoolClient.callTool.
+ * Forwarded to the MCP SDK's RequestOptions so aborts become protocol-level
+ * cancellation notifications instead of orphaned in-flight requests.
+ */
+export interface PoolCallToolOptions {
+  /** Cancels the in-flight request when aborted */
+  signal?: AbortSignal;
+  /** Request timeout in ms (SDK default applies when omitted) */
+  timeoutMs?: number;
+}
+
+/**
  * Interface for clients managed by McpClientPool.
  * Both CraftMcpClient (remote MCP sources) and ApiSourcePoolClient (API sources) implement this.
  */
 export interface PoolClient {
   listTools(): Promise<Tool[]>;
-  callTool(name: string, args: Record<string, unknown>): Promise<unknown>;
+  callTool(name: string, args: Record<string, unknown>, options?: PoolCallToolOptions): Promise<unknown>;
   close(): Promise<void>;
 }
 
@@ -145,12 +157,15 @@ export class CraftMcpClient {
     return { name: info.name, version: info.version };
   }
 
-  async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
+  async callTool(name: string, args: Record<string, unknown>, options?: PoolCallToolOptions): Promise<unknown> {
     if (!this.connected) {
       await this.connect();
     }
 
-    const result = await this.client.callTool({ name, arguments: args });
+    const result = await this.client.callTool({ name, arguments: args }, undefined, {
+      ...(options?.signal ? { signal: options.signal } : {}),
+      ...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
+    });
     return result;
   }
 

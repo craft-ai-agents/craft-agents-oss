@@ -24,12 +24,15 @@ export type {
   WebhookHttpMethod,
   WebhookBodyFormat,
   WebhookAuth,
+  ScriptAction,
+  ScriptActionRuntime,
   AutomationAction,
   AutomationMatcher,
   AutomationsConfig,
   PromptReferences,
   PromptActionResult,
   WebhookActionResult,
+  ScriptActionResult,
   ActionExecutionResult,
   PendingPrompt,
   AutomationResult,
@@ -66,7 +69,7 @@ export { buildEnvFromSdkInput } from './sdk-bridge.ts';
 // Utilities
 // ============================================================================
 
-export { parsePromptReferences } from './utils.ts';
+export { parsePromptReferences, buildScriptEnv, buildBaseScriptEnv, type ScriptEnvOptions } from './utils.ts';
 
 // ============================================================================
 // Re-exports from sub-modules
@@ -76,7 +79,7 @@ export { parsePromptReferences } from './utils.ts';
 export { AutomationEventLogger, type LoggedAutomationEvent, type LoggedAutomationEventInput } from './event-logger.ts';
 
 // Schemas
-export { AutomationsConfigSchema, AutomationConditionSchema, TimeConditionSchema, StateConditionSchema, zodErrorToIssues, VALID_EVENTS } from './schemas.ts';
+export { AutomationsConfigSchema, AutomationConditionSchema, TimeConditionSchema, StateConditionSchema, ScriptActionSchema, zodErrorToIssues, VALID_EVENTS } from './schemas.ts';
 
 // Condition evaluator
 export { evaluateConditions, type ConditionContext } from './conditions.ts';
@@ -86,6 +89,16 @@ export { sanitizeForShell } from './security.ts';
 
 // Webhook execution utilities
 export { executeWebhookRequest, executeWithRetry, createWebhookHistoryEntry, createPromptHistoryEntry, type ExecuteWebhookOptions, type RetryConfig } from './webhook-utils.ts';
+
+// Script execution utilities
+export {
+  executeScriptAction,
+  createScriptHistoryEntry,
+  clampScriptTimeout,
+  DEFAULT_SCRIPT_TIMEOUT_MS,
+  MAX_SCRIPT_TIMEOUT_MS,
+  type ScriptExecutionContext,
+} from './script-executor.ts';
 
 // Retry scheduler
 export { RetryScheduler, type RetryQueueEntry, type RetrySchedulerOptions } from './retry-scheduler.ts';
@@ -131,9 +144,11 @@ export {
   PromptHandler,
   EventLogHandler,
   WebhookHandler,
+  ScriptHandler,
   type AutomationHandler,
   type PromptHandlerOptions,
   type EventLogHandlerOptions,
   type WebhookHandlerOptions,
+  type ScriptHandlerOptions,
   type AutomationsConfigProvider,
 } from './handlers/index.ts';

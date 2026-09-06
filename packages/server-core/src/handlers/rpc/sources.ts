@@ -76,7 +76,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
   server.handle(RPC_CHANNELS.sources.SAVE_CREDENTIALS, async (_ctx, workspaceId: string, sourceSlug: string, credential: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { loadSource, getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+    const { loadSource, getSourceCredentialManager, markSourceAuthenticated } = await import('@craft-agent/shared/sources')
 
     const source = loadSource(workspace.rootPath, sourceSlug)
     if (!source) {
@@ -86,6 +86,11 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     // SourceCredentialManager handles credential type resolution
     const credManager = getSourceCredentialManager()
     await credManager.save(source, { value: credential })
+
+    // A fresh user-supplied credential clears needs_auth — save() alone only
+    // writes the vault, so without this the UI would stay stuck on "needs
+    // auth" until something else touches the config.
+    markSourceAuthenticated(workspace.rootPath, sourceSlug)
 
     log.info(`Saved credentials for source: ${sourceSlug}`)
   })

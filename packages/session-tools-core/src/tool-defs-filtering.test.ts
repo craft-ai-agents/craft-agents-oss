@@ -61,6 +61,14 @@ describe('session tool filtering helpers', () => {
     expect(blocked.has('source_oauth_trigger')).toBe(true);
     expect(blocked.has('source_credential_prompt')).toBe(true);
     expect(blocked.has('spawn_session')).toBe(true);
+
+    // Pages: reads are Explore-safe, mutations are not
+    expect(allowed.has('list_pages')).toBe(true);
+    expect(allowed.has('get_page')).toBe(true);
+    expect(blocked.has('create_page')).toBe(true);
+    expect(blocked.has('update_page')).toBe(true);
+    expect(blocked.has('write_page_data')).toBe(true);
+    expect(blocked.has('delete_page')).toBe(true);
   });
 
   it('safe-mode helpers support MCP prefixing', () => {

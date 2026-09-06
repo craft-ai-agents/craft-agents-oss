@@ -142,6 +142,20 @@ describe('resolveClaudeThinkingOptions', () => {
     })
   })
 
+  it('treats Fable 5.1 as Mythos-class too (adaptive + low when level is off)', () => {
+    const result = resolveClaudeThinkingOptions({
+      thinkingLevel: 'off',
+      model: 'claude-fable-5-1',
+      providerType: 'anthropic',
+      minimizeThinking: false,
+    })
+
+    expect(result).toEqual({
+      thinking: { type: 'adaptive' },
+      effort: 'low',
+    })
+  })
+
   it('still disables thinking on Opus 4.8 when level is off (unchanged for non-Mythos models)', () => {
     const result = resolveClaudeThinkingOptions({
       thinkingLevel: 'off',

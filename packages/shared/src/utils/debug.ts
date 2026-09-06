@@ -54,6 +54,11 @@ export function enableDebug(): void {
   debugEnabled = true;
 }
 
+/** Turn debug logging back off (tests that enable it must restore state). */
+export function disableDebug(): void {
+  debugEnabled = false;
+}
+
 /**
  * Check if debug mode is enabled.
  */

@@ -15,6 +15,7 @@
 const BEDROCK_TO_BARE: Record<string, string> = {
   // US inference profile IDs (primary)
   'us.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'us.anthropic.claude-fable-5-1': 'claude-fable-5-1',
   'us.anthropic.claude-fable-5': 'claude-fable-5',
   'us.anthropic.claude-opus-4-7': 'claude-opus-4-7',
   // Compatibility alias for an earlier incorrect 4.7 mapping.
@@ -27,6 +28,7 @@ const BEDROCK_TO_BARE: Record<string, string> = {
   'us.anthropic.claude-sonnet-4-5-20250929-v1:0': 'claude-sonnet-4-5-20250929',
   // EU inference profile IDs
   'eu.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'eu.anthropic.claude-fable-5-1': 'claude-fable-5-1',
   'eu.anthropic.claude-fable-5': 'claude-fable-5',
   'eu.anthropic.claude-opus-4-7': 'claude-opus-4-7',
   'eu.anthropic.claude-opus-4-7-v1': 'claude-opus-4-7',
@@ -38,6 +40,7 @@ const BEDROCK_TO_BARE: Record<string, string> = {
   'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': 'claude-sonnet-4-5-20250929',
   // Global inference profile IDs
   'global.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'global.anthropic.claude-fable-5-1': 'claude-fable-5-1',
   'global.anthropic.claude-fable-5': 'claude-fable-5',
   'global.anthropic.claude-opus-4-7': 'claude-opus-4-7',
   'global.anthropic.claude-opus-4-7-v1': 'claude-opus-4-7',
@@ -47,6 +50,7 @@ const BEDROCK_TO_BARE: Record<string, string> = {
   'global.anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
   // Base IDs (no region prefix)
   'anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'anthropic.claude-fable-5-1': 'claude-fable-5-1',
   'anthropic.claude-fable-5': 'claude-fable-5',
   'anthropic.claude-opus-4-7': 'claude-opus-4-7',
   'anthropic.claude-opus-4-7-v1': 'claude-opus-4-7',
@@ -190,10 +194,21 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
     contextWindow: 200_000,
   },
   {
-    id: 'claude-fable-5',
-    name: 'Fable 5',
+    id: 'claude-fable-5-1',
+    name: 'Fable 5.1',
     shortName: 'Fable',
     description: 'Next-generation model for complex work',
+    descriptionKey: 'model.fableDesc',
+    provider: 'anthropic',
+    contextWindow: 1_000_000,
+  },
+  {
+    id: 'claude-fable-5',
+    name: 'Fable 5',
+    // shortName intentionally collides with 5.1, which is listed first, so
+    // findModelIdByShortName('Fable') resolves to the newest Fable.
+    shortName: 'Fable',
+    description: 'Previous Fable generation',
     descriptionKey: 'model.fableDesc',
     provider: 'anthropic',
     contextWindow: 1_000_000,

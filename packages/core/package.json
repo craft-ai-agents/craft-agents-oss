@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/core",
-  "version": "0.12.1",
+  "version": "0.13.1",
   "license": "Apache-2.0",
   "description": "Core types, storage, and agent logic for Jonwork",
   "type": "module",
@@ -12,7 +12,7 @@
     "./utils": "./src/utils/index.ts"
   },
   "peerDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.220",
+    "@anthropic-ai/claude-agent-sdk": "0.3.258",
     "@modelcontextprotocol/sdk": ">=1.29.0"
   },
   "devDependencies": {

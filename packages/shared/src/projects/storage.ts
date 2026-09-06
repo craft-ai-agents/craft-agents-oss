@@ -21,6 +21,7 @@ import {
 import { basename, extname, join } from 'path';
 import { randomUUID } from 'crypto';
 import { atomicWriteFileSync, readJsonFileSync, getMimeType } from '../utils/files.ts';
+import { generateUniqueSlug } from '../utils/slug.ts';
 import { debug } from '../utils/debug.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { estimateTokensDensityAware } from '../utils/large-response.ts';
@@ -253,14 +254,6 @@ export function loadWorkspaceProjects(workspaceRootPath: string): LoadedProject[
  * Generate a URL-safe, workspace-unique project slug.
  */
 export function generateProjectSlug(workspaceRootPath: string, name: string): string {
-  let slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .substring(0, 50);
-
-  if (!slug) slug = 'project';
-
   const projectsDir = getWorkspaceProjectsPath(workspaceRootPath);
   const existingSlugs = new Set<string>();
   if (existsSync(projectsDir)) {
@@ -268,12 +261,7 @@ export function generateProjectSlug(workspaceRootPath: string, name: string): st
       if (entry.isDirectory()) existingSlugs.add(entry.name);
     }
   }
-
-  if (!existingSlugs.has(slug)) return slug;
-
-  let counter = 2;
-  while (existingSlugs.has(`${slug}-${counter}`)) counter++;
-  return `${slug}-${counter}`;
+  return generateUniqueSlug(name, existingSlugs, 'project');
 }
 
 /**

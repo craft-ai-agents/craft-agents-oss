@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/messaging-whatsapp-worker",
-  "version": "0.12.1",
+  "version": "0.13.1",
   "license": "Apache-2.0",
   "description": "WhatsApp worker subprocess for Jonwork (Baileys-based, unofficial API)",
   "type": "module",

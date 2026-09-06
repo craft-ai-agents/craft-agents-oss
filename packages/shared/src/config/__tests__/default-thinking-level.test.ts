@@ -106,12 +106,20 @@ describe('default thinking level storage', () => {
 
   it('supports every thinking level', () => {
     const { configDir } = setupWorkspaceConfigDir()
-    for (const level of THINKING_LEVEL_IDS) {
-      runEval(configDir, `setDefaultThinkingLevel('${level}')`)
-      const output = runEval(configDir, "console.log(String(getDefaultThinkingLevel()))")
-      expect(output).toBe(level)
-    }
-  })
+    // ONE subprocess sets + reads every level through the real disk path. A
+    // spawn per level cold-loads the whole storage module graph (~0.5s each ×
+    // 2 spawns × every level) and blew past bun's 5s default on CI runners —
+    // cross-process persistence itself is pinned by the round-trip test above.
+    const script = THINKING_LEVEL_IDS
+      .map((level) => `setDefaultThinkingLevel('${level}'); console.log(String(getDefaultThinkingLevel()));`)
+      .join(' ')
+    const output = runEval(configDir, script)
+    expect(output.split('\n')).toEqual([...THINKING_LEVEL_IDS])
+
+    // And the LAST write survives to a fresh process (disk, not module state).
+    const last = THINKING_LEVEL_IDS[THINKING_LEVEL_IDS.length - 1]!
+    expect(runEval(configDir, "console.log(String(getDefaultThinkingLevel()))")).toBe(last)
+  }, 15_000)
 
   it('migrates legacy "think" value to "medium"', () => {
     const { configDir, configPath } = setupWorkspaceConfigDir()

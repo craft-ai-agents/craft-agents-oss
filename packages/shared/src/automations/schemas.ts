@@ -63,11 +63,32 @@ export const WebhookActionSchema = z.object({
   ]).optional(),
 });
 
-/** Accepts prompt and webhook actions strictly; passes through legacy/unknown action types without erroring */
-export const ActionDefinitionSchema = z.union([
-  PromptActionSchema,
-  WebhookActionSchema,
-  z.object({ type: z.string() }).passthrough(),
+export const ScriptActionSchema = z.object({
+  type: z.literal('script'),
+  script: z.string().min(1, 'Script path cannot be empty').superRefine((script, ctx) => {
+    // Workspace-relative only; the executor re-validates with symlink resolution.
+    if (script.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(script)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Script path must be relative to the workspace root' });
+    }
+    if (script.split(/[\\/]/).includes('..')) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Script path must not contain ".." segments' });
+    }
+  }),
+  args: z.array(z.string()).optional(),
+  runtime: z.enum(['bun', 'node', 'python3']).optional(),
+  timeoutMs: z.number().int().positive().optional(),
+  page: z.string().min(1).optional(),
+});
+
+/**
+ * Strict action union — unknown action types are validation errors.
+ * (Replaced the legacy `.passthrough()` escape hatch: silently-ignored actions
+ * hid typos and let unvalidated config reach handlers.)
+ */
+export const ActionDefinitionSchema = z.discriminatedUnion('type', [
+  PromptActionSchema.strict(),
+  WebhookActionSchema.strict(),
+  ScriptActionSchema.strict(),
 ]);
 
 // ============================================================================

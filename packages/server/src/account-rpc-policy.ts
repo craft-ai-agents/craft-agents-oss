@@ -9,7 +9,6 @@ import { CANVAS_WORKFLOWS, canvasWorkflowFromOps } from '@craft-agent/session-to
 import { advanceCanvasModel, stepCanvasProvider, canvasWorkflowModel, readCanvasProviderArtifacts, rejectUnisolatedAgentExecution } from '@craft-agent/server-core/webui'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { loadTaskSpec, parseTaskYaml, serializeTaskYaml } from '@craft-agent/shared/tasks'
 
 function requireCanvasSkill(workflowId: unknown, skills: string[]): string {
   if (typeof workflowId !== 'string' || !CANVAS_WORKFLOWS.some(workflow => workflow.id === workflowId)) throw new Error('未知画布业务技能')
@@ -25,9 +24,6 @@ const MANAGED_CHANNELS = new Set<string>([
   ...Object.values(RPC_CHANNELS.file), ...Object.values(RPC_CHANNELS.fs),
   ...Object.values(RPC_CHANNELS.skills),
   ...Object.values(RPC_CHANNELS.projects), RPC_CHANNELS.canvas.CALL_TOOL,
-  RPC_CHANNELS.tasks.VALIDATE, RPC_CHANNELS.tasks.CREATE,
-  RPC_CHANNELS.tasks.GET, RPC_CHANNELS.tasks.LIST, RPC_CHANNELS.tasks.GET_RESULTS,
-  RPC_CHANNELS.automations.GET,
   RPC_CHANNELS.workspaces.GET, RPC_CHANNELS.server.GET_WORKSPACES,
   RPC_CHANNELS.window.SWITCH_WORKSPACE,
   RPC_CHANNELS.system.VERSIONS, RPC_CHANNELS.system.IS_DEBUG_MODE,
@@ -161,47 +157,6 @@ export class AccountScopedRpcServer implements RpcServer {
             const session = this.assertSession(account.workspaceId,args[0])
             if ((session.projectId ?? null) !== args[1].projectId) throw new Error('企业会话不能跨项目改绑或解绑，请在目标项目新建会话')
           }
-        }
-        if ([RPC_CHANNELS.tasks.VALIDATE, RPC_CHANNELS.tasks.CREATE, RPC_CHANNELS.tasks.GET,
-          RPC_CHANNELS.tasks.LIST, RPC_CHANNELS.tasks.GET_RESULTS, RPC_CHANNELS.automations.GET]
-          .includes(channel as any) && args[0] !== account.workspaceId) {
-          throw new Error('无权访问该工作区')
-        }
-        if (channel === RPC_CHANNELS.tasks.CREATE) {
-          const request = args[1]
-          if (!request || typeof request !== 'object' || typeof request.yaml !== 'string' || Buffer.byteLength(request.yaml) > 1024 * 1024) {
-            throw new Error('任务定义无效或超过 1MB')
-          }
-          const parsed = parseTaskYaml(request.yaml)
-          if (!parsed.valid || !parsed.spec) return handler(ctx, ...args)
-          const spec = parsed.spec
-          if (!spec.project) throw new Error('企业任务必须绑定明确的项目')
-          const project = await this.assertProject(account.id, spec.project)
-          const models = [spec.defaults?.model, ...spec.nodes.map(node => node.model)].filter((model): model is string => Boolean(model))
-          if (models.some(model => !policy.models.includes(model))) throw new Error('ERP 未授权任务使用的模型')
-          const connections = [spec.defaults?.llmConnection, ...spec.nodes.map(node => node.llmConnection)].filter((slug): slug is string => Boolean(slug))
-          for (const connection of connections) await this.assertConnection(connection, policy.models)
-          if ((spec.sources ?? []).some(source => !policy.sources.includes(source))) throw new Error('ERP 未授权任务使用的数据源')
-          if ((spec.skills ?? []).some(skill => !policy.skills.includes(skill))) throw new Error('ERP 未授权任务使用的技能')
-          if (request.attachToExistingSession) {
-            const existing = this.assertSession(account.workspaceId, request.attachToExistingSession)
-            if (existing.projectId !== spec.project) throw new Error('任务与会话不属于同一业务项目')
-          }
-          if (request.orchestratorSessionId) {
-            const existing = this.assertSession(account.workspaceId, request.orchestratorSessionId)
-            if (existing.projectId !== spec.project) throw new Error('任务与会话不属于同一业务项目')
-          }
-          // The server owns execution roots. A desktop-authored task may select
-          // business content, never an arbitrary server filesystem directory.
-          spec.cwd = project.config.workingDirectory || project.folderPath
-          args[1] = { ...request, yaml: serializeTaskYaml(spec) }
-        }
-        if ([RPC_CHANNELS.tasks.GET, RPC_CHANNELS.tasks.GET_RESULTS].includes(channel as any)) {
-          const slug = args[1]
-          if (typeof slug !== 'string' || !/^[a-z0-9][a-z0-9-]{0,159}$/.test(slug)) throw new Error('任务标识无效')
-          const loaded = loadTaskSpec(this.accounts.getSkillWorkspaceRoot(account.id), slug)
-          if (loaded?.spec?.project) await this.assertProject(account.id, loaded.spec.project)
-          else if (loaded?.spec) throw new Error('企业任务缺少业务项目绑定')
         }
         if (channel === RPC_CHANNELS.canvas.CALL_TOOL) {
           if (args[0] !== account.workspaceId) throw new Error('无权访问该画布工作区')

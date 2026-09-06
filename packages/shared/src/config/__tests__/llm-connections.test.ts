@@ -360,3 +360,53 @@ describe('Claude Fable 5', () => {
     expect(getModelDisplayName('us.anthropic.claude-fable-5')).toBe('Fable 5')
   })
 })
+
+// ============================================================
+// Claude Fable 5.1 registration (Claude Agent SDK path)
+// ============================================================
+
+describe('Claude Fable 5.1', () => {
+  it('is registered as an Anthropic model with the expected metadata', () => {
+    const fable = ANTHROPIC_MODELS.find(m => m.id === 'claude-fable-5-1')
+    expect(fable).toBeDefined()
+    expect(fable!.provider).toBe('anthropic')
+    expect(fable!.name).toBe('Fable 5.1')
+    expect(fable!.shortName).toBe('Fable')
+    expect(fable!.contextWindow).toBe(1_000_000)
+    expect(fable!.descriptionKey).toBe('model.fableDesc')
+  })
+
+  it('is listed before Fable 5 so the newest Fable wins shortName resolution', () => {
+    const ids = ANTHROPIC_MODELS.map(m => m.id)
+    expect(ids.indexOf('claude-fable-5-1')).toBeGreaterThanOrEqual(0)
+    expect(ids.indexOf('claude-fable-5-1')).toBeLessThan(ids.indexOf('claude-fable-5'))
+  })
+
+  it('resolves display/short name, context window, and Claude detection', () => {
+    expect(getModelDisplayName('claude-fable-5-1')).toBe('Fable 5.1')
+    expect(getModelShortName('claude-fable-5-1')).toBe('Fable')
+    expect(getModelContextWindow('claude-fable-5-1')).toBe(1_000_000)
+    expect(isClaudeModel('claude-fable-5-1')).toBe(true)
+  })
+
+  it('does NOT become the Anthropic default (Opus 4.8 stays default)', () => {
+    expect(getDefaultModelForConnection('anthropic')).toBe('claude-opus-4-8')
+  })
+
+  it('round-trips through the Bedrock inference-profile mapping', () => {
+    expect(toBedrockNativeId('claude-fable-5-1')).toBe('us.anthropic.claude-fable-5-1')
+    expect(toBedrockNativeId('claude-fable-5-1', 'eu')).toBe('eu.anthropic.claude-fable-5-1')
+    expect(fromBedrockNativeId('us.anthropic.claude-fable-5-1')).toBe('claude-fable-5-1')
+    expect(fromBedrockNativeId('eu.anthropic.claude-fable-5-1')).toBe('claude-fable-5-1')
+    expect(fromBedrockNativeId('global.anthropic.claude-fable-5-1')).toBe('claude-fable-5-1')
+    expect(fromBedrockNativeId('anthropic.claude-fable-5-1')).toBe('claude-fable-5-1')
+    // Bedrock-native id resolves to display metadata too
+    expect(getModelDisplayName('us.anthropic.claude-fable-5-1')).toBe('Fable 5.1')
+  })
+
+  it('the 5.1 and 5.0 ids never cross-map through the Bedrock tables', () => {
+    // Exact-key maps must not let the 'claude-fable-5' prefix swallow 5.1.
+    expect(fromBedrockNativeId('us.anthropic.claude-fable-5')).toBe('claude-fable-5')
+    expect(toBedrockNativeId('claude-fable-5')).toBe('us.anthropic.claude-fable-5')
+  })
+})

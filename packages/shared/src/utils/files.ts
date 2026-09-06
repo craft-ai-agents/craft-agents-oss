@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync, writeFileSync, unlinkSync, mkdtempS
 import { extname, basename, resolve, join, relative } from 'path';
 import { execSync } from 'child_process';
 import { tmpdir } from 'os';
+import { randomBytes } from 'crypto';
 
 /**
  * Strip UTF-8 BOM (Byte Order Mark) from a string.
@@ -34,7 +35,11 @@ export function readJsonFileSync<T = unknown>(filePath: string): T {
  * Uses write-to-temp-then-rename pattern which is atomic on POSIX systems.
  */
 export function atomicWriteFileSync(filePath: string, data: string): void {
-  const tmpPath = filePath + '.tmp';
+  // Unique temp name per write: a fixed `${filePath}.tmp` lets two concurrent
+  // writers to the same target (e.g. a page's refresh script and a host one-shot
+  // both regenerating snapshot.json) clobber each other's temp mid-rename,
+  // producing a torn/empty file or ENOENT. pid + random keeps them disjoint.
+  const tmpPath = `${filePath}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
   try {
     writeFileSync(tmpPath, data);
     renameSync(tmpPath, filePath);

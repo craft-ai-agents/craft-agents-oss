@@ -5,7 +5,6 @@ import type { AccountStore, PublicAccount } from './accounts'
 import { ErpSsoClient, resolveManagedDefaultModel, type AccessSnapshot } from './erp-sso'
 import { ControlLedger } from './control-ledger'
 import { decodeBundle, type Release } from './erp-resource-bundle'
-import { enterpriseWorkspaceName, seedEnterpriseCases } from './enterprise-cases'
 
 export interface ExecutionPolicyInput { workspaceId: string; model: string; sources: string[]; skills: string[] }
 export interface ExecutionReceipt { complete(status: 'complete' | 'failed' | 'interrupted' | 'unknown'): Promise<void> }
@@ -71,12 +70,11 @@ export class ErpControlRuntime implements ExecutionPolicy {
   async provision(identity: { member_id: string; account_id: string }): Promise<PublicAccount> {
     const p = await this.client.access(identity.member_id)
     if (p.account_id !== identity.account_id || p.member_id !== identity.member_id || !p.active) throw new Error('ERP identity or entitlement invalid')
-    const account = await this.accounts.provisionExternal(p.account_id, p.member_id, p.role, enterpriseWorkspaceName(p.tenant_id), p.login_email)
+    const account = await this.accounts.provisionExternal(p.account_id, p.member_id, p.role)
     this.ledger.ensure(account.id, p.member_id)
     this.cache.set(account.id, {value:p, expires:Date.now()+p.ttl_seconds*1000})
     await this.syncGrants(account.id, p.member_id)
     await this.prepare(account.workspaceId)
-    seedEnterpriseCases(this.accounts.getSkillWorkspaceRoot(account.id), p.skills)
     return this.publicAccount(account)
   }
   publicAccount(a: PublicAccount) { return this.accounts.getExternalMember(a.id) ? {...a, credits:this.ledger.balance(a.id).available, billingMode:'server', executionMode:'server_only'} : a }
@@ -87,7 +85,6 @@ export class ErpControlRuntime implements ExecutionPolicy {
     if (!force && cached && cached.expires > Date.now()) return cached.value
     const value = await this.client.access(member)
     if (value.member_id !== member || value.account_id !== account) throw new Error('ERP identity mismatch')
-    await this.accounts.updateExternalUsername(value.account_id, value.member_id, value.login_email)
     this.cache.set(account, {value, expires:Date.now()+value.ttl_seconds*1000})
     return value
   }
@@ -188,7 +185,6 @@ export class ErpControlRuntime implements ExecutionPolicy {
             active = p.active
             if (active) {
               await this.syncGrants(a.id, member)
-              seedEnterpriseCases(this.accounts.getSkillWorkspaceRoot(a.id), p.skills)
             }
           } catch { this.cache.delete(a.id); syncError = 'policy_unavailable' }
           // Revoking execution access must never prevent delivery of past usage.

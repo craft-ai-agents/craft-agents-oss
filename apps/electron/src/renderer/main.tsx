@@ -9,6 +9,7 @@ import { ThemeProvider } from './context/ThemeContext'
 import { windowWorkspaceIdAtom } from './atoms/sessions'
 import { Toaster } from '@/components/ui/sonner'
 import { setupI18n, i18n } from '@craft-agent/shared/i18n'
+import { redactSensitiveHeadersInPlace, redactSensitiveKeysInPlace } from '@craft-agent/shared/utils/redaction'
 import { initReactI18next } from 'react-i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import './index.css'
@@ -64,23 +65,16 @@ sentryInit(
         return null
       }
 
-      // Scrub sensitive data from breadcrumbs (mirrors main process scrubbing in main/index.ts)
+      // Scrub sensitive data (shared logic with the main process hook).
+      // The header scrub was previously missing here — renderer drift, fixed
+      // by moving both hooks onto @craft-agent/shared/utils redaction.ts.
+      if (event.request?.headers) {
+        redactSensitiveHeadersInPlace(event.request.headers)
+      }
       if (event.breadcrumbs) {
         for (const breadcrumb of event.breadcrumbs) {
           if (breadcrumb.data) {
-            for (const key of Object.keys(breadcrumb.data)) {
-              const lowerKey = key.toLowerCase()
-              if (
-                lowerKey.includes('token') ||
-                lowerKey.includes('key') ||
-                lowerKey.includes('secret') ||
-                lowerKey.includes('password') ||
-                lowerKey.includes('credential') ||
-                lowerKey.includes('auth')
-              ) {
-                breadcrumb.data[key] = '[REDACTED]'
-              }
-            }
+            redactSensitiveKeysInPlace(breadcrumb.data)
           }
         }
       }

@@ -82,3 +82,21 @@ export type { ArchiveSessionArgs } from './archive-session.ts';
 // Integrated infinite canvas
 export { handleApplyCanvasOps, handleGetCanvasContext } from './infinite-canvas.ts';
 export type { ApplyCanvasOpsArgs, GetCanvasContextArgs } from './infinite-canvas.ts';
+
+// Pages
+export {
+  handleListPages,
+  handleGetPage,
+  handleCreatePage,
+  handleUpdatePage,
+  handleWritePageData,
+  handleDeletePage,
+} from './pages.ts';
+export type {
+  ListPagesArgs,
+  GetPageArgs,
+  CreatePageArgs,
+  UpdatePageArgs,
+  WritePageDataArgs,
+  DeletePageArgs,
+} from './pages.ts';

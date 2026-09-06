@@ -223,6 +223,12 @@ export function setWorkspaceSkillRoots(workspaceRoot: string, roots: { publicRoo
   invalidateSkillsCache();
 }
 
+/** Server-only callers use this to grant managed agents read-only access to
+ * their own verified ERP skill cache. */
+export function getWorkspaceSkillRoots(workspaceRoot: string): { publicRoot: string; privateRoot: string } | null {
+  return managedSkillRoots.get(workspaceRoot) ?? null;
+}
+
 /** Desktop execution uses only the signed-in account's cloud snapshot. */
 export function setAccountSkillRoots(roots: { publicRoot: string; privateRoot: string } | null): void {
   accountSkillRoots = roots;

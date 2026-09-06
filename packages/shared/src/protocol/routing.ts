@@ -427,6 +427,35 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // canvas — project-backed visual workspace
   RPC_CHANNELS.canvas.CALL_TOOL,
 
+  // pages — workspace pages (mini dashboards)
+  RPC_CHANNELS.pages.GET,
+  RPC_CHANNELS.pages.GET_ONE,
+  RPC_CHANNELS.pages.CREATE,
+  RPC_CHANNELS.pages.UPDATE,
+  RPC_CHANNELS.pages.DELETE,
+  RPC_CHANNELS.pages.GET_CONTENT,
+  RPC_CHANNELS.pages.SET_CONTENT,
+  RPC_CHANNELS.pages.GET_DATA,
+  RPC_CHANNELS.pages.LIST_GRANTS,
+  RPC_CHANNELS.pages.ISSUE_GRANT,
+  RPC_CHANNELS.pages.REVOKE_GRANT,
+  RPC_CHANNELS.pages.CREATE_LEASE,
+  RPC_CHANNELS.pages.RELEASE_LEASE,
+  RPC_CHANNELS.pages.EXECUTE_ACTION,
+  RPC_CHANNELS.pages.CANCEL_ACTION,
+  // Sharing runs on the workspace server: it holds the page files, the vault
+  // token, and evaluates the CRAFT_FEATURE_PAGES_SHARING flag.
+  RPC_CHANNELS.pages.GET_SHARE_CAPABILITIES,
+  RPC_CHANNELS.pages.GET_SHARE_DATA_SCAN,
+  RPC_CHANNELS.pages.PUBLISH,
+  RPC_CHANNELS.pages.SET_PUBLICATION_PASSWORD,
+  RPC_CHANNELS.pages.UNPUBLISH,
+  // Thumbnails: the poster file lives on the workspace server; regeneration is
+  // a no-op unless that host injected a capturer (Electron main).
+  RPC_CHANNELS.pages.GET_THUMBNAIL,
+  RPC_CHANNELS.pages.REGENERATE_THUMBNAIL,
+  RPC_CHANNELS.pages.CHANGED,
+
   // git — workspace filesystem
   RPC_CHANNELS.git.GET_BRANCH,
 

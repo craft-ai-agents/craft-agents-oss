@@ -15,6 +15,7 @@ export {
   invalidateSkillsCache,
   setAccountSkillRoots,
   setWorkspaceSkillRoots,
+  getWorkspaceSkillRoots,
   loadSkillBySlug,
   getSkillIconPath,
   deleteSkill,

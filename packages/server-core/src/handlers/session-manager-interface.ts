@@ -247,6 +247,13 @@ export interface ISessionManager {
    */
   notifyConfigFileChange(workspaceRootPath: string, relativePath: string): void
 
+  /**
+   * Request a (re)capture of a page's preview poster. No-op unless a capturer
+   * was injected (Electron main only); headless/WebUI hosts fall back to the
+   * placeholder tile.
+   */
+  enqueuePageThumbnail(workspaceId: string, workspaceRootPath: string, slug: string): void
+
   // ---------------------------------------------------------------------------
   // Server-level observability
   // ---------------------------------------------------------------------------

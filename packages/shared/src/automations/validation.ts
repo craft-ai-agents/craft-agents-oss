@@ -6,7 +6,7 @@
  */
 
 import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { resolveAutomationsConfigPath } from './resolve-config-path.ts';
 import { AUTOMATIONS_CONFIG_FILE } from './constants.ts';
 import { AutomationsConfigSchema, zodErrorToIssues, DEPRECATED_EVENT_ALIASES } from './schemas.ts';
@@ -329,7 +329,7 @@ export function validateAutomations(workspaceRoot: string): ValidationResult {
 
   // Validate labels, llmConnection slugs, and model compatibility
   try {
-    const config = content as { automations?: Record<string, Array<{ labels?: string[]; actions?: Array<{ type: string; llmConnection?: string; model?: string }> }>> };
+    const config = content as { automations?: Record<string, Array<{ labels?: string[]; actions?: Array<{ type: string; llmConnection?: string; model?: string; script?: string }> }>> };
     const labelEntries = config.automations;
     if (labelEntries) {
       for (const [event, matchers] of Object.entries(labelEntries)) {
@@ -354,7 +354,23 @@ export function validateAutomations(workspaceRoot: string): ValidationResult {
           // Validate llmConnection slugs and model compatibility in prompt actions
           const actions = matcher?.actions;
           if (actions) {
-            for (const action of actions) {
+            for (let j = 0; j < actions.length; j++) {
+              const action = actions[j]!;
+
+              // Script actions: warn when the workspace-relative script is missing
+              // (warning, not error — the file may be created later)
+              if (action.type === 'script' && action.script && !isAbsolute(action.script)) {
+                if (!existsSync(join(workspaceRoot, action.script))) {
+                  warnings.push({
+                    file,
+                    path: `automations.${event}[${i}].actions[${j}].script`,
+                    message: `Script file not found in workspace: ${action.script}`,
+                    severity: 'warning',
+                    suggestion: 'Create the script or fix the path (relative to the workspace root)',
+                  });
+                }
+              }
+
               if (action.type !== 'prompt') continue;
 
               if (action.llmConnection) {
