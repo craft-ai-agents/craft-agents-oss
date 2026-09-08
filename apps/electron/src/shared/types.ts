@@ -572,6 +572,8 @@ export interface ElectronAPI {
   // Appearance settings
   getRichToolDescriptions(): Promise<boolean>
   setRichToolDescriptions(enabled: boolean): Promise<void>
+  getDefaultZoomLevel(): Promise<number>
+  setDefaultZoomLevel(level: number): Promise<void>
 
   // Prompt caching & context
   getExtendedPromptCache(): Promise<boolean>

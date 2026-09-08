@@ -17,7 +17,7 @@
  */
 
 import '@sentry/electron/preload'
-import { contextBridge, ipcRenderer, shell, webUtils } from 'electron'
+import { contextBridge, ipcRenderer, shell, webUtils, webFrame } from 'electron'
 import { WsRpcClient, type TransportConnectionState } from '../transport/client'
 import { RoutedClient } from '../transport/routed-client'
 import { buildClientApi } from '../transport/build-api'
@@ -192,6 +192,51 @@ client.handleCapability(CLIENT_BROWSER_INVOKE, async (req: BrowserCapabilityRequ
 const api = buildClientApi(client, CHANNEL_MAP, (ch) => client.isChannelAvailable(ch))
 
 ;(api as any).getRuntimeEnvironment = (): 'electron' | 'web' => 'electron'
+
+// ---------------------------------------------------------------------------
+// Default zoom level — applied renderer-side via webFrame
+// ---------------------------------------------------------------------------
+// The main-process handler can't apply zoom in thin-client mode (no local RPC
+// server — every channel goes to the remote server, which has no windows), and
+// a zoom factor set in main before navigation is reset when the load commits.
+// webFrame works identically in every mode and applies instantly.
+
+const applyZoomLevel = (level: unknown): void => {
+  if (typeof level !== 'number' || !Number.isFinite(level)) return
+  const clamped = Math.min(Math.max(level, 50), 300)
+  webFrame.setZoomFactor(clamped / 100)
+}
+
+{
+  // Instant feedback while dragging the settings slider: zoom this window
+  // synchronously, then persist through whichever server owns the config.
+  const invokeSetDefaultZoomLevel = (api as any).setDefaultZoomLevel
+  ;(api as any).setDefaultZoomLevel = (level: number) => {
+    applyZoomLevel(level)
+    return invokeSetDefaultZoomLevel(level)
+  }
+}
+
+{
+  // Apply the stored zoom on launch once the transport is up (the config may
+  // live on a remote server). onConnectionStateChanged can fire synchronously
+  // before `unsub` is assigned — the applied flag makes that safe.
+  let zoomApplied = false
+  const applyStoredZoom = () => {
+    if (zoomApplied) return
+    zoomApplied = true
+    Promise.resolve((api as any).getDefaultZoomLevel?.())
+      .then(applyZoomLevel)
+      .catch(() => { /* stay at 100% if the read fails */ })
+  }
+  let unsub: (() => void) | undefined
+  unsub = client.onConnectionStateChanged((state) => {
+    if (state.status === 'connected') {
+      unsub?.()
+      applyStoredZoom()
+    }
+  })
+}
 
 // ---------------------------------------------------------------------------
 // Transport connection state logging (for remote connections)
