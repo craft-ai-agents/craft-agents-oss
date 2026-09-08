@@ -11,6 +11,13 @@ export const actions = {
     defaultHotkey: 'mod+n',
     category: 'General',
   },
+  'app.commandPalette': {
+    id: 'app.commandPalette',
+    label: 'Command Palette',
+    description: 'Search and run any command',
+    defaultHotkey: 'mod+k',
+    category: 'General',
+  },
   'app.newChatInPanel': {
     id: 'app.newChatInPanel',
     label: 'New Chat in Panel',

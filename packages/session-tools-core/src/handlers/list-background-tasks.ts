@@ -16,8 +16,7 @@ export interface ListBackgroundTasksArgs {
  * previous turn is invisible to them once that subprocess is torn down. This
  * tool reads the cross-subprocess registry instead, so a "status?" query returns
  * a truthful answer — including tasks that were `orphaned` when their owning turn
- * ended. Never guess or claim "the app restarted"; report exactly what the
- * registry says.
+ * ended. Report exactly what the registry says.
  */
 export async function handleListBackgroundTasks(
   ctx: SessionToolContext,

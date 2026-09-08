@@ -238,7 +238,7 @@ export class SourceManager {
       }
       if (hasGuides) {
         parts.push('');
-        parts.push('IMPORTANT: You MUST read a source\'s guide with the Read tool BEFORE using any of its tools. Tool calls WILL BE REJECTED if the guide has not been read first.');
+        parts.push('Read a source\'s guide before using its tools — the runtime rejects tool calls until you do.');
       }
     }
 

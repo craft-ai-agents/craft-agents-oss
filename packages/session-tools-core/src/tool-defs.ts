@@ -464,7 +464,9 @@ Use this when a source provides HTML templates for rich rendering of its data (e
 
 Templates use Mustache syntax — the tool handles rendering and writes the output HTML to the session data folder.`,
 
-  browser_tool: `Run browser actions using a CLI-like command (string or array input).
+  browser_tool: `Read \`~/.craft-agent/docs/browser-tools.md\` before first use — the runtime blocks calls until you do.
+
+Run browser actions using a CLI-like command (string or array input).
 
 All browser interactions use this single tool with strict validation and actionable feedback.
 String mode supports batching with semicolons: \`fill @e1 value; fill @e2 value; click @e3\`
@@ -607,7 +609,7 @@ Status meanings:
 - completed / failed / stopped: a terminal notification was received.
 - orphaned: the turn that launched the task ended before it finished, so it was terminated with that turn's subprocess.
 
-Never guess or claim "the app restarted" — report exactly what this tool returns. Omit sessionId for the current session.`,
+This is the authoritative cross-turn task registry; the SDK's in-subprocess task tools cannot see tasks from a prior turn. Report exactly what this tool returns. Omit sessionId for the current session.`,
 
   send_agent_message: `Send a message to another session. The message is delivered with your session ID so the target can reply back.
 
