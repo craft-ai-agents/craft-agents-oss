@@ -1,6 +1,7 @@
 import { normalize, isAbsolute, sep } from 'path'
 import { homedir, tmpdir } from 'os'
 import { realpath } from 'fs/promises'
+import { realpathSync } from 'fs'
 import { getWorkspaceByNameOrId, type Workspace } from '@craft-agent/shared/config'
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import type { PlatformServices } from '../runtime/platform'
@@ -58,9 +59,20 @@ export function getWorkspaceAllowedDirs(workspaceId?: string | null): string[] {
   if (!workspace) return []
 
   const dirs: string[] = [workspace.rootPath]
+  // Resolve symlinks so setups that mount workspaces via symlink (e.g. NFS-backed
+  // Syncthing mirrors) don't fail path validation when realpath() on a session file
+  // resolves outside the symlink path.
+  try {
+    const real = realpathSync(workspace.rootPath)
+    if (real !== workspace.rootPath) dirs.push(real)
+  } catch { /* workspace path may not exist yet */ }
   const config = loadWorkspaceConfig(workspace.rootPath)
   if (config?.defaults?.workingDirectory) {
     dirs.push(config.defaults.workingDirectory)
+    try {
+      const realWd = realpathSync(config.defaults.workingDirectory)
+      if (realWd !== config.defaults.workingDirectory) dirs.push(realWd)
+    } catch { /* ignore */ }
   }
   return dirs
 }
