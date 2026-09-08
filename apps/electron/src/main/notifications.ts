@@ -178,7 +178,7 @@ function updateBadgeCountMacOS(count: number): void {
       }
     } else {
       // Reset to original icon (no badge)
-      if (baseIconPath) {
+      if (baseIconPath && !app.isPackaged) {
         const originalIcon = nativeImage.createFromPath(baseIconPath)
         app.dock?.setIcon(originalIcon)
       }
