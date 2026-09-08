@@ -221,8 +221,8 @@ echo ""
 # Verify checksum (sha512, base64 encoded)
 info "Verifying checksum..."
 if [ "$OS_TYPE" = "darwin" ]; then
-    # macOS: shasum outputs hex, convert to base64
-    actual=$(shasum -a 512 "$installer_path" | cut -d' ' -f1 | xxd -r -p | base64)
+    # macOS: base64 wraps at 76 chars, so normalize before comparing
+    actual=$(shasum -a 512 "$installer_path" | cut -d' ' -f1 | xxd -r -p | base64 | tr -d '\n')
 else
     # Linux: sha512sum outputs hex, convert to base64
     actual=$(sha512sum "$installer_path" | cut -d' ' -f1 | xxd -r -p | base64 | tr -d '\n')
