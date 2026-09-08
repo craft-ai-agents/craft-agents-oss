@@ -11,8 +11,8 @@
  * - Pending/queued states (Electron only)
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Clock } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Check, Clock, Copy } from 'lucide-react'
 import type { StoredAttachment, ContentBadge } from '@craft-agent/core'
 import { normalizePath } from '@craft-agent/core/utils'
 import { cn } from '../../lib/utils'
@@ -340,6 +340,7 @@ export function UserMessageBubble({
   compactMode,
 }: UserMessageBubbleProps) {
   const { t } = useTranslation()
+
   const hasAttachments = attachments && attachments.length > 0
 
   // Show the queued chip while `isQueued` is true AND for at least
@@ -408,6 +409,33 @@ export function UserMessageBubble({
     }
     displayContent = displayContent.trim()
   }
+
+  const [copied, setCopied] = useState(false)
+  const copyResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimeoutRef.current != null) {
+        clearTimeout(copyResetTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(displayContent)
+      if (copyResetTimeoutRef.current != null) {
+        clearTimeout(copyResetTimeoutRef.current)
+      }
+      setCopied(true)
+      copyResetTimeoutRef.current = setTimeout(() => {
+        copyResetTimeoutRef.current = null
+        setCopied(false)
+      }, 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }, [displayContent])
 
   return (
     <div className={cn("flex flex-col items-end gap-3 w-full", className)}>
@@ -479,40 +507,53 @@ export function UserMessageBubble({
         </div>
       )}
 
-      {/* Text content bubble. Queued messages render an inline header chip
-          inside the bubble (Clock icon + 'Queued' italic) instead of a
-          separate pill below — keeps the chat to one bubble per message
-          while the chip and pulsing icon make the waiting state obvious
-          (#616 follow-up). */}
-      <div
-        className={cn(
-          "max-w-[80%] bg-user-message-bubble rounded-[16px] break-words min-w-0 select-text [&_p]:m-0",
-          compactMode ? "px-4 py-2" : "px-5 py-3.5"
-        )}
-      >
-        {showQueued && (
-          <div
-            className="flex items-center gap-1.5 text-foreground/55 mb-1.5"
-            role="status"
-            aria-live="polite"
+      {/* Text content bubble with hover copy button. Queued messages render an inline header chip
+          inside the bubble (Clock icon + 'Queued' italic) instead of a separate pill below. */}
+      <div className="group/user-msg relative max-w-[80%] min-w-0">
+        {!compactMode && (
+          <button
+            onClick={handleCopy}
+            className={cn(
+              "absolute -left-9 top-4 flex items-center justify-center w-7 h-7 rounded-[6px] transition-opacity",
+              "opacity-0 group-hover/user-msg:opacity-100",
+              copied ? "text-success" : "text-muted-foreground hover:text-foreground hover:bg-foreground/5",
+              "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            )}
+            title={copied ? t('common.copied') : t('chat.copyMessage')}
           >
-            <Clock className="h-3 w-3 animate-pulse" aria-hidden="true" />
-            <span className="text-[11px] italic">{t('chat.queuedBadge')}</span>
-          </div>
+            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
         )}
-        {hasInlineBadges
-          ? renderContentWithBadges(displayContent, inlineBadges, onUrlClick, onFileClick)
-          : (
-            <Markdown
-              mode="minimal"
-              onUrlClick={onUrlClick}
-              onFileClick={onFileClick}
-              className="text-sm [&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap"
+        <div
+          className={cn(
+            "bg-user-message-bubble rounded-[16px] break-words min-w-0 max-w-full select-text [&_p]:m-0",
+            compactMode ? "px-4 py-2" : "px-5 py-3.5"
+          )}
+        >
+          {showQueued && (
+            <div
+              className="flex items-center gap-1.5 text-foreground/55 mb-1.5"
+              role="status"
+              aria-live="polite"
             >
-              {displayContent}
-            </Markdown>
-          )
-        }
+              <Clock className="h-3 w-3 animate-pulse" aria-hidden="true" />
+              <span className="text-[11px] italic">{t('chat.queuedBadge')}</span>
+            </div>
+          )}
+          {hasInlineBadges
+            ? renderContentWithBadges(displayContent, inlineBadges, onUrlClick, onFileClick)
+            : (
+              <Markdown
+                mode="minimal"
+                onUrlClick={onUrlClick}
+                onFileClick={onFileClick}
+                className="text-sm [&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap"
+              >
+                {displayContent}
+              </Markdown>
+            )
+          }
+        </div>
       </div>
     </div>
   )
