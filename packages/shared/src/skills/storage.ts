@@ -156,7 +156,7 @@ function loadSkillsFromDir(skillsDir: string, source: SkillSource): LoadedSkill[
   try {
     const entries = readdirSync(skillsDir, { withFileTypes: true });
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
 
       const skill = loadSkillFromDir(skillsDir, entry.name, source);
       if (skill) {
@@ -342,7 +342,7 @@ export function listSkillSlugs(workspaceRoot: string): string[] {
   try {
     return readdirSync(skillsDir, { withFileTypes: true })
       .filter((entry) => {
-        if (!entry.isDirectory()) return false;
+        if (!entry.isDirectory() && !entry.isSymbolicLink()) return false;
         const skillFile = join(skillsDir, entry.name, 'SKILL.md');
         return existsSync(skillFile);
       })
