@@ -609,6 +609,31 @@ describe('PromptHandler', () => {
 
       handler.dispose();
     });
+
+    it('should expand environment variables in automationName', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{
+          name: 'Triage $CRAFT_LABEL issues',
+          actions: [{ type: 'prompt', prompt: 'Review issues' }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      await bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'urgent',
+      });
+
+      expect(onPromptsReady).toHaveBeenCalledTimes(1);
+      const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      expect(prompts[0]!.automationName).toBe('Triage urgent issues');
+
+      handler.dispose();
+    });
   });
 
   describe('dispose', () => {
