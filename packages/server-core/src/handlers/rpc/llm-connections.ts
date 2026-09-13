@@ -329,11 +329,23 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // Unified connection test — uses the agent factory to spawn a real agent subprocess
   // and validate credentials via runMiniCompletion(). Same code path as actual chat.
   server.handle(RPC_CHANNELS.settings.TEST_LLM_CONNECTION_SETUP, async (_ctx, params: import('@craft-agent/shared/protocol').TestLlmConnectionParams): Promise<import('@craft-agent/shared/protocol').TestLlmConnectionResult> => {
-    const { provider, apiKey, baseUrl, model, piAuthProvider, customEndpoint } = params
+    const { provider, apiKey, baseUrl, model, piAuthProvider, customEndpoint, connectionSlug } = params
     const trimmedKey = apiKey?.trim() ?? ''
+
+    // A masked key from GET_API_KEY means the user kept the stored credential.
+    // Resolve it back by slug so the test uses the real key.
+    let effectiveKey = trimmedKey
+    if (trimmedKey.includes('••') && connectionSlug) {
+      const storedKey = await getCredentialManager().getLlmApiKey(connectionSlug)
+      if (storedKey) {
+        effectiveKey = storedKey
+        deps.platform.logger?.info(`[testLlmConnectionSetup] Resolved masked placeholder to stored credential for ${connectionSlug}`)
+      }
+    }
+
     const allowEmptyApiKey = !setupTestRequiresApiKey(baseUrl)
 
-    if (!trimmedKey && !allowEmptyApiKey) {
+    if (!effectiveKey && !allowEmptyApiKey) {
       return { success: false, error: 'API key is required' }
     }
 
@@ -351,7 +363,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       deps.platform.logger?.info(`[testLlmConnectionSetup] Resolved model: ${testModel}`)
       const result = await testBackendConnection({
         provider,
-        apiKey: trimmedKey,
+        apiKey: effectiveKey,
         allowEmptyApiKey,
         model: testModel,
         baseUrl,
