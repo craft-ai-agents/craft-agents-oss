@@ -1,5 +1,5 @@
 import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
-import { getMcpBaseUrl, discoverOAuthMetadata, prepareMcpOAuth } from '../oauth';
+import { getMcpBaseUrl, discoverOAuthMetadata, prepareMcpOAuth, exchangeMcpOAuth, canonicalResourceIdentifier } from '../oauth';
 
 // ============================================================
 // Unit tests for internal helpers exported only for testing
@@ -97,7 +97,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://mcp.craft.do/my/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toEqual({ ...authServerMetadata, resource: 'https://mcp.craft.do/my' });
     });
 
     it('falls back to RFC 8414 when HEAD returns non-401', async () => {
@@ -214,7 +214,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://example.com/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toEqual({ ...authServerMetadata, resource: 'https://example.com/api' });
     });
 
     it('falls back to POST when both HEAD and GET return 405 (Streamable HTTP)', async () => {
@@ -256,7 +256,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://example.com/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toEqual({ ...authServerMetadata, resource: 'https://example.com/api' });
     });
 
     it('falls back when authorization_servers is empty array', async () => {
@@ -403,7 +403,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://example.com/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toEqual({ ...authServerMetadata, resource: 'https://example.com/api' });
     });
 
     it('parses resource_metadata with single quotes', async () => {
@@ -437,7 +437,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://example.com/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toEqual({ ...authServerMetadata, resource: 'https://example.com/api' });
     });
   });
 
@@ -725,7 +725,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://example.com/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toEqual({ ...authServerMetadata, resource: 'https://example.com/api' });
     });
 
     it('falls back when WWW-Authenticate header is null', async () => {
@@ -780,7 +780,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://example.com/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toEqual({ ...authServerMetadata, resource: 'https://example.com/api' });
     });
 
     it('falls back when resource_metadata value has no quotes', async () => {
@@ -1034,7 +1034,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://example.com/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toEqual({ ...authServerMetadata, resource: 'https://example.com/api' });
     });
 
     it('handles authorization server URL at root (no path)', async () => {
@@ -1067,7 +1067,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://example.com/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toEqual({ ...authServerMetadata, resource: 'https://example.com/api' });
     });
   });
 
@@ -1223,5 +1223,278 @@ describe('prepareMcpOAuth', () => {
     });
 
     await expect(prepareMcpOAuth('https://example.com/mcp', { callbackPort: 8914 })).rejects.toThrow('Failed to register OAuth client: Server error');
+  });
+});
+
+
+// ============================================================
+// RFC 8707 resource indicators
+//
+// Regression coverage for #1054: resource-bound MCP servers (RFC 9728) issue a
+// token scoped to a specific resource. Without `resource` on the authorization
+// and token requests, the flow completes but the server rejects the token.
+// ============================================================
+
+describe('canonicalResourceIdentifier', () => {
+  it('keeps the full MCP endpoint path', () => {
+    expect(canonicalResourceIdentifier('https://notfair.co/api/mcp/notfair'))
+      .toBe('https://notfair.co/api/mcp/notfair');
+  });
+
+  it('strips the fragment (RFC 8707 §2 forbids it)', () => {
+    expect(canonicalResourceIdentifier('https://example.com/mcp#frag'))
+      .toBe('https://example.com/mcp');
+  });
+
+  it('normalizes a bare root path', () => {
+    expect(canonicalResourceIdentifier('https://example.com/')).toBe('https://example.com');
+  });
+
+  it('preserves a significant query string', () => {
+    expect(canonicalResourceIdentifier('https://example.com/mcp?tenant=acme'))
+      .toBe('https://example.com/mcp?tenant=acme');
+  });
+
+  it('returns undefined for an invalid URL', () => {
+    expect(canonicalResourceIdentifier('not a url')).toBeUndefined();
+  });
+});
+
+describe('RFC 8707 resource indicator', () => {
+  const originalFetch = globalThis.fetch;
+  let mockFetch: ReturnType<typeof mock>;
+
+  beforeEach(() => {
+    mockFetch = mock(() => Promise.resolve(new Response('Not Found', { status: 404 })));
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  /** Mocks the notfair.co topology from #1054: 401 + hint → PRM → auth server metadata. */
+  function mockResourceBoundServer() {
+    mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (url === 'https://notfair.co/api/mcp/notfair' && options?.method === 'HEAD') {
+        return Promise.resolve(new Response(null, {
+          status: 401,
+          headers: {
+            'WWW-Authenticate': 'Bearer resource_metadata="https://notfair.co/.well-known/oauth-protected-resource/api/mcp/notfair"',
+          },
+        }));
+      }
+      if (url === 'https://notfair.co/.well-known/oauth-protected-resource/api/mcp/notfair') {
+        return Promise.resolve(new Response(JSON.stringify({
+          resource: 'https://notfair.co/api/mcp/notfair',
+          authorization_servers: ['https://notfair.co'],
+        }), { status: 200 }));
+      }
+      if (url === 'https://notfair.co/.well-known/oauth-authorization-server') {
+        return Promise.resolve(new Response(JSON.stringify({
+          authorization_endpoint: 'https://notfair.co/api/oauth/authorize',
+          token_endpoint: 'https://notfair.co/api/oauth/token',
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('Not Found', { status: 404 }));
+    });
+  }
+
+  it('sends the resource declared by protected resource metadata on the auth request', async () => {
+    mockResourceBoundServer();
+
+    const prepared = await prepareMcpOAuth('https://notfair.co/api/mcp/notfair', { callbackPort: 8914 });
+
+    expect(new URL(prepared.authUrl).searchParams.get('resource'))
+      .toBe('https://notfair.co/api/mcp/notfair');
+    expect(prepared.resource).toBe('https://notfair.co/api/mcp/notfair');
+  });
+
+  it('prefers the server-declared resource over the requested URL', async () => {
+    mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (options?.method === 'HEAD') {
+        return Promise.resolve(new Response(null, {
+          status: 401,
+          headers: {
+            'WWW-Authenticate': 'Bearer resource_metadata="https://example.com/.well-known/oauth-protected-resource/mcp"',
+          },
+        }));
+      }
+      if (url === 'https://example.com/.well-known/oauth-protected-resource/mcp') {
+        // Canonical identifier differs from the URL the client was configured with
+        return Promise.resolve(new Response(JSON.stringify({
+          resource: 'https://example.com/canonical/mcp',
+          authorization_servers: ['https://auth.example.com'],
+        }), { status: 200 }));
+      }
+      if (url === 'https://auth.example.com/.well-known/oauth-authorization-server') {
+        return Promise.resolve(new Response(JSON.stringify({
+          authorization_endpoint: 'https://auth.example.com/authorize',
+          token_endpoint: 'https://auth.example.com/token',
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('Not Found', { status: 404 }));
+    });
+
+    const prepared = await prepareMcpOAuth('https://example.com/mcp', { callbackPort: 8914 });
+
+    expect(prepared.resource).toBe('https://example.com/canonical/mcp');
+  });
+
+  it('falls back to the canonical MCP URL when only RFC 8414 discovery succeeds', async () => {
+    mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (options?.method === 'HEAD') {
+        return Promise.resolve(new Response(null, { status: 200 }));
+      }
+      if (url === 'https://example.com/.well-known/oauth-authorization-server') {
+        return Promise.resolve(new Response(JSON.stringify({
+          authorization_endpoint: 'https://example.com/oauth/authorize',
+          token_endpoint: 'https://example.com/oauth/token',
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('Not Found', { status: 404 }));
+    });
+
+    const prepared = await prepareMcpOAuth('https://example.com/mcp', { callbackPort: 8914 });
+
+    expect(prepared.resource).toBe('https://example.com/mcp');
+    expect(new URL(prepared.authUrl).searchParams.get('resource')).toBe('https://example.com/mcp');
+  });
+
+  it('repeats the resource on the token exchange (RFC 8707 §2.2)', async () => {
+    let tokenBody: string | undefined;
+    mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (url === 'https://notfair.co/api/oauth/token') {
+        tokenBody = options?.body as string;
+        return Promise.resolve(new Response(JSON.stringify({
+          access_token: 'scoped-token',
+          token_type: 'Bearer',
+          expires_in: 3600,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      }
+      return Promise.resolve(new Response('Not Found', { status: 404 }));
+    });
+
+    const result = await exchangeMcpOAuth({
+      code: 'auth-code',
+      codeVerifier: 'verifier',
+      tokenEndpoint: 'https://notfair.co/api/oauth/token',
+      clientId: 'craft-agent',
+      redirectUri: 'http://localhost:8914/oauth/callback',
+      resource: 'https://notfair.co/api/mcp/notfair',
+    });
+
+    expect(result.success).toBe(true);
+    expect(new URLSearchParams(tokenBody!).get('resource')).toBe('https://notfair.co/api/mcp/notfair');
+  });
+
+  it('omits the resource parameter when there is none to send', async () => {
+    let tokenBody: string | undefined;
+    mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+      tokenBody = options?.body as string;
+      return Promise.resolve(new Response(JSON.stringify({
+        access_token: 'token',
+        token_type: 'Bearer',
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    });
+
+    await exchangeMcpOAuth({
+      code: 'auth-code',
+      codeVerifier: 'verifier',
+      tokenEndpoint: 'https://example.com/token',
+      clientId: 'craft-agent',
+      redirectUri: 'http://localhost:8914/oauth/callback',
+    });
+
+    expect(new URLSearchParams(tokenBody!).has('resource')).toBe(false);
+  });
+});
+
+describe('RFC 9728 well-known protected resource discovery', () => {
+  const originalFetch = globalThis.fetch;
+  let mockFetch: ReturnType<typeof mock>;
+
+  beforeEach(() => {
+    mockFetch = mock(() => Promise.resolve(new Response('Not Found', { status: 404 })));
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('discovers path-scoped metadata when the 401 carries no resource_metadata hint', async () => {
+    mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (options?.method === 'HEAD') {
+        // 401 without the hint — common for servers that predate the header
+        return Promise.resolve(new Response(null, { status: 401 }));
+      }
+      if (url === 'https://example.com/.well-known/oauth-protected-resource/mcp') {
+        return Promise.resolve(new Response(JSON.stringify({
+          resource: 'https://example.com/mcp',
+          authorization_servers: ['https://auth.example.com'],
+        }), { status: 200 }));
+      }
+      if (url === 'https://auth.example.com/.well-known/oauth-authorization-server') {
+        return Promise.resolve(new Response(JSON.stringify({
+          authorization_endpoint: 'https://auth.example.com/authorize',
+          token_endpoint: 'https://auth.example.com/token',
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('Not Found', { status: 404 }));
+    });
+
+    const result = await discoverOAuthMetadata('https://example.com/mcp');
+
+    expect(result).toEqual({
+      authorization_endpoint: 'https://auth.example.com/authorize',
+      token_endpoint: 'https://auth.example.com/token',
+      resource: 'https://example.com/mcp',
+    });
+  });
+
+  it('falls back to the origin-root well-known location', async () => {
+    mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (options?.method === 'HEAD') {
+        return Promise.resolve(new Response(null, { status: 401 }));
+      }
+      if (url === 'https://example.com/.well-known/oauth-protected-resource') {
+        return Promise.resolve(new Response(JSON.stringify({
+          resource: 'https://example.com',
+          authorization_servers: ['https://example.com'],
+        }), { status: 200 }));
+      }
+      if (url === 'https://example.com/.well-known/oauth-authorization-server') {
+        return Promise.resolve(new Response(JSON.stringify({
+          authorization_endpoint: 'https://example.com/authorize',
+          token_endpoint: 'https://example.com/token',
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('Not Found', { status: 404 }));
+    });
+
+    const result = await discoverOAuthMetadata('https://example.com/mcp');
+
+    expect(result?.resource).toBe('https://example.com');
+  });
+
+  it('does not probe well-known resource metadata for servers that are not 401-protected', async () => {
+    mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (options?.method === 'HEAD') {
+        return Promise.resolve(new Response(null, { status: 200 }));
+      }
+      if (url === 'https://example.com/.well-known/oauth-authorization-server') {
+        return Promise.resolve(new Response(JSON.stringify({
+          authorization_endpoint: 'https://example.com/authorize',
+          token_endpoint: 'https://example.com/token',
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('Not Found', { status: 404 }));
+    });
+
+    await discoverOAuthMetadata('https://example.com/mcp');
+
+    const probed = mockFetch.mock.calls.map((call) => call[0] as string);
+    expect(probed.some((url) => url.includes('oauth-protected-resource'))).toBe(false);
   });
 });

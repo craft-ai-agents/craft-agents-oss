@@ -1193,6 +1193,7 @@ export class SourceCredentialManager {
         oauthConfig.tokenUrl,
         cred.clientId || oauthConfig.clientId,
         cred.clientSecret || oauthConfig.clientSecret,
+        oauthConfig.resource,
       );
 
       await this.save(source, {
