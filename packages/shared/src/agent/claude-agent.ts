@@ -1546,6 +1546,32 @@ export class ClaudeAgent extends BaseAgent {
               return { continue: true };
             }],
           }],
+          // ═══════════════════════════════════════════════════════════════════════════
+          // PERMISSION REQUEST: separate SDK-level consent gate from PreToolUse.
+          // `permissionMode: 'bypassPermissions'` + `allowDangerouslySkipPermissions`
+          // do NOT suppress this hook for every tool category — observed empirically:
+          // internal mcp__session__* tools (list_sessions, get_session_info, etc.) and
+          // built-in tools like WebSearch still fire a PermissionRequest that, left
+          // unanswered (no hook registered), the CLI defaults to deny ("Claude
+          // requested permissions to use X, but you haven't granted it yet."). All of
+          // Craft's actual admission logic already runs in the PreToolUse hook above,
+          // so unconditionally allow here — this hook only fires for tools PreToolUse
+          // already decided to let through.
+          PermissionRequest: [{
+            hooks: [async (_hookInput) => {
+              if (_hookInput.hook_event_name !== 'PermissionRequest') {
+                return { continue: true };
+              }
+              debug(`[ClaudeAgent] PermissionRequest hook: auto-allowing ${_hookInput.tool_name} (PreToolUse already gated it)`);
+              return {
+                continue: true,
+                hookSpecificOutput: {
+                  hookEventName: 'PermissionRequest' as const,
+                  decision: { behavior: 'allow' as const },
+                },
+              };
+            }],
+          }],
           SubagentStop: [{
             hooks: [async (input, _toolUseID) => {
               const typedInput = input as { agent_id?: string; agent_transcript_path?: string };
