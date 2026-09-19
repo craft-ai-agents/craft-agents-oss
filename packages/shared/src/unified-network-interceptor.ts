@@ -21,6 +21,8 @@
 // Shared infrastructure (toolMetadataStore, error capture, logging, config)
 import {
   DEBUG,
+  DEBUG_FULL_BODIES,
+  MAX_LOGGED_BODY_CHARS,
   debugLog,
   isRichToolDescriptionsEnabled,
   isExtendedPromptCacheEnabled,
@@ -1946,9 +1948,14 @@ function headersToCurl(headers: HeadersInitType | undefined): string {
 }
 
 /**
- * Format a fetch request as a cURL command
+ * Format a fetch request as a cURL command.
+ *
+ * Request bodies are replaced by a size placeholder unless `fullBodies` is set —
+ * they carry user prompts, tool arguments and base64 image payloads, and logging
+ * them in full is what let this log grow into the tens of GiB (#1033). Opt in with
+ * `CRAFT_DEBUG_FULL_BODIES=1`.
  */
-function toCurl(url: string, init?: RequestInit): string {
+export function toCurl(url: string, init?: RequestInit, fullBodies: boolean = DEBUG_FULL_BODIES): string {
   const method = init?.method?.toUpperCase() ?? 'GET';
   const headers = headersToCurl(init?.headers as HeadersInitType | undefined);
 
@@ -1957,8 +1964,16 @@ function toCurl(url: string, init?: RequestInit): string {
     curl += ` \\\n  ${headers}`;
   }
   if (init?.body && typeof init.body === 'string') {
-    const escapedBody = init.body.replace(/'/g, "'\\''");
-    curl += ` \\\n  -d '${escapedBody}'`;
+    const body = init.body;
+    if (fullBodies) {
+      const truncated = body.length > MAX_LOGGED_BODY_CHARS;
+      const shown = truncated ? body.slice(0, MAX_LOGGED_BODY_CHARS) : body;
+      const escapedBody = shown.replace(/'/g, "'\\''");
+      const marker = truncated ? `... [BODY TRUNCATED: ${body.length} chars total]` : '';
+      curl += ` \\\n  -d '${escapedBody}${marker}'`;
+    } else {
+      curl += ` \\\n  -d '[REQUEST BODY OMITTED: ${body.length} chars]'`;
+    }
   }
   curl += ` \\\n  '${url}'`;
 

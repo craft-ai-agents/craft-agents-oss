@@ -11,7 +11,7 @@
 
 import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync, appendFileSync, mkdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 // ============================================================================
 // CONSTANTS
@@ -39,33 +39,113 @@ let _sessionDir: string | null = process.env.CRAFT_SESSION_DIR || null;
 export const LOG_DIR = join(homedir(), '.craft-agent', 'logs');
 export const LOG_FILE = join(LOG_DIR, 'interceptor.log');
 
-// Ensure log directory exists at module load
-try {
-  if (!existsSync(LOG_DIR)) {
-    mkdirSync(LOG_DIR, { recursive: true });
-  }
-} catch {
-  // Ignore - logging will silently fail if dir can't be created
-}
+/** Rotate the active log once it reaches this size. */
+export const MAX_LOG_FILE_BYTES = 32 * 1024 * 1024;
 
-// Rotate log file if older than 1 day
+/** Also rotate a log that has not been written to for this long. */
 const MAX_LOG_AGE_MS = 24 * 60 * 60 * 1000;
-try {
-  if (existsSync(LOG_FILE)) {
-    const stat = statSync(LOG_FILE);
-    if (Date.now() - stat.mtimeMs > MAX_LOG_AGE_MS) {
-      const prevLog = LOG_FILE + '.prev';
-      renameSync(LOG_FILE, prevLog);
-    }
-  }
-} catch {
-  // Ignore — rotation is best-effort
+
+/** Hard cap on a single entry, so one oversized entry can't dominate the file. */
+export const MAX_LOG_ENTRY_CHARS = 4 * 1024 * 1024;
+
+/** Cap applied to request bodies on the `CRAFT_DEBUG_FULL_BODIES` opt-in path. */
+export const MAX_LOGGED_BODY_CHARS = 2 * 1024 * 1024;
+
+/**
+ * When `CRAFT_DEBUG_FULL_BODIES=1`, request bodies are written to interceptor.log
+ * instead of being replaced by a size placeholder. Opt-in only — bodies carry user
+ * prompts, tool arguments and base64 image payloads.
+ */
+export const DEBUG_FULL_BODIES = process.env.CRAFT_DEBUG_FULL_BODIES === '1';
+
+interface LogLimits {
+  maxBytes: number;
+  maxAgeMs: number;
+  checkIntervalMs: number;
+  checkChars: number;
 }
 
-export function debugLog(...args: unknown[]) {
-  if (!DEBUG) return;
-  const timestamp = new Date().toISOString();
-  const message = `${timestamp} [interceptor] ${args.map((a) => {
+const DEFAULT_LOG_LIMITS: LogLimits = {
+  maxBytes: MAX_LOG_FILE_BYTES,
+  maxAgeMs: MAX_LOG_AGE_MS,
+  // Rotation is checked at most once per interval, unless enough characters
+  // accumulated in the meantime — a statSync per log line would be its own I/O problem.
+  checkIntervalMs: 1000,
+  checkChars: 1024 * 1024,
+};
+
+const _limits: LogLimits = { ...DEFAULT_LOG_LIMITS };
+
+/** Mutable so tests can redirect writes away from the real user log. */
+let _logFile = LOG_FILE;
+let _charsSinceCheck = 0;
+let _lastRotateCheck = 0;
+
+/** Rename the active log to `<log>.prev`, replacing any previous rotation. */
+function rotateLogFile(filePath: string): void {
+  const prev = filePath + '.prev';
+  try {
+    // renameSync refuses to clobber an existing target on Windows.
+    unlinkSync(prev);
+  } catch {
+    // No previous rotation to replace.
+  }
+  renameSync(filePath, prev);
+}
+
+/**
+ * Rotate `filePath` when it exceeds the size or age limit. Consults the real file
+ * rather than a per-process byte counter, so concurrent subprocess writers that
+ * share this log degrade gracefully — overshoot is bounded by one check interval.
+ */
+function rotateLogIfNeeded(filePath: string): void {
+  const now = Date.now();
+  if (now - _lastRotateCheck < _limits.checkIntervalMs && _charsSinceCheck < _limits.checkChars) return;
+  _lastRotateCheck = now;
+  _charsSinceCheck = 0;
+
+  try {
+    const stat = statSync(filePath);
+    if (stat.size >= _limits.maxBytes || now - stat.mtimeMs > _limits.maxAgeMs) {
+      rotateLogFile(filePath);
+    }
+  } catch {
+    // ENOENT — nothing to rotate.
+  }
+}
+
+/**
+ * Create the log directory and prepare the log file: reclaim an oversized log,
+ * otherwise rotate a stale one. Best-effort — never throws.
+ */
+export function initLogFile(filePath: string): void {
+  try {
+    mkdirSync(dirname(filePath), { recursive: true });
+  } catch {
+    // Ignore - logging will silently fail if dir can't be created
+  }
+
+  try {
+    const stat = statSync(filePath);
+    if (stat.size >= _limits.maxBytes) {
+      // A debug log is disposable: truncating reclaims the space immediately,
+      // where rotating a multi-gigabyte file would keep it around as `.prev`.
+      writeFileSync(filePath, '');
+    } else if (Date.now() - stat.mtimeMs > _limits.maxAgeMs) {
+      rotateLogFile(filePath);
+    }
+  } catch {
+    // ENOENT, or the rotation failed — best-effort either way.
+  }
+}
+
+// Gated on DEBUG: the file is only ever written when debug logging is on, and the
+// prep below truncates an oversized log — not something an unrelated import should do.
+if (DEBUG) initLogFile(LOG_FILE);
+
+/** Serialize debug args into one log line (without timestamp). */
+function formatLogEntry(args: unknown[]): string {
+  return args.map((a) => {
     if (typeof a === 'object') {
       try {
         return JSON.stringify(a);
@@ -75,12 +155,48 @@ export function debugLog(...args: unknown[]) {
       }
     }
     return String(a);
-  }).join(' ')}`;
+  }).join(' ');
+}
+
+/** Append one timestamped, size-bounded entry. Never throws. */
+export function appendLogEntry(message: string): void {
+  const clipped = message.length > MAX_LOG_ENTRY_CHARS
+    ? `${message.slice(0, MAX_LOG_ENTRY_CHARS)}... [ENTRY TRUNCATED at ${MAX_LOG_ENTRY_CHARS} chars]`
+    : message;
+  // Truncate before stamping so the timestamp is never clipped.
+  const line = `${new Date().toISOString()} [interceptor] ${clipped}\n`;
   try {
-    appendFileSync(LOG_FILE, message + '\n');
+    rotateLogIfNeeded(_logFile);
+    appendFileSync(_logFile, line);
+    _charsSinceCheck += line.length;
   } catch {
     // Silently fail if can't write to log file
   }
+}
+
+export function debugLog(...args: unknown[]) {
+  if (!DEBUG) return;
+  appendLogEntry(formatLogEntry(args));
+}
+
+/** Redirect log writes and reset rotation state. Tests only. */
+export function _setLogFileForTesting(filePath: string): void {
+  _logFile = filePath;
+  _charsSinceCheck = 0;
+  _lastRotateCheck = 0;
+}
+
+/** Override rotation limits. Tests only. */
+export function _setLogLimitsForTesting(limits: Partial<LogLimits>): void {
+  Object.assign(_limits, limits);
+}
+
+/** Restore the default log path and limits, clearing rotation state. Tests only. */
+export function _resetLogStateForTesting(): void {
+  _logFile = LOG_FILE;
+  Object.assign(_limits, DEFAULT_LOG_LIMITS);
+  _charsSinceCheck = 0;
+  _lastRotateCheck = 0;
 }
 
 // ============================================================================
