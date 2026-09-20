@@ -459,6 +459,7 @@ export function useOnboarding({
         model: data.models?.[0],
         piAuthProvider: data.piAuthProvider,
         customEndpoint: data.customEndpoint,
+        connectionSlug: editingSlug || undefined,
       })
 
       if (!testResult.success) {

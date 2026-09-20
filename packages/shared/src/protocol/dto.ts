@@ -609,6 +609,8 @@ export interface LlmConnectionSetup {
 export interface TestLlmConnectionParams {
   provider: 'anthropic' | 'pi'
   apiKey: string
+  /** Connection slug used to resolve a masked placeholder back to the stored credential */
+  connectionSlug?: string
   baseUrl?: string
   model?: string
   piAuthProvider?: string
