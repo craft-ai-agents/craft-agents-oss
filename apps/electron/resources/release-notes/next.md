@@ -8,4 +8,6 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Bug Fixes
 
+- Fix packaged desktop spellcheck context menus so misspelled chat text now shows spelling suggestions and dictionary actions on right-click. ([#476](https://github.com/craft-ai-agents/craft-agents-oss/issues/476))
+
 ## Breaking Changes
