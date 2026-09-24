@@ -855,6 +855,14 @@ function readImageFile(tempFile: string): FileAttachment | null {
 }
 
 /**
+ * True when a path points at a filesystem root rather than a directory inside it.
+ * Covers the POSIX root ('/') and a Windows drive root ('C:\' or 'C:/').
+ */
+function isFilesystemRoot(path: string): boolean {
+  return path === '/' || path === '\\' || /^[A-Za-z]:[\\/]?$/.test(path);
+}
+
+/**
  * Format a single absolute path to relative if it's within cwd
  * @param absolutePath - The absolute path to format
  * @param cwd - Current working directory (defaults to process.cwd())
@@ -862,6 +870,14 @@ function readImageFile(tempFile: string): FileAttachment | null {
  */
 export function formatSinglePathToRelative(absolutePath: string, cwd?: string): string {
   const basePath = cwd || process.cwd();
+
+  // Relativizing against the filesystem root is meaningless and lossy: a packaged
+  // app's process.cwd() is often '/', which would rewrite an absolute path like
+  // /Users/x into ./Users/x and make stored transcripts disagree with the runtime
+  // log. Only relativize when the base actually has a directory component.
+  if (isFilesystemRoot(basePath)) {
+    return absolutePath;
+  }
 
   if (absolutePath.startsWith(basePath)) {
     const relativePath = relative(basePath, absolutePath);
@@ -887,7 +903,10 @@ export function formatPathsToRelative(text: string, cwd?: string): string {
   // Regex to match absolute file paths
   // Matches paths starting with / followed by path segments
   // Handles paths with common file extensions and directory paths
-  const absolutePathRegex = /(\/(?:Users|home|var|tmp|opt|etc)[^\s\n:,\]\})"'`]*)/g;
+  // The negative lookbehind keeps a keyword from matching when it is only a
+  // substring of a longer absolute path (e.g. "/home" inside "/Volumes/home"),
+  // which previously corrupted the surrounding path into "/Volumes./home".
+  const absolutePathRegex = /(?<![\w.\-~@/])(\/(?:Users|home|var|tmp|opt|etc)[^\s\n:,\]\})"'`]*)/g;
 
   return text.replace(absolutePathRegex, (match) => {
     return formatSinglePathToRelative(match, basePath);
