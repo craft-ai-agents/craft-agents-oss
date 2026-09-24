@@ -145,7 +145,12 @@ function globToRegex(pattern: string): RegExp {
 /**
  * Check if a path matches any of the allowed write path patterns
  */
-function matchesAllowedWritePath(filePath: string, allowedPaths: string[]): boolean {
+/**
+ * Whether a file path matches any of the workspace's `allowedWritePaths` globs.
+ * Exported so ask mode (core/pre-tool-use.ts) can suppress the write prompt for
+ * the same paths that Explore mode auto-allows — a single source of truth.
+ */
+export function matchesAllowedWritePath(filePath: string, allowedPaths: string[]): boolean {
   // Normalize path (expand ~, resolve, and use forward slashes)
   const normalizedPath = normalizeForComparison(expandHome(filePath));
 

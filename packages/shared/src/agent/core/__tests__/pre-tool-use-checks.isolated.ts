@@ -40,11 +40,13 @@ mock.module('../../mode-manager.ts', () => ({
 
 // Mock permissionsConfigCache for read-only bash pattern checks
 let mockReadOnlyBashPatterns: Array<{ regex: RegExp }> = [];
+let mockAllowedWritePaths: string[] = [];
 
 mock.module('../../permissions-config.ts', () => ({
   permissionsConfigCache: {
     getMergedConfig: () => ({
       readOnlyBashPatterns: mockReadOnlyBashPatterns,
+      allowedWritePaths: mockAllowedWritePaths,
     }),
   },
 }));
@@ -166,6 +168,7 @@ describe('runPreToolUseChecks', () => {
     mockValidateConfigFileContent.mockReset();
     mockValidateConfigFileContent.mockImplementation(() => null);
     mockReadOnlyBashPatterns = [];
+    mockAllowedWritePaths = [];
     mockCraftAgentsCliFlag = false;
   });
 
@@ -965,6 +968,25 @@ describe('shouldPromptInAskMode', () => {
       expect(result).not.toBeNull();
       expect(result!.promptType).toBe('file_write');
       expect(result!.description).toContain('/test/nb.ipynb');
+    });
+
+    it('auto-allows writes to an allowedWritePaths glob (no prompt in ask mode)', () => {
+      mockAllowedWritePaths = ['/test/social/**'];
+      const result = shouldPromptInAskMode('Write', { file_path: '/test/social/x/thread.md', content: 'x' }, pm, {
+        workspaceRootPath: '/test',
+        activeSourceSlugs: [],
+      });
+      expect(result).toBeNull();
+    });
+
+    it('still prompts for writes outside allowedWritePaths', () => {
+      mockAllowedWritePaths = ['/test/social/**'];
+      const result = shouldPromptInAskMode('Write', { file_path: '/test/secrets/key.txt', content: 'x' }, pm, {
+        workspaceRootPath: '/test',
+        activeSourceSlugs: [],
+      });
+      expect(result).not.toBeNull();
+      expect(result!.promptType).toBe('file_write');
     });
 
     it('auto-allows whitelisted file write tools', () => {

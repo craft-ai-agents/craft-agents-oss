@@ -42,6 +42,7 @@ import {
   isReadOnlyBashCommandWithConfig,
   getPermissionModeDiagnostics,
   PERMISSION_MODE_CONFIG,
+  matchesAllowedWritePath,
   type PermissionMode,
 } from '../mode-manager.ts';
 import { evaluateApiEndpointPolicy, evaluateMcpToolPolicy } from '../source-policy.ts';
@@ -1034,6 +1035,21 @@ export function shouldPromptInAskMode(
       return null;
     }
     const filePath = (input.file_path as string) || (input.notebook_path as string) || 'unknown';
+    // Honor allowedWritePaths in Ask mode too: a workspace/source-configured write
+    // allowlist that Explore mode already auto-allows should not re-prompt here.
+    // This lets automations / tasks run in Ask mode (writing only to whitelisted
+    // paths) instead of needing Allow-All — writes outside the allowlist still prompt.
+    if (filePath !== 'unknown') {
+      try {
+        const merged = permissionsConfigCache.getMergedConfig(permissionsContext);
+        if (merged.allowedWritePaths.length > 0 && matchesAllowedWritePath(filePath, merged.allowedWritePaths)) {
+          onDebug?.(`Auto-allowing "${toolName}" to "${filePath}" via allowedWritePaths`);
+          return null;
+        }
+      } catch (e) {
+        onDebug?.(`allowedWritePaths check failed, will prompt: ${String(e)}`);
+      }
+    }
     return {
       promptType: 'file_write',
       description: `${toolName}: ${filePath}`,
