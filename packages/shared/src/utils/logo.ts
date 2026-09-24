@@ -6,14 +6,13 @@
  */
 
 import { debug } from './debug.ts';
-import { homedir } from 'os';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { readJsonFileSync } from './files.ts';
+import { CONFIG_DIR } from '../config/paths.ts';
 
 // Cache path for persisted provider domains
-const CRAFT_AGENT_DIR = join(homedir(), '.craft-agent');
-const PROVIDER_DOMAINS_CACHE_PATH = join(CRAFT_AGENT_DIR, 'provider-domains.json');
+const PROVIDER_DOMAINS_CACHE_PATH = join(CONFIG_DIR, 'provider-domains.json');
 
 // Google Favicon V2 API - free, reliable, no API key needed
 // Updated URL: Google migrated from /s2/favicons to faviconV2
