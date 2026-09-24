@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync, writeFileSync, unlinkSync, mkdtempSync, renameSync } from 'fs';
-import { extname, basename, resolve, join, relative } from 'path';
+import { extname, basename, resolve, join, relative, parse } from 'path';
 import { execSync } from 'child_process';
 import { tmpdir } from 'os';
 import { randomBytes } from 'crypto';
@@ -863,8 +863,17 @@ function readImageFile(tempFile: string): FileAttachment | null {
 export function formatSinglePathToRelative(absolutePath: string, cwd?: string): string {
   const basePath = cwd || process.cwd();
 
-  if (absolutePath.startsWith(basePath)) {
-    const relativePath = relative(basePath, absolutePath);
+  // Relativizing against the filesystem root is meaningless and lossy: a packaged
+  // app's process.cwd() is often '/', which would rewrite an absolute path like
+  // /Users/x into ./Users/x and make stored transcripts disagree with the runtime
+  // log. Only relativize when the base actually has a directory component.
+  const resolvedBase = resolve(basePath);
+  if (resolvedBase === parse(resolvedBase).root) {
+    return absolutePath;
+  }
+
+  if (absolutePath.startsWith(resolvedBase)) {
+    const relativePath = relative(resolvedBase, absolutePath);
     if (relativePath && !relativePath.startsWith('..') && !relativePath.startsWith('./')) {
       return './' + relativePath;
     }
@@ -887,7 +896,10 @@ export function formatPathsToRelative(text: string, cwd?: string): string {
   // Regex to match absolute file paths
   // Matches paths starting with / followed by path segments
   // Handles paths with common file extensions and directory paths
-  const absolutePathRegex = /(\/(?:Users|home|var|tmp|opt|etc)[^\s\n:,\]\})"'`]*)/g;
+  // The negative lookbehind keeps a keyword from matching when it is only a
+  // substring of a longer absolute path (e.g. "/home" inside "/Volumes/home"),
+  // which previously corrupted the surrounding path into "/Volumes./home".
+  const absolutePathRegex = /(?<![\w.\-~@/])(\/(?:Users|home|var|tmp|opt|etc)[^\s\n:,\]\})"'`]*)/g;
 
   return text.replace(absolutePathRegex, (match) => {
     return formatSinglePathToRelative(match, basePath);
