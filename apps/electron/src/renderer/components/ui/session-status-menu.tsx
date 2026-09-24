@@ -9,6 +9,7 @@ import {
   getStateIcon,
   getStateColor,
   getStatusIconStyle,
+  resolveStatusDisplayLabel,
 } from '@/config/session-status-config'
 
 // Re-export types for backwards compatibility
@@ -26,11 +27,9 @@ const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-3 roun
 // StateItemContent - Shared item rendering
 // ============================================================================
 
-const DEFAULT_STATUS_IDS = new Set(['backlog', 'todo', 'needs-review', 'done', 'cancelled'])
-
 function StateItemContent({ state }: { state: SessionStatus }) {
   const { t } = useTranslation()
-  const label = DEFAULT_STATUS_IDS.has(state.id) ? t(`status.${state.id}`, state.label) : state.label
+  const label = resolveStatusDisplayLabel(state, t)
   return (
     <>
       <span className="shrink-0 flex items-center" style={getStatusIconStyle(state)}>
