@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync, writeFileSync, unlinkSync, mkdtempSync, renameSync } from 'fs';
-import { extname, basename, resolve, join, relative, parse } from 'path';
+import { extname, basename, resolve, join, relative } from 'path';
 import { execSync } from 'child_process';
 import { tmpdir } from 'os';
 import { randomBytes } from 'crypto';
@@ -855,6 +855,14 @@ function readImageFile(tempFile: string): FileAttachment | null {
 }
 
 /**
+ * True when a path points at a filesystem root rather than a directory inside it.
+ * Covers the POSIX root ('/') and a Windows drive root ('C:\' or 'C:/').
+ */
+function isFilesystemRoot(path: string): boolean {
+  return path === '/' || path === '\\' || /^[A-Za-z]:[\\/]?$/.test(path);
+}
+
+/**
  * Format a single absolute path to relative if it's within cwd
  * @param absolutePath - The absolute path to format
  * @param cwd - Current working directory (defaults to process.cwd())
@@ -867,13 +875,12 @@ export function formatSinglePathToRelative(absolutePath: string, cwd?: string): 
   // app's process.cwd() is often '/', which would rewrite an absolute path like
   // /Users/x into ./Users/x and make stored transcripts disagree with the runtime
   // log. Only relativize when the base actually has a directory component.
-  const resolvedBase = resolve(basePath);
-  if (resolvedBase === parse(resolvedBase).root) {
+  if (isFilesystemRoot(basePath)) {
     return absolutePath;
   }
 
-  if (absolutePath.startsWith(resolvedBase)) {
-    const relativePath = relative(resolvedBase, absolutePath);
+  if (absolutePath.startsWith(basePath)) {
+    const relativePath = relative(basePath, absolutePath);
     if (relativePath && !relativePath.startsWith('..') && !relativePath.startsWith('./')) {
       return './' + relativePath;
     }
