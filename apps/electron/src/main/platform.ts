@@ -6,6 +6,7 @@
  */
 
 import type { PlatformServices } from '../runtime/platform'
+import os from 'node:os'
 
 export interface ElectronPlatformOptions {
   app: Electron.App
@@ -27,7 +28,11 @@ export function createElectronPlatform(opts: ElectronPlatformOptions): PlatformS
     isPackaged: app.isPackaged,
     appVersion: app.getVersion(),
     openExternal: (url) => shell.openExternal(url),
-    openPath: (p) => shell.openPath(p).then(() => {}),
+    openPath: (p) => {
+      // Expand ~ to home directory before passing to shell.openPath
+      const expandedPath = p.startsWith('~/') ? p.replace('~', os.homedir()) : p
+      return shell.openPath(expandedPath).then(() => {})
+    },
     showItemInFolder: (p) => shell.showItemInFolder(p),
     quit: () => app.quit(),
     systemDarkMode: () => nativeTheme.shouldUseDarkColors,
