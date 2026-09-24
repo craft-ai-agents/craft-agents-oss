@@ -330,6 +330,9 @@ export interface ApiOAuthConfig {
   scopes?: string[];
   /** Auth0-style audience parameter */
   audience?: string;
+  /** RFC 8707 resource indicator — set for resource-bound servers that require
+   *  the issued token to be audience-scoped to a specific resource URI */
+  resource?: string;
   /** Additional parameters to include in the authorization URL */
   extraParams?: Record<string, string>;
 }

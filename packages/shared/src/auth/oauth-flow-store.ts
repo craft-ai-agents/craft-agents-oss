@@ -21,6 +21,8 @@ export interface PendingOAuthFlow {
   clientId: string;
   clientSecret?: string;
   tokenEndpoint: string;
+  /** RFC 8707 resource indicator carried from prepare into the token exchange */
+  resource?: string;
   provider: OAuthProvider;
 
   // Binding fields — validated on oauth:complete

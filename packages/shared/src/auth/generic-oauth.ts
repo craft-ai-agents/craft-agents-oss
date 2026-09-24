@@ -65,6 +65,10 @@ export function prepareGenericOAuth(options: PrepareGenericOAuthOptions): Prepar
   if (oauthConfig.audience) {
     authUrl.searchParams.set('audience', oauthConfig.audience);
   }
+  // RFC 8707 resource indicator, for providers that issue audience-scoped tokens
+  if (oauthConfig.resource) {
+    authUrl.searchParams.set('resource', oauthConfig.resource);
+  }
   // Extra provider-specific params (e.g. access_type=offline)
   if (oauthConfig.extraParams) {
     for (const [key, value] of Object.entries(oauthConfig.extraParams)) {
@@ -80,6 +84,7 @@ export function prepareGenericOAuth(options: PrepareGenericOAuthOptions): Prepar
     clientId: oauthConfig.clientId,
     clientSecret: oauthConfig.clientSecret,
     redirectUri,
+    resource: oauthConfig.resource,
     provider: 'generic',
   };
 }
@@ -103,6 +108,12 @@ export async function exchangeGenericOAuth(params: OAuthExchangeParams): Promise
     });
     if (params.clientSecret) {
       body.set('client_secret', params.clientSecret);
+    }
+    // RFC 8707 §2.2 — repeat the resource indicator from the auth request.
+    // Auto-discovered API sources prepare via prepareMcpOAuth, so this carries
+    // the resource identifier discovered from protected resource metadata.
+    if (params.resource) {
+      body.set('resource', params.resource);
     }
 
     const response = await fetch(params.tokenEndpoint, {
@@ -158,6 +169,7 @@ export async function refreshGenericOAuthToken(
   tokenUrl: string,
   clientId: string,
   clientSecret?: string,
+  resource?: string,
 ): Promise<{ accessToken: string; refreshToken?: string; expiresAt?: number }> {
   const body = new URLSearchParams({
     client_id: clientId,
@@ -166,6 +178,10 @@ export async function refreshGenericOAuthToken(
   });
   if (clientSecret) {
     body.set('client_secret', clientSecret);
+  }
+  // RFC 8707 §2.2 — refreshed tokens must keep the same audience.
+  if (resource) {
+    body.set('resource', resource);
   }
 
   const response = await fetch(tokenUrl, {
