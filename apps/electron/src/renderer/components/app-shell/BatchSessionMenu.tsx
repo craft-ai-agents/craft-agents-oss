@@ -120,20 +120,20 @@ export function BatchSessionMenu({ onSendToWorkspace }: BatchSessionMenuProps = 
   // Batch flag/unflag
   const handleBatchFlag = useCallback(() => {
     selectedIds.forEach(id => onFlagSession(id))
-    toast(`${selectedIds.size} ${selectedIds.size === 1 ? 'session' : 'sessions'} flagged`)
-  }, [selectedIds, onFlagSession])
+    toast(t('session.batchFlagged', { count: selectedIds.size }))
+  }, [selectedIds, onFlagSession, t])
 
   const handleBatchUnflag = useCallback(() => {
     selectedIds.forEach(id => onUnflagSession(id))
-    toast(`${selectedIds.size} ${selectedIds.size === 1 ? 'session' : 'sessions'} unflagged`)
-  }, [selectedIds, onUnflagSession])
+    toast(t('session.batchUnflagged', { count: selectedIds.size }))
+  }, [selectedIds, onUnflagSession, t])
 
   // Batch archive
   const handleBatchArchive = useCallback(() => {
     selectedIds.forEach(id => onArchiveSession(id))
     clearMultiSelect()
-    toast(`${selectedIds.size} ${selectedIds.size === 1 ? 'session' : 'sessions'} archived`)
-  }, [selectedIds, onArchiveSession, clearMultiSelect])
+    toast(t('session.batchArchived', { count: selectedIds.size }))
+  }, [selectedIds, onArchiveSession, clearMultiSelect, t])
 
   // Batch send to workspace
   const handleSendToWorkspace = useCallback(() => {
@@ -155,8 +155,8 @@ export function BatchSessionMenu({ onSendToWorkspace }: BatchSessionMenuProps = 
       await onDeleteSession(ids[i], true) // skip confirmation for remaining
     }
     clearMultiSelect()
-    toast(`${count} ${count === 1 ? 'session' : 'sessions'} deleted`)
-  }, [selectedIds, onDeleteSession, clearMultiSelect])
+    toast(t('session.batchDeleted', { count }))
+  }, [selectedIds, onDeleteSession, clearMultiSelect, t])
 
   // Resolve current status icon for the submenu trigger
   const statusIcon = activeStatusId
