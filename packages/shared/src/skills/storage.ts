@@ -12,6 +12,7 @@ import {
   rmSync,
   statSync,
 } from 'fs';
+import type { Dirent } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import matter from 'gray-matter';
@@ -94,6 +95,22 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
   }
 }
 
+function isDirectoryOrSymlinkToDirectory(parentDir: string, entry: Dirent): boolean {
+  if (entry.isDirectory()) {
+    return true;
+  }
+
+  if (!entry.isSymbolicLink()) {
+    return false;
+  }
+
+  try {
+    return statSync(join(parentDir, entry.name)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 // ============================================================
 // Load Operations
 // ============================================================
@@ -156,7 +173,7 @@ function loadSkillsFromDir(skillsDir: string, source: SkillSource): LoadedSkill[
   try {
     const entries = readdirSync(skillsDir, { withFileTypes: true });
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
+      if (!isDirectoryOrSymlinkToDirectory(skillsDir, entry)) continue;
 
       const skill = loadSkillFromDir(skillsDir, entry.name, source);
       if (skill) {
@@ -342,7 +359,7 @@ export function listSkillSlugs(workspaceRoot: string): string[] {
   try {
     return readdirSync(skillsDir, { withFileTypes: true })
       .filter((entry) => {
-        if (!entry.isDirectory()) return false;
+        if (!isDirectoryOrSymlinkToDirectory(skillsDir, entry)) return false;
         const skillFile = join(skillsDir, entry.name, 'SKILL.md');
         return existsSync(skillFile);
       })
