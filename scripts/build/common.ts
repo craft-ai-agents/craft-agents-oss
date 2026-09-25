@@ -538,7 +538,9 @@ export function copyPiAgentServer(config: BuildConfig): void {
   const koffiSource = join(rootDir, 'node_modules', 'koffi');
 
   if (!existsSync(koffiSource)) {
-    console.warn('  Warning: koffi not found in node_modules. Pi SDK sessions may not work.');
+    // Optional: current @earendil-works/pi-* (>=0.80.x) vendors its own native
+    // Windows VT helper and never loads koffi — ship it only when installed.
+    console.log('  Copied index.js (koffi not installed — not required by current Pi SDK)');
     return;
   }
 
