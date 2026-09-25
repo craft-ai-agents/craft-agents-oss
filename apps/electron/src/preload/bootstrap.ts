@@ -25,6 +25,11 @@ import { CHANNEL_MAP } from '../transport/channel-map'
 import { createCallbackServer } from '@craft-agent/shared/auth/callback-server'
 import { CHATGPT_OAUTH_CONFIG } from '@craft-agent/shared/auth/chatgpt-oauth-config'
 import {
+  isOAuthFlowCancelledError,
+  OAuthFlowTimedOutError,
+  waitForOAuthCallback,
+} from './oauth-wait'
+import {
   CLIENT_OPEN_EXTERNAL,
   CLIENT_OPEN_PATH,
   CLIENT_SHOW_IN_FOLDER,
@@ -190,6 +195,9 @@ client.handleCapability(CLIENT_BROWSER_INVOKE, async (req: BrowserCapabilityRequ
 // ---------------------------------------------------------------------------
 
 const api = buildClientApi(client, CHANNEL_MAP, (ch) => client.isChannelAvailable(ch))
+
+let cancelPendingChatGptOAuth: (() => void) | null = null
+let pendingChatGptOAuthState: string | undefined
 
 ;(api as any).getRuntimeEnvironment = (): 'electron' | 'web' => 'electron'
 
@@ -359,10 +367,15 @@ client.onConnectionStateChanged((state) => {
   connectionSlug: string,
 ): Promise<{ success: boolean; error?: string }> => {
   let callbackServer: Awaited<ReturnType<typeof createCallbackServer>> | null = null
+  const abortController = new AbortController()
   let flowId: string | undefined
   let state: string | undefined
 
   try {
+    cancelPendingChatGptOAuth = () => {
+      abortController.abort()
+    }
+
     // 1. Start callback server on ChatGPT's fixed port with /auth/callback path
     callbackServer = await createCallbackServer({
       appType: 'electron',
@@ -374,12 +387,23 @@ client.onConnectionStateChanged((state) => {
     const startResult = await client.invoke('chatgpt:startOAuth', connectionSlug)
     flowId = startResult.flowId
     state = startResult.state
+    pendingChatGptOAuthState = state
+
+    if (abortController.signal.aborted) {
+      await client.invoke('chatgpt:cancelOAuth', { state })
+      throw new Error('ChatGPT authentication cancelled')
+    }
 
     // 3. Open browser for user consent
     await shell.openExternal(startResult.authUrl)
 
     // 4. Wait for OpenAI to redirect to our callback server
-    const callback = await callbackServer.promise
+    const callback = await waitForOAuthCallback(callbackServer.promise, {
+      timeoutMs: CHATGPT_OAUTH_CONFIG.FLOW_TIMEOUT_MS,
+      signal: abortController.signal,
+      timeoutMessage: 'ChatGPT authentication timed out. Please try again.',
+      cancelMessage: 'ChatGPT authentication cancelled',
+    })
 
     // 5. Check for errors from the provider
     if (callback.query.error) {
@@ -401,13 +425,31 @@ client.onConnectionStateChanged((state) => {
     if (state) {
       client.invoke('chatgpt:cancelOAuth', { state }).catch(() => {})
     }
+    if (isOAuthFlowCancelledError(err) || (err instanceof Error && err.message === 'ChatGPT authentication cancelled')) {
+      return { success: false, error: 'ChatGPT authentication cancelled' }
+    }
+    if (err instanceof OAuthFlowTimedOutError) {
+      return { success: false, error: err.message }
+    }
     return {
       success: false,
       error: err instanceof Error ? err.message : 'ChatGPT OAuth flow failed',
     }
   } finally {
+    cancelPendingChatGptOAuth = null
+    pendingChatGptOAuthState = undefined
     callbackServer?.close()
   }
+}
+
+;(api as any).cancelChatGptOAuth = async (): Promise<{ success: boolean }> => {
+  cancelPendingChatGptOAuth?.()
+
+  if (pendingChatGptOAuthState) {
+    return client.invoke('chatgpt:cancelOAuth', { state: pendingChatGptOAuthState })
+  }
+
+  return { success: true }
 }
 
 // App lifecycle — direct IPC (not WS RPC) since it restarts the server itself

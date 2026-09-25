@@ -46,6 +46,7 @@ interface OnboardingWizardProps {
 
   // Claude OAuth (two-step flow)
   isWaitingForCode?: boolean
+  isProviderOAuthPending?: boolean
   onSubmitAuthCode?: (code: string) => void
   onCancelOAuth?: () => void
 
@@ -98,6 +99,7 @@ export function OnboardingWizard({
   onFinish,
   // Two-step OAuth flow
   isWaitingForCode,
+  isProviderOAuthPending,
   onSubmitAuthCode,
   onCancelOAuth,
   // Copilot device flow
@@ -169,6 +171,7 @@ export function OnboardingWizard({
             onStartOAuth={onStartOAuth}
             onBack={onBack}
             isWaitingForCode={isWaitingForCode}
+            isProviderOAuthPending={isProviderOAuthPending}
             onSubmitAuthCode={onSubmitAuthCode}
             editInitialValues={editInitialValues}
             onCancelOAuth={onCancelOAuth}

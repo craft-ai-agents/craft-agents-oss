@@ -14,6 +14,7 @@ import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { randomUUID } from 'node:crypto'
 import { CLIENT_OPEN_EXTERNAL } from '@craft-agent/server-core/transport'
+import { CHATGPT_OAUTH_CONFIG } from '@craft-agent/shared/auth'
 
 // Local OAuth state
 let copilotOAuthAbort: AbortController | null = null
@@ -634,7 +635,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     createdAt: number
   }
   const pendingChatGptFlows = new Map<string, PendingChatGptFlow>()
-  const CHATGPT_FLOW_TTL_MS = 5 * 60 * 1000
+  const CHATGPT_FLOW_TTL_MS = CHATGPT_OAUTH_CONFIG.FLOW_TIMEOUT_MS
 
   function cleanupExpiredChatGptFlows() {
     const now = Date.now()
