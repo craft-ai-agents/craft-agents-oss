@@ -1268,6 +1268,26 @@ export class ClaudeAgent extends BaseAgent {
         // This allows Safe Mode to properly allow read-only bash commands without SDK interference
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
+        // Isolate the embedded SDK session from the end user's own ambient Claude Code
+        // CLI configuration. Without this, the spawned `claude` binary loads ALL
+        // filesystem settings sources by default (~/.claude/settings.json,
+        // ~/.claude/settings.local.json, project/local .claude/settings.json, and
+        // their CLAUDE.md files) per the SDK's own documented default ("When omitted,
+        // all sources are loaded"). That silently merges a user's personal Claude Code
+        // CLI permission rules (permissions.allow/deny/ask, defaultMode) and CLAUDE.md
+        // instructions — written for their standalone `claude` CLI usage — into Craft's
+        // own embedded, fully-bypassed agent session. Observed symptom: internal
+        // mcp__session__* tools (list_sessions, get_session_info, etc.) and built-in
+        // tools like WebSearch intermittently fail with "Claude requested permissions
+        // to use X, but you haven't granted it yet" even under permissionMode:
+        // 'bypassPermissions', because the ambient settings' permission rules/defaultMode
+        // are still being merged in from the user's unrelated ~/.claude/settings*.json.
+        // Craft already builds its own system prompt (see systemPrompt.append above) and
+        // reads workspace CLAUDE.md itself, so it does not depend on the SDK's native
+        // settings-file loading for context. Pass [] for full isolation — deterministic,
+        // reproducible agent behavior regardless of what the user has configured for
+        // their own separate Claude Code CLI installation.
+        settingSources: [],
         // User hooks from automations.json are merged with internal hooks
         hooks: (() => {
           // Build user-defined hooks from automations.json using the workspace-level AutomationSystem
@@ -1524,6 +1544,32 @@ export class ClaudeAgent extends BaseAgent {
               const typedInput = input as { agent_id?: string; agent_type?: string };
               debug(`[ClaudeAgent] SubagentStart: agent_id=${typedInput.agent_id}, type=${typedInput.agent_type}`);
               return { continue: true };
+            }],
+          }],
+          // ═══════════════════════════════════════════════════════════════════════════
+          // PERMISSION REQUEST: separate SDK-level consent gate from PreToolUse.
+          // `permissionMode: 'bypassPermissions'` + `allowDangerouslySkipPermissions`
+          // do NOT suppress this hook for every tool category — observed empirically:
+          // internal mcp__session__* tools (list_sessions, get_session_info, etc.) and
+          // built-in tools like WebSearch still fire a PermissionRequest that, left
+          // unanswered (no hook registered), the CLI defaults to deny ("Claude
+          // requested permissions to use X, but you haven't granted it yet."). All of
+          // Craft's actual admission logic already runs in the PreToolUse hook above,
+          // so unconditionally allow here — this hook only fires for tools PreToolUse
+          // already decided to let through.
+          PermissionRequest: [{
+            hooks: [async (_hookInput) => {
+              if (_hookInput.hook_event_name !== 'PermissionRequest') {
+                return { continue: true };
+              }
+              debug(`[ClaudeAgent] PermissionRequest hook: auto-allowing ${_hookInput.tool_name} (PreToolUse already gated it)`);
+              return {
+                continue: true,
+                hookSpecificOutput: {
+                  hookEventName: 'PermissionRequest' as const,
+                  decision: { behavior: 'allow' as const },
+                },
+              };
             }],
           }],
           SubagentStop: [{
