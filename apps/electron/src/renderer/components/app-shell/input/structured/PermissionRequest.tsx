@@ -24,6 +24,7 @@ interface PermissionRequestProps {
  */
 export function PermissionRequest({ request, onResponse, unstyled = false }: PermissionRequestProps) {
   const { t } = useTranslation()
+  const canAlwaysAllow = request.canAlwaysAllow !== false
 
   const handleAllow = () => {
     onResponse({ type: 'permission', allowed: true, alwaysAllow: false })
@@ -86,6 +87,8 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
           variant="ghost"
           className="h-7 gap-1.5 border border-foreground/10 hover:bg-foreground/5 active:bg-foreground/10"
           onClick={handleAlwaysAllow}
+          disabled={!canAlwaysAllow}
+          title={canAlwaysAllow ? undefined : 'Always Allow is disabled by managed settings'}
         >
           <RefreshCw className="h-3.5 w-3.5" />
           Always Allow
@@ -102,7 +105,9 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
 
         {/* Tip text */}
         <span className="min-w-0 flex-1 basis-full text-[10px] text-muted-foreground sm:basis-auto sm:text-right">
-          "Always Allow" remembers this command for the session
+          {canAlwaysAllow
+            ? '"Always Allow" remembers this command for the session'
+            : '"Always Allow" is disabled by managed settings'}
         </span>
       </div>
     </div>
