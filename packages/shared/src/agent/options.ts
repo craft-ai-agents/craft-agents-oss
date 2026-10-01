@@ -218,6 +218,21 @@ export function buildClaudeSubprocessEnv(
     delete env.AWS_BEARER_TOKEN_BEDROCK;
     delete env.ANTHROPIC_BEDROCK_BASE_URL;
 
+    // If the user's own shell environment (e.g. ~/.zshrc) exports
+    // CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=true for their standalone Claude Code CLI
+    // usage, the spawned binary silently forces permissionMode to 'default' and
+    // logs "Permission mode forced to default — CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is
+    // set (allowed_non_write_users hardening)" — completely ignoring Craft's own
+    // explicit permissionMode: 'bypassPermissions' + allowDangerouslySkipPermissions.
+    // Since env is inherited wholesale via `...process.env` above, this ambient
+    // personal-CLI hardening setting silently downgrades every embedded session,
+    // causing sensitive tools (mcp__session__*, WebSearch) to be auto-denied with
+    // "Claude requested permissions to use X, but you haven't granted it yet."
+    // even though Craft's own PreToolUse pipeline already decided to allow them.
+    // Force it off so Craft's explicit bypass intent is never silently overridden
+    // by whatever the user has configured for their own separate CLI environment.
+    env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB = '0';
+
     return env;
 }
 
