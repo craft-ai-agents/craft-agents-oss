@@ -3858,7 +3858,12 @@ export class SessionManager implements ISessionManager {
         managed.poolServer = new McpPoolServer(managed.mcpPool, { debug: (msg) => sessionLog.debug(msg) })
         managed.mcpPool.onToolsChanged = () => managed.poolServer?.notifyToolsChanged()
         poolServerUrl = await managed.poolServer.start()
-        await managed.mcpPool.sync(mcpServers) // Ensure pool has tools before SDK connects
+        // Include apiServers: API-type sources are in-process SDK MCP servers that
+        // must be registered in the pool too, or the HTTP pool server exposes none
+        // of them to the SDK subprocess — every api_<slug> tool goes missing while
+        // MCP-type sources still work. setSourceServers() (reload/enable paths)
+        // already passes both; the initial startup sync must match.
+        await managed.mcpPool.sync(mcpServers, apiServers) // Ensure pool has MCP + API tools before SDK connects
       }
 
       // Per-session env overrides
