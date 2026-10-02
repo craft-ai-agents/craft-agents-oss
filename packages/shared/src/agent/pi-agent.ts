@@ -587,6 +587,7 @@ export class PiAgent extends BaseAgent {
       authType: this.config.authType,
       workspaceId: this.config.workspace.id,
       piAuth,
+      searchProvider: runtime.searchProvider,
       baseUrl: runtime.baseUrl,
       customEndpoint: runtime.customEndpoint,
       customModels: runtime.customModels,
@@ -1995,6 +1996,7 @@ export class PiAgent extends BaseAgent {
       this.send({
         type: 'update_runtime_config',
         id,
+        searchProvider: runtime.searchProvider,
         model: update.model,
         providerType: update.providerType,
         authType: update.authType,

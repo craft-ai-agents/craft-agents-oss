@@ -138,11 +138,13 @@ interface InitMessage {
   customEndpoint?: { api: CustomEndpointApi; supportsImages?: boolean };
   customModels?: Array<string | { id: string; contextWindow?: number; supportsImages?: boolean }>;
   piAuth?: { provider: string; credential: PiCredential };
+  searchProvider?: 'auto' | 'parallel';
 }
 
 interface RuntimeConfigUpdateMessage {
   type: 'update_runtime_config';
   id: string;
+  searchProvider?: 'auto' | 'parallel';
   model: string;
   providerType?: string;
   authType?: string;
@@ -625,10 +627,10 @@ async function ensureSession(): Promise<AgentSession> {
   const activeSearchModel = () => (initConfig?.model ? stripPiPrefix(initConfig.model) : undefined);
   const searchProvider = {
     get name() {
-      return resolveSearchProvider(initConfig?.piAuth, activeSearchModel()).name;
+      return resolveSearchProvider(initConfig?.piAuth, activeSearchModel(), initConfig?.searchProvider).name;
     },
-    async search(query: string, count: number) {
-      return resolveSearchProvider(initConfig?.piAuth, activeSearchModel()).search(query, count);
+    async search(query: string, count: number, signal?: AbortSignal) {
+      return resolveSearchProvider(initConfig?.piAuth, activeSearchModel(), initConfig?.searchProvider).search(query, count, signal);
     },
   };
   const searchTool = createSearchTool(searchProvider);
@@ -1647,6 +1649,7 @@ async function handleUpdateRuntimeConfig(msg: RuntimeConfigUpdateMessage): Promi
       baseUrl: msg.baseUrl,
       customEndpoint: msg.customEndpoint,
       customModels: msg.customModels,
+      searchProvider: msg.searchProvider,
     };
 
     if (piModelRegistry && initConfig.baseUrl?.trim() && initConfig.customEndpoint) {

@@ -174,6 +174,9 @@ export interface LlmConnection {
    */
   piAuthProvider?: string;
 
+  /** Opt-in native Pi web search. Omit or use auto to preserve provider routing. */
+  searchProvider?: 'auto' | 'parallel';
+
   /**
    * Custom endpoint protocol config.
    * Set when user configures an arbitrary API endpoint (Ollama, DashScope, vLLM, etc.).

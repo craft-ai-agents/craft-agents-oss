@@ -15,6 +15,7 @@ import { ResponsesApiSearchProvider } from './providers/openai.ts';
 import { ChatGPTBackendSearchProvider, extractChatGptAccountId } from './providers/chatgpt.ts';
 import { GoogleSearchProvider } from './providers/google.ts';
 import { DDGSearchProvider } from './providers/ddg.ts';
+import { ParallelSearchProvider } from './providers/parallel.ts';
 
 export type SearchProviderCredential =
   | { type: 'api_key'; key: string }
@@ -54,7 +55,8 @@ function getOpenAiCodexAccessToken(piAuth?: SearchProviderAuthConfig): string | 
  *   by the ChatGPT backend provider to search with a model the account actually supports,
  *   instead of a hardcoded one that may have been retired (craft-agents-oss#1023).
  */
-export function resolveSearchProvider(piAuth?: SearchProviderAuthConfig, activeModel?: string): WebSearchProvider {
+export function resolveSearchProvider(piAuth?: SearchProviderAuthConfig, activeModel?: string, selection?: 'auto' | 'parallel'): WebSearchProvider {
+  if (selection === 'parallel') return new ParallelSearchProvider();
   const provider = piAuth?.provider;
   const apiKey = getApiKey(piAuth);
   const openAiCodexAccess = getOpenAiCodexAccessToken(piAuth);
