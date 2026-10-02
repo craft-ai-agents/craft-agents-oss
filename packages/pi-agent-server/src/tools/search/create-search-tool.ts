@@ -65,14 +65,16 @@ export function createSearchTool(
     promptSnippet:
       'Use web_search for up-to-date information, documentation lookups, or fact-checking. Returns titles, URLs, and snippets. Accepts a query string and optional count (1-10).',
     parameters: schema,
-    async execute(toolCallId, params) {
+    async execute(toolCallId, params, signal) {
       const { query } = params;
       const count = Math.max(1, Math.min(10, params.count ?? 5));
 
       try {
-        const results = await provider.search(query, count);
+        const results = await provider.search(query, count, signal);
         return formatResults(query, provider.name, results);
       } catch (err) {
+        // A cancelled request must not launch another network search.
+        if (signal?.aborted) throw err;
         const primaryMsg = err instanceof Error ? err.message : String(err);
 
         const canFallback = provider.name !== fallbackProvider.name;
