@@ -22,6 +22,7 @@ import {
 } from '../config/llm-connections.ts';
 import type { McpClientPool } from '../mcp/mcp-pool.ts';
 import { proxyToolName } from '../mcp/proxy-tool-name.ts';
+import { jsonSchemaToZodShape } from './json-schema-to-zod-shape.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
 import { loadProjectById, getProjectAssetsPath, listProjectAssets, getProjectMemoryPath, loadProjectMemory } from '../projects/storage.ts';
 import { DEFAULT_MODEL, isClaudeModel, isAdaptiveThinkingAlwaysOnModel, getDefaultSummarizationModel, getModelContextWindow } from '../config/models.ts';
@@ -415,7 +416,7 @@ export function jsonPropToZod(prop: any, depth = 0): z.ZodTypeAny {
     case 'object': {
       // Nested object with known properties → build z.object({...})
       if (prop.properties && typeof prop.properties === 'object') {
-        const shape = jsonSchemaToZodShape(prop, depth + 1);
+        const shape = jsonSchemaToZodShape(prop, jsonPropToZod, depth + 1);
         const obj = z.object(shape);
         // JSON Schema defaults additionalProperties to true when omitted.
         // Only use strict (strip) mode when explicitly set to false.
@@ -430,20 +431,6 @@ export function jsonPropToZod(prop: any, depth = 0): z.ZodTypeAny {
     default:
       return withDesc(z.unknown());
   }
-}
-
-function jsonSchemaToZodShape(schema: Record<string, unknown>, depth = 0): Record<string, z.ZodTypeAny> {
-  const properties = (schema.properties as Record<string, any>) || {};
-  const required = new Set((schema.required as string[]) || []);
-  const shape: Record<string, z.ZodTypeAny> = {};
-
-  for (const [key, prop] of Object.entries(properties)) {
-    let zodType = jsonPropToZod(prop, depth);
-    if (!required.has(key)) zodType = zodType.optional();
-    shape[key] = zodType;
-  }
-
-  return shape;
 }
 
 /**
@@ -467,7 +454,7 @@ function createSourceProxyServers(pool: McpClientPool): Record<string, ReturnTyp
         mcpTool.name,
         mcpTool.description || `Tool from ${slug}`,
         {
-          ...jsonSchemaToZodShape((mcpTool.inputSchema as Record<string, unknown>) || {}),
+          ...jsonSchemaToZodShape((mcpTool.inputSchema as Record<string, unknown>) || {}, jsonPropToZod),
           ...z.object({}).catchall(z.unknown()).shape,
         },
         async (args: Record<string, unknown>) => {
