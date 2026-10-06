@@ -8,8 +8,37 @@
 import { describe, it, expect } from 'bun:test'
 import { z } from 'zod'
 import { jsonPropToZod } from '../claude-agent.ts'
+import { jsonSchemaToZodShape } from '../json-schema-to-zod-shape.ts'
+import { stripToolMetadata } from '../core/pre-tool-use.ts'
 
 describe('jsonPropToZod', () => {
+  it('allows injected top-level metadata to be stripped before proxy validation', () => {
+    const schema = z.object(jsonSchemaToZodShape({
+      type: 'object',
+      properties: {
+        entity_id: { type: 'string' },
+        _intent: { type: 'string' },
+        _displayName: { type: 'string' },
+        options: {
+          type: 'object',
+          properties: { _intent: { type: 'string' } },
+          required: ['_intent'],
+        },
+      },
+      required: ['entity_id', '_intent', '_displayName', 'options'],
+    }, jsonPropToZod));
+    const input = stripToolMetadata('mcp__ha-mcp__ha_get_state', {
+      entity_id: 'sensor.example',
+      _intent: 'Read the sensor state',
+      _displayName: 'Get State',
+      options: { _intent: 'Nested tool argument' },
+    }).input;
+
+    expect(schema.safeParse(input).success).toBe(true);
+    expect(schema.safeParse({ options: { _intent: 'Nested tool argument' } }).success).toBe(false);
+    expect(schema.safeParse({ entity_id: 'sensor.example', options: {} }).success).toBe(false);
+  });
+
   describe('primitives', () => {
     it('converts string type', () => {
       const schema = jsonPropToZod({ type: 'string' })
