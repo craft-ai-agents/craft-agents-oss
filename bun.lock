@@ -271,6 +271,7 @@
         "@earendil-works/pi-agent-core": "0.87.1",
         "@earendil-works/pi-ai": "0.87.1",
         "@earendil-works/pi-coding-agent": "0.87.1",
+        "@modelcontextprotocol/sdk": "^1.29.0",
         "duck-duck-scrape": "^2.2.7",
         "node-html-parser": "^6.1.0",
         "pdfjs-dist": "^5.4.0",
