@@ -112,7 +112,7 @@ export class PromptHandler implements AutomationHandler {
         pendingPrompts.push({
           sessionId: this.options.sessionId,
           matcherId,
-          automationName,
+          automationName: expandEnvVars(automationName, env),
           prompt: expandedPrompt,
           mentions: references.mentions,
           labels: expandedLabels,
