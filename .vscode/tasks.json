@@ -1,0 +1,52 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "craft: electron dev (debug)",
+      "type": "shell",
+      "command": "bun",
+      "args": [
+        "run",
+        "electron:dev"
+      ],
+      "options": {
+        "env": {
+          "CRAFT_ELECTRON_INSPECT_PORT": "43229",
+          "CRAFT_ELECTRON_REMOTE_DEBUG_PORT": "43222"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "custom",
+        "pattern": {
+          "regexp": "^(.*)$",
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*$",
+          "endsPattern": "Debugger listening on ws://.*:43229/"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": false
+      }
+    },
+    {
+      "label": "validate electron dev debug",
+      "type": "shell",
+      "command": "bun",
+      "args": [
+        "run",
+        "electron:dev"
+      ],
+      "isBackground": true,
+      "problemMatcher": [
+        "$tsc"
+      ],
+      "group": "test"
+    }
+  ]
+}
