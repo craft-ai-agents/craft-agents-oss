@@ -9,6 +9,7 @@
     "spellCheck": false,
     "keepAwakeWhileRunning": false,
     "richToolDescriptions": true,
+    "defaultZoomLevel": 100,
     "extendedPromptCache": false,
     "browserToolEnabled": true,
     "allowRemoteEvaluate": true
