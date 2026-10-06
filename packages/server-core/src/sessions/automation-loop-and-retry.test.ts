@@ -117,4 +117,35 @@ describe('source-activation auto-retry', () => {
     expect((sm as any).startPreTurnDecisions(managed, 'x\n\n[a activated]', { hidden: true }, { activationResend: true })).toBeNull()
     expect(asked).toBe(0)
   })
+
+  // Found in the 2026-09-30 decision log: every "OAuth token revoked" 401 re-ran both turn-start
+  // decisions for the same message and wrote the suggestions follow-up twice.
+  it('keeps an auth retry\'s thinking level and hint, asks nothing again and keeps the request\'s trace', async () => {
+    const sm = new SessionManager()
+    let asked = 0
+    ;(sm as any).decisionFeatureActive = () => { asked++; return true }
+    const managed = createManagedSession({ id: 's', name: 's' }, { id: 'w', name: 'w', rootPath: tmpdir(), createdAt: 1 } as never, { messagesLoaded: true })
+    managed.thinkingLevel = 'max'
+    managed.turnThinkingOverride = 'low'
+    managed.turnSuggestionHint = '<system-reminder>Use the dri-board skill.</system-reminder>'
+    const trace = { trace: { decisionId: 'd1', candidates: [] } as never, used: new Set<string>() }
+    managed.suggestionTrace = trace
+
+    const kept = await (sm as any).startPreTurnDecisions(managed, 'Update the DRI board', undefined, { authRetry: true })
+    expect(kept).toEqual({ thinkingOverride: 'low', suggestionHint: '<system-reminder>Use the dri-board skill.</system-reminder>' })
+    expect(managed.suggestionTrace).toBe(trace)
+    expect(asked).toBe(0)
+  })
+
+  it('does not rate the thinking level of hidden messages such as background-task nudges', () => {
+    const sm = new SessionManager()
+    ;(sm as any).decisionFeatureActive = () => true
+    const managed = createManagedSession({ id: 's', name: 's' }, { id: 'w', name: 'w', rootPath: tmpdir(), createdAt: 1 } as never, { messagesLoaded: true })
+    managed.thinkingLevel = 'max'
+    const nudge = '[background-task-completed] The background agent you launched (Map code) has finished.'
+    // The previous turn's answer no longer matches the last reply once another message ran.
+    managed.thinkingTrace = { answers: {} } as never
+    expect((sm as any).startPreTurnDecisions(managed, nudge, { hidden: true })).toBeNull()
+    expect(managed.thinkingTrace).toBeUndefined()
+  })
 })

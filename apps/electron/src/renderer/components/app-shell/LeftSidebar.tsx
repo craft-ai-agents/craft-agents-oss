@@ -531,7 +531,8 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
             renderIcon(link)
           )}
         </span>
-        {link.title}
+        {/* One line: long names (e.g. page titles) end in "…", the full name shows on hover */}
+        <span className="min-w-0 truncate text-left" title={link.title}>{link.title}</span>
         {/* After-title element: type indicator icon, right-aligned before count badge, revealed on hover */}
         {link.afterTitle && (
           <span data-touch-reveal="true" className="ml-auto opacity-0 group-hover/section:opacity-100 group-data-[state=open]:opacity-100 group-data-[edit-active=true]:opacity-100 transition-opacity">

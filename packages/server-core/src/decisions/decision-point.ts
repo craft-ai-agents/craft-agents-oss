@@ -6,7 +6,8 @@
  *
  *   1. resolve a client: Settings switch → the feature's toggle → key → endpoint;
  *   2. decide under the user's background deadline (`decisionLayer.deadlineMs`)
- *      unless the request sets its own;
+ *      unless the request sets its own, and under at least `DECISION_COLD_DEADLINE_MS`
+ *      when the provider has not answered for `DECISION_COLD_AFTER_MS` (a cold start);
  *   3. record every call (feature tag, question keys, answers, state hash, never
  *      the state itself);
  *   4. return `null` on any failure so the caller keeps its pre-decision behaviour;
@@ -42,6 +43,8 @@ export interface DecisionPointDeps {
   log?: (message: string) => void
   resolveClient?: (options: ResolveDecisionClientOptions) => Promise<DecisionClientResolution>
   recorder?: DecisionRecorder
+  /** Clock for the cold-start check, in ms. */
+  now?: () => number
 }
 
 export interface DecisionPointOptions extends DecisionPointDeps {
@@ -56,6 +59,18 @@ export interface DecisionPointOptions extends DecisionPointDeps {
 
 /** Deadline cap for decision points that hold up a turn start or a message acknowledgement. */
 export const FOREGROUND_MAX_DEADLINE_MS = 3_000
+
+/**
+ * A provider that has not answered for this long starts cold. In the 2026-09-30 log, calls
+ * failed 1% of the time within 30 s of the previous one and 6–12% after longer idle, all at
+ * the 1.5 s default deadline.
+ */
+export const DECISION_COLD_AFTER_MS = 30_000
+/** Deadline floor for a cold call; still under `FOREGROUND_MAX_DEADLINE_MS`. */
+export const DECISION_COLD_DEADLINE_MS = 2_800
+
+/** When each provider last answered (process-wide: every point shares the provider's warmth). */
+const lastAnsweredAt = new Map<string, number>()
 
 /**
  * Resolve once and return a function that asks the model, possibly several
@@ -79,12 +94,17 @@ export async function openDecisionPoint(options: DecisionPointOptions): Promise<
 
   const { client, provider, endpoint, settings } = resolution.value
   const recorder = options.recorder ?? getDecisionRecorder()
+  const now = options.now ?? Date.now
   return async (request, meta, signal) => {
     const startedAt = performance.now()
-    const base = { feature: options.record, provider, model: endpoint.model, questions: request.questions, sessionId: options.sessionId, meta }
+    const lastAnswer = lastAnsweredAt.get(provider)
+    const coldStart = lastAnswer === undefined || now() - lastAnswer >= DECISION_COLD_AFTER_MS
+    const base = { feature: options.record, provider, model: endpoint.model, questions: request.questions, sessionId: options.sessionId, meta, coldStart }
     try {
-      const deadlineMs = Math.min(request.deadlineMs ?? settings.deadlineMs, options.maxDeadlineMs ?? Number.POSITIVE_INFINITY)
+      const requested = request.deadlineMs ?? settings.deadlineMs
+      const deadlineMs = Math.min(coldStart ? Math.max(requested, DECISION_COLD_DEADLINE_MS) : requested, options.maxDeadlineMs ?? Number.POSITIVE_INFINITY)
       const result = await client.decide({ ...request, deadlineMs }, signal)
+      lastAnsweredAt.set(provider, now())
       const record = buildDecisionRecord({ ...base, result })
       void recorder.append(record)
       recordHandles.set(result, { record, recorder })

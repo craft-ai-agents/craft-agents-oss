@@ -40,7 +40,10 @@ export class ApiSourcePoolClient implements PoolClient {
 
   async callTool(name: string, args: Record<string, unknown>, options?: PoolCallToolOptions): Promise<unknown> {
     if (!this.connected) await this.connect();
-    return this.client.callTool({ name, arguments: args }, undefined, {
+    // API tools declare `_intent` (it steers their large-result handling); the agent's copy was
+    // stripped before the call reached the pool.
+    const withIntent = options?.intent && args._intent === undefined ? { ...args, _intent: options.intent } : args;
+    return this.client.callTool({ name, arguments: withIntent }, undefined, {
       ...(options?.signal ? { signal: options.signal } : {}),
       ...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
     });

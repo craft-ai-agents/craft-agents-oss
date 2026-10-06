@@ -346,6 +346,7 @@ export const RPC_CHANNELS = {
     DELETE_API_KEY: 'decisions:deleteApiKey',
     TEST: 'decisions:test',
     PROBE_SERVER: 'decisions:probeServer',
+    GET_USAGE: 'decisions:getUsage',
   },
   badge: {
     REFRESH: 'badge:refresh',

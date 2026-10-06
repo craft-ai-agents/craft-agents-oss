@@ -20,6 +20,8 @@ export interface SettingsToggleProps {
   description?: string
   /** Optional longer help, shown from an info icon next to the label */
   tooltip?: React.ReactNode
+  /** Optional small line under the description (e.g. usage numbers) */
+  note?: string
   /** Current checked state */
   checked: boolean
   /** Change handler */
@@ -49,6 +51,7 @@ export function SettingsToggle({
   label,
   description,
   tooltip,
+  note,
   checked,
   onCheckedChange,
   disabled,
@@ -92,6 +95,7 @@ export function SettingsToggle({
         {description && (
           <div className={cn(settingsUI.description, settingsUI.labelDescriptionGap)}>{description}</div>
         )}
+        {note && <div className={cn(settingsUI.descriptionSmall, 'mt-0.5 tabular-nums')}>{note}</div>}
       </label>
       <Switch
         id={id}

@@ -11,9 +11,12 @@
  */
 
 import { readFile } from 'node:fs/promises';
+import type { DecisionLayerFeature } from './settings.ts';
 import {
+  defaultDecisionsLogPath,
   isDecisionFollowUpRecord,
   isDecisionOutcomeRecord,
+  previousDecisionsLogPath,
   type DecisionFollowUpRecord,
   type DecisionLogLine,
   type DecisionOutcomeRecord,
@@ -35,6 +38,9 @@ export interface FeatureUsage {
   failures: number;
   /** Failure kind → count. */
   failureKinds: Record<string, number>;
+  /** Calls made after the provider had been idle (`coldStart`), and how many of them failed. */
+  coldCalls: number;
+  coldFailures: number;
   /** Calls whose outcome was recorded. */
   withOutcome: number;
   /** Outcomes with `changed: true`. */
@@ -43,6 +49,8 @@ export interface FeatureUsage {
   actions: Record<string, number>;
   /** Follow-up result → count (a decision can have several). */
   followUps: Record<string, number>;
+  /** Outcome action → follow-up result → count: e.g. how often a lowered thinking level was corrected. */
+  followUpsByAction: Record<string, Record<string, number>>;
   latencyP50Ms?: number;
   latencyP95Ms?: number;
   inputTokens: number;
@@ -110,7 +118,7 @@ export function summarizeDecisionUsage(lines: readonly DecisionLogLine[], filter
     let entry = byFeature.get(record.feature);
     if (!entry) {
       entry = {
-        usage: { feature: record.feature, calls: 0, failures: 0, failureKinds: {}, withOutcome: 0, changed: 0, actions: {}, followUps: {}, inputTokens: 0, outputTokens: 0, sessions: 0 },
+        usage: { feature: record.feature, calls: 0, failures: 0, failureKinds: {}, coldCalls: 0, coldFailures: 0, withOutcome: 0, changed: 0, actions: {}, followUps: {}, followUpsByAction: {}, inputTokens: 0, outputTokens: 0, sessions: 0 },
         latencies: [],
         sessions: new Set(),
       };
@@ -122,17 +130,21 @@ export function summarizeDecisionUsage(lines: readonly DecisionLogLine[], filter
     if (typeof record.latencyMs === 'number') entry.latencies.push(record.latencyMs);
     usage.inputTokens += record.usage?.inputTokens ?? 0;
     usage.outputTokens += record.usage?.outputTokens ?? 0;
+    if (record.coldStart) usage.coldCalls++;
     if (!record.ok) {
       usage.failures++;
+      if (record.coldStart) usage.coldFailures++;
       failures++;
       const kind = record.error?.kind ?? 'unknown';
       usage.failureKinds[kind] = (usage.failureKinds[kind] ?? 0) + 1;
       continue;
     }
+    const outcome = record.id ? outcomes.get(record.id) : undefined;
     for (const followUp of (record.id ? followUps.get(record.id) : undefined) ?? []) {
       usage.followUps[followUp.result] = (usage.followUps[followUp.result] ?? 0) + 1;
+      const byAction = (usage.followUpsByAction[outcome?.action ?? '-'] ??= {});
+      byAction[followUp.result] = (byAction[followUp.result] ?? 0) + 1;
     }
-    const outcome = record.id ? outcomes.get(record.id) : undefined;
     if (!outcome) continue;
     usage.withOutcome++;
     if (outcome.changed) usage.changed++;
@@ -149,6 +161,38 @@ export function summarizeDecisionUsage(lines: readonly DecisionLogLine[], filter
   return { total: decisions.length, failures, providers, features };
 }
 
+/** The tag each Settings toggle's decision point writes as `feature`. */
+export const DECISION_RECORD_TAGS: Record<DecisionLayerFeature, string> = {
+  decideTool: 'decide_tool',
+  taskVerdicts: 'task_verdict',
+  semanticLabels: 'semantic_labels',
+  turnOutcome: 'turn_outcome',
+  guardedMode: 'guarded_mode',
+  riskBadges: 'risk_badges',
+  automationConditions: 'automation_condition',
+  taskRepairs: 'task_repairs',
+  smartTitles: 'smart_titles',
+  adaptiveThinking: 'adaptive_thinking',
+  midTurnMessages: 'mid_turn_messages',
+  largeResults: 'large_results',
+  suggestions: 'suggestions',
+};
+
+/** What Settings shows per toggle: checks, failures and how often an answer changed something. */
+export type DecisionToggleUsage = Pick<FeatureUsage, 'calls' | 'failures' | 'changed' | 'withOutcome'>;
+
+/** Per-toggle usage since `since`, over the current and the rotated log. Toggles without calls are left out. */
+export async function readDecisionToggleUsage(since: Date, logPath: string = defaultDecisionsLogPath()): Promise<Partial<Record<DecisionLayerFeature, DecisionToggleUsage>>> {
+  const lines = [...(await readDecisionLog(previousDecisionsLogPath(logPath))), ...(await readDecisionLog(logPath))];
+  const byTag = new Map(summarizeDecisionUsage(lines, { since }).features.map(feature => [feature.feature, feature]));
+  const usage: Partial<Record<DecisionLayerFeature, DecisionToggleUsage>> = {};
+  for (const [toggle, tag] of Object.entries(DECISION_RECORD_TAGS) as [DecisionLayerFeature, string][]) {
+    const feature = byTag.get(tag);
+    if (feature) usage[toggle] = { calls: feature.calls, failures: feature.failures, changed: feature.changed, withOutcome: feature.withOutcome };
+  }
+  return usage;
+}
+
 /** Plain-text table for terminals. */
 export function formatDecisionUsage(summary: DecisionUsageSummary): string {
   if (summary.total === 0) return 'No decision records match.';
@@ -157,17 +201,22 @@ export function formatDecisionUsage(summary: DecisionUsageSummary): string {
     f.feature,
     String(f.calls),
     String(f.failures),
+    f.coldCalls > 0 ? `${f.coldFailures}/${f.coldCalls}` : '-',
     f.withOutcome > 0 ? `${f.changed}/${f.withOutcome}` : '-',
     f.latencyP50Ms !== undefined ? `${f.latencyP50Ms}/${f.latencyP95Ms}` : '-',
     String(f.sessions),
     Object.entries(f.actions).sort((a, b) => b[1] - a[1]).map(([action, count]) => `${action}×${count}`).join(' ') || '-',
   ]);
-  const header = ['feature', 'calls', 'failed', 'changed', 'p50/p95 ms', 'sessions', 'actions'];
+  const header = ['feature', 'calls', 'failed', 'cold failed', 'changed', 'p50/p95 ms', 'sessions', 'actions'];
   const widths = header.map((h, i) => Math.max(h.length, ...rows.map(r => r[i]!.length)));
   const line = (cells: string[]) => cells.map((c, i) => (i === cells.length - 1 ? c : c.padEnd(widths[i]!))).join('  ');
+  const counts = (byResult: Record<string, number>) => Object.entries(byResult).sort((a, b) => b[1] - a[1]).map(([result, count]) => `${result}×${count}`).join(' ');
   const followUps = summary.features
     .filter(f => Object.keys(f.followUps).length > 0)
-    .map(f => `${f.feature}: ${Object.entries(f.followUps).sort((a, b) => b[1] - a[1]).map(([result, count]) => `${result}×${count}`).join(' ')}`);
+    .flatMap(f => [
+      `${f.feature}: ${counts(f.followUps)}`,
+      ...Object.entries(f.followUpsByAction).sort(([a], [b]) => a.localeCompare(b)).map(([action, byResult]) => `  ${action} → ${counts(byResult)}`),
+    ]);
   return [
     `${summary.total} decisions (${summary.failures} failed) — ${providers}`, '', line(header), ...rows.map(line),
     ...(followUps.length > 0 ? ['', 'follow-ups', ...followUps] : []),

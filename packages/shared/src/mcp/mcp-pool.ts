@@ -472,6 +472,7 @@ export class McpClientPool {
           sessionPath: this.sessionPath,
           toolName: proxyName,
           input: args,
+          intent: options?.intent,
           summarize: this.summarizeCallback,
         });
         if (guarded) {

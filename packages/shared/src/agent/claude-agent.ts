@@ -433,6 +433,7 @@ export function jsonPropToZod(prop: any, depth = 0): z.ZodTypeAny {
   }
 }
 
+const SOURCE_TOOL_INTENT = z.string().describe('REQUIRED: What you are trying to accomplish with this call (1-2 sentences)');
 /**
  * Create one SDK MCP server per connected source, using original tool names.
  * The SDK adds its own `mcp__{serverKey}__` prefix, so we use the source slug
@@ -455,10 +456,13 @@ function createSourceProxyServers(pool: McpClientPool): Record<string, ReturnTyp
         mcpTool.description || `Tool from ${slug}`,
         {
           ...jsonSchemaToZodShape((mcpTool.inputSchema as Record<string, unknown>) || {}, jsonPropToZod),
+          // Why the agent calls the tool: it steers how a large result is handled and labels the
+          // tool card. The Claude CLI runs no network interceptor to add it, so the proxy asks.
+          _intent: SOURCE_TOOL_INTENT,
           ...z.object({}).catchall(z.unknown()).shape,
         },
-        async (args: Record<string, unknown>) => {
-          const result = await pool.callTool(proxyName, args);
+        async ({ _intent, ...args }: Record<string, unknown>) => {
+          const result = await pool.callTool(proxyName, args, typeof _intent === 'string' ? { intent: _intent } : undefined);
           return {
             content: [{ type: 'text' as const, text: result.content }],
             ...(result.isError ? { isError: true } : {}),
@@ -1385,6 +1389,7 @@ export class ClaudeAgent extends BaseAgent {
                 hasSourceActivation: !!this.onSourceActivationRequest,
                 permissionManager: this.permissionManager,
                 prerequisiteManager: this.prerequisiteManager,
+                keepSourceToolIntent: true,
                 rtkContext,
                 onDebug: (msg) => this.onDebug?.(msg),
               };

@@ -6,8 +6,8 @@
  * whether it is hard to undo, reaches outside the project, or reaches other
  * people or services. Any "yes" at or above the threshold turns the call into
  * an ordinary permission prompt. Tighten-only: the model can add a prompt,
- * never skip one, and no answer means no prompt (the call runs as in Execute).
- * Execute mode never gets here.
+ * never skip one, and no answer (`null`) also means a prompt: the shared side
+ * asks with "could not be checked". Execute mode never gets here.
  */
 
 import type { GuardedModeCheck, GuardedModeCall, GuardedModeRisk, GuardedModeVerdict } from '@craft-agent/shared/agent'

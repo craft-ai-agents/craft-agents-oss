@@ -16,7 +16,7 @@ import {
 } from '@craft-agent/shared/decisions'
 import { pickTurnThinkingLevel } from './adaptive-thinking'
 import { checkAutomationCondition } from './automation-condition'
-import { buildLargeResultSummaryGate } from './large-results'
+import { buildLargeResultFilter } from './large-results'
 import { buildTurnOutcomeRequest, classifyTurnOutcome } from './turn-outcome'
 
 function answering(feature: DecisionLayerFeature, answers: Record<string, unknown>): () => Promise<DecisionClientResolution> {
@@ -48,10 +48,10 @@ describe('decision outcome records', () => {
   }
 
   it('joins each outcome to its decision by id and says whether the answer changed anything', async () => {
-    const lowered = answering('adaptiveThinking', { demand: { type: 'score', score: 1, confidence: 0.9, probabilities: { '1': 0.9 } } })
-    const unsure = answering('adaptiveThinking', { demand: { type: 'score', score: 0, confidence: 0.3, probabilities: { '0': 0.3 } } })
-    expect(await pickTurnThinkingLevel('rename this', 'max', { resolveClient: lowered, recorder, sessionId: 's1' })).toBe('medium')
-    expect(await pickTurnThinkingLevel('thanks', 'max', { resolveClient: unsure, recorder, sessionId: 's1' })).toBeNull()
+    const lowered = answering('adaptiveThinking', { demand: { type: 'score', score: 1, confidence: 0.9, probabilities: { '1': 0.9 } }, consequential: { noul: 0.1 } })
+    const unsure = answering('adaptiveThinking', { demand: { type: 'score', score: 0, confidence: 0.3, probabilities: { '0': 0.3 } }, consequential: { noul: 0.1 } })
+    expect((await pickTurnThinkingLevel({ message: 'rename this' }, 'max', { resolveClient: lowered, recorder, sessionId: 's1' })).level).toBe('medium')
+    expect((await pickTurnThinkingLevel({ message: 'thanks' }, 'max', { resolveClient: unsure, recorder, sessionId: 's1' })).level).toBeNull()
 
     const { decisions, outcomes } = await lines()
     expect(decisions).toHaveLength(2)
@@ -69,7 +69,7 @@ describe('decision outcome records', () => {
       const client = new SystemOneClient({ baseUrl: resolution.value.endpoint.baseUrl, apiKey: 'k', model: resolution.value.endpoint.model, fetch: fetchImpl })
       return { ok: true, value: { ...resolution.value, client } }
     }
-    expect(await pickTurnThinkingLevel('thanks', 'max', { resolveClient: failing, recorder })).toBeNull()
+    expect((await pickTurnThinkingLevel({ message: 'thanks' }, 'max', { resolveClient: failing, recorder })).level).toBeNull()
     const { decisions, outcomes } = await lines()
     expect(decisions).toHaveLength(1)
     expect(decisions[0]!.ok).toBe(false)
@@ -77,9 +77,10 @@ describe('decision outcome records', () => {
   })
 
   it('tags large results and automation conditions with their session', async () => {
-    const preview = answering('largeResults', { handling: { type: 'choice', choice: 'preview', confidence: 0.9, probabilities: { preview: 0.9, summary: 0.1 } } })
-    const gate = buildLargeResultSummaryGate({ resolveClient: preview, recorder })
-    expect(await gate({ text: 'x', context: { toolName: 'grep' }, estimatedTokens: 30_000, sessionId: 'big' })).toBe(false)
+    const secondPart = answering('largeResults', Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`p${i}`, { noul: i === 1 ? 0.9 : 0.1 }])))
+    const filter = buildLargeResultFilter({ resolveClient: secondPart, recorder })
+    const text = Array.from({ length: 6 }, (_, i) => `${i} ${'x'.repeat(1_400)}`).join('\n\n')
+    expect(await filter({ text, context: { toolName: 'grep', intent: 'find part 1' }, budgetChars: 24_000, filePath: '/f', sessionId: 'big' })).toMatchObject({ kept: 2, total: 6 })
 
     const no = answering('automationConditions', { condition: { type: 'noul', noul: 0.1 } })
     expect(await checkAutomationCondition({ question: 'Bug report?' }, { event: 'LabelAdd' }, { resolveClient: no, recorder, sessionId: 'auto', matcherId: 'm1' }))
@@ -88,7 +89,7 @@ describe('decision outcome records', () => {
     const { decisions, outcomes } = await lines()
     expect(decisions.map(d => [d.feature, d.sessionId])).toEqual([['large_results', 'big'], ['automation_condition', 'auto']])
     expect(decisions[1]!.meta).toMatchObject({ matcherId: 'm1' })
-    expect(outcomes.map(o => [o.action, o.changed])).toEqual([['skip_summary', true], ['skip', true]])
+    expect(outcomes.map(o => [o.action, o.changed])).toEqual([['filter', true], ['skip', true]])
   })
 
   it('turn outcome: a closing offer is described as finished, and the outcome is recorded', async () => {

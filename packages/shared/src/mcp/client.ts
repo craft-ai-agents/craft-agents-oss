@@ -69,6 +69,8 @@ export interface PoolCallToolOptions {
   signal?: AbortSignal;
   /** Request timeout in ms (SDK default applies when omitted) */
   timeoutMs?: number;
+  /** The agent's stated intent: steers large-result handling; API tools also receive it as `_intent`. */
+  intent?: string;
 }
 
 /**

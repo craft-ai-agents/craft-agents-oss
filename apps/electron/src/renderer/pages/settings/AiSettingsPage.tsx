@@ -24,7 +24,7 @@ import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
 import { DECISION_SETTINGS_CHANGED_EVENT } from '@/atoms/permission-modes'
 import { motion, AnimatePresence } from 'motion/react'
 import type { LlmConnectionWithStatus, ThinkingLevel, WorkspaceSettings, Workspace } from '../../../shared/types'
-import type { DecisionLayerFeature, DecisionLayerStatus, DecisionLayerSettingsPatch, DecisionProviderId, DecisionServerProbe, DecisionTestResult } from '../../../shared/types'
+import type { DecisionLayerFeature, DecisionLayerStatus, DecisionLayerSettingsPatch, DecisionProviderId, DecisionServerProbe, DecisionTestResult, DecisionToggleUsage } from '../../../shared/types'
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVELS } from '@craft-agent/shared/agent/thinking-levels'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import {
@@ -59,6 +59,9 @@ import { useAppShellContext } from '@/context/AppShellContext'
 import { getModelShortName, type ModelDefinition } from '@config/models'
 import { getModelsForProviderType, resolveMidStreamBehavior, type CustomEndpointApi, type MidStreamBehavior } from '@config/llm-connections'
 import { toast } from 'sonner'
+
+/** Checks with an outcome after which a feature that changed nothing is pointed out. */
+const DECISION_NO_CHANGE_MIN_CHECKS = 30
 
 /**
  * Compact token count: 1234 → "1.2K", 1234567 → "1.2M". Used by the RTK
@@ -667,6 +670,7 @@ export default function AiSettingsPage() {
   // The card is always shown; everything behind it stays off until the user enables it.
   const [decisionStatus, setDecisionStatus] = useState<DecisionLayerStatus | null>(null)
   const [decisionAdvancedOpen, setDecisionAdvancedOpen] = useState(false)
+  const [decisionUsage, setDecisionUsage] = useState<Partial<Record<DecisionLayerFeature, DecisionToggleUsage>>>({})
   const [decisionKeyDraft, setDecisionKeyDraft] = useState('')
   const [decisionModelDraft, setDecisionModelDraft] = useState('')
   const [decisionBaseUrlDraft, setDecisionBaseUrlDraft] = useState('')
@@ -1104,6 +1108,19 @@ export default function AiSettingsPage() {
   )
   // Decision-model features for Advanced settings, grouped by what they touch.
   // Literal t() keys keep the i18n coverage check effective.
+  // What each feature did over the last 7 days, loaded when Advanced settings opens.
+  useEffect(() => {
+    if (!decisionAdvancedOpen || typeof window.electronAPI?.getDecisionUsage !== 'function') return
+    window.electronAPI.getDecisionUsage().then(setDecisionUsage).catch((error) => console.error('Failed to load decision usage:', error))
+  }, [decisionAdvancedOpen])
+  const decisionUsageNote = (usage: DecisionToggleUsage | undefined): string | undefined => {
+    if (!usage) return undefined
+    if (usage.withOutcome === 0) return t("settings.ai.decisions.usageChecks", { calls: usage.calls, failures: usage.failures })
+    const line = t("settings.ai.decisions.usageChanged", { calls: usage.calls, changed: usage.changed, failures: usage.failures })
+    // Every extra call should earn its place: say so when a feature has had its chances and changed nothing.
+    return usage.withOutcome >= DECISION_NO_CHANGE_MIN_CHECKS && usage.changed === 0 ? `${line} · ${t("settings.ai.decisions.usageNoChange")}` : line
+  }
+
   const decisionFeatureGroups: Array<{ id: string; title: string; toggles: Array<{ feature: DecisionLayerFeature; label: string; description: string; tooltip: string }> }> = [
     { id: 'agent', title: t("settings.ai.decisions.groupAgent"), toggles: [
       { feature: 'decideTool', label: t("settings.ai.decisions.featureDecideTool"), description: t("settings.ai.decisions.featureDecideToolDesc"), tooltip: t("settings.ai.decisions.featureDecideToolTooltip") },
@@ -1642,6 +1659,7 @@ export default function AiSettingsPage() {
                                     label={label}
                                     description={description}
                                     tooltip={tooltip}
+                                    note={decisionUsageNote(decisionUsage[feature])}
                                     checked={decisionStatus.settings.features[feature] ?? false}
                                     disabled={!decisionStatus.settings.enabled}
                                     onCheckedChange={(checked) => { void updateDecisionSettings({ features: { [feature]: checked } }) }}

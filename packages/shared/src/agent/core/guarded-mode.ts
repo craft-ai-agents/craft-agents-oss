@@ -11,11 +11,12 @@
  * Execute mode itself is never checked: it always runs without prompts.
  *
  * Tighten-only by construction: the check can turn an allow into a prompt,
- * never a block or prompt into an allow. No check, an inactive check, no answer,
- * or an error means the call proceeds as it would in Execute mode. If the mode
- * changes while the check thinks, the call is re-decided under the new mode; if
- * the turn stops, it is blocked instead of raising a late prompt. Its prompts
- * carry no `remember` key, so "Always Allow" cannot whitelist them.
+ * never a block or prompt into an allow. No check or an inactive check means the
+ * call proceeds as it would in Execute mode; an active check that gives no answer
+ * or fails turns the call into a prompt ("could not be checked"), as in Ask to
+ * Edit. If the mode changes while the check thinks, the call is re-decided under
+ * the new mode; if the turn stops, it is blocked instead of raising a late prompt.
+ * Its prompts carry no `remember` key, so "Always Allow" cannot whitelist them.
  */
 
 import { homedir } from 'node:os';
@@ -25,7 +26,8 @@ import { permissionsConfigCache, type PermissionsContext } from '../permissions-
 import { evaluateApiEndpointPolicy } from '../source-policy.ts';
 import { runPreToolUseChecks, type PreToolUseCheckResult, type PreToolUseInput } from './pre-tool-use.ts';
 
-export type GuardedModeRisk = 'irreversible' | 'outside_workspace' | 'external';
+/** `unchecked`: the check gave no usable answer, so the call asks rather than runs unjudged. */
+export type GuardedModeRisk = 'irreversible' | 'outside_workspace' | 'external' | 'unchecked';
 
 /** A tool call described for the check. */
 export interface GuardedModeCall {
@@ -64,6 +66,7 @@ const RISK_LABELS: Record<GuardedModeRisk, string> = {
   irreversible: 'hard to undo',
   outside_workspace: 'reaches outside the project',
   external: 'reaches other people or services',
+  unchecked: 'could not be checked',
 };
 
 const FILE_WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
@@ -187,9 +190,9 @@ export async function applyGuardedModeCheck(
   } else {
     try {
       const verdict = await check.check(call, options.signal);
-      risks = Array.isArray(verdict?.risks) ? verdict.risks.filter(risk => Object.hasOwn(RISK_LABELS, risk)) : [];
+      risks = Array.isArray(verdict?.risks) ? verdict.risks.filter(risk => Object.hasOwn(RISK_LABELS, risk)) : ['unchecked'];
     } catch {
-      risks = [];
+      risks = ['unchecked'];
     }
   }
 

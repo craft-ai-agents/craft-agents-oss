@@ -100,12 +100,12 @@ import { evaluateAutoLabels, autoLabelMatchToEntry, type AutoLabelMatch } from '
 import { evaluateSemanticLabelsForMessage } from '../decisions/semantic-labels'
 import { classifyTurnOutcome, TURN_OUTCOME_ATTENTION_STATUS } from '../decisions/turn-outcome'
 import { isSmallTalk, titleNoLongerFits, TITLE_DRIFT_RECENT_MESSAGES } from '../decisions/smart-titles'
-import { pickTurnThinkingLevel } from '../decisions/adaptive-thinking'
+import { pickTurnThinkingLevel, recordThinkingFollowUp } from '../decisions/adaptive-thinking'
 import { decideMidTurnDelivery, isContinuation } from '../decisions/mid-turn-messages'
 import { candidatesUsedBy, collectSuggestionCandidates, formatSuggestionHint, pickSuggestion, suggestionFollowUp, wantsSuggestion, type SuggestionTrace } from '../decisions/suggestions'
-import { isDecisionFeatureActive, type DecisionLayerFeature } from '@craft-agent/shared/decisions'
-import { setLargeResultSummaryGate } from '@craft-agent/shared/utils'
-import { buildLargeResultSummaryGate } from '../decisions/large-results'
+import { isDecisionFeatureActive, type DecisionLayerFeature, type DecisionResult } from '@craft-agent/shared/decisions'
+import { setLargeResultFilter } from '@craft-agent/shared/utils'
+import { buildLargeResultFilter, finishLargeResultExcerpts, noteLargeResultFileUse } from '../decisions/large-results'
 import { buildGuardedModeCheck } from '../decisions/guarded-mode'
 import { assessPermissionRisks } from '../decisions/permission-risks'
 import { checkAutomationCondition } from '../decisions/automation-condition'
@@ -962,6 +962,10 @@ interface ManagedSession {
   turnSteers?: string[]
   /** Thinking level adaptive thinking chose for the current request; an auto-retry keeps it. */
   turnThinkingOverride?: ThinkingLevel | null
+  /** Suggestion hint sent with the current request; an auth retry sends it again. */
+  turnSuggestionHint?: string | null
+  /** Adaptive thinking's answer for the last user turn, for the next turn's `corrected`/`accepted` follow-up. */
+  thinkingTrace?: DecisionResult
   /** Suggestions answer for the current request and the candidates it used, for the follow-up line. */
   suggestionTrace?: { trace: SuggestionTrace; used: Set<string> }
 }
@@ -1675,28 +1679,42 @@ export class SessionManager implements ISessionManager {
     managed: ManagedSession,
     message: string,
     options?: SendMessageOptions,
-    turn: { activationResend?: boolean } = {},
+    turn: { activationResend?: boolean; authRetry?: boolean; attachments?: FileAttachment[] } = {},
   ): Promise<{ thinkingOverride: ThinkingLevel | null; suggestionHint: string | null }> | null {
-    // An auto-retry continues the same request: keep its thinking level, ask nothing again.
-    if (turn.activationResend) {
-      const kept = managed.turnThinkingOverride ?? null
-      return kept ? Promise.resolve({ thinkingOverride: kept, suggestionHint: null }) : null
+    // An auto-retry continues the same request: keep its thinking level, ask nothing again. An
+    // auth retry re-sends the attempt the provider rejected, so it keeps that attempt's hint too.
+    if (turn.activationResend || turn.authRetry) {
+      const thinkingOverride = managed.turnThinkingOverride ?? null
+      const suggestionHint = turn.authRetry ? managed.turnSuggestionHint ?? null : null
+      return thinkingOverride || suggestionHint ? Promise.resolve({ thinkingOverride, suggestionHint }) : null
     }
     managed.turnThinkingOverride = null
+    managed.turnSuggestionHint = null
     this.finishSuggestionTrace(managed)
+    // Valid only while the last reply answers that turn: any other message in between drops it.
+    const previousThinking = managed.thinkingTrace
+    managed.thinkingTrace = undefined
     const log = (line: string) => sessionLog.info(line)
     const interactive = !managed.hidden && managed.systemPromptPreset !== 'mini'
-    // Slash commands are instructions to the app, not requests to rate.
-    const rateThinking = interactive && !message.trim().startsWith('/') && this.decisionFeatureActive('adaptiveThinking')
+    // Slash commands are instructions to the app, and hidden messages (background-task nudges) are
+    // the app's own: neither is a request to rate, so they run at the session level.
+    const rateThinking = interactive && !options?.hidden && !message.trim().startsWith('/') && this.decisionFeatureActive('adaptiveThinking')
     const suggest = interactive && !managed.taskRunId && !managed.taskSlug
       && this.decisionFeatureActive('suggestions') && wantsSuggestion(message, options)
     // Nothing to ask: the caller skips the await entirely.
     if (!rateThinking && !suggest) return null
 
-    // Adaptive thinking: a lower level for a simple turn, never above the session's.
+    // Adaptive thinking: a lower level for a simple turn, never above the session's. It reads the
+    // message with the end of the previous reply and the attachments' names (never their content).
     const thinking = rateThinking
-      ? pickTurnThinkingLevel(message, managed.thinkingLevel ?? DEFAULT_THINKING_LEVEL, { sessionId: managed.id, log })
-          .then((level) => {
+      ? pickTurnThinkingLevel({
+          message,
+          previousReply: managed.messages.findLast(m => m.role === 'assistant' && !m.isIntermediate)?.content,
+          attachments: turn.attachments?.map(a => `${a.name} (${a.type}, ${Math.max(1, Math.round(a.size / 1024))} KB)`),
+        }, managed.thinkingLevel ?? DEFAULT_THINKING_LEVEL, { sessionId: managed.id, log })
+          .then(({ level, result }) => {
+            if (previousThinking) recordThinkingFollowUp(previousThinking, result)
+            if (result) managed.thinkingTrace = result
             if (level) sessionLog.info(`[adaptive-thinking] Session ${managed.id}: thinking ${level} for this turn`)
             return level
           })
@@ -1729,6 +1747,7 @@ export class SessionManager implements ISessionManager {
 
     return Promise.all([thinking, suggestion]).then(([thinkingOverride, suggestionHint]) => {
       managed.turnThinkingOverride = thinkingOverride
+      managed.turnSuggestionHint = suggestionHint
       return { thinkingOverride, suggestionHint }
     })
   }
@@ -2369,9 +2388,9 @@ export class SessionManager implements ISessionManager {
   }
 
   async initialize(): Promise<void> {
-    // Large tool results (decision model, toggle `largeResults`): the process-wide gate asks
-    // whether a summary is needed before the summarization call; it no-ops while the toggle is off.
-    setLargeResultSummaryGate(buildLargeResultSummaryGate({ log: (line) => sessionLog.info(line) }))
+    // Large tool results (decision model, toggle `largeResults`): the process-wide filter keeps the
+    // parts the agent's intent needs instead of a summary; it no-ops while the toggle is off.
+    setLargeResultFilter(buildLargeResultFilter({ log: (line) => sessionLog.info(line) }))
     // Guarded mode behaves as Ask while its risk check cannot run (decision layer or feature off).
     setGuardedModeActiveResolver(() => isDecisionFeatureActive('guardedMode'))
 
@@ -6681,7 +6700,7 @@ export class SessionManager implements ISessionManager {
     }
 
     // Decision-model checks for this turn run while the agent is set up below.
-    const preTurnDecisions = this.startPreTurnDecisions(managed, message, options, { activationResend })
+    const preTurnDecisions = this.startPreTurnDecisions(managed, message, options, { activationResend, authRetry: _isAuthRetry, attachments })
 
     // Start perf span for entire sendMessage flow
     const sendSpan = perf.span('session.sendMessage', { sessionId })
@@ -7291,7 +7310,10 @@ export class SessionManager implements ISessionManager {
     this.setProcessing(managed, false)
     managed.stopRequested = false  // Reset for next turn
     // The request is over unless a source activation is about to re-send it.
-    if (!managed.autoRetryTimer && managed.pendingActivationResend === undefined) this.finishSuggestionTrace(managed)
+    if (!managed.autoRetryTimer && managed.pendingActivationResend === undefined) {
+      this.finishSuggestionTrace(managed)
+      finishLargeResultExcerpts(managed.id)
+    }
 
     // 1b. Orphan backstop: with the default per-turn subprocess model, any
     // background sub-agent still marked `running` dies when this turn's
@@ -8427,6 +8449,7 @@ export class SessionManager implements ISessionManager {
 
       case 'tool_start': {
         this.noteSuggestionUse(managed, { toolName: event.toolName, input: event.input })
+        noteLargeResultFileUse(managed.id, event.input)
         // Format tool input paths to relative for better readability
         const formattedToolInput = formatToolInputPaths(event.input, managed.workingDirectory)
 

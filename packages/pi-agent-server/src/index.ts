@@ -89,7 +89,7 @@ import {
 } from './custom-endpoint-models.ts';
 
 // Direct source imports from shared (bundled by bun build)
-import { handleLargeResponse, estimateTokens, tokenLimitFor, setLargeResultSummaryGate } from '../../shared/src/utils/large-response.ts';
+import { handleLargeResponse, estimateTokens, tokenLimitFor, setLargeResultFilter } from '../../shared/src/utils/large-response.ts';
 import { getSessionPlansPath, getSessionPath } from '../../shared/src/sessions/storage.ts';
 import { buildCallLlmRequest } from '../../shared/src/agent/llm-tool.ts';
 import type { LLMQueryRequest, LLMQueryResult } from '../../shared/src/agent/llm-tool.ts';
@@ -203,7 +203,7 @@ interface OutboundPreToolUseReq {
   toolCallId?: string;
   input: Record<string, unknown>;
 }
-interface OutboundToolExecReq { type: 'tool_execute_request'; requestId: string; toolName: string; args: Record<string, unknown> }
+interface OutboundToolExecReq { type: 'tool_execute_request'; requestId: string; toolName: string; toolCallId?: string; args: Record<string, unknown> }
 interface OutboundSessionToolCompleted { type: 'session_tool_completed'; toolName: string; args: Record<string, unknown>; isError: boolean }
 interface OutboundMiniResult { type: 'mini_completion_result'; id: string; text: string | null }
 interface OutboundLlmQueryResult {
@@ -337,9 +337,9 @@ function debugLog(message: string): void {
 }
 
 // Large tool results (decision model, toggle `largeResults`): handleLargeResponse asks the
-// main process whether a summary is needed before summarizing.
+// main process for the parts the agent's intent needs before summarizing.
 const largeResultGate = createLargeResultGateClient(send);
-setLargeResultSummaryGate(largeResultGate.gate);
+setLargeResultFilter(largeResultGate.filter);
 
 /** Find the most recent .jsonl session file in a directory. */
 function findMostRecentSessionFile(sessionDir: string): string | null {
@@ -970,6 +970,7 @@ function buildProxyTools(): ToolDefinition<any, any>[] {
         type: 'tool_execute_request',
         requestId,
         toolName: def.name,
+        toolCallId,
         args: approvedInput,
       });
 
@@ -1290,6 +1291,7 @@ function handleSessionEvent(event: AgentSessionEvent): void {
               type: 'tool_execute_request',
               requestId,
               toolName: tc.name!,
+              toolCallId: tc.id,
               args: (tc.arguments ?? {}) as Record<string, unknown>,
             });
             prefetchCache.set(tc.id!, promise);
@@ -1809,7 +1811,7 @@ async function processMessage(msg: InboundMessage): Promise<void> {
       break;
 
     case 'large_result_gate_response':
-      largeResultGate.handleResponse(msg.requestId, msg.summarize);
+      largeResultGate.handleResponse(msg.requestId, msg.excerpt);
       break;
 
     case 'abort':

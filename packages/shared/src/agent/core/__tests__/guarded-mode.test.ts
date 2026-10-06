@@ -191,15 +191,28 @@ describe('applyGuardedModeCheck', () => {
     expect(await applyGuardedModeCheck(allow, pushCtx(), stopping, { signal: turn.signal })).toEqual({ type: 'block', reason: 'The turn was stopped.' });
   });
 
-  it('never asks for read-only calls, and ignores empty, failed or malformed answers', async () => {
+  it('never asks for read-only calls, and runs calls the check answered without a known risk', async () => {
     let calls = 0;
     const counting = guardOf(async () => { calls++; return { risks: [] }; });
     expect(await applyGuardedModeCheck(allow, ctx('Bash', { command: 'ls' }), counting)).toBe(allow);
     expect(calls).toBe(0);
     expect(await applyGuardedModeCheck(allow, pushCtx(), counting)).toBe(allow);
-    expect(await applyGuardedModeCheck(allow, pushCtx(), guardOf(async () => null))).toBe(allow);
-    expect(await applyGuardedModeCheck(allow, pushCtx(), guardOf(async () => { throw new Error('down'); }))).toBe(allow);
-    expect(await applyGuardedModeCheck(allow, pushCtx(), guardOf(async () => ({ risks: 'external' }) as never))).toBe(allow);
     expect(await applyGuardedModeCheck(allow, pushCtx(), guardOf(async () => ({ risks: ['unknown_risk'] }) as never))).toBe(allow);
+  });
+
+  it('asks when the check gives no answer, fails or answers without a risk list', async () => {
+    // Before: each of these ran the call as in Execute, unjudged.
+    for (const check of [async () => null, async () => { throw new Error('down'); }, async () => ({ risks: 'external' }) as never]) {
+      const result = await applyGuardedModeCheck(allow, pushCtx(), guardOf(check));
+      expect(result).toMatchObject({ type: 'prompt', promptType: 'bash', command: 'git push --force' });
+      expect((result as { description: string }).description).toBe('Guarded mode (could not be checked) · Execute: git push --force');
+      expect((result as { remember?: unknown }).remember).toBeUndefined();
+    }
+  });
+
+  it('still blocks rather than asks when the turn stops and the check gives no answer', async () => {
+    const turn = new AbortController();
+    const stopped = guardOf(async () => { turn.abort(); return null; });
+    expect(await applyGuardedModeCheck(allow, pushCtx(), stopped, { signal: turn.signal })).toEqual({ type: 'block', reason: 'The turn was stopped.' });
   });
 });

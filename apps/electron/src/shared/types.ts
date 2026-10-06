@@ -78,8 +78,9 @@ import type {
   DecisionProviderId,
   DecisionServerProbe,
   DecisionTestResult,
+  DecisionToggleUsage,
 } from '@craft-agent/shared/decisions';
-export type { DecisionLayerFeature, DecisionLayerSettings, DecisionLayerSettingsPatch, DecisionLayerStatus, DecisionProviderId, DecisionServerProbe, DecisionTestResult };
+export type { DecisionLayerFeature, DecisionLayerSettings, DecisionLayerSettingsPatch, DecisionLayerStatus, DecisionProviderId, DecisionServerProbe, DecisionTestResult, DecisionToggleUsage };
 
 // =============================================================================
 // GUI-only types (not used by server/handler code)
@@ -605,6 +606,8 @@ export interface ElectronAPI {
   testDecisionConnection(options?: { settings?: DecisionLayerSettingsPatch; apiKey?: string }): Promise<DecisionTestResult>
   /** GET {baseUrl}/health of the configured local decision server (Laya / custom). Never rejects for network errors. */
   probeDecisionServer(options?: { baseUrl?: string }): Promise<DecisionServerProbe>
+  /** Per-feature checks, failures and changes over the last 7 days (from decisions.jsonl). */
+  getDecisionUsage(): Promise<Partial<Record<DecisionLayerFeature, DecisionToggleUsage>>>
 
   // Network proxy settings
   getNetworkProxySettings(): Promise<NetworkProxySettings | undefined>

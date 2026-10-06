@@ -19,7 +19,11 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.decisions.DELETE_API_KEY,
   RPC_CHANNELS.decisions.TEST,
   RPC_CHANNELS.decisions.PROBE_SERVER,
+  RPC_CHANNELS.decisions.GET_USAGE,
 ] as const
+
+/** Settings shows what each feature did over this window. */
+const USAGE_WINDOW_MS = 7 * 24 * 3_600_000
 
 function assertProvider(provider: unknown): asserts provider is DecisionProviderId {
   if (!isDecisionProviderId(provider)) {
@@ -68,6 +72,12 @@ export function registerDecisionsHandlers(server: RpcServer, _deps: HandlerDeps)
     return probeConfiguredDecisionServer(undefined, {
       baseUrlOverride: typeof options?.baseUrl === 'string' ? options.baseUrl : undefined,
     })
+  })
+
+  // Per-toggle checks, failures and changes from decisions.jsonl (and its rotated copy).
+  server.handle(RPC_CHANNELS.decisions.GET_USAGE, async () => {
+    const { readDecisionToggleUsage } = await import('@craft-agent/shared/decisions')
+    return readDecisionToggleUsage(new Date(Date.now() - USAGE_WINDOW_MS))
   })
 
   server.handle(RPC_CHANNELS.decisions.TEST, async (_ctx, options?: { settings?: Record<string, unknown>; apiKey?: string }) => {

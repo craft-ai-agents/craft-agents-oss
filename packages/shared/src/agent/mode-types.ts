@@ -25,7 +25,7 @@ import { z } from 'zod';
  * `guarded` runs like Execute, except that a call the decision model flags as
  * risky becomes a permission prompt (`core/guarded-mode.ts`). It is offered only
  * while the decision layer's `guardedMode` feature is on; without an answer from
- * the model a call runs as it would in Execute. Execute itself never asks the
+ * the model the call asks, as in Ask to Edit. Execute itself never asks the
  * model.
  */
 export type PermissionMode = 'safe' | 'ask' | 'guarded' | 'allow-all';

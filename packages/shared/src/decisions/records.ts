@@ -79,6 +79,8 @@ export interface DecisionRecord {
   sessionId?: string;
   /** Caller context (e.g. item count, thresholds). Redacted by key name. */
   meta?: Record<string, unknown>;
+  /** The provider had not answered for a while, so the call ran under the longer cold-start deadline. */
+  coldStart?: boolean;
 }
 
 /** What a decision point did with an answer. Option keys and numbers only, like decision records. */
@@ -145,6 +147,7 @@ export interface DecisionRecordInput {
   latencyMs?: number;
   sessionId?: string;
   meta?: Record<string, unknown>;
+  coldStart?: boolean;
 }
 
 export function summarizeDecisionAnswers(answers: Record<string, DecisionAnswer>): Record<string, DecisionRecordAnswer> {
@@ -195,6 +198,7 @@ export function buildDecisionRecord(input: DecisionRecordInput): DecisionRecord 
   if (input.latencyMs !== undefined && record.latencyMs === undefined) record.latencyMs = input.latencyMs;
   if (input.sessionId) record.sessionId = input.sessionId;
   if (input.meta && Object.keys(input.meta).length > 0) record.meta = redactSensitiveValues(input.meta);
+  if (input.coldStart) record.coldStart = true;
 
   return record;
 }
@@ -277,9 +281,13 @@ export class DecisionRecorder {
       return; // no file yet
     }
     if (size <= this.maxBytes) return;
-    const previous = this.path.endsWith('.jsonl') ? `${this.path.slice(0, -'.jsonl'.length)}.prev.jsonl` : `${this.path}.prev`;
-    await rename(this.path, previous);
+    await rename(this.path, previousDecisionsLogPath(this.path));
   }
+}
+
+/** Where a full log is moved on rotation: `decisions.jsonl` → `decisions.prev.jsonl`. */
+export function previousDecisionsLogPath(path: string): string {
+  return path.endsWith('.jsonl') ? `${path.slice(0, -'.jsonl'.length)}.prev.jsonl` : `${path}.prev`;
 }
 
 let defaultRecorder: DecisionRecorder | null = null;

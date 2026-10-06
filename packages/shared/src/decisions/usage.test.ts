@@ -85,9 +85,21 @@ describe('decision usage summary', () => {
     const summary = summarizeDecisionUsage(withFollowUps);
     expect(summary.total).toBe(2);
     expect(summary.features[0]).toMatchObject({ feature: 'suggestions', followUps: { hint_used: 1, held_back_used: 1 } });
+    expect(summary.features[0]!.followUpsByAction).toEqual({ 'hint:source:gmail': { hint_used: 1 }, none: { held_back_used: 1 } });
     const table = formatDecisionUsage(summary);
     expect(table).toContain('follow-ups');
     expect(table).toContain('held_back_used×1');
+    expect(table).toContain('  none → held_back_used×1');
+  });
+
+  it('counts calls made after the provider was idle, and how many of those failed', () => {
+    const summary = summarizeDecisionUsage([
+      decision('a', 'suggestions', { coldStart: true }),
+      decision('b', 'suggestions', { coldStart: true, ok: false, error: { kind: 'timeout', message: 'x' } }),
+      decision('c', 'suggestions'),
+    ]);
+    expect(summary.features[0]).toMatchObject({ calls: 3, failures: 1, coldCalls: 2, coldFailures: 1 });
+    expect(formatDecisionUsage(summary)).toContain('cold failed');
   });
 
   it('skips torn lines and formats a table', () => {
@@ -97,5 +109,31 @@ describe('decision usage summary', () => {
     expect(table).toContain('adaptive_thinking');
     expect(table).toContain('1/2');
     expect(formatDecisionUsage(summarizeDecisionUsage([]))).toBe('No decision records match.');
+  });
+});
+
+describe('decision usage per Settings toggle', () => {
+  it('reads the current and rotated log and reports per toggle since the window start', async () => {
+    const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const { readDecisionToggleUsage, DECISION_RECORD_TAGS } = await import('./usage.ts');
+    const dir = mkdtempSync(join(tmpdir(), 'toggle-usage-'));
+    try {
+      const recent = (id: string, feature: string, extra: Record<string, unknown> = {}) => decision(id, feature, { t: '2026-09-30T10:00:00.000Z', ...extra });
+      writeFileSync(join(dir, 'decisions.prev.jsonl'), [recent('a', 'adaptive_thinking'), outcome('a', 'thinking:low', true)].map(line => JSON.stringify(line)).join('\n'));
+      writeFileSync(join(dir, 'decisions.jsonl'), [
+        recent('b', 'adaptive_thinking', { ok: false, error: { kind: 'timeout', message: 'x' } }),
+        recent('c', 'large_results'), outcome('c', 'summarize', false),
+        decision('d', 'large_results'), // 2026-09-27: before the window
+      ].map(line => JSON.stringify(line)).join('\n'));
+      expect(await readDecisionToggleUsage(new Date('2026-09-29T00:00:00Z'), join(dir, 'decisions.jsonl'))).toEqual({
+        adaptiveThinking: { calls: 2, failures: 1, changed: 1, withOutcome: 1 },
+        largeResults: { calls: 1, failures: 0, changed: 0, withOutcome: 1 },
+      });
+      expect(new Set(Object.values(DECISION_RECORD_TAGS)).size).toBe(Object.keys(DECISION_RECORD_TAGS).length);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

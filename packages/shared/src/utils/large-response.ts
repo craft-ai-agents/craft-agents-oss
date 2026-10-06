@@ -472,6 +472,8 @@ export interface FormatOptions {
   absolutePath: string;
   /** Summary from runMiniCompletion (if available) */
   summary?: string;
+  /** Parts kept by relevance to the agent's intent (host filter), instead of a summary */
+  excerpt?: LargeResultExcerpt & { intent: string };
   /** Fallback preview when no summary (first N chars of response) */
   preview?: string;
 }
@@ -481,7 +483,7 @@ export interface FormatOptions {
  * Includes file references for both Read/Grep and transform_data access.
  */
 export function formatLargeResponseMessage(opts: FormatOptions): string {
-  const { estimatedTokens, relativePath, absolutePath, summary, preview } = opts;
+  const { estimatedTokens, relativePath, absolutePath, summary, excerpt, preview } = opts;
 
   const fileRef = [
     `Full data saved to: ${absolutePath}`,
@@ -491,6 +493,10 @@ export function formatLargeResponseMessage(opts: FormatOptions): string {
 
   if (summary) {
     return `[Large response (~${estimatedTokens} tokens) summarized]\n\n${fileRef}\n\n${summary}`;
+  }
+
+  if (excerpt) {
+    return `[Large response (~${estimatedTokens} tokens): ${excerpt.kept} of ${excerpt.total} parts kept as relevant to "${excerpt.intent.slice(0, 200)}"]\n\n${fileRef}\n\n${excerpt.text}`;
   }
 
   if (preview) {
@@ -505,34 +511,44 @@ export function formatLargeResponseMessage(opts: FormatOptions): string {
 // ============================================================
 
 /**
- * Optional host hook deciding whether a large result needs a summary at all
- * (decision model, toggle `largeResults`). `false` skips the summarization call
- * and keeps the saved file + preview; `true` or `null` summarizes as usual.
- * Registered once per process by the host (the Pi subprocess registers one
- * that asks the main process); unset means "always summarize".
+ * Optional host hook (decision model, toggle `largeResults`): instead of a summary, keep
+ * the parts of a large result that the agent's stated intent needs. `null` means no answer
+ * or no useful cut, and the result is summarized as before. Registered once per process by
+ * the host (the Pi subprocess registers one that asks the main process); unset means
+ * "always summarize".
  */
-export type LargeResultSummaryGate = (input: {
+export type LargeResultFilter = (input: {
   text: string;
   context: SummarizationContext;
-  estimatedTokens: number;
+  /** Characters the kept parts may use. */
+  budgetChars: number;
+  /** Where the full result was saved. */
+  filePath: string;
   /** Session the result belongs to (for the decision record). */
   sessionId?: string;
-}) => Promise<boolean | null>;
+}) => Promise<LargeResultExcerpt | null>;
 
-let largeResultSummaryGate: LargeResultSummaryGate | null = null;
-
-/** Install (or clear with `null`) the process-wide summary gate. */
-export function setLargeResultSummaryGate(gate: LargeResultSummaryGate | null): void {
-  largeResultSummaryGate = gate;
+export interface LargeResultExcerpt {
+  /** The kept parts in their original order, with the gaps marked. */
+  text: string;
+  kept: number;
+  total: number;
 }
 
-/** Ask the installed gate; `null` without one or when it fails. Also answers for the Pi subprocess. */
-export async function askLargeResultSummaryGate(input: Parameters<LargeResultSummaryGate>[0]): Promise<boolean | null> {
-  if (!largeResultSummaryGate) return null;
+let largeResultFilter: LargeResultFilter | null = null;
+
+/** Install (or clear with `null`) the process-wide filter. */
+export function setLargeResultFilter(filter: LargeResultFilter | null): void {
+  largeResultFilter = filter;
+}
+
+/** Ask the installed filter; `null` without one or when it fails. Also answers for the Pi subprocess. */
+export async function askLargeResultFilter(input: Parameters<LargeResultFilter>[0]): Promise<LargeResultExcerpt | null> {
+  if (!largeResultFilter) return null;
   try {
-    return await largeResultSummaryGate(input);
+    return await largeResultFilter(input);
   } catch (error) {
-    debug('large-response', `Summary gate failed, summarizing: ${error instanceof Error ? error.message : String(error)}`);
+    debug('large-response', `Large-result filter failed, summarizing: ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
 }
@@ -682,18 +698,25 @@ export async function handleLargeResponse(
 
   const { absolutePath, relativePath } = saveResult;
 
-  // 2. Try summarization if within limits and callback provided (and the host's gate does not
-  //    judge the preview + saved file to be enough)
+  // 2. With the agent's stated intent, the host's filter may keep just the parts it needs
+  //    (no summarization call, at most half the per-result limit); otherwise summarize if
+  //    within limits and a callback is provided.
+  let excerpt: LargeResultExcerpt | null = null;
   let summary: string | undefined;
-  if (summarize && estimatedTokens <= MAX_SUMMARIZATION_INPUT && (await askLargeResultSummaryGate({ text, context, estimatedTokens, sessionId: basename(sessionPath) })) !== false) {
-    try {
-      const prompt = buildSummarizationPrompt(text, context);
-      const result = await summarize(prompt);
-      if (result) {
-        summary = result;
+  if (summarize && estimatedTokens <= MAX_SUMMARIZATION_INPUT) {
+    if (context.intent) {
+      excerpt = await askLargeResultFilter({ text, context, budgetChars: tokenLimitFor(contextWindow) * 2, filePath: absolutePath, sessionId: basename(sessionPath) });
+    }
+    if (!excerpt) {
+      try {
+        const prompt = buildSummarizationPrompt(text, context);
+        const result = await summarize(prompt);
+        if (result) {
+          summary = result;
+        }
+      } catch (error) {
+        debug('large-response', `Summarization failed: ${error instanceof Error ? error.message : String(error)}`);
       }
-    } catch (error) {
-      debug('large-response', `Summarization failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -703,7 +726,8 @@ export async function handleLargeResponse(
     relativePath,
     absolutePath,
     summary,
-    preview: summary ? undefined : text.substring(0, 2000),
+    excerpt: excerpt && context.intent ? { ...excerpt, intent: context.intent } : undefined,
+    preview: summary || excerpt ? undefined : text.substring(0, 2000),
   });
 
   return { message, filePath: absolutePath, wasSummarized: !!summary };

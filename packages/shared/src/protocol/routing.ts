@@ -342,6 +342,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.decisions.DELETE_API_KEY,
   RPC_CHANNELS.decisions.TEST,
   RPC_CHANNELS.decisions.PROBE_SERVER,
+  RPC_CHANNELS.decisions.GET_USAGE,
 
   // pi — provider config on workspace server
   RPC_CHANNELS.pi.GET_API_KEY_PROVIDERS,

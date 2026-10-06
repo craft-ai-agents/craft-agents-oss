@@ -640,6 +640,8 @@ export interface PreToolUseInput {
   prerequisiteManager?: PrerequisiteManagerLike;
   /** Backend metadata (e.g. Pi forwards intent / displayName via input.metadata) */
   backendMetadata?: { intent?: string; displayName?: string };
+  /** Keep `_intent` on source tools: Claude's source proxies require it and take it out themselves */
+  keepSourceToolIntent?: boolean;
   /** RTK Bash-rewrite context (undefined when toggle is off or rtk binary missing) */
   rtkContext?: import('./rtk-rewrite.ts').RtkContext;
   /** Debug callback */
@@ -852,7 +854,9 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
   // 5f. Metadata stripping
   const metadataResult = stripToolMetadata(toolName, currentInput, onDebug);
   if (metadataResult.modified) {
-    currentInput = metadataResult.input;
+    const serverName = toolName.startsWith('mcp__') ? toolName.split('__')[1] : undefined;
+    const keepIntent = ctx.keepSourceToolIntent && serverName && activeSourceSlugs.includes(serverName) && '_intent' in currentInput;
+    currentInput = keepIntent ? { ...metadataResult.input, _intent: currentInput._intent } : metadataResult.input;
     wasModified = true;
   }
 

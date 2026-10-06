@@ -450,6 +450,36 @@ describe('runPreToolUseChecks', () => {
       }
     });
 
+    it('keeps _intent on source tools when the backend asks (Claude source proxies require it)', () => {
+      const result = runPreToolUseChecks(createInput({
+        toolName: 'mcp__slack__api_slack',
+        input: { path: '/conversations.replies', _intent: 'read thread', _displayName: 'Read Thread' },
+        activeSourceSlugs: ['slack'],
+        allSourceSlugs: ['slack'],
+        keepSourceToolIntent: true,
+      }));
+
+      expect(result.type).toBe('modify');
+      if (result.type === 'modify') {
+        expect(result.input.path).toBe('/conversations.replies');
+        expect(result.input._intent).toBe('read thread');
+        expect(result.input._displayName).toBeUndefined();
+      }
+    });
+
+    it('still strips _intent from non-source tools when keepSourceToolIntent is set', () => {
+      const result = runPreToolUseChecks(createInput({
+        toolName: 'Read',
+        input: { file_path: '/absolute/path/file.ts', _intent: 'reading a file' },
+        keepSourceToolIntent: true,
+      }));
+
+      expect(result.type).toBe('modify');
+      if (result.type === 'modify') {
+        expect(result.input._intent).toBeUndefined();
+      }
+    });
+
     it('combines path expansion and metadata stripping', () => {
       const result = runPreToolUseChecks(createInput({
         toolName: 'Read',

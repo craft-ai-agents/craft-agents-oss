@@ -332,6 +332,7 @@ export const CHANNEL_MAP = {
   deleteDecisionApiKey: invoke(RPC_CHANNELS.decisions.DELETE_API_KEY),
   testDecisionConnection: invoke(RPC_CHANNELS.decisions.TEST),
   probeDecisionServer: invoke(RPC_CHANNELS.decisions.PROBE_SERVER),
+  getDecisionUsage: invoke(RPC_CHANNELS.decisions.GET_USAGE),
 
   // Badge
   refreshBadge: invoke(RPC_CHANNELS.badge.REFRESH),
