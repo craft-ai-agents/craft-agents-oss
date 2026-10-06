@@ -525,6 +525,9 @@ export interface LoadedSource {
    * Computed during source loading so renderer doesn't need filesystem access.
    */
   iconPath?: string;
+
+  /** Raw SVG content for inline rendering (SVG icons only) */
+  rawSvg?: string;
 }
 
 /**
