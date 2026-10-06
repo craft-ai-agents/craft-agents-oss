@@ -29,7 +29,7 @@ export type ApiAuthType = 'bearer' | 'header' | 'query' | 'basic' | 'oauth' | 'n
 /**
  * Google service types for OAuth scope selection
  */
-export type GoogleService = 'gmail' | 'calendar' | 'drive' | 'docs' | 'sheets' | 'youtube' | 'searchconsole';
+export type GoogleService = 'gmail' | 'calendar' | 'drive' | 'docs' | 'sheets' | 'youtube' | 'searchconsole' | 'ads' | 'tag-manager' | 'analytics' | 'slides';
 
 /**
  * Slack service types for OAuth scope selection
