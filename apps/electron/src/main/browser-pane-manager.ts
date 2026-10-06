@@ -1781,26 +1781,22 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   /**
-   * Pick an unbound window that the caller's workspace is allowed to adopt.
+   * Pick an unbound window that the caller's session and workspace can adopt.
    *
-   * Why workspace filtering matters: when a session ends, its window stays
-   * alive and becomes `ownerType='manual'` so the next turn of the **same**
-   * session can re-bind it. But the window keeps its original `workspaceId`.
-   * Without filtering, a session in workspace B would grab a window left
-   * behind by workspace A — moving the window across workspaces, which is
-   * exactly the leak this whole workspace-isolation work is fixing.
+   * A session window keeps its owner after a turn ends so the same session can
+   * reuse its browser state and target lifecycle commands. Other sessions
+   * must not take it over, even within the same workspace. A manually opened
+   * window has no session owner and can be adopted by any compatible workspace.
    *
-   * Rule: adoption is allowed if the unbound window has `workspaceId === null`
-   * (truly user-opened, no workspace context) OR matches the caller's
-   * `workspaceId`. Same-workspace reuse covers the legitimate "turn ended,
-   * next turn re-binds" case as well as any future turn of any session in
-   * that workspace.
+   * Adoption requires either no previous session owner or the same owner, and
+   * a null workspace or one matching the caller's workspace.
    */
-  private findReusableUnboundInstance(workspaceId: string | null): BrowserInstance | null {
+  private findReusableUnboundInstance(sessionId: string, workspaceId: string | null): BrowserInstance | null {
     const candidates = Array.from(this.instances.values()).filter(
       (i) =>
         i.boundSessionId === null &&
         i.ownerType === 'manual' &&
+        (i.ownerSessionId === null || i.ownerSessionId === sessionId) &&
         (i.workspaceId === null || i.workspaceId === workspaceId),
     )
     if (candidates.length === 0) return null
@@ -1833,7 +1829,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     // can never hijack a window the user opened manually.
     const allowReuseManual = options?.allowReuseManual ?? true
     if (allowReuseManual) {
-      const reusable = this.findReusableUnboundInstance(workspaceId)
+      const reusable = this.findReusableUnboundInstance(sessionId, workspaceId)
       if (reusable) {
         this.bindSession(reusable.id, sessionId, { workspaceId })
         if (options?.show) {

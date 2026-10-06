@@ -514,16 +514,36 @@ describe('BrowserPaneManager', () => {
         expect(stillA?.workspaceId).toBe('ws-a')
       })
 
-      it('DOES reuse an unbound window within the same workspace (next-turn case)', () => {
-        // The legitimate same-workspace reuse: session-A ends a turn, leaves
-        // an unbound window behind; the same workspace's session-A (or any
-        // session in workspace A) should grab it on the next turn.
+      it('reuses an unbound window for the same session on its next turn', () => {
         const original = manager.createForSession('sess-a1', { workspaceId: 'ws-a' })
         manager.unbindAllForSession('sess-a1')
 
-        const reused = manager.createForSession('sess-a2', { workspaceId: 'ws-a' })
+        const reused = manager.createForSession('sess-a1', { workspaceId: 'ws-a' })
         expect(reused).toBe(original)
         expect(manager.listInstances()).toHaveLength(1)
+
+        const info = manager.listInstances()[0]
+        expect(info.boundSessionId).toBe('sess-a1')
+        expect(info.ownerSessionId).toBe('sess-a1')
+      })
+
+      it('does NOT reuse an unbound window for another session in the same workspace', () => {
+        const original = manager.createForSession('sess-a1', { workspaceId: 'ws-a' })
+        manager.unbindAllForSession('sess-a1')
+
+        const next = manager.createForSession('sess-a2', { workspaceId: 'ws-a' })
+        expect(next).not.toBe(original)
+        expect(manager.listInstances()).toHaveLength(2)
+
+        const previous = manager.listInstances().find((i) => i.id === original)
+        expect(previous?.boundSessionId).toBeNull()
+        expect(previous?.ownerSessionId).toBe('sess-a1')
+        expect(previous?.workspaceId).toBe('ws-a')
+
+        const current = manager.listInstances().find((i) => i.id === next)
+        expect(current?.boundSessionId).toBe('sess-a2')
+        expect(current?.ownerSessionId).toBe('sess-a2')
+        expect(current?.workspaceId).toBe('ws-a')
       })
 
       it('lets any workspace adopt a truly unbound (workspaceId=null) manual window', () => {
