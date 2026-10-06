@@ -179,6 +179,7 @@ export async function rebuildMenu(): Promise<void> {
 
     // Window menu (from shared schema + macOS-specific items)
     {
+      role: 'windowMenu' as const,
       label: i18n.t(WINDOW_MENU.labelKey),
       submenu: [
         ...WINDOW_MENU.items.map(toElectronMenuItem),
