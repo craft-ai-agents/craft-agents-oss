@@ -524,6 +524,8 @@ export interface PermissionRequest {
   toolName: string;
   command?: string;  // Optional: bash commands have it, MCP tools may not
   description: string;
+  /** Whether the user can persist this approval for the session */
+  canAlwaysAllow?: boolean;
   type?: PermissionRequestType;  // Type of permission request
   /** Friendly app/package label for admin approval prompts */
   appName?: string;

@@ -268,10 +268,70 @@ interface PendingPermission {
   resolve: (allowed: boolean, alwaysAllow?: boolean) => void;
   toolName: string;
   command: string;
+  baseCommand: string;
   /** What "Always Allow" stores, as computed by the permission check. */
   remember?: PermissionRemember;
 }
 
+export interface SdkPermissionRequest {
+  requestId: string;
+  toolName: string;
+  command?: string;
+  description: string;
+  blockedPath?: string;
+  canAlwaysAllow?: boolean;
+}
+
+export function shouldDeferSdkPermissionToLocalHook(toolName: string): boolean {
+  return new Set(['Bash', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit']).has(toolName)
+    || toolName.startsWith('mcp__')
+    || toolName.startsWith('api_');
+}
+
+/** Adapt Claude SDK permission prompts to Craft's host approval flow. */
+export function createSdkPermissionHandler(
+  requestPermission: (request: SdkPermissionRequest) => Promise<boolean>,
+  deferToLocalPermission?: (toolName: string) => boolean,
+): NonNullable<Options['canUseTool']> {
+  return async (toolName, input, options) => {
+    if (options.signal.aborted) {
+      return { behavior: 'deny', message: 'Permission request was aborted', interrupt: true };
+    }
+
+    if (deferToLocalPermission?.(toolName)) {
+      return { behavior: 'allow', updatedInput: input };
+    }
+
+    const command = typeof input.command === 'string' ? input.command : undefined;
+    const blockedPath = options.blockedPath;
+    const description = options.title
+      ?? options.description
+      ?? (command ? `Execute ${toolName}: ${command}` : `Allow ${toolName}`);
+    const canAlwaysAllow = !options.matchedAskRule && !options.suppressAlwaysAllowRule;
+    const allowed = await requestPermission({
+      requestId: options.requestId,
+      toolName,
+      command,
+      description,
+      ...(blockedPath ? { blockedPath } : {}),
+      ...(canAlwaysAllow ? {} : { canAlwaysAllow: false }),
+    });
+
+    return allowed
+      ? { behavior: 'allow' as const, updatedInput: input }
+      : { behavior: 'deny' as const, message: 'User denied permission' };
+  };
+}
+
+// Dangerous commands that should always require permission (never auto-allow)
+const DANGEROUS_COMMANDS = new Set([
+  'rm', 'rmdir', 'sudo', 'su', 'chmod', 'chown', 'chgrp',
+  'mv', 'cp', 'dd', 'mkfs', 'fdisk', 'parted',
+  'kill', 'killall', 'pkill',
+  'reboot', 'shutdown', 'halt', 'poweroff',
+  'curl', 'wget', 'ssh', 'scp', 'rsync',
+  'git push', 'git reset', 'git rebase', 'git checkout',
+]);
 // ============================================================
 // Global Tool Permission System
 // Used by both bash commands (via agent instance) and MCP tools (via global functions)
@@ -533,6 +593,33 @@ export class ClaudeAgent extends BaseAgent {
   private lastStderrOutput: string[] = [];
   /** Accepted text steers, owned by the foreground turn. */
   private pendingSteers = new PendingSteers();
+
+  private requestHostPermission(request: SdkPermissionRequest): Promise<boolean> {
+    const command = request.command ?? request.blockedPath ?? '';
+    const baseCommand = this.permissionManager.getBaseCommand(command);
+
+    return new Promise(resolve => {
+      this.pendingPermissions.set(request.requestId, {
+        resolve,
+        toolName: request.toolName,
+        command,
+        baseCommand,
+      });
+
+      if (this.onPermissionRequest) {
+        this.onPermissionRequest({
+          requestId: request.requestId,
+          toolName: request.toolName,
+          ...(command ? { command } : {}),
+          description: request.description,
+          ...(request.canAlwaysAllow === undefined ? {} : { canAlwaysAllow: request.canAlwaysAllow }),
+        });
+      } else {
+        this.pendingPermissions.delete(request.requestId);
+        resolve(false);
+      }
+    });
+  }
 
   /**
    * WS2 keep-alive: when true, use one long-lived streaming-input `query()` per
@@ -1300,10 +1387,20 @@ export class ClaudeAgent extends BaseAgent {
           debug('[ClaudeAgent] 🔧 Tools configuration:', JSON.stringify(toolsValue));
           return toolsValue;
         })(),
-        // Bypass SDK's built-in permission system - we handle all permissions via PreToolUse hook
-        // This allows Safe Mode to properly allow read-only bash commands without SDK interference
+        // Craft's PreToolUse hook remains the source of truth for local modes.
+        // Managed settings can still override bypass and invoke canUseTool;
+        // that callback forwards those otherwise invisible prompts to the host.
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
+        canUseTool: createSdkPermissionHandler(
+          request => this.requestHostPermission(request),
+          toolName => {
+            const sessionId = this.config.session?.id;
+            return Boolean(sessionId)
+              && getPermissionMode(sessionId!) !== 'allow-all'
+              && shouldDeferSdkPermissionToLocalHook(toolName);
+          },
+        ),
         // User hooks from automations.json are merged with internal hooks
         hooks: (() => {
           // Build user-defined hooks from automations.json using the workspace-level AutomationSystem
@@ -1497,6 +1594,7 @@ export class ClaudeAgent extends BaseAgent {
                 case 'prompt': {
                   const requestId = `perm-${input.tool_use_id}`;
                   const command = checkResult.command || '';
+                  const baseCommand = this.permissionManager.getBaseCommand(command);
 
                   debug(`[PreToolUse] Requesting permission for ${input.tool_name}: ${command}`);
 
@@ -1505,6 +1603,7 @@ export class ClaudeAgent extends BaseAgent {
                       resolve,
                       toolName: input.tool_name,
                       command,
+                      baseCommand,
                       remember: checkResult.remember,
                     });
                   });
@@ -1629,10 +1728,8 @@ export class ClaudeAgent extends BaseAgent {
               }
             : {}),
         mcpServers,
-        // No `canUseTool`: `permissionMode: 'bypassPermissions'` shadows it (SDK never calls it,
-        // and since SDK 0.3.198 the combination triggers a runtime warning on every query).
-        // All permission logic is handled via the PreToolUse hook instead (see hooks.PreToolUse above).
-        // Bash permission logic is in PreToolUse where it actually executes.
+        // Local mode decisions are handled via the PreToolUse hook above. The
+        // SDK callback is only reached when managed settings force an approval.
         // Selectively disable tools - file tools are disabled (use MCP), web/code controlled by settings
         disallowedTools,
         // No plugins — skills are handled by BaseAgent.chat() via read-before-execute

@@ -4461,6 +4461,7 @@ export class SessionManager implements ISessionManager {
         toolName: string;
         command?: string;
         description: string;
+        canAlwaysAllow?: boolean;
         type?: 'bash' | 'file_write' | 'mcp_mutation' | 'api_mutation' | 'admin_approval';
         appName?: string;
         reason?: string;

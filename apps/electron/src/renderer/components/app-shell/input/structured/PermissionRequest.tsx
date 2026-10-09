@@ -25,6 +25,7 @@ interface PermissionRequestProps {
  */
 export function PermissionRequest({ request, onResponse, unstyled = false }: PermissionRequestProps) {
   const { t } = useTranslation()
+  const canAlwaysAllow = request.canAlwaysAllow !== false
   // Decision-model risk badges (opt-in, informational). Literal keys keep the i18n coverage check effective.
   const riskLabels: Record<PermissionRisk, string> = {
     deletes: t('chat.permissionRisk.deletes'),
@@ -110,6 +111,8 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
             variant="ghost"
             className="h-7 gap-1.5 border border-foreground/10 hover:bg-foreground/5 active:bg-foreground/10"
             onClick={handleAlwaysAllow}
+            disabled={!canAlwaysAllow}
+            title={canAlwaysAllow ? undefined : 'Always Allow is disabled by managed settings'}
           >
             <RefreshCw className="h-3.5 w-3.5" />
             {t('chat.permissionAlwaysAllow')}
@@ -128,7 +131,9 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
         {/* Tip text */}
         {canRemember && (
           <span className="min-w-0 flex-1 basis-full text-[10px] text-muted-foreground sm:basis-auto sm:text-right">
-            {t('chat.permissionAlwaysAllowTip')}
+            {canAlwaysAllow
+              ? t('chat.permissionAlwaysAllowTip')
+              : '"Always Allow" is disabled by managed settings'}
           </span>
         )}
       </div>
