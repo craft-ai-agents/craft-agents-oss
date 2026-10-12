@@ -817,6 +817,7 @@ export interface StdioMcpConfig {
   command: string;
   args?: string[];
   env?: Record<string, string>;
+  cwd?: string;
 }
 
 /**
