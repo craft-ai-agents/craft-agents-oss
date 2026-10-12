@@ -6,9 +6,17 @@
  * - Electron side: calls session.setProxy() on default + browser-pane sessions.
  */
 
+import { execFileSync } from 'node:child_process';
 import { app, session } from 'electron';
 import { Agent, Dispatcher, ProxyAgent, setGlobalDispatcher } from 'undici';
-import { parseNoProxyRules, shouldBypassProxy, splitCommaSeparated, type NoProxyRule } from './network-proxy-utils';
+import {
+  normalizeProxyUrl,
+  parseNoProxyRules,
+  parseWindowsInternetSettings,
+  shouldBypassProxy,
+  splitCommaSeparated,
+  type NoProxyRule,
+} from './network-proxy-utils';
 import { getNetworkProxySettings, setNetworkProxySettings } from '@craft-agent/shared/config/storage';
 import type { NetworkProxySettings } from '@craft-agent/shared/config/types';
 import { BROWSER_PANE_SESSION_PARTITION } from './browser-pane-manager';
@@ -16,6 +24,10 @@ import log from './logger';
 
 // Track the current dispatcher so we can close it when reconfiguring
 let currentProxyDispatcher: Dispatcher | null = null;
+const syncedProcessProxyEnv = new Map<string, { applied: string; previous: string | undefined }>();
+
+const WINDOWS_INTERNET_SETTINGS_KEY =
+  'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings';
 
 /**
  * Custom undici Dispatcher that routes requests through proxy agents based on protocol,
@@ -75,6 +87,68 @@ class ProtocolProxyDispatcher extends Dispatcher {
   }
 }
 
+function readWindowsSystemProxySettings(): NetworkProxySettings | undefined {
+  if (process.platform !== 'win32') return undefined;
+
+  try {
+    const output = execFileSync('reg', ['query', WINDOWS_INTERNET_SETTINGS_KEY], {
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+    return parseWindowsInternetSettings(output);
+  } catch (error) {
+    log.warn('[proxy] Failed to read Windows system proxy settings:', error);
+    return undefined;
+  }
+}
+
+function resolveEffectiveProxySettings(
+  settings: NetworkProxySettings | undefined,
+): NetworkProxySettings | undefined {
+  if (settings?.enabled && (settings.httpProxy || settings.httpsProxy)) {
+    return {
+      ...settings,
+      httpProxy: normalizeProxyUrl(settings.httpProxy),
+      httpsProxy: normalizeProxyUrl(settings.httpsProxy),
+    };
+  }
+  return readWindowsSystemProxySettings();
+}
+
+function syncProcessProxyEnv(settings: NetworkProxySettings | undefined): void {
+  for (const [key, { applied, previous }] of syncedProcessProxyEnv) {
+    if (process.env[key] !== applied) continue;
+    if (previous === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = previous;
+    }
+  }
+  syncedProcessProxyEnv.clear();
+
+  const httpProxy = settings?.httpProxy;
+  const httpsProxy = settings?.httpsProxy ?? httpProxy;
+
+  if (httpProxy) {
+    setProcessProxyEnv('HTTP_PROXY', httpProxy);
+    setProcessProxyEnv('http_proxy', httpProxy);
+  }
+  if (httpsProxy) {
+    setProcessProxyEnv('HTTPS_PROXY', httpsProxy);
+    setProcessProxyEnv('https_proxy', httpsProxy);
+  }
+  if (settings?.noProxy) {
+    setProcessProxyEnv('NO_PROXY', settings.noProxy);
+    setProcessProxyEnv('no_proxy', settings.noProxy);
+  }
+}
+
+function setProcessProxyEnv(key: string, value: string): void {
+  const previous = process.env[key];
+  process.env[key] = value;
+  syncedProcessProxyEnv.set(key, { applied: value, previous });
+}
+
 /**
  * Configure the Node.js global undici dispatcher for proxy routing.
  */
@@ -112,7 +186,9 @@ async function configureElectronProxy(settings: NetworkProxySettings | undefined
 
   const proxyConfig = settings?.enabled
     ? buildElectronProxyConfig(settings)
-    : { mode: 'direct' as const };
+    : process.platform === 'win32'
+      ? { mode: 'system' as const }
+      : { mode: 'direct' as const };
 
   const sessions = [
     session.defaultSession,
@@ -151,18 +227,20 @@ function buildElectronProxyConfig(settings: NetworkProxySettings): Electron.Prox
  */
 export async function applyConfiguredProxySettings(): Promise<void> {
   const settings = getNetworkProxySettings();
+  const effectiveSettings = resolveEffectiveProxySettings(settings);
+  const hasManualProxy = !!settings?.enabled && (!!settings.httpProxy || !!settings.httpsProxy);
 
-  const hasHttpProxy = !!settings?.httpProxy;
-  const hasNoProxy = !!settings?.noProxy;
   log.info('[proxy] Applying proxy settings:', {
-    enabled: settings?.enabled ?? false,
-    hasHttpProxy,
-    hasHttpsProxy: !!settings?.httpsProxy,
-    hasNoProxy,
+    enabled: effectiveSettings?.enabled ?? false,
+    source: hasManualProxy ? 'manual' : effectiveSettings ? 'windows-system' : 'system',
+    hasHttpProxy: !!effectiveSettings?.httpProxy,
+    hasHttpsProxy: !!effectiveSettings?.httpsProxy,
+    hasNoProxy: !!effectiveSettings?.noProxy,
   });
 
-  configureNodeProxy(settings);
-  await configureElectronProxy(settings);
+  syncProcessProxyEnv(effectiveSettings);
+  configureNodeProxy(effectiveSettings);
+  await configureElectronProxy(effectiveSettings);
 }
 
 /**
