@@ -131,6 +131,8 @@ export function CompactWorkspaceSwitcher({
       toast.error(t('toast.cannotRemoveActiveWorkspace'))
       return
     }
+    const confirmed = await window.electronAPI.showDeleteWorkspaceConfirmation(workspace.name)
+    if (!confirmed) return
     const removed = await window.electronAPI.removeWorkspace(workspace.id)
     if (removed) {
       toast.success(t('toast.removedWorkspace', { name: workspace.name }))
