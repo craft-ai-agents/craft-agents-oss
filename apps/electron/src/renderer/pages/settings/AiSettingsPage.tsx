@@ -265,7 +265,9 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
       case 'pi_compat':
         parts.push(connection.baseUrl?.toLowerCase().includes('manifest.build')
           ? 'Manifest'
-          : 'Craft Agents Backend Compatible')
+          : connection.baseUrl?.toLowerCase().includes('cheaperinference.com')
+            ? 'Cheaper Inference'
+            : 'Craft Agents Backend Compatible')
         break
       default: parts.push(provider || 'Unknown')
     }
@@ -1308,7 +1310,7 @@ export default function AiSettingsPage() {
               label: conn.name,
               description: conn.providerType === 'anthropic' ? 'Anthropic API' :
                            conn.providerType === 'pi' ? 'Craft Agents Backend' :
-                           conn.providerType === 'pi_compat' ? (conn.baseUrl?.toLowerCase().includes('manifest.build') ? 'Manifest' : 'Craft Agents Backend Compatible') :
+                           conn.providerType === 'pi_compat' ? (conn.baseUrl?.toLowerCase().includes('manifest.build') ? 'Manifest' : conn.baseUrl?.toLowerCase().includes('cheaperinference.com') ? 'Cheaper Inference' : 'Craft Agents Backend Compatible') :
                            conn.providerType || 'Unknown',
             }))}
           />
