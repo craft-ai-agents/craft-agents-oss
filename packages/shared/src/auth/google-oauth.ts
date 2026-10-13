@@ -68,6 +68,27 @@ export const GOOGLE_SERVICE_SCOPES: Record<GoogleService, string[]> = {
     'https://www.googleapis.com/auth/webmasters.readonly', // Read Search Console data
     'https://www.googleapis.com/auth/userinfo.email',
   ],
+  ads: [
+    'https://www.googleapis.com/auth/adwords', // Full Google Ads access
+    'https://www.googleapis.com/auth/userinfo.email',
+  ],
+  'tag-manager': [
+    'https://www.googleapis.com/auth/tagmanager.manage.accounts', // Manage GTM accounts
+    'https://www.googleapis.com/auth/tagmanager.edit.containers', // Edit GTM containers
+    'https://www.googleapis.com/auth/tagmanager.edit.containerversions', // Edit container versions
+    'https://www.googleapis.com/auth/tagmanager.publish', // Publish containers
+    'https://www.googleapis.com/auth/tagmanager.readonly', // Read GTM data
+    'https://www.googleapis.com/auth/userinfo.email',
+  ],
+  analytics: [
+    'https://www.googleapis.com/auth/analytics', // View and manage Analytics data
+    'https://www.googleapis.com/auth/analytics.readonly', // Read Analytics data
+    'https://www.googleapis.com/auth/userinfo.email',
+  ],
+  slides: [
+    'https://www.googleapis.com/auth/presentations', // Full Slides access
+    'https://www.googleapis.com/auth/userinfo.email',
+  ],
 };
 
 /**
