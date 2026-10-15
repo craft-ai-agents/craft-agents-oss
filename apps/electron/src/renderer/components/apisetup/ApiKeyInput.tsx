@@ -122,6 +122,7 @@ const ANTHROPIC_PRESETS: Preset[] = [
   // The gateway URL carries the account and gateway ids the Pi SDK needs (cloudflare-gateway.ts).
   { key: CLOUDFLARE_AI_GATEWAY_PROVIDER, label: 'Cloudflare AI Gateway', url: '', placeholder: 'Cloudflare API token', urlPlaceholder: CLOUDFLARE_AI_GATEWAY_URL_EXAMPLE, piOnly: true },
   { key: 'manifest', label: 'Manifest', url: 'https://app.manifest.build/v1', placeholder: 'mnfst_...' },
+  { key: 'cheaperinference', label: 'Cheaper Inference', url: 'https://api.cheaperinference.com/v1', placeholder: 'ci_live_...' },
   { key: 'custom', label: 'Custom', url: '', placeholder: 'Paste your key here...' },
 ]
 
@@ -130,7 +131,7 @@ const ANTHROPIC_PRESETS: Preset[] = [
  * OpenAI-compatible protocol. They behave like 'custom' on submit (customEndpoint
  * gets pinned to openai-completions) but stay branded in the dropdown.
  */
-const OPENAI_COMPAT_CUSTOM_URL_PRESETS: ReadonlySet<string> = new Set(['manifest'])
+const OPENAI_COMPAT_CUSTOM_URL_PRESETS: ReadonlySet<string> = new Set(['manifest', 'cheaperinference'])
 
 // OpenAI provider presets - for Codex backend
 // Only direct OpenAI is supported; 3PP providers (OpenRouter, Vercel, Ollama) should be
@@ -155,6 +156,7 @@ const COMPAT_ANTHROPIC_DEFAULTS = 'claude-opus-5-5, claude-opus-4-8, claude-sonn
 const COMPAT_OPENAI_DEFAULTS = 'openai/gpt-5.2-codex, openai/gpt-5.1-codex-mini'
 const COMPAT_MINIMAX_DEFAULTS = 'MiniMax-M2.5, MiniMax-M2.5-highspeed'
 const COMPAT_KIMI_DEFAULTS = 'k3, kimi-for-coding, kimi-for-coding-highspeed'
+const COMPAT_CHEAPER_INFERENCE_DEFAULTS = 'gpt-5.4-mini, gpt-5.4, claude-sonnet-5, gemini-3.1-pro'
 
 function getPresetsForProvider(providerType: 'anthropic' | 'openai' | 'pi' | 'google' | 'pi_api_key'): Preset[] {
   if (providerType === 'pi_api_key') return ANTHROPIC_PRESETS
@@ -302,6 +304,8 @@ export function ApiKeyInput({
       setConnectionDefaultModel(COMPAT_KIMI_DEFAULTS)
     } else if (preset.key === 'manifest') {
       setConnectionDefaultModel('auto')
+    } else if (preset.key === 'cheaperinference') {
+      setConnectionDefaultModel(COMPAT_CHEAPER_INFERENCE_DEFAULTS)
     } else if (preset.key === 'custom' || OPENAI_COMPAT_CUSTOM_URL_PRESETS.has(preset.key)) {
       setConnectionDefaultModel(providerType === 'openai' ? COMPAT_OPENAI_DEFAULTS : COMPAT_ANTHROPIC_DEFAULTS)
     } else {
@@ -327,6 +331,8 @@ export function ApiKeyInput({
         setConnectionDefaultModel('qwen3-coder')
       } else if (presetKey === 'manifest') {
         setConnectionDefaultModel('auto')
+      } else if (presetKey === 'cheaperinference') {
+        setConnectionDefaultModel(COMPAT_CHEAPER_INFERENCE_DEFAULTS)
       } else if (presetKey === 'minimax-global' || presetKey === 'minimax-cn') {
         setConnectionDefaultModel(COMPAT_MINIMAX_DEFAULTS)
       } else if (presetKey === 'kimi-coding') {

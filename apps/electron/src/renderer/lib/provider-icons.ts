@@ -7,6 +7,7 @@
 
 import awsIcon from '@/assets/provider-icons/aws.svg'
 import azureIcon from '@/assets/provider-icons/azure.svg'
+import cheaperInferenceIcon from '@/assets/provider-icons/cheaperinference.svg'
 import claudeIcon from '@/assets/provider-icons/claude.svg'
 import copilotIcon from '@/assets/provider-icons/copilot.svg'
 import googleIcon from '@/assets/provider-icons/google.svg'
@@ -29,6 +30,7 @@ export const providerIcons = {
   anthropic: claudeIcon,
   aws: awsIcon,
   azure: azureIcon,
+  cheaperinference: cheaperInferenceIcon,
   copilot: copilotIcon,
   google: googleIcon,
   huggingface: huggingfaceIcon,
@@ -72,6 +74,7 @@ export function getProviderDisplayName(providerType: string, baseUrl?: string | 
     if (url.includes('minimax.io') || url.includes('minimaxi.com')) return 'Minimax'
     if (url.includes('v0.dev') || url.includes('vercel')) return 'Vercel'
     if (url.includes('manifest.build')) return 'Manifest'
+    if (url.includes('cheaperinference.com')) return 'Cheaper Inference'
   }
   return providerDisplayNames[providerType] || providerType
 }
@@ -94,6 +97,7 @@ function detectProviderFromUrl(baseUrl: string): ProviderIconKey | null {
   if (url.includes('mistral.ai')) return 'mistral'
   if (url.includes('bedrock')) return 'aws'
   if (url.includes('huggingface.co')) return 'huggingface'
+  if (url.includes('cheaperinference.com')) return 'cheaperinference'
 
   return null
 }
