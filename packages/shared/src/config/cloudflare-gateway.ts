@@ -22,7 +22,13 @@ export function parseCloudflareGatewayUrl(url: string): { accountId: string; gat
     return null;
   }
   if (parsed.protocol !== 'https:' || parsed.hostname !== 'gateway.ai.cloudflare.com') return null;
-  const [version, accountId, gatewayId] = parsed.pathname.split('/').filter(Boolean).map(decodeURIComponent);
+  let segments: string[];
+  try {
+    segments = parsed.pathname.split('/').filter(Boolean).map(decodeURIComponent);
+  } catch {
+    return null; // a malformed percent-escape is an unusable URL, like any other parse failure
+  }
+  const [version, accountId, gatewayId] = segments;
   if (version !== 'v1' || !accountId || !gatewayId || accountId.startsWith('<') || gatewayId.startsWith('<')) return null;
   return { accountId, gatewayId };
 }
