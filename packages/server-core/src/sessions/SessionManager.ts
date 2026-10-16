@@ -7285,8 +7285,7 @@ export class SessionManager implements ISessionManager {
 
         // 2. Destroy the agent — the new agent's postInit() will refresh auth
         sessionLog.info(`[auth-retry] Destroying agent for session ${sessionId}`)
-        this.recoverPendingSteers(managed)
-        managed.agent = null
+        await this.disposeManagedAgentRuntime(managed, 'auth retry')
 
         // 3. Retry the message
         const retryMessage = managed.lastSentMessage
