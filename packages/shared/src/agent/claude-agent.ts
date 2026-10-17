@@ -1535,37 +1535,23 @@ export class ClaudeAgent extends BaseAgent {
                       const activated = await this.onSourceActivationRequest(sourceSlug);
                       if (activated) {
                         this.onDebug?.(`Source "${sourceSlug}" auto-enabled successfully, tools available next turn`);
-                        return {
-                          continue: false,
-                          decision: 'block' as const,
-                          reason: `STOP. Source "${sourceSlug}" has been activated successfully. The tools will be available on the next turn. Do NOT try other tool names or approaches. Respond to the user now: tell them the source is now active and ask them to send their request again.`,
-                        };
+                        // Reuse source_test's drain so sibling tool results reach
+                        // the journal before source_activated triggers auto-retry.
+                        this.setPendingSourceActivationRestart({
+                          sourceSlug,
+                          userMessage: this.getCurrentTurnUserMessage() ?? userMessage,
+                        });
+                        return blockWithReason(`Source "${sourceSlug}" has been activated. The current turn will restart automatically with its tools available.`);
                       } else {
-                        return {
-                          continue: false,
-                          decision: 'block' as const,
-                          reason: `Source "${sourceSlug}" could not be activated. It may require authentication. Please check the source status and authenticate if needed.`,
-                        };
+                        return blockWithReason(`Source "${sourceSlug}" could not be activated. It may require authentication. Please check the source status and authenticate if needed.`);
                       }
                     } catch (error) {
-                      return {
-                        continue: false,
-                        decision: 'block' as const,
-                        reason: `Failed to activate source "${sourceSlug}": ${error instanceof Error ? error.message : 'Unknown error'}`,
-                      };
+                      return blockWithReason(`Failed to activate source "${sourceSlug}": ${error instanceof Error ? error.message : 'Unknown error'}`);
                     }
                   } else if (sourceExists) {
-                    return {
-                      continue: false,
-                      decision: 'block' as const,
-                      reason: `Source "${sourceSlug}" is available but not enabled for this session. Please enable it in the sources panel.`,
-                    };
+                    return blockWithReason(`Source "${sourceSlug}" is available but not enabled for this session. Please enable it in the sources panel.`);
                   } else {
-                    return {
-                      continue: false,
-                      decision: 'block' as const,
-                      reason: `Source "${sourceSlug}" could not be connected. It may need re-authentication, or the server may be unreachable. Check the source in the sidebar for details.`,
-                    };
+                    return blockWithReason(`Source "${sourceSlug}" could not be connected. It may need re-authentication, or the server may be unreachable. Check the source in the sidebar for details.`);
                   }
                 }
 
