@@ -27,7 +27,7 @@ Automations are configured in `automations.json` at the root of your workspace:
 ```bash
 craft-agent automation list
 craft-agent automation get <id>
-craft-agent automation create --event UserPromptSubmit --prompt "..."
+craft-agent automation create --event LabelAdd --matcher "^bug$" --prompt "Review this session labelled bug"
 craft-agent automation update <id> --json '{...}'
 craft-agent automation enable <id>
 craft-agent automation disable <id>
@@ -74,9 +74,13 @@ craft-agent automation validate
 
 > **Note:** `TodoStateChange` is a deprecated alias for `SessionStatusChange`. Existing configs using the old name will continue to work but will show a deprecation warning during validation.
 
-### Agent Events (passed to Claude SDK)
+### Agent Events (matching only)
 
-| Event | Trigger | Match Value |
+Agent event names are accepted in configuration, but their actions do not run. The non-Claude agent-event path only evaluates matchers, and Claude SDK hook registration currently returns no hooks. This applies to prompt, webhook, and script actions. A successful validation or matcher test does not mean an action will execute.
+
+Use an app event such as `LabelAdd` or `SessionStatusChange`, or use `SchedulerTick`, when you need actions to run.
+
+| Event | Event meaning | Match Value |
 |-------|---------|-------------|
 | `PreToolUse` | Before a tool executes | Tool name |
 | `PostToolUse` | After a tool executes successfully | Tool name |

@@ -185,6 +185,8 @@ craft-agent skill delete commit-helper
 
 Manage workspace automations stored in `automations.json`.
 
+Only app events (including `LabelAdd`, `SessionStatusChange`, and `SchedulerTick`) run actions. Agent events such as `UserPromptSubmit` and `PreToolUse` are accepted for matching but do not execute actions. See [the automations guide](./automations.md#supported-events) for the distinction.
+
 ### Commands
 - `craft-agent automation list`
 - `craft-agent automation get <id>`
@@ -204,7 +206,7 @@ Manage workspace automations stored in `automations.json`.
 
 | Flag | Description |
 |------|-------------|
-| `--event <EventName>` | **(required for create)** Event trigger (e.g., `UserPromptSubmit`, `SchedulerTick`, `LabelAdd`) |
+| `--event <EventName>` | **(required for create)** Event trigger (e.g., `LabelAdd`, `SchedulerTick`, `SessionStatusChange`) |
 | `--name "<name>"` | Display name for the automation |
 | `--matcher "<regex>"` | Regex pattern for event matching |
 | `--cron "<expression>"` | Cron expression (for `SchedulerTick` events) |
@@ -223,8 +225,8 @@ Fields without a flag of their own — `conditions`, `semanticCondition` (decisi
 ```bash
 craft-agent automation list
 craft-agent automation validate
-# Simple prompt automation with flat flags
-craft-agent automation create --event UserPromptSubmit --prompt "Summarize this prompt"
+# Prompt automation triggered when the bug label is added
+craft-agent automation create --event LabelAdd --matcher "^bug$" --prompt "Review this session labelled bug"
 # Scheduled automation with flat flags
 craft-agent automation create --event SchedulerTick --cron "0 9 * * 1-5" --timezone "Europe/Budapest" --prompt "Give me a morning briefing" --labels "Scheduled" --permission-mode safe
 # Complex automation with --json
@@ -235,7 +237,7 @@ craft-agent automation enable abc123
 craft-agent automation duplicate abc123
 craft-agent automation history abc123 --limit 10
 craft-agent automation last-executed abc123
-craft-agent automation test abc123 --match "UserPromptSubmit"
+craft-agent automation test abc123 --match "bug"
 craft-agent automation lint
 craft-agent automation delete abc123
 ```
