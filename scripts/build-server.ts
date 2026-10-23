@@ -55,6 +55,7 @@ import {
   downloadBun,
   downloadUv,
   buildSubprocessServers,
+  copyShadowedNestedDeps,
   getPlatformKey,
 } from './build/common';
 
@@ -412,6 +413,26 @@ function copyProductionDeps(config: ServerBuildConfig): void {
   }
 
   console.log(`  Total: ${copied.size} packages copied to node_modules`);
+
+  // -------------------------------------------------------------------------
+  // 3. Nested copies a workspace package resolves to instead of the root one
+  // -------------------------------------------------------------------------
+  // Steps 1-2 read every dependency from the root `node_modules`, which is where
+  // the hoisted linker puts them. A workspace package that pins a different major
+  // than the root also has its own nested copy, and inside the monorepo it resolves
+  // to that one; from the built output it would resolve to the root major instead.
+  // That is how the server shipped zod 4 to session-tools-core, whose zod-to-json-schema
+  // returns `{}` for a zod 4 schema, emptying every session tool schema (OSS #1082).
+  for (const pkg of SERVER_PACKAGES) {
+    const shadows = copyShadowedNestedDeps(
+      join(rootDir, 'packages', pkg, 'node_modules'),
+      srcModules,
+      join(destModules, 'packages', pkg, 'node_modules'),
+    );
+    for (const { dep, nested, root } of shadows) {
+      console.log(`  Nested ${dep}@${nested} for ${pkg} (root has ${root})`);
+    }
+  }
 }
 
 function getDirSize(dir: string): number {
