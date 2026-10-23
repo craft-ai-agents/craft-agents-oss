@@ -35,6 +35,7 @@ import {
 } from '../transport/source-oauth'
 import { createCallbackServer } from '@craft-agent/shared/auth/callback-server'
 import { CHATGPT_OAUTH_CONFIG } from '@craft-agent/shared/auth/chatgpt-oauth-config'
+import { openUrl } from '@craft-agent/shared/utils/open-url'
 import {
   CLIENT_OPEN_EXTERNAL,
   CLIENT_OPEN_PATH,
@@ -318,7 +319,7 @@ async function runSourceOAuth(args: SourceOAuthArgs, signal: AbortSignal): Promi
     if (signal.aborted) return abandon()
 
     // 3. Open browser for user consent (local — must open on the user's machine, not remote server)
-    await shell.openExternal(startResult.authUrl)
+    await openUrl(startResult.authUrl)
 
     // 4. Wait for OAuth provider to redirect to our callback server, but not past the flow's
     //    lifetime (the server forgets it then) or a restart
@@ -371,7 +372,7 @@ async function runSourceOAuth(args: SourceOAuthArgs, signal: AbortSignal): Promi
   try {
     const result = await client.invoke('onboarding:startClaudeOAuth')
     if (result.success && result.authUrl) {
-      await shell.openExternal(result.authUrl)
+      await openUrl(result.authUrl)
     }
     return result
   } catch (err) {
@@ -407,7 +408,7 @@ async function runSourceOAuth(args: SourceOAuthArgs, signal: AbortSignal): Promi
     state = startResult.state
 
     // 3. Open browser for user consent
-    await shell.openExternal(startResult.authUrl)
+    await openUrl(startResult.authUrl)
 
     // 4. Wait for OpenAI to redirect to our callback server
     const callback = await callbackServer.promise
