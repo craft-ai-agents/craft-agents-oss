@@ -2,53 +2,159 @@
  * Path Portability Utilities
  *
  * Functions for making filesystem paths portable across machines.
- * Supports ~ and ${HOME} path variables for cross-machine compatibility.
+ * Supports ~, ${HOME}, ${CRAFT_CONFIG_DIR}, and caller-provided variables
+ * for cross-machine compatibility.
  */
 
 import { homedir } from 'os';
 import { resolve, join, normalize, isAbsolute } from 'path';
 import { existsSync } from 'fs';
+import { CONFIG_DIR } from '../config/paths';
 
 /**
- * Expand path variables (~, ${HOME}, $HOME) to absolute paths.
+ * Extra path variables that callers can provide for context-aware expansion.
+ * Values should be absolute paths.
+ */
+export interface PathVars {
+  [key: string]: string;
+}
+
+/**
+ * Expand ONLY variable references (~, ${HOME}, ${CRAFT_CONFIG_DIR}, caller vars)
+ * without converting relative paths to absolute.
  *
- * @param inputPath - Path that may contain variables
- * @param basePath - Base path for relative path resolution (defaults to cwd)
- * @returns Absolute path with all variables expanded
+ * Use this for values where bare strings like "true", "dart", or "production"
+ * should pass through unchanged — e.g. env values, command names, args.
+ *
+ * For file/folder paths where relative paths should be resolved to absolute,
+ * use `expandPath()` instead.
+ *
+ * @param input - String that may contain variables
+ * @param extraVars - Additional named variables
+ * @returns String with variables substituted; non-variable strings unchanged
  *
  * @example
- * expandPath('~')                    // '/Users/alice'
- * expandPath('~/Documents')          // '/Users/alice/Documents'
- * expandPath('${HOME}/projects')     // '/Users/alice/projects'
- * expandPath('/absolute/path')       // '/absolute/path' (unchanged)
+ * expandVars('dart')                 // 'dart' (unchanged — bare command)
+ * expandVars('true')                 // 'true' (unchanged — env flag)
+ * expandVars('${HOME}/.venv/bin/python')  // '/Users/alice/.venv/bin/python'
+ * expandVars('${SOURCE_DIR}/server.js', { SOURCE_DIR: '/app/foo' })  // '/app/foo/server.js'
  */
-export function expandPath(inputPath: string, basePath?: string): string {
-  if (!inputPath) return inputPath;
+export function expandVars(input: string, extraVars?: PathVars): string {
+  if (!input) return input;
 
-  let expanded = inputPath;
+  let result = input;
   const home = homedir();
 
   // Handle ~ alone
-  if (expanded === '~') {
-    return home;
-  }
+  if (result === '~') return home;
 
   // Handle ~/ prefix
-  if (expanded.startsWith('~/')) {
-    expanded = join(home, expanded.slice(2));
+  if (result.startsWith('~/')) {
+    result = join(home, result.slice(2));
   }
 
   // Handle ${HOME} and $HOME variables
-  expanded = expanded.replace(/\$\{HOME\}/g, home);
-  expanded = expanded.replace(/\$HOME(?=\/|$)/g, home);
+  result = result.replace(/\$\{HOME\}/g, home);
+  result = result.replace(/\$HOME(?=\/|$)/g, home);
 
-  // If still not absolute, resolve from base path
+  // Handle ${CRAFT_CONFIG_DIR} — centralized config directory
+  result = result.replace(/\$\{CRAFT_CONFIG_DIR\}/g, CONFIG_DIR);
+
+  // Handle caller-provided extra variables
+  if (extraVars) {
+    for (const [key, value] of Object.entries(extraVars)) {
+      if (!value) continue;
+      result = result.replace(new RegExp(`\\$\{${key}\}`, 'g'), value);
+      result = result.replace(new RegExp(`\\$${key}(?=/|$)`, 'g'), value);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Expand path variables (~, ${HOME}, $HOME, ${CRAFT_CONFIG_DIR}, and caller-provided vars)
+ * to absolute paths. Relative paths are resolved against basePath (defaults to cwd).
+ *
+ * Use this for file/folder paths only — NOT for env values or command names.
+ * For env values, command names, and args, use `expandVars()` instead.
+ *
+ * @param inputPath - Path that may contain variables
+ * @param basePath - Base path for relative path resolution (defaults to cwd)
+ * @param extraVars - Additional named variables (e.g. { WORKSPACE: '/path', SOURCE_DIR: '/path' })
+ * @returns Absolute path with all variables expanded
+ */
+export function expandPath(inputPath: string, basePath?: string, extraVars?: PathVars): string {
+  if (!inputPath) return inputPath;
+
+  // First do variable-only expansion
+  let expanded = expandVars(inputPath, extraVars);
+
+  // Then resolve relative paths to absolute
   if (!isAbsolute(expanded)) {
     const base = basePath || process.cwd();
     expanded = resolve(base, expanded);
   }
 
   return normalize(expanded);
+}
+
+/**
+ * Resolved stdio config after platform overrides and variable expansion.
+ */
+export interface ResolvedStdioConfig {
+  command: string;
+  args: string[];
+  env: Record<string, string> | undefined;
+}
+
+/**
+ * Resolve a stdio MCP config for the current platform.
+ *
+ * Applies platform overrides (command replaces, args replace, env merges),
+ * then expands path variables (${HOME}, ${CRAFT_CONFIG_DIR}, ${WORKSPACE},
+ * ${SOURCE_DIR}) at runtime — never mutating the original config.
+ *
+ * @param mcp - The raw MCP config from config.json
+ * @param workspacePath - Workspace root path
+ * @param sourceDir - This source's folder path
+ * @returns Resolved command, args, and env with variables expanded
+ */
+export function resolveStdioConfig(
+  mcp: { command?: string; args?: string[]; env?: Record<string, string>; platform?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }> },
+  workspacePath: string,
+  sourceDir: string,
+): ResolvedStdioConfig | null {
+  if (!mcp.command) return null;
+
+  const vars: PathVars = {
+    WORKSPACE: workspacePath,
+    SOURCE_DIR: sourceDir,
+  };
+
+  // Start with defaults
+  let command = mcp.command;
+  let args = mcp.args || [];
+  let env = mcp.env ? { ...mcp.env } : undefined;
+
+  // Apply platform override if present
+  const platformKey = process.platform as string;
+  const override = mcp.platform?.[platformKey];
+  if (override) {
+    if (override.command) command = override.command;
+    if (override.args) args = override.args;
+    if (override.env) env = { ...(env || {}), ...override.env };
+  }
+
+  return {
+    command: expandVars(command, vars),
+    args: args.map(a => expandVars(a, vars)),
+    env: env
+      ? Object.fromEntries(
+          Object.entries(env).map(([k, v]) => [k, expandVars(v, vars)])
+        )
+      : undefined,
+  };
 }
 
 /**

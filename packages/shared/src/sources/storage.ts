@@ -72,7 +72,11 @@ export function loadSourceConfig(
   try {
     const config = readJsonFileSync<FolderSourceConfig>(configPath);
 
-    // Expand path variables in local source paths for portability
+    // Expand path variables in local source paths for portability.
+    // This is safe to do at load time because local paths are only used
+    // for working directory resolution, not persisted back by source_test.
+    // MCP field expansion happens at build time in server-builder.ts to avoid
+    // persisting expanded values back to config.json.
     if (config.type === 'local' && config.local?.path) {
       config.local.path = expandPath(config.local.path);
     }
