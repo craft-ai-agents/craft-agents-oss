@@ -102,6 +102,8 @@ export interface SpawnSessionRequest {
   enabledSourceSlugs?: string[];
   permissionMode?: PermissionMode;
   thinkingLevel?: ThinkingLevel;
+  /** Start the new session in Coding mode. Omit to inherit the workspace default. */
+  codingMode?: boolean;
   labels?: string[];
   workingDirectory?: string;
   /** Workspace project id to bind the spawned session to */
@@ -1179,6 +1181,7 @@ ${formattedMessages}
       enabledSourceSlugs: input.enabledSourceSlugs as string[] | undefined,
       permissionMode: input.permissionMode as SpawnSessionRequest['permissionMode'],
       thinkingLevel: input.thinkingLevel as SpawnSessionRequest['thinkingLevel'],
+      codingMode: input.codingMode as boolean | undefined,
       labels: input.labels as string[] | undefined,
       workingDirectory: typeof input.workingDirectory === 'string' && input.workingDirectory
         ? expandPath(input.workingDirectory)

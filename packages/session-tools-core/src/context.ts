@@ -850,6 +850,9 @@ export interface SessionInfo {
   workingDirectory?: string;
   llmConnection?: string;
   model?: string;
+  projectId?: string;
+  codingMode?: boolean;
+  parentSessionId?: string;
   isActive: boolean;
 }
 
@@ -955,6 +958,9 @@ export interface SessionListItem {
   labels: string[];
   status: string;
   createdAt: number;
+  projectId?: string;
+  codingMode?: boolean;
+  parentSessionId?: string;
 }
 
 /** Options for list_sessions filtering and pagination. */

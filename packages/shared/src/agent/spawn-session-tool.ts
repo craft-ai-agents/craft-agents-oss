@@ -47,9 +47,11 @@ Use this to delegate tasks to parallel sessions — research, analysis, drafts, 
 Call with help=true first to discover available connections, models, and sources.
 When spawning, the 'prompt' parameter is required.
 
-Optional overrides: model, llmConnection, permissionMode, thinkingLevel, enabledSourceSlugs, labels, workingDirectory. Omitted fields inherit from the spawning session or the workspace default.
+Optional overrides: model, llmConnection, permissionMode, thinkingLevel, codingMode, enabledSourceSlugs, labels, workingDirectory. Omitted fields inherit from the spawning session or the workspace default.
 
 thinkingLevel is silently ignored on non-reasoning models (e.g. gpt-4o, gemini-2.5-flash) — the SDK drops the reasoning param rather than erroring.
+
+codingMode starts the session with the lean coding prompt and reduced tool profile. It is fixed once the session has messages.
 
 The spawned session appears in the session list and runs fire-and-forget.
 Only use 'attachments' for existing file paths on disk — the tool reads them automatically.`,
@@ -70,6 +72,8 @@ Only use 'attachments' for existing file paths on disk — the tool reads them a
         .describe('Permission mode for the new session'),
       thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional()
         .describe('Reasoning level for the new session. Silently ignored on non-reasoning models (e.g. gpt-4o, gemini-2.5-flash). Omit to inherit the workspace default.'),
+      codingMode: z.boolean().optional()
+        .describe('Run the new session in Coding mode (lean coding prompt and reduced session tools). Fixed once the session has messages. Omit to inherit the workspace default.'),
       labels: z.array(z.string()).optional()
         .describe('Labels for the new session'),
       workingDirectory: z.string().optional()

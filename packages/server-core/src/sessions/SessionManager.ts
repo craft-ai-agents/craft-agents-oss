@@ -4919,6 +4919,7 @@ export class SessionManager implements ISessionManager {
           enabledSourceSlugs: request.enabledSourceSlugs ?? managed.enabledSourceSlugs,
           permissionMode,
           thinkingLevel: request.thinkingLevel ?? managed.thinkingLevel,
+          codingMode: request.codingMode,
           labels: request.labels ?? managed.labels,
           workingDirectory: request.workingDirectory,
           projectId: request.projectId ?? managed.projectId,
@@ -5116,6 +5117,8 @@ export class SessionManager implements ISessionManager {
             projectId: session.projectId,
             llmConnection: session.llmConnection,
             model: session.model,
+            codingMode: session.codingMode ?? false,
+            parentSessionId: session.parentSessionId,
             isActive: session.agent != null,
           }
         },
@@ -5165,6 +5168,8 @@ export class SessionManager implements ISessionManager {
               status: s.sessionStatus ?? 'todo',
               createdAt: s.createdAt ?? 0,
               projectId: s.projectId,
+              codingMode: s.codingMode ?? false,
+              parentSessionId: s.parentSessionId,
             })),
           }
         },

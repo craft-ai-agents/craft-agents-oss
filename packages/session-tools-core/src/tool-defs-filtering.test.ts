@@ -9,6 +9,7 @@ import {
   getToolDefsAsJsonSchema,
   CODING_PROFILE_TOOLS,
   CODING_ONLY_TOOLS,
+  SpawnSessionSchema,
 } from './tool-defs.ts';
 
 describe('session tool filtering helpers', () => {
@@ -35,6 +36,13 @@ describe('session tool filtering helpers', () => {
     expect(getToolDefsAsJsonSchema({ prefix: 'mcp__session__', includeDecide: true }).some(d => d.name === 'mcp__session__decide')).toBe(true);
     // Unfiltered constants still know the tool so backends can execute it once advertised.
     expect(SESSION_TOOL_DEFS.some(d => d.name === 'decide' && d.executionMode === 'registry' && d.readOnly === true)).toBe(true);
+  });
+
+  it('accepts an explicit codingMode on spawn_session', () => {
+    expect(SpawnSessionSchema.parse({ prompt: 'edit the code', codingMode: true })).toMatchObject({
+      prompt: 'edit the code',
+      codingMode: true,
+    });
   });
 
   it('name set and registry stay aligned for filtered output', () => {
@@ -122,8 +130,8 @@ describe('session tool filtering helpers', () => {
     });
 
     it('keeps only the always-on coding tools in a bare coding session', () => {
-      expect(names({ profile: 'coding' })).toEqual(['SubmitPlan', 'send_developer_feedback', 'pr_status', 'pr_bind', 'pr_unbind', 'pr_set_auto_merge', 'list_background_tasks']);
-      expect(names({ profile: 'coding', includeDeveloperFeedback: false })).toEqual(['SubmitPlan', 'pr_status', 'pr_bind', 'pr_unbind', 'pr_set_auto_merge', 'list_background_tasks']);
+      expect(names({ profile: 'coding' })).toEqual(['SubmitPlan', 'send_developer_feedback', 'set_session_labels', 'set_session_status', 'pr_status', 'pr_bind', 'pr_unbind', 'pr_set_auto_merge', 'list_background_tasks']);
+      expect(names({ profile: 'coding', includeDeveloperFeedback: false })).toEqual(['SubmitPlan', 'set_session_labels', 'set_session_status', 'pr_status', 'pr_bind', 'pr_unbind', 'pr_set_auto_merge', 'list_background_tasks']);
     });
 
     it('adds source tools only with enabled sources, project memory only with a project', () => {
@@ -139,7 +147,7 @@ describe('session tool filtering helpers', () => {
 
     it('drops desktop-workflow tools even when their own flags are on', () => {
       const coding = names({ profile: 'coding', includeDecide: true, includeBrowser: true, hasEnabledSources: true, hasProject: true });
-      for (const dropped of ['browser_tool', 'create_page', 'set_session_labels', 'spawn_session', 'call_llm', 'decide', 'transform_data', 'update_user_preferences']) {
+      for (const dropped of ['browser_tool', 'create_page', 'spawn_session', 'get_session_info', 'list_sessions', 'call_llm', 'decide', 'transform_data', 'update_user_preferences']) {
         expect(coding).not.toContain(dropped);
       }
       expect(coding.every(name => name in CODING_PROFILE_TOOLS)).toBe(true);
@@ -152,7 +160,7 @@ describe('session tool filtering helpers', () => {
 
     it('applies the same filter to the JSON Schema view (Pi)', () => {
       const pi = getToolDefsAsJsonSchema({ prefix: 'mcp__session__', profile: 'coding' }).map(d => d.name);
-      expect(pi).toEqual(['mcp__session__SubmitPlan', 'mcp__session__send_developer_feedback', 'mcp__session__pr_status', 'mcp__session__pr_bind', 'mcp__session__pr_unbind', 'mcp__session__pr_set_auto_merge', 'mcp__session__list_background_tasks']);
+      expect(pi).toEqual(['mcp__session__SubmitPlan', 'mcp__session__send_developer_feedback', 'mcp__session__set_session_labels', 'mcp__session__set_session_status', 'mcp__session__pr_status', 'mcp__session__pr_bind', 'mcp__session__pr_unbind', 'mcp__session__pr_set_auto_merge', 'mcp__session__list_background_tasks']);
     });
   });
 
