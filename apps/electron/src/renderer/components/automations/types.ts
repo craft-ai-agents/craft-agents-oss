@@ -13,6 +13,7 @@
 import { computeNextRuns } from './utils'
 import type { PermissionMode } from '../../../shared/types'
 import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
+import { AUTOMATIONS_LOAD_ISSUES_KEY, type AutomationLoadIssue } from '@craft-agent/shared/protocol'
 import { DEFAULT_WEBHOOK_METHOD } from './constants'
 
 // ============================================================================
@@ -79,7 +80,18 @@ export interface WebhookAction {
   auth?: { type: 'basic'; username: string; password: string } | { type: 'bearer'; token: string }
 }
 
-export type AutomationAction = PromptAction | WebhookAction
+export interface ScriptAction {
+  type: 'script'
+  /** Script path relative to the workspace root */
+  script: string
+  args?: string[]
+  runtime?: 'bun' | 'node' | 'python3'
+  timeoutMs?: number
+  /** Slug of the page this script refreshes */
+  page?: string
+}
+
+export type AutomationAction = PromptAction | WebhookAction | ScriptAction
 
 // ============================================================================
 // Conditions (mirrored from packages/shared/src/automations/types.ts)
@@ -231,6 +243,11 @@ export interface AutomationListItem {
   telegramTopic?: string
   /** Timestamp of last execution (ms since epoch) */
   lastExecutedAt?: number
+  /**
+   * Why this automation does not run, from the server's load of automations.json
+   * (invalid entry skipped, or an event that never runs). Undefined when it runs.
+   */
+  issues?: string[]
 }
 
 // ============================================================================
@@ -374,9 +391,21 @@ interface AutomationsConfigFile {
   automations?: Record<string, AutomationsConfigMatcher[]>
 }
 
-type RawAction =
-  | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel }
-  | { type: 'webhook'; url: string; method?: string; headers?: Record<string, string>; bodyFormat?: 'json' | 'form' | 'raw'; body?: unknown; captureResponse?: boolean; auth?: WebhookAction['auth'] }
+/** A raw action is whatever the file holds — including types that no longer exist (e.g. "command"). */
+type LooseAction = { type?: unknown; [key: string]: unknown }
+
+function isLooseAction(value: unknown): value is LooseAction {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** Actions the screen can show: prompt, webhook and script (all three run). */
+function isKnownAction(value: unknown): value is AutomationAction {
+  if (!isLooseAction(value)) return false
+  if (value.type === 'prompt') return typeof value.prompt === 'string'
+  if (value.type === 'webhook') return typeof value.url === 'string'
+  if (value.type === 'script') return typeof value.script === 'string'
+  return false
+}
 
 interface AutomationsConfigMatcher {
   id?: string
@@ -388,18 +417,23 @@ interface AutomationsConfigMatcher {
   labels?: string[]
   conditions?: AutomationConditionUI[]
   enabled?: boolean
-  actions?: RawAction[]
+  actions?: unknown[]
 }
 
 /** Derive a human-readable name from task actions and event */
 function deriveAutomationName(event: string, matcher: AutomationsConfigMatcher): string {
   if (matcher.name) return matcher.name
-  const allActions = matcher.actions ?? []
-  const firstAction = allActions[0]
-  if (!firstAction) return getEventDisplayName(event as AutomationTrigger)
+  const firstAction = (Array.isArray(matcher.actions) ? matcher.actions : [])[0]
+  // Missing or unknown action (e.g. the removed "command" type): name it after the event
+  if (!isKnownAction(firstAction)) return getEventDisplayName(event as AutomationTrigger)
 
   if (firstAction.type === 'webhook') {
     const label = `Webhook ${firstAction.method ?? DEFAULT_WEBHOOK_METHOD} ${firstAction.url}`
+    return label.length > 40 ? label.slice(0, 40) + '...' : label
+  }
+
+  if (firstAction.type === 'script') {
+    const label = `Script ${firstAction.script}`
     return label.length > 40 ? label.slice(0, 40) + '...' : label
   }
 
@@ -436,9 +470,56 @@ function deriveAutomationSummary(event: string, matcher: AutomationsConfigMatche
   return `On ${getEventDisplayName(event as AutomationTrigger)}`
 }
 
+/** Key that ties a load issue to the row it describes: raw event name + index in that event's list. */
+function matcherKey(event: string, index: number): string {
+  return `${event}#${index}`
+}
+
+/**
+ * The automations that will not run, and why, as attached by the server to the
+ * automations.json it returns (empty for older servers that don't send them).
+ */
+export function parseAutomationLoadIssues(json: unknown): AutomationLoadIssue[] {
+  if (!json || typeof json !== 'object') return []
+  const raw = (json as Record<string, unknown>)[AUTOMATIONS_LOAD_ISSUES_KEY]
+  if (!Array.isArray(raw)) return []
+  const issues: AutomationLoadIssue[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue
+    const e = entry as Record<string, unknown>
+    const messages = Array.isArray(e.messages) ? e.messages.filter((m): m is string => typeof m === 'string') : []
+    if (messages.length === 0) continue
+    const issue: AutomationLoadIssue = { messages }
+    if (typeof e.event === 'string') issue.event = e.event
+    if (typeof e.index === 'number') issue.index = e.index
+    if (typeof e.id === 'string') issue.id = e.id
+    if (typeof e.name === 'string') issue.name = e.name
+    issues.push(issue)
+  }
+  return issues
+}
+
+/**
+ * Load issues no listed row shows — the whole file (e.g. not valid JSON), an
+ * event whose value isn't a list, an entry that isn't an object. The list puts
+ * these in its banner so nothing that won't run goes unexplained.
+ */
+export function getUnattachedLoadIssues(json: unknown, items: AutomationListItem[]): string[] {
+  const listed = new Set(items.map(item => matcherKey(item.event, item.matcherIndex)))
+  return parseAutomationLoadIssues(json)
+    .filter(issue => issue.event === undefined || issue.index === undefined || !listed.has(matcherKey(issue.event, issue.index)))
+    .map((issue) => {
+      if (issue.event === undefined) return issue.messages.join(' ')
+      const where = `${issue.name ?? issue.event}${issue.index === undefined ? '' : ` #${issue.index + 1}`}`
+      return `${where}: ${issue.messages.join(' ')}`
+    })
+}
+
 /**
  * Parse an automations.json file into a flat list of AutomationListItem[].
- * Each matcher entry under each event becomes one item.
+ * Each matcher entry under each event becomes one item. Entries the server
+ * reports as not running carry `issues`, and are listed even when they have no
+ * action the screen can show (e.g. only the removed "command" type).
  */
 export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
   if (!json || typeof json !== 'object') return []
@@ -446,22 +527,28 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
   const eventMap = config.automations
   if (!eventMap || typeof eventMap !== 'object') return []
 
-  const allEvents = [...APP_EVENTS, ...AGENT_EVENTS] as string[]
+  const issuesByMatcher = new Map<string, string[]>()
+  for (const issue of parseAutomationLoadIssues(json)) {
+    if (issue.event === undefined || issue.index === undefined) continue
+    const key = matcherKey(issue.event, issue.index)
+    issuesByMatcher.set(key, [...(issuesByMatcher.get(key) ?? []), ...issue.messages])
+  }
+
   const items: AutomationListItem[] = []
   let index = 0
 
   for (const [eventName, matchers] of Object.entries(eventMap)) {
     if (!Array.isArray(matchers)) continue
-    const event = (allEvents.includes(eventName) ? eventName : eventName) as AutomationTrigger
+    const event = eventName as AutomationTrigger
 
     for (let matcherIdx = 0; matcherIdx < matchers.length; matcherIdx++) {
-      const matcher = matchers[matcherIdx]
-      const rawActions = matcher.actions
-      if (!rawActions || !Array.isArray(rawActions) || rawActions.length === 0) continue
+      const matcher = matchers[matcherIdx] as AutomationsConfigMatcher | null
+      if (!matcher || typeof matcher !== 'object' || Array.isArray(matcher)) continue
+      const issues = issuesByMatcher.get(matcherKey(eventName, matcherIdx))
 
-      const actions: AutomationAction[] = rawActions
-        .filter((a): a is AutomationAction => a.type === 'prompt' || a.type === 'webhook')
-      if (actions.length === 0) continue
+      const actions = (Array.isArray(matcher.actions) ? matcher.actions : []).filter(isKnownAction)
+      // Nothing to show: list it only when the server says why it won't run.
+      if (actions.length === 0 && !issues) continue
 
       const rawTopic = (matcher as { telegramTopic?: unknown }).telegramTopic
       const telegramTopic =
@@ -482,6 +569,7 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
         conditions: matcher.conditions,
         actions,
         telegramTopic,
+        issues,
       })
       index++
     }

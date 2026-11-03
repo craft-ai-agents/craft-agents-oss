@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test'
-import { computeCollapsedPagination } from '../useSessionSearch'
+import { computeCollapsedPagination, paginateFamilies } from '../useSessionSearch'
+import { buildSessionFamilies } from '@/utils/session-tree'
 import type { SessionMeta } from '@/atoms/sessions'
 
 function makeSession(id: string, opts: Partial<SessionMeta> = {}): SessionMeta {
@@ -121,5 +122,70 @@ describe('computeCollapsedPagination', () => {
       expect(result.paginatedItems.map(s => s.id)).toEqual(['done1', 'done2'])
       expect(result.hasMore).toBe(true)
     })
+  })
+})
+
+describe('paginateFamilies', () => {
+  const at = (iso: string) => Date.parse(iso)
+  // Newest first, as the list hands them over. The family (parent → child, branch) differs from
+  // its root in every grouping: the child is newer, done, unread and in another project.
+  const families = buildSessionFamilies([
+    makeSession('child', {
+      parentSessionId: 'parent', createdAt: 2, lastMessageAt: at('2026-03-06T10:00:00.000Z'),
+      sessionStatus: 'done', hasUnread: true, projectId: 'p2',
+    }),
+    makeSession('solo', { lastMessageAt: at('2026-03-05T10:00:00.000Z') }),
+    makeSession('parent', {
+      createdAt: 1, lastMessageAt: at('2026-03-04T10:00:00.000Z'), sessionStatus: 'todo', projectId: 'p1',
+    }),
+    makeSession('branch', { branchFromSessionId: 'parent', createdAt: 3, lastMessageAt: at('2026-03-03T10:00:00.000Z') }),
+  ])
+  const none = new Set<string>()
+
+  it('places a family by its newest member and keeps it together', () => {
+    const page = paginateFamilies(families, 50, undefined, 'date', none)
+
+    expect(page.rows.map(r => `${r.item.id}@${r.depth}`)).toEqual(['parent@0', 'child@1', 'branch@1', 'solo@0'])
+    expect(page.rows.slice(0, 3).map(r => r.groupItem.lastMessageAt)).toEqual(Array(3).fill(at('2026-03-06T10:00:00.000Z')))
+    expect(page.hasMore).toBe(false)
+  })
+
+  it('never splits a family across pages: the one crossing the limit is shown whole', () => {
+    const page = paginateFamilies(families, 2, undefined, 'date', none)
+
+    expect(page.rows.map(r => r.item.id)).toEqual(['parent', 'child', 'branch'])
+    expect(page.hasMore).toBe(true)
+  })
+
+  it('collapses a family with the date group of its newest member, counting its sessions', () => {
+    const page = paginateFamilies(families, 50, new Set(['2026-03-06T00:00:00.000Z']), 'date', none)
+
+    expect(page.rows.map(r => r.item.id)).toEqual(['solo'])
+    expect(page.collapsedGroupsMeta).toEqual([{ key: '2026-03-06T00:00:00.000Z', count: 3 }])
+  })
+
+  it("groups a family by its root's status and project, and as unread when any member is", () => {
+    const collapsed = (groupKey: string, mode: 'status' | 'unread' | 'project') =>
+      paginateFamilies(families, 50, new Set([groupKey]), mode, none)
+
+    expect(collapsed('status-todo', 'status').collapsedGroupsMeta).toEqual([{ key: 'status-todo', count: 3 }])
+    expect(collapsed('status-todo', 'status').rows.map(r => r.item.id)).toEqual(['solo'])
+    expect(collapsed('unread-yes', 'unread').collapsedGroupsMeta).toEqual([{ key: 'unread-yes', count: 3 }])
+    expect(collapsed('project-p1', 'project').collapsedGroupsMeta).toEqual([{ key: 'project-p1', count: 3 }])
+  })
+
+  it('counts families in sessions in per-group windows', () => {
+    const page = paginateFamilies(families, 1, undefined, 'status', none)
+
+    // One family per group fits the window of 1, whatever its size.
+    expect(page.rows.map(r => r.item.id)).toEqual(['parent', 'child', 'branch', 'solo'])
+    expect(page.hasMore).toBe(false)
+  })
+
+  it('leaves out the sessions under a collapsed row', () => {
+    const page = paginateFamilies(families, 50, undefined, 'date', new Set(['parent']))
+
+    expect(page.rows.map(r => r.item.id)).toEqual(['parent', 'solo'])
+    expect(page.rows[0]).toMatchObject({ collapsed: true, descendantCount: 2 })
   })
 })

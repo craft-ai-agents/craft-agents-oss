@@ -9,7 +9,6 @@ import { join } from 'node:path';
 import type { BaseEventPayload } from './event-bus.ts';
 import type { AutomationEvent, AutomationMatcher, PromptReferences, AgentEvent, SdkAutomationInput } from './types.ts';
 import { matchesCron } from './cron-matcher.ts';
-import { sanitizeForShell } from './security.ts';
 import { evaluateConditions } from './conditions.ts';
 
 // ============================================================================
@@ -29,18 +28,37 @@ export function toSnakeCase(str: string): string {
 
 /**
  * Expand environment variables in a string.
- * Supports both $VAR and ${VAR} syntax.
+ * Supports both $VAR and ${VAR} syntax; unknown variables become ''.
+ *
+ * One pass: an inserted value is never expanded again, so a session named
+ * `$CRAFT_WH_SLACK_URL` stays that text instead of pulling in a webhook secret,
+ * and values containing `$` arrive intact.
  *
  * @example
  * expandEnvVars('Hello $NAME', { NAME: 'World' }) // 'Hello World'
  * expandEnvVars('${GREETING} World', { GREETING: 'Hi' }) // 'Hi World'
  */
 export function expandEnvVars(str: string, env: Record<string, string>): string {
-  return str
-    // Replace ${VAR} syntax
-    .replace(/\$\{([^}]+)\}/g, (_, varName) => env[varName] ?? '')
-    // Replace $VAR syntax (word boundary)
-    .replace(/\$([A-Z_][A-Z0-9_]*)/gi, (_, varName) => env[varName] ?? '');
+  return str.replace(
+    /\$\{([^}]+)\}|\$([A-Z_][A-Z0-9_]*)/gi,
+    (_, braced: string | undefined, bare: string | undefined) => env[(braced ?? bare)!] ?? '',
+  );
+}
+
+/**
+ * Expand environment variables in every string of a JSON value (object keys
+ * included). Never expand serialized JSON: a value with a quote or a newline
+ * would break it, or add fields.
+ */
+export function expandEnvVarsInJson(value: unknown, env: Record<string, string>): unknown {
+  if (typeof value === 'string') return expandEnvVars(value, env);
+  if (Array.isArray(value)) return value.map(item => expandEnvVarsInJson(item, env));
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [expandEnvVars(key, env), expandEnvVarsInJson(item, env)]),
+    );
+  }
+  return value;
 }
 
 // ============================================================================
@@ -208,23 +226,12 @@ export function matcherMatchesSdk(matcher: AutomationMatcher, event: AgentEvent,
 // Environment Variable Utilities
 // ============================================================================
 
-/**
- * Get process.env as a clean Record<string, string> with undefined values filtered out.
- * Avoids the unsafe `process.env as Record<string, string>` cast that turns undefined
- * values into the string "undefined".
- */
-export function cleanEnv(): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined)
-  );
-}
-
 /** Keys skipped when iterating payload fields for env vars */
 const PAYLOAD_SKIP_KEYS = new Set(['sessionId', 'sessionName', 'workspaceId', 'timestamp']);
 
 /**
- * Build the base CRAFT_* environment variables shared by both prompt and webhook actions.
- * Contains event info, session metadata, scheduler time, and payload fields (unsanitized).
+ * The event's CRAFT_* variables, shared by prompt, webhook and script actions:
+ * event info, session metadata, scheduler time and payload fields, as raw text.
  */
 function buildBaseEventEnv(event: AutomationEvent, payload: BaseEventPayload): Record<string, string> {
   const env: Record<string, string> = {
@@ -251,7 +258,7 @@ function buildBaseEventEnv(event: AutomationEvent, payload: BaseEventPayload): R
     env.CRAFT_LOCAL_DATE = now.toISOString().split('T')[0]!;
   }
 
-  // Payload fields as CRAFT_ vars (raw — callers apply sanitization if needed)
+  // Payload fields as CRAFT_ vars
   for (const [key, value] of Object.entries(payload)) {
     if (PAYLOAD_SKIP_KEYS.has(key)) continue;
     const envKey = `CRAFT_${toSnakeCase(key).toUpperCase()}`;
@@ -262,34 +269,23 @@ function buildBaseEventEnv(event: AutomationEvent, payload: BaseEventPayload): R
 }
 
 /**
- * Build environment variables from an event payload for prompt/command actions.
- * Includes full process.env and sanitizes user-controlled values for shell safety.
+ * Variables for prompt actions: the event's CRAFT_* variables only, as raw text.
+ *
+ * The prompt text, labels and Telegram topic name are expanded with these, and
+ * the result goes to the model, the session and Telegram. So no process
+ * environment — in the app it holds the connection's OAuth token or API key
+ * (ClaudeAgent.postInit sets them), and `$CLAUDE_CODE_OAUTH_TOKEN` in a prompt
+ * used to expand to the real token — and no CRAFT_WH_* webhook secrets. Values are not shell-escaped: prompts are not a
+ * shell (the old escaping put backslashes into session names and labels).
  */
-export function buildEnvFromPayload(event: AutomationEvent, payload: BaseEventPayload): Record<string, string> {
-  const base = buildBaseEventEnv(event, payload);
-  const env: Record<string, string> = { ...cleanEnv(), ...base };
-
-  // Sanitize session name for shell context
-  if (payload.sessionName) env.CRAFT_SESSION_NAME = sanitizeForShell(payload.sessionName);
-
-  // Sanitize payload field values for shell context
-  for (const [key, value] of Object.entries(payload)) {
-    if (PAYLOAD_SKIP_KEYS.has(key)) continue;
-    const envKey = `CRAFT_${toSnakeCase(key).toUpperCase()}`;
-    env[envKey] = typeof value === 'string' ? sanitizeForShell(value) : String(value);
-  }
-
-  return env;
+export function buildPromptEnv(event: AutomationEvent, payload: BaseEventPayload): Record<string, string> {
+  return buildBaseEventEnv(event, payload);
 }
 
 /**
- * Build environment variables for webhook actions.
- *
- * Unlike buildEnvFromPayload (used by prompt actions), this:
- * - Does NOT spread process.env (no secret leakage)
- * - Does NOT apply shell sanitization (irrelevant for HTTP context)
- * - Only injects CRAFT_WH_* user-defined vars from process.env (webhook secrets)
- * - Includes CRAFT_* system vars derived from the event payload
+ * Build environment variables for webhook actions: the event's CRAFT_* variables
+ * plus the user's CRAFT_WH_* variables from process.env (webhook secrets), and
+ * nothing else from process.env.
  *
  * Users set webhook secrets in their shell profile:
  *   export CRAFT_WH_SLACK_URL="https://hooks.slack.com/services/T.../B.../xxx"
@@ -330,22 +326,7 @@ export interface ScriptEnvOptions {
   page?: string;
 }
 
-/**
- * Build environment variables for script actions: CRAFT_*-only by design.
- *
- * Unlike buildEnvFromPayload (prompt actions), process.env is NOT spread —
- * a script's env is exactly:
- * - every CRAFT_* var from process.env (runtime hints like CRAFT_BUN/CRAFT_UV,
- *   user-defined CRAFT_* secrets, CRAFT_CONFIG_DIR, ...)
- * - CRAFT_* event context (same base as webhooks; no shell sanitization —
- *   values are argv/env payloads, never interpreted by a shell)
- * - CRAFT_WORKSPACE_PATH and, for page refreshes, CRAFT_PAGE_SLUG /
- *   CRAFT_PAGE_DIR / CRAFT_PAGE_DATA_DIR
- * - a documented minimal set of non-secret platform essentials (HOME etc.)
- *
- * Notably absent: PATH (runtimes are spawned by absolute path) and every
- * non-CRAFT credential (ANTHROPIC_API_KEY, GITHUB_TOKEN, ...).
- */
+/** Platform essentials plus every CRAFT_* var from process.env (see buildScriptEnv). */
 function applyPlatformAndCraftEnv(env: Record<string, string>): void {
   for (const key of SCRIPT_ENV_PLATFORM_ESSENTIALS) {
     const value = process.env[key];
@@ -385,6 +366,21 @@ export function buildBaseScriptEnv(options: ScriptEnvOptions): Record<string, st
   return env;
 }
 
+/**
+ * Build environment variables for script actions: CRAFT_*-only by design.
+ *
+ * process.env is NOT spread — a script's env is exactly:
+ * - every CRAFT_* var from process.env (runtime hints like CRAFT_BUN/CRAFT_UV,
+ *   user-defined CRAFT_* secrets, CRAFT_CONFIG_DIR, ...)
+ * - CRAFT_* event context (same base as prompts and webhooks; no shell
+ *   escaping — values are argv/env payloads, never interpreted by a shell)
+ * - CRAFT_WORKSPACE_PATH and, for page refreshes, CRAFT_PAGE_SLUG /
+ *   CRAFT_PAGE_DIR / CRAFT_PAGE_DATA_DIR
+ * - a documented minimal set of non-secret platform essentials (HOME etc.)
+ *
+ * Notably absent: PATH (runtimes are spawned by absolute path) and every
+ * non-CRAFT credential (ANTHROPIC_API_KEY, GITHUB_TOKEN, ...).
+ */
 export function buildScriptEnv(
   event: AutomationEvent,
   payload: BaseEventPayload,

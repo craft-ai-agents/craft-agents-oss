@@ -402,12 +402,13 @@ export abstract class BaseAgent implements AgentBackend {
   }
 
   /**
-   * Fire an automation agent event (from automations.json) via AutomationSystem.
+   * Report an agent event (PreToolUse, Stop, …) to the AutomationSystem, which
+   * only matches it: agent events don't run automation actions (#1117).
    * Catches all errors — automations must never break the agent flow.
    *
-   * Non-Claude backends call this directly. ClaudeAgent uses SDK's buildSdkHooks() instead.
+   * Non-Claude backends call this directly; ClaudeAgent would use buildSdkHooks().
    *
-   * @param signal - Optional AbortSignal for cancelling automation execution on abort
+   * @param signal - Optional AbortSignal, passed through to executeAgentEvent
    */
   protected async emitAutomationEvent(event: AutomationAgentEvent, input: SdkAutomationInput, signal?: AbortSignal): Promise<void> {
     try {
@@ -1013,10 +1014,11 @@ ${formattedMessages}
       this.config.markTransferredSessionSummaryApplied?.();
     }
 
-    // Prepend read directive to the message so the model reads SKILL.md first. Host guidance for
-    // this turn goes last, after mention parsing, so it can never register a skill or source.
+    // Prepend read directive to the message so the model reads SKILL.md first. Host context goes
+    // around it after mention parsing (session context before, this turn's guidance last), so it
+    // can never register a skill or source.
     const directive = this.formatSkillDirective(skillPaths);
-    const messageParts = [branchSeedContext, transferredSessionContext, directive, cleanMessage, options?.turnContext].filter(Boolean);
+    const messageParts = [branchSeedContext, transferredSessionContext, options?.sessionContext, directive, cleanMessage, options?.turnContext].filter(Boolean);
     const effectiveMessage = messageParts.join('\n\n');
 
     // Capture the raw user message for source-activation auto-retry. `cleanMessage`

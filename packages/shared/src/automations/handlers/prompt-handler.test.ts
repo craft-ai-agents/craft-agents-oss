@@ -320,6 +320,58 @@ describe('PromptHandler', () => {
 
       handler.dispose();
     });
+
+    it('expands only the event\'s variables, never the process environment', async () => {
+      // In the app, process.env holds the SDK's OAuth token and API keys
+      process.env.TEST_PROMPT_SECRET = 'process-secret';
+      process.env.CRAFT_WH_TEST_PROMPT_SECRET = 'webhook-secret';
+      try {
+        const onPromptsReady = jest.fn();
+        const configProvider = createMockConfigProvider({
+          LabelAdd: [{
+            labels: ['key::$TEST_PROMPT_SECRET'],
+            telegramTopic: 'Topic $TEST_PROMPT_SECRET',
+            actions: [{ type: 'prompt', prompt: 'Keys: $TEST_PROMPT_SECRET ${CRAFT_WH_TEST_PROMPT_SECRET} $CRAFT_LABEL' }],
+          }],
+        });
+
+        const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+        handler.subscribe(bus);
+        await bus.emit('LabelAdd', { workspaceId: 'test-workspace', timestamp: Date.now(), label: 'urgent' });
+
+        const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+        expect(prompts[0]!.prompt).toBe('Keys:   urgent');
+        expect(prompts[0]!.labels).toEqual(['key::']);
+        expect(prompts[0]!.telegramTopic).toBe('Topic');
+
+        handler.dispose();
+      } finally {
+        delete process.env.TEST_PROMPT_SECRET;
+        delete process.env.CRAFT_WH_TEST_PROMPT_SECRET;
+      }
+    });
+
+    it('inserts values as they are: no shell escaping, no second expansion', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{ actions: [{ type: 'prompt', prompt: 'Session: ${CRAFT_SESSION_NAME}' }] }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+      await bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'bug',
+        sessionId: 's-1',
+        sessionName: 'Fix "login" for $CRAFT_WORKSPACE_ID',
+      });
+
+      const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      expect(prompts[0]!.prompt).toBe('Session: Fix "login" for $CRAFT_WORKSPACE_ID');
+
+      handler.dispose();
+    });
   });
 
   describe('@mention parsing and deduplication', () => {

@@ -506,7 +506,7 @@ export class SourceCredentialManager {
         if (!source.config.mcp?.url) {
           throw new Error('MCP URL not configured');
         }
-        prepared = await prepareMcpOAuth(source.config.mcp.url, { callbackPort, callbackUrl: providerCallbackUrl ?? directCallbackUrl });
+        prepared = await prepareMcpOAuth(source.config.mcp.url, { callbackPort, callbackUrl: providerCallbackUrl ?? directCallbackUrl, scopes: source.config.mcp.scopes });
         break;
       }
     }
@@ -634,7 +634,7 @@ export class SourceCredentialManager {
 
     try {
       const oauth = new CraftOAuth(
-        { mcpUrl: source.config.mcp.url },
+        { mcpUrl: source.config.mcp.url, scopes: source.config.mcp.scopes },
         callbacks,
         sessionContext
       );

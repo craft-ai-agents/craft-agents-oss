@@ -202,6 +202,24 @@ export function buildClaudeSubprocessEnv(
         env.CLAUDE_CODE_ENABLE_TODO_TOOLS = '1';
     }
 
+    // Claude Code 2.1.304 turned tool search on behind a custom ANTHROPIC_BASE_URL: every MCP tool
+    // (the session and source tools) goes behind ToolSearch, and the model loads their schemas through
+    // `tool_reference` blocks. A gateway that refuses that costs three refused requests per CLI process
+    // before it retries without (measured on 2.1.316); one that passes the fields on without supporting
+    // them may never give the model those tools. Keep it off there, as before. An explicit value wins.
+    if (env.ENABLE_TOOL_SEARCH === undefined && isThirdPartyBaseUrl(env.ANTHROPIC_BASE_URL)) {
+        env.ENABLE_TOOL_SEARCH = 'false';
+    }
+
+    // When the model's safeguards keep stopping a reply, Claude Code answers it again on a fallback
+    // model and keeps the session on it. Behind a third-party endpoint that model is
+    // `ANTHROPIC_DEFAULT_OPUS_MODEL` or else `claude-opus-4-8` (Claude Code 2.1.316), whatever the
+    // connection's own model is called, and the endpoint may not serve it: every turn after the switch
+    // would fail. There the refusal ends the turn with its explanation instead. An explicit value wins.
+    if (env.CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK === undefined && isThirdPartyBaseUrl(env.ANTHROPIC_BASE_URL)) {
+        env.CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK = '1';
+    }
+
     // Windows: point the SDK's Bash tool at the user-configured Git Bash if set.
     // The SDK otherwise falls back to a hardcoded Program Files search that misses
     // per-user installs (e.g. AppData\Local\Programs\Git) → "No bash shell found"
@@ -219,6 +237,17 @@ export function buildClaudeSubprocessEnv(
     delete env.ANTHROPIC_BEDROCK_BASE_URL;
 
     return env;
+}
+
+/** A base URL that is not Anthropic's own API (an Anthropic-compatible gateway or local runtime). */
+function isThirdPartyBaseUrl(baseUrl: string | undefined): boolean {
+    if (!baseUrl?.trim()) return false;
+    try {
+        const host = new URL(baseUrl.trim()).hostname.toLowerCase();
+        return host !== 'anthropic.com' && !host.endsWith('.anthropic.com');
+    } catch {
+        return true;
+    }
 }
 
 /** Filename of the per-platform native Claude binary inside its npm package. */

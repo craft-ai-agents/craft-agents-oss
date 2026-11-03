@@ -11,6 +11,8 @@ import type { SessionMeta } from "@/atoms/sessions"
 
 interface SessionBadgesProps {
   item: SessionMeta
+  /** Label entries left out: those the row's parent already shows (a task family's label) */
+  hiddenLabels?: readonly string[]
 }
 
 /** Revealed chips slide 8px in from the left while fading in, one after another: the "expand in place"
@@ -22,7 +24,7 @@ const revealDelay = (step: number): React.CSSProperties => ({ transitionDelay: `
 
 /** A div acting as a button: chips live inside the row's <button>, so no nested buttons. It keeps the
  *  press from reaching the row (which selects on mousedown) and handles Enter/Space by hand. */
-function chipButtonProps(onActivate: () => void) {
+export function chipButtonProps(onActivate: () => void) {
   return {
     role: 'button',
     tabIndex: 0,
@@ -42,7 +44,7 @@ function chipButtonProps(onActivate: () => void) {
  * line in place — the hidden chips slide in after the visible ones and wrap onto further lines — and a
  * trailing chevron collapses it again. The row grows once (no height animation, spec §6.1).
  */
-export function SessionBadges({ item }: SessionBadgesProps) {
+export function SessionBadges({ item, hiddenLabels }: SessionBadgesProps) {
   const { t } = useTranslation()
   const ctx = useSessionListContext()
   const [expanded, setExpanded] = useState(false)
@@ -50,11 +52,15 @@ export function SessionBadges({ item }: SessionBadgesProps) {
   const lessRef = useRef<HTMLDivElement>(null)
 
   // One chip per plain label, one per valued entry (shared with the chat header): a valued chip edits and
-  // removes only its own entry, a plain chip every entry of its label.
-  const chips = useMemo(
-    () => (item.labels?.length ? sessionLabelChips(item.labels, ctx.flatLabels) : []),
-    [item.labels, ctx.flatLabels],
-  )
+  // removes only its own entry, a plain chip every entry of its label. Chips are built from all entries
+  // and filtered after, so `entryIndex` keeps pointing into the session's own labels.
+  const chips = useMemo(() => {
+    const labels = item.labels
+    if (!labels?.length) return []
+    const all = sessionLabelChips(labels, ctx.flatLabels)
+    if (!hiddenLabels?.length) return all
+    return all.filter(chip => !hiddenLabels.includes(chip.entryIndex === undefined ? chip.label.id : labels[chip.entryIndex]))
+  }, [item.labels, ctx.flatLabels, hiddenLabels])
 
   const containerRef = useRef<HTMLDivElement>(null)
   const counterRef = useRef<HTMLSpanElement>(null)

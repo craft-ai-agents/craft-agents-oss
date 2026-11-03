@@ -33,6 +33,33 @@ describe('AutomationSystem', () => {
       await system.dispose();
     });
 
+    it('should still load the other automations when one uses the removed command action', async () => {
+      // Before: one invalid matcher made the whole file invalid, so nothing ran.
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          LabelAdd: [
+            { matcher: '^urgent$', actions: [{ type: 'command', command: 'echo legacy' }] },
+          ],
+          SchedulerTick: [
+            { cron: '0 9 * * *', actions: [{ type: 'prompt', prompt: 'morning briefing' }] },
+          ],
+        },
+      }));
+
+      const warn = spyOn(console, 'warn').mockImplementation(() => {});
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+
+      expect(system.getMatchersForEvent('LabelAdd')).toEqual([]);
+      expect(system.getMatchersForEvent('SchedulerTick').map(m => m.cron)).toEqual(['0 9 * * *']);
+      expect(String(warn.mock.calls[0]?.[1])).toContain('removed "command" type');
+
+      warn.mockRestore();
+      await system.dispose();
+    });
+
     it('should load automations.json if present', async () => {
       writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
         automations: {
@@ -154,29 +181,31 @@ describe('AutomationSystem', () => {
       await system.dispose();
     });
 
-    it('should return errors for invalid config', async () => {
+    it('should skip an invalid matcher, report it, and keep loading the rest', async () => {
       const system = new AutomationSystem({
         workspaceRootPath: tempDir,
         workspaceId: 'test-workspace',
       });
 
-      // Invalid JSON structure (actions must have at least one action)
       writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
         automations: {
           LabelAdd: [
             { matcher: 'test', actions: 'not-an-array' }, // Invalid: actions should be an array
+            { matcher: 'good', actions: [{ type: 'prompt', prompt: 'still runs' }] },
           ],
         },
       }));
 
       const result = system.reloadConfig();
-      expect(result.success).toBe(false);
-      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.success).toBe(true);
+      expect(result.errors.some(e => e.startsWith('LabelAdd[0]'))).toBe(true);
+      const loaded = system.getMatchersForEvent('LabelAdd');
+      expect(loaded.map(m => m.matcher)).toEqual(['good']);
 
       await system.dispose();
     });
 
-    it('should return errors for semantically invalid conditions', async () => {
+    it('should skip a matcher with semantically invalid conditions', async () => {
       const system = new AutomationSystem({
         workspaceRootPath: tempDir,
         workspaceId: 'test-workspace',
@@ -194,8 +223,28 @@ describe('AutomationSystem', () => {
       }));
 
       const result = system.reloadConfig();
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
       expect(result.errors.some(e => e.includes('Invalid time value'))).toBe(true);
+      expect(system.getMatchersForEvent('LabelAdd')).toEqual([]);
+
+      await system.dispose();
+    });
+
+    it('should keep the last loaded config when the file stops being valid JSON', async () => {
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: { LabelAdd: [{ actions: [{ type: 'prompt', prompt: 'keep me' }] }] },
+      }));
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+      expect(system.getMatchersForEvent('LabelAdd')).toHaveLength(1);
+
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), '{ "automations": {'); // mid-edit
+      const result = system.reloadConfig();
+      expect(result.success).toBe(false);
+      expect(result.errors[0]).toContain('Failed to parse JSON');
+      expect(system.getMatchersForEvent('LabelAdd')).toHaveLength(1);
 
       await system.dispose();
     });

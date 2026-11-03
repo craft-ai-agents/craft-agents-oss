@@ -1824,18 +1824,29 @@ export function isApiEndpointAllowed(
 }
 
 /**
- * Tools that are always allowed in any mode (read-only by nature)
+ * Tools Explore mode runs as they are: they read, or touch only the session's own state (its task
+ * list, its background tasks). Explore blocks every tool shouldAllowToolInMode does not handle, so
+ * one Craft does not know (Claude Code adds tools with its releases: EnterWorktree creates git
+ * worktrees, CronCreate schedules prompts) does not run there just because nothing checked it.
+ * Left out on purpose: SendMessage (it reaches other Claude sessions on the machine, whose calls
+ * Explore does not check) and Workflow (its agents can run in git worktrees).
  */
 const ALWAYS_ALLOWED_TOOLS = new Set([
-  'Read', 'Glob', 'Grep',           // File reading
-  'Task',                           // Agent orchestration (TaskOutput was removed in Claude Code 2.1.269)
-  'WebFetch', 'WebSearch',          // Web research
-  'TodoWrite',                      // Task tracking
-  'SubmitPlan',                     // Plan submission
-  'LSP',                            // Language server (read-only)
+  'Read', 'Glob', 'Grep', 'LSP',                  // File reading
+  'Find', 'Ls',                                   // Pi's file listing
+  'WebFetch', 'WebSearch',                        // Web research
+  'ToolSearch',                                   // Loads the definitions of deferred tools
+  'ListMcpResourcesTool', 'ReadMcpResourceTool',  // MCP resources
+  'ListAgents', 'TaskStop',                       // The session's agents and background tasks
+  'TodoWrite', 'TaskCreate', 'TaskGet', 'TaskList', 'TaskUpdate', 'CronList',  // Task tracking
+  'ReportFindings', 'StructuredOutput',           // Answers in a set shape
+  'SubmitPlan',                                   // Plan submission
   // Browser automation tool (canonical wrapper)
   'browser_tool',
 ]);
+
+/** Always-allowed tools that also come as an MCP tool of any server (mcp__plan__SubmitPlan). */
+const ALWAYS_ALLOWED_MCP_VARIANTS = ['SubmitPlan'];
 
 /**
  * Result type for tool permission checks
@@ -1893,17 +1904,34 @@ export function shouldAllowToolInMode(
     return { allowed: true };
   }
 
-  // Check if tool name ends with an always-allowed tool (for MCP variants like mcp__plan__SubmitPlan)
-  for (const allowedTool of ALWAYS_ALLOWED_TOOLS) {
-    if (toolName.endsWith(`__${allowedTool}`)) {
-      return { allowed: true };
-    }
+  // MCP variants of an always-allowed tool (mcp__plan__SubmitPlan). Not every always-allowed name:
+  // a source's own `SendMessage` or `TaskCreate` is a mutation.
+  if (ALWAYS_ALLOWED_MCP_VARIANTS.some(allowedTool => toolName.endsWith(`__${allowedTool}`))) {
+    return { allowed: true };
   }
 
   // Browser tool aliases (legacy browser_open/browser_snapshot/...)
   // are normalized centrally to avoid drift across permission checks.
   if (isBrowserToolNameOrAlias(toolName)) {
     return { allowed: true };
+  }
+
+  // A subagent's own calls get these checks too, but not in a git worktree (a write to the repository)
+  // or a cloud environment (whose calls Craft never sees)
+  if (toolName === 'Agent' || toolName === 'Task') {
+    const isolation = (toolInput as Record<string, unknown> | null)?.isolation;
+    if (!isolation) return { allowed: true };
+    return {
+      allowed: false,
+      reason: `${toolName} with \`isolation: ${String(isolation)}\` is blocked in ${config.displayName}: it sets up another copy of the repository. Run the agent without \`isolation\`, or switch to Ask or Allow All mode (${config.shortcutHint}).`,
+    };
+  }
+
+  // Monitor runs its `command` in a shell as Bash does (each output line becomes an event), so the
+  // command gets the Bash check; a Monitor watching a WebSocket (`ws`) instead only reads.
+  if (toolName === 'Monitor') {
+    const command = (toolInput as Record<string, unknown> | null)?.command;
+    return command === undefined ? { allowed: true } : shouldAllowToolInMode('Bash', { command }, mode, options);
   }
 
   // Handle Bash - check if command is read-only
@@ -2118,8 +2146,11 @@ export function shouldAllowToolInMode(
     };
   }
 
-  // Default: allow other tools not explicitly handled
-  return { allowed: true };
+  // A tool none of the above knows may change things: Explore runs only what it knows to be read-only
+  return {
+    allowed: false,
+    reason: getBlockReasonWithConfig(toolName, config),
+  };
 }
 
 /**
@@ -2140,6 +2171,12 @@ function getBlockReasonWithConfig(toolName: string, config: ToolCheckConfig): st
   }
   if (toolName.startsWith('api_')) {
     return `API mutations are blocked in ${displayName}. Switch to Ask or Allow All mode (${shortcut}) to make changes.`;
+  }
+  if (toolName === 'SendMessage') {
+    return `SendMessage is blocked in ${displayName}: it can reach other Claude sessions on this machine. To continue an agent's work, start a new agent with what it found, or switch to Ask or Allow All mode (${shortcut}).`;
+  }
+  if (toolName === 'Workflow') {
+    return `Workflow is blocked in ${displayName}: its agents can run in git worktrees. Use Agent instead, or switch to Ask or Allow All mode (${shortcut}).`;
   }
   return `${toolName} is blocked in ${displayName}. Switch to Ask or Allow All mode (${shortcut}) to use this tool.`;
 }

@@ -424,12 +424,12 @@ export interface SessionToolContext {
    * Only available in backends that run alongside SessionManager (Claude in-process, Pi subprocess).
    * Codex and other backends leave this undefined — callers should degrade gracefully (restart required).
    *
-   * `availability` is always `'next-turn'` when activation succeeds: both Claude SDK
-   * (frozen `mcpServers` at `query()` start) and Pi (subprocess reloads proxy tools
-   * on the next `handlePrompt`) require the current turn to end before new tools
-   * are callable. The backend handles this via the existing source_activated + auto_retry
-   * machinery — the current turn is aborted and the renderer resends the user's
-   * original message with a `[{slug} activated]` suffix.
+   * `availability` is always `'next-turn'` when activation succeeds: both Claude (sets
+   * each turn's MCP servers at turn start) and Pi (subprocess reloads proxy tools on the
+   * next `handlePrompt`) need a new turn before new tools are callable. The backend
+   * handles this via the existing source_activated + auto_retry machinery — the current
+   * turn ends and the server resends the user's original message with a
+   * `[{slug} activated]` suffix.
    */
   activateSourceInSession?(sourceSlug: string): Promise<{
     ok: boolean;
@@ -848,9 +848,28 @@ export interface SessionInfo {
   createdAt: number;
   updatedAt?: number;
   workingDirectory?: string;
+  projectId?: string;
+  /** The session this one is a sub-session of (a spawned session, a task's subtask) */
+  parentSessionId?: string;
   llmConnection?: string;
   model?: string;
   isActive: boolean;
+  /** The task the session belongs to (its own session, or a subtask's) */
+  task?: SessionTaskInfo;
+}
+
+/** A task as get_session_info reports it; the content fields are absent when task.yaml can't be read. */
+export interface SessionTaskInfo {
+  slug: string;
+  /** task.yaml, the task's full spec */
+  specPath: string;
+  /** The subtask (DAG node) this session runs, for a subtask's session */
+  nodeId?: string;
+  title?: string;
+  goal?: string;
+  acceptanceCriteria?: string;
+  /** Empty when the task is a single step (its goal) */
+  subtasks?: Array<{ id: string; title: string; prompt?: string; dependsOn?: string[] }>;
 }
 
 // ============================================================
@@ -955,6 +974,11 @@ export interface SessionListItem {
   labels: string[];
   status: string;
   createdAt: number;
+  projectId?: string;
+  /** Set for a sub-session */
+  parentSessionId?: string;
+  /** Set for a task's sessions: get_session_info returns the task's content */
+  taskSlug?: string;
 }
 
 /** Options for list_sessions filtering and pagination. */

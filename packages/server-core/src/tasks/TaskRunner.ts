@@ -63,6 +63,8 @@ export interface ConductorSessionHost {
   onSessionComplete(listener: (evt: SessionCompletionEvent) => void): () => void;
   /** Resolved working directory of a session, so children inherit the orchestrator's cwd. */
   getSessionWorkingDirectory(sessionId: string): string | undefined;
+  /** Parent of a sub-session (undefined = top-level or unknown), so a run never starts on one. */
+  getSessionParentId(sessionId: string): string | undefined;
 }
 
 export interface TaskRunnerDeps {
@@ -1054,6 +1056,12 @@ export class TaskRunner {
     // orchestrator mid-`verifying` — that race is a known, bounded v1 limitation.
     const orchestrator = opts.orchestratorSessionId;
     if (orchestrator) {
+      // Tasks are one level deep: the board shows an orchestrator's children as its subtasks, so a
+      // sub-session can't orchestrate a run of its own. An unknown id is let through as before.
+      const parentId = this.deps.host.getSessionParentId(orchestrator);
+      if (parentId) {
+        throw new Error(`Task "${slug}" can't run on session ${orchestrator}: it is a sub-session of ${parentId}.`);
+      }
       for (const existing of this.runs.values()) {
         const snap = existing.snapshot();
         if (snap.orchestratorSessionId === orchestrator && !isTerminalRunStatus(snap.status)) {

@@ -10,6 +10,7 @@ import type { Session, SessionEvent, Message, PermissionRequest, CredentialReque
 /** Explicit SDK retry boundaries; keep their transport shape authoritative. */
 export type TextDiscardEvent = Extract<SessionEvent, { type: 'text_discard' }>
 export type RetryEvent = Extract<SessionEvent, { type: 'retry' }>
+export type MessagesRetractedEvent = Extract<SessionEvent, { type: 'messages_retracted' }>
 
 /**
  * Streaming state for a session - replaces streamingTextRef
@@ -543,6 +544,7 @@ export interface UsageUpdateEvent {
  */
 export type AgentEvent =
   | TextDiscardEvent
+  | MessagesRetractedEvent
   | RetryEvent
   | TextDeltaEvent
   | TextCompleteEvent

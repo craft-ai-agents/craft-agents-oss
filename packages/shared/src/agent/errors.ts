@@ -205,6 +205,13 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
     ],
     canRetry: true,
   },
+  model_refusal: {
+    title: 'Reply Stopped by Safeguards',
+    message: "The model's safeguards stopped its reply to your last message. Rephrase the request, or switch to another model.",
+    actions: [],
+    // The same request on the same model is stopped again
+    canRetry: false,
+  },
   image_too_large: {
     title: 'Image Too Large',
     message: 'The image exceeds API limits (max 8000px or 5MB). Please resize or use a smaller image.',

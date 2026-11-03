@@ -355,6 +355,28 @@ export type AutomationsValidationResult = {
   config: AutomationsConfig | null;
 };
 
+/**
+ * Something in automations.json that will not run, and why. Produced by
+ * loadAutomationsConfigLenient; the Automations screen shows these.
+ *
+ * `event` + `index` locate the matcher in the RAW file (before deprecated
+ * aliases are merged), so the UI can mark the row it lists. Without `event`
+ * the issue is about the whole file (e.g. not valid JSON).
+ */
+export interface AutomationLoadIssue {
+  event?: string;
+  index?: number;
+  id?: string;
+  name?: string;
+  messages: string[];
+}
+
+/** Result of the lenient runtime load: every valid matcher, plus what was not loaded. */
+export interface AutomationsLenientLoadResult {
+  config: AutomationsConfig;
+  issues: AutomationLoadIssue[];
+}
+
 // ============================================================================
 // SDK Types
 // ============================================================================

@@ -5,12 +5,31 @@
  * read it natively: Chromium has no HEIC codec for <img> previews, Electron's
  * nativeImage returns an empty image, and sharp's prebuilt binaries ship without
  * libheif (decoding it needs a source-built libvips). So we transcode HEIC/HEIF
- * to JPEG at ingestion with the pure-JS `heic-convert` decoder; every downstream
- * consumer (model upload, thumbnailing, preview) then works with plain JPEG.
+ * to an upright sRGB JPEG at ingestion; every downstream consumer (model upload,
+ * thumbnailing, preview) then works with plain JPEG.
+ *
+ * On macOS the decoder is ImageIO, the one Photos and Preview use, through
+ * `sips`. Elsewhere, or when sips fails, it is the pure-JS `heic-convert`
+ * (libheif + libde265 in wasm), which gets iPhone files visibly wrong: it drops
+ * the color profile (Display P3 values read as sRGB look washed out), shifts
+ * saturated colors, and can decode blocks of an image in the wrong colors.
  */
 
-import { readFile } from 'node:fs/promises'
-import { extname } from 'node:path'
+import { execFile } from 'node:child_process'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { extname, join } from 'node:path'
+import { promisify } from 'node:util'
+import { createLogger } from '@craft-agent/shared/utils'
+
+const log = createLogger('heic')
+const execFileAsync = promisify(execFile)
+
+/** ImageIO's command-line tool, part of every macOS install. */
+const SIPS_PATH = '/usr/bin/sips'
+const SRGB_PROFILE_PATH = '/System/Library/ColorSync/Profiles/sRGB Profile.icc'
+/** Per sips step; both steps together take about half a second for a 48 MP photo. */
+const SIPS_TIMEOUT_MS = 30_000
 
 /** MIME types that identify HEIC/HEIF still images and sequences. */
 const HEIC_MIME_TYPES = new Set([
@@ -55,8 +74,52 @@ export function isHeicBuffer(buffer: Buffer): boolean {
   return HEIC_FTYP_BRANDS.has(buffer.toString('latin1', 8, 12).trim())
 }
 
-/** Decode the primary image of a HEIC/HEIF buffer to a JPEG buffer. */
+/**
+ * Decode the primary image of a HEIC/HEIF buffer to an upright sRGB JPEG
+ * (`quality` 0–1): ImageIO on macOS, `heic-convert` elsewhere or when sips fails.
+ */
 export async function decodeHeicToJpeg(buffer: Buffer, quality = 0.92): Promise<Buffer> {
+  if (process.platform === 'darwin') {
+    try {
+      return await decodeHeicWithImageIO(buffer, quality)
+    } catch (error) {
+      // execFile's message repeats the whole command line; sips's first stderr line is the reason
+      const reason = (error as { stderr?: string }).stderr?.trim().split('\n')[0]
+        || (error instanceof Error ? error.message : String(error))
+      log.warn(`sips could not decode the HEIC image (${reason}), using heic-convert`)
+    }
+  }
+  return decodeHeicWithLibheif(buffer, quality)
+}
+
+/**
+ * macOS only. Two sips steps, because sips keeps a photo's rotation as an EXIF
+ * tag in a JPEG with the pixels as stored, and nativeImage and the model ignore
+ * that tag. A BMP has no such tag, so sips turns the pixels upright for it, and
+ * `--matchTo` converts them from the file's profile (an iPhone's Display P3) to
+ * sRGB, what every consumer assumes for an untagged image. Then BMP → JPEG.
+ */
+export async function decodeHeicWithImageIO(buffer: Buffer, quality = 0.92): Promise<Buffer> {
+  const dir = await mkdtemp(join(tmpdir(), 'craft-heic-'))
+  try {
+    const heic = join(dir, 'image.heic')
+    const bmp = join(dir, 'image.bmp')
+    const jpeg = join(dir, 'image.jpg')
+    await writeFile(heic, buffer)
+    await sips(['--matchTo', SRGB_PROFILE_PATH, '-s', 'format', 'bmp', heic, '--out', bmp])
+    await sips(['-s', 'format', 'jpeg', '-s', 'formatOptions', String(Math.round(quality * 100)), bmp, '--out', jpeg])
+    return await readFile(jpeg)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
+async function sips(args: string[]): Promise<void> {
+  await execFileAsync(SIPS_PATH, args, { timeout: SIPS_TIMEOUT_MS })
+}
+
+/** The pure-JS decoder, on any platform. Upright, but with the limits above. */
+export async function decodeHeicWithLibheif(buffer: Buffer, quality = 0.92): Promise<Buffer> {
   const convert = (await import('heic-convert')).default
   const out = await convert({ buffer, format: 'JPEG', quality })
   return Buffer.from(out)

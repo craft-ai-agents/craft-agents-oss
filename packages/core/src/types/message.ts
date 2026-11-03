@@ -475,6 +475,7 @@ export type ErrorCode =
   | 'invalid_model'          // Model ID not found
   | 'data_policy_error'      // OpenRouter data policy restriction
   | 'invalid_request'        // API rejected the request (e.g., bad image, invalid content)
+  | 'model_refusal'          // The model's safeguards stopped its reply, and no other model answered
   | 'image_too_large'        // Image exceeds API dimension/size limits
   | 'provider_error'         // AI provider experiencing issues (overloaded, unavailable)
   | 'queued_message_replay_failed'  // A message queued during an active turn could not be auto-replayed (#616)
@@ -573,6 +574,11 @@ export interface AgentEventUsage {
 export type AgentEvent =
   // Failed assistant output is discarded before a retry can produce more text.
   | { type: 'text_discard'; turnId: string }
+  // The backend took back output it had sent (Claude: a reply its safeguards stopped, which a
+  // fallback model answers instead): remove the assistant text of these turns and these tool calls.
+  | { type: 'messages_retracted'; turnIds: string[]; toolUseIds: string[] }
+  // The model's safeguards stopped a reply. fallbackModel: the session goes on with that model.
+  | { type: 'model_refusal'; message: string; fallbackModel?: string }
   | { type: 'retry'; phase: 'backoff'; message: string }
   | { type: 'retry'; phase: 'active' | 'end' }
   | { type: 'status'; message: string }
@@ -620,4 +626,31 @@ export type AgentEvent =
  */
 export function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * The messages without what a `messages_retracted` event took back: the assistant text of its
+ * turns, its tool calls, and everything a subagent one of those calls started posted.
+ */
+export function withoutRetractedMessages<M extends Pick<Message, 'role' | 'turnId' | 'toolUseId' | 'parentToolUseId'>>(
+  messages: M[],
+  retracted: { turnIds: readonly string[]; toolUseIds: readonly string[] },
+): M[] {
+  const turnIds = new Set(retracted.turnIds);
+  const toolUseIds = new Set(retracted.toolUseIds);
+  // A subagent's own calls go with the call that started it, at any depth
+  for (let grew = toolUseIds.size > 0; grew;) {
+    grew = false;
+    for (const message of messages) {
+      if (message.toolUseId && message.parentToolUseId && toolUseIds.has(message.parentToolUseId) && !toolUseIds.has(message.toolUseId)) {
+        toolUseIds.add(message.toolUseId);
+        grew = true;
+      }
+    }
+  }
+  return messages.filter(message => !(
+    (message.role === 'assistant' && message.turnId !== undefined && turnIds.has(message.turnId))
+    || (message.toolUseId !== undefined && toolUseIds.has(message.toolUseId))
+    || (message.parentToolUseId !== undefined && toolUseIds.has(message.parentToolUseId))
+  ));
 }

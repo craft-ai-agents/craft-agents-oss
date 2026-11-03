@@ -122,24 +122,36 @@ describe('session tool filtering helpers', () => {
     });
 
     it('keeps only the always-on coding tools in a bare coding session', () => {
-      expect(names({ profile: 'coding' })).toEqual(['SubmitPlan', 'send_developer_feedback', 'pr_status', 'pr_bind', 'pr_unbind', 'pr_set_auto_merge', 'list_background_tasks']);
-      expect(names({ profile: 'coding', includeDeveloperFeedback: false })).toEqual(['SubmitPlan', 'pr_status', 'pr_bind', 'pr_unbind', 'pr_set_auto_merge', 'list_background_tasks']);
+      const pages = ['list_pages', 'get_page', 'create_page', 'update_page', 'write_page_data', 'delete_page'];
+      const prTools = ['pr_status', 'pr_bind', 'pr_unbind', 'pr_set_auto_merge'];
+      expect(names({ profile: 'coding' })).toEqual([
+        'SubmitPlan', 'mermaid_validate', 'source_test', 'transform_data', 'send_developer_feedback', 'call_llm', 'spawn_session',
+        'browser_tool', ...pages, ...prTools, 'get_session_info', 'list_sessions', 'list_background_tasks',
+      ]);
+      expect(names({ profile: 'coding', includeDeveloperFeedback: false })).toEqual(names({ profile: 'coding' }).filter(name => name !== 'send_developer_feedback'));
     });
 
-    it('adds source tools only with enabled sources, project memory only with a project', () => {
+    it('keeps the browser behind its setting', () => {
+      expect(names({ profile: 'coding', includeBrowser: false })).not.toContain('browser_tool');
+      expect(names({ profile: 'coding', includeBrowser: false })).toContain('create_page');
+    });
+
+    it('adds the other source tools only with enabled sources, project memory only with a project', () => {
       const withSources = names({ profile: 'coding', hasEnabledSources: true });
-      expect(withSources).toContain('source_test');
       expect(withSources).toContain('source_oauth_trigger');
+      expect(withSources).toContain('source_list_resources');
       expect(withSources).not.toContain('project_memory_append');
 
       const withProject = names({ profile: 'coding', hasProject: true });
       expect(withProject).toContain('project_memory_append');
-      expect(withProject).not.toContain('source_test');
+      expect(withProject).not.toContain('source_oauth_trigger');
+      // source_test loads a source enabled after the session's tools were fixed, so it can't wait for one
+      expect(withProject).toContain('source_test');
     });
 
     it('drops desktop-workflow tools even when their own flags are on', () => {
       const coding = names({ profile: 'coding', includeDecide: true, includeBrowser: true, hasEnabledSources: true, hasProject: true });
-      for (const dropped of ['browser_tool', 'create_page', 'set_session_labels', 'spawn_session', 'call_llm', 'decide', 'transform_data', 'update_user_preferences']) {
+      for (const dropped of ['set_session_labels', 'set_session_status', 'archive_session', 'create_task', 'send_agent_message', 'decide', 'update_user_preferences', 'render_template', 'script_sandbox', 'config_validate']) {
         expect(coding).not.toContain(dropped);
       }
       expect(coding.every(name => name in CODING_PROFILE_TOOLS)).toBe(true);
@@ -152,7 +164,7 @@ describe('session tool filtering helpers', () => {
 
     it('applies the same filter to the JSON Schema view (Pi)', () => {
       const pi = getToolDefsAsJsonSchema({ prefix: 'mcp__session__', profile: 'coding' }).map(d => d.name);
-      expect(pi).toEqual(['mcp__session__SubmitPlan', 'mcp__session__send_developer_feedback', 'mcp__session__pr_status', 'mcp__session__pr_bind', 'mcp__session__pr_unbind', 'mcp__session__pr_set_auto_merge', 'mcp__session__list_background_tasks']);
+      expect(pi).toEqual(names({ profile: 'coding' }).map(name => `mcp__session__${name}`));
     });
   });
 

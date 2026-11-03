@@ -70,6 +70,7 @@ import { ProcessingIndicator } from "./chat-display/ProcessingIndicator"
 import { ScrollOnMount } from "./chat-display/ScrollOnMount"
 import { TurnFrame } from "./chat-display/TurnFrame"
 import { NewChatSuggestions } from "./chat-display/NewChatSuggestions"
+import { TaskBriefState } from "./chat-display/TaskBrief"
 import { newChatSuggestionMentions, newChatSuggestionMessage, pickNewChatSuggestions, pickCustomSuggestions, type NewChatSuggestion } from "./chat-display/new-chat-suggestions"
 import {
   CompactEmptyState,
@@ -1045,6 +1046,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
     const resizeObserver = new ResizeObserver(() => {
+      // Nothing to follow without turns; a task brief, read from the top, stays at its top
+      if (totalTurnCountRef.current === 0) return
+
       // Unfocused panels: always scroll to bottom instantly (user isn't reading them)
       if (!isFocusedPanelRef.current) {
         messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
@@ -1402,6 +1406,14 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // minimum display time): holding them back left the turns unmounted while the search
   // highlight / scroll-to-match effects ran, so a slow switch lost the match.
   const showTranscriptSkeleton = useDelayedLoading(messagesLoading)
+  const newChatEmptyState = (
+    <NewChatEmptyState compact={compactMode}>
+      {canRunSuggestion && <NewChatSuggestions suggestions={newChatSuggestions} onSelect={handleRunSuggestion} />}
+    </NewChatEmptyState>
+  )
+  // A task's orchestrator has no messages until a run, so it shows the task instead (subtask
+  // sessions get their prompt when they start)
+  const briefTaskSlug = session && !session.parentSessionId ? session.taskSlug : undefined
 
   return (
     <RunCommandProvider value={session ? handleRunCommand : null}>
@@ -1460,9 +1472,18 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                       compact/mobile chats share compactMode but are not edits */}
                   {compactMode && emptyStateLabel !== undefined && turns.length === 0 && <CompactEmptyState />}
                   {emptyStateLabel === undefined && !messagesLoading && !messagesLoadError && turns.length === 0 && !hasUnrenderedLoadedMessages && (
-                    <NewChatEmptyState compact={compactMode}>
-                      {canRunSuggestion && <NewChatSuggestions suggestions={newChatSuggestions} onSelect={handleRunSuggestion} />}
-                    </NewChatEmptyState>
+                    briefTaskSlug ? (
+                      <TaskBriefState
+                        workspaceId={session.workspaceId}
+                        sessionId={session.id}
+                        taskSlug={briefTaskSlug}
+                        title={session.name}
+                        compact={compactMode}
+                        onOpenUrl={onOpenUrl}
+                        onOpenFile={onOpenFile}
+                        fallback={newChatEmptyState}
+                      />
+                    ) : newChatEmptyState
                   )}
                   {!compactMode && hasUnrenderedLoadedMessages && <NoRenderableMessages />}
                   {/* Load more indicator - shown when there are older messages */}

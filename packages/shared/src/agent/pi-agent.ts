@@ -82,7 +82,7 @@ import { getPermissionModeDiagnostics } from './mode-manager.ts';
 // call_llm pre-execution pipeline
 
 // McpClientPool for source tool proxying (centralized pool from main process)
-import type { McpClientPool } from '../mcp/mcp-pool.ts';
+import type { McpClientPool, ProxyToolDef } from '../mcp/mcp-pool.ts';
 
 // Path utilities
 import { join } from 'path';
@@ -181,6 +181,9 @@ export class PiAgent extends BaseAgent {
 
   // Pi session ID (managed by subprocess, reported back)
   private piSessionId: string | null = null;
+
+  // Proxy tool set last sent to the current subprocess (JSON; null: none yet), see syncProxyTools
+  private sentProxyTools: string | null = null;
 
   // Callback server port (managed by subprocess)
   private callbackPort: number = 0;
@@ -610,10 +613,17 @@ export class PiAgent extends BaseAgent {
       this.debug(`Failed to configure PI auto-compaction (continuing): ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    // Register session-scoped tools as proxy tools in the subprocess.
-    // These tools (SubmitPlan, config_validate, source auth, call_llm, etc.)
-    // are executed in the main process when the LLM calls them.
     this.assertBackendSessionToolParity();
+    this.sentProxyTools = null;
+    this.syncProxyTools();
+  }
+
+  /**
+   * The tools the subprocess serves through the main process: the session tools (SubmitPlan,
+   * source auth, call_llm, etc., executed here when the model calls them) and the sources' tools
+   * from the pool.
+   */
+  private buildProxyToolDefs(): ProxyToolDef[] {
     // Same visibility filters as Claude (session-scoped-tools.ts): feature flags, the
     // "Built-in browser" setting and the agent profile (coding mode).
     const sessionToolDefs = getSessionToolProxyDefs({
@@ -630,29 +640,24 @@ export class PiAgent extends BaseAgent {
       }
     }
 
-    this.send({
-      type: 'register_tools',
-      tools: sessionToolDefs,
-    });
-    this.debug(`Registered ${sessionToolDefs.length} session tools with subprocess`);
-
-    // If pool has source tools, register them with the subprocess.
-    this.registerPoolToolsWithSubprocess();
+    return [...sessionToolDefs, ...(this.mcpPool?.getProxyToolDefs() ?? [])];
   }
 
   /**
-   * Send pool's proxy tool defs to subprocess for model visibility.
+   * Send the subprocess its proxy tools when they changed since the last send. It replaces its set
+   * with them and builds its Pi session again at the next prompt, so a tool that drops out (a
+   * source turned off, the Coding profile's source tools once no source is left) is gone from then
+   * on: before, the subprocess merged them into what it had, and a call to a turned-off source's
+   * tool turned the source back on.
    */
-  private registerPoolToolsWithSubprocess(): void {
-    if (!this.mcpPool) return;
-    const proxyDefs = this.mcpPool.getProxyToolDefs();
-    if (proxyDefs.length > 0) {
-      this.send({
-        type: 'register_tools',
-        tools: proxyDefs,
-      });
-      this.debug(`Registered ${proxyDefs.length} MCP source tools from pool with subprocess`);
-    }
+  private syncProxyTools(): void {
+    if (!this.subprocess?.stdin?.writable) return;
+    const tools = this.buildProxyToolDefs();
+    const json = JSON.stringify(tools);
+    if (json === this.sentProxyTools) return;
+    this.send({ type: 'register_tools', tools });
+    this.sentProxyTools = json;
+    this.debug(`Sent ${tools.length} proxy tools to the subprocess`);
   }
 
   /**
@@ -1275,7 +1280,7 @@ export class PiAgent extends BaseAgent {
       this.debug(`Captured pre-tool metadata for ${toolName} (${toolCallId}, sessionId=${debugSessionId}): intent=${!!preIntent}, displayName=${!!preDisplayName}`);
     }
 
-    // Fire PreToolUse automation event — await so automations run before tool executes
+    // Report PreToolUse to the AutomationSystem (matched only — agent events run no actions, #1117)
     await this.emitAutomationEvent('PreToolUse', {
       hook_event_name: 'PreToolUse',
       tool_name: toolName,
@@ -2231,6 +2236,10 @@ export class PiAgent extends BaseAgent {
         this.send({ type: 'set_thinking_level', level: turnThinkingOverride });
       }
 
+      // The session tools follow the session's state (a project assigned, the Coding profile's
+      // source tools), which can change without a source change
+      this.syncProxyTools();
+
       // Send prompt to subprocess
       const turnId = `turn-${++this.rpcIdCounter}`;
       this.send({
@@ -2407,8 +2416,7 @@ export class PiAgent extends BaseAgent {
     //   2. McpClientPool sync (connecting/disconnecting MCP + API sources)
     await super.setSourceServers(mcpServers, apiServers, intendedSlugs);
 
-    // Register pool's proxy tool defs with subprocess so the model can call them.
-    this.registerPoolToolsWithSubprocess();
+    this.syncProxyTools();
   }
 
   // ============================================================

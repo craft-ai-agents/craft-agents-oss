@@ -12,15 +12,14 @@
 
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSetAtom } from 'jotai'
 import { Info, MoreHorizontal, Pencil } from 'lucide-react'
 import { PanelHeaderCenterButton } from '@/components/ui/PanelHeaderCenterButton'
 import { RenameDialog } from '@/components/ui/rename-dialog'
 import { DropdownMenu, DropdownMenuTrigger, StyledDropdownMenuContent } from '@/components/ui/styled-dropdown'
 import { useAppShellContext } from '@/context/AppShellContext'
-import { kanbanEditorTargetAtom } from '@/atoms/kanban'
 import type { SessionMeta } from '@/atoms/sessions'
-import { navigate, routes } from '@/lib/navigate'
+import { routes } from '@/lib/navigate'
+import { useOpenTaskEditor } from '@/hooks/useOpenTaskEditor'
 import { cn } from '@/lib/utils'
 import { getSessionStatus } from '@/utils/session'
 import { PanelHeader } from '../PanelHeader'
@@ -180,12 +179,10 @@ export const ChatHeader = React.memo(function ChatHeader({
   // board's full-pane Task editor prefilled from task.yaml.
   const taskSlug = item?.taskSlug
   const isTaskOrchestrator = !!taskSlug && !item?.parentSessionId
-  const setKanbanEditorTarget = useSetAtom(kanbanEditorTargetAtom)
+  const openTaskEditor = useOpenTaskEditor()
   const handleEditTask = React.useCallback(() => {
-    if (!taskSlug) return
-    setKanbanEditorTarget({ mode: 'edit', sessionId, taskSlug, initialTitle: title })
-    navigate(routes.view.board())
-  }, [taskSlug, sessionId, title, setKanbanEditorTarget])
+    if (taskSlug) openTaskEditor(sessionId, taskSlug, title)
+  }, [taskSlug, sessionId, title, openTaskEditor])
 
   // ── Compact: one drawer for ⋯ and the status glyph, plus the Session info sheet ──
   const [drawer, setDrawer] = React.useState<DrawerState>({ open: false, view: 'root' })

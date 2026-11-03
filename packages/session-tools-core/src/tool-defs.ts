@@ -269,7 +269,7 @@ export const ArchiveSessionSchema = z.object({
 
 export const CreateTaskSchema = z.object({
   title: z.string().describe('Short task title shown on the board (also drives the slug)'),
-  description: z.string().describe('What the task should accomplish — becomes the task goal and the initial node prompt'),
+  description: z.string().describe('What the task should accomplish — becomes the task goal and the initial node prompt. Self-contained: the agent that works on it sees none of this conversation'),
   acceptanceCriteria: z.string().optional().describe('Freeform rubric the final result is verified against'),
   sources: z.array(z.string()).optional().describe('Source slugs to enable on the task sessions'),
   skills: z.array(z.string()).optional().describe('Skill slugs applied to dispatched task prompts'),
@@ -665,7 +665,7 @@ Use it for durable project knowledge: a decision, a gotcha, a convention, a user
 
   create_task: `Create a Craft Agents Task on the kanban board — writes tasks/<slug>/task.yaml and creates its orchestrator session. CREATION ONLY: the task lands in "todo" and is NOT run; starting it is the user's (or an automation's) decision.
 
-Provide title + description (the description becomes the task goal and the initial node prompt). Optional: acceptanceCriteria (verification rubric), sources / skills (workspace slugs), llmConnection + model, workingDirectory, projectId. When projectId is omitted, the task inherits the invoking session's project.
+Provide title + description (the description becomes the task goal and the initial node prompt). The description is all the agent that later works on the task gets, so make it self-contained: what to do, where (files, links, ids) and the decisions already made. Never point back at this conversation ("as discussed above", "item 3 of the plan"). Optional: acceptanceCriteria (verification rubric), sources / skills (workspace slugs), llmConnection + model, workingDirectory, projectId. When projectId is omitted, the task inherits the invoking session's project.
 
 Returns { slug, orchestratorSessionId, taskLabelId, warnings } — unknown source/skill slugs are reported as warnings, not errors. Use it when the user asks to capture or queue work as a task; to execute work right now, use the current session or spawn_session instead.`,
 
@@ -711,13 +711,15 @@ This changes state on GitHub and can lead to the PR merging without further acti
 
   get_session_info: `Get metadata about the current session or a specific session by ID.
 
-Returns labels, status, name, permission mode, projectId (if the session is bound to a project), workingDirectory, and other details.
+Returns labels, status, name, permission mode, projectId (if the session is bound to a project), parentSessionId (for a sub-session), workingDirectory, and other details.
+For a task's session (a Tasks board item, e.g. one create_task made), \`task\` holds the task itself: goal, acceptance criteria, subtasks and the path of its task.yaml. Read it before working on a task.
 Call with no arguments to introspect your own session state.`,
 
   list_sessions: `List sessions in the workspace. Returns total count + paginated results.
 
 Use filters (status, label, search) to narrow results instead of fetching everything. Default limit is 20 sessions.
-Use get_session_info for full details on a specific session (list-then-detail pattern).`,
+Sessions of a Tasks board item carry taskSlug; sub-sessions carry parentSessionId.
+Use get_session_info for full details on a specific session (list-then-detail pattern), including a task's goal and subtasks.`,
 
   list_background_tasks: `List background agents/tasks tracked for a session (running, finished, or orphaned).
 
@@ -856,9 +858,9 @@ export type AgentProfile = 'default' | 'coding';
 
 /**
  * Session tools a `coding` profile keeps, and the condition each one needs. Everything else
- * (Pages, browser, session self-management, inter-session messaging, config/skill/mermaid
- * validation, data/template/LLM helpers, preferences) serves desktop workflows and is dropped.
- * - `always`: kept in every coding session (feature flags still apply)
+ * (session labels/status/archive, board tasks, inter-session and gateway messaging, config/skill
+ * validation, template/sandbox helpers, `decide`, preferences) serves desktop workflows and is dropped.
+ * - `always`: kept in every coding session (feature flags and settings still apply)
  * - `sources`: kept while the session has at least one enabled source (auth + MCP resources)
  * - `project`: kept while the session is bound to a project
  */
@@ -866,14 +868,32 @@ export const CODING_PROFILE_TOOLS: Readonly<Record<string, 'always' | 'sources' 
   SubmitPlan: 'always',
   list_background_tasks: 'always',
   send_developer_feedback: 'always',
+  // Diagrams, large data tables, focused LLM calls, and delegating to or reading other sessions
+  mermaid_validate: 'always',
+  transform_data: 'always',
+  call_llm: 'always',
+  spawn_session: 'always',
+  get_session_info: 'always',
+  list_sessions: 'always',
   // PR tools are core to Coding mode; each returns a clean "unavailable" result off a GitHub checkout
   // (no async git gating — see plan D7), so they are always offered there (and only there: CODING_ONLY_TOOLS).
   pr_status: 'always',
   pr_bind: 'always',
   pr_unbind: 'always',
   pr_set_auto_merge: 'always',
+  // The built-in browser (still behind its setting) checks the web UI being built; Pages hold the
+  // reports and dashboards a coding session produces.
+  browser_tool: 'always',
+  list_pages: 'always',
+  get_page: 'always',
+  create_page: 'always',
+  update_page: 'always',
+  write_page_data: 'always',
+  delete_page: 'always',
   project_memory_append: 'project',
-  source_test: 'sources',
+  // The agent turns a source on with source_test, which restarts the turn with the source's tools;
+  // the `sources` tools below join from the next turn once a source is enabled.
+  source_test: 'always',
   source_oauth_trigger: 'sources',
   source_google_oauth_trigger: 'sources',
   source_slack_oauth_trigger: 'sources',

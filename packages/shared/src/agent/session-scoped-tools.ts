@@ -15,10 +15,11 @@
  * - call_llm (backend-specific, not in registry)
  */
 
-import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
+import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { getSessionPlansPath, getSessionPath } from '../sessions/storage.ts';
 import { DOC_REFS } from '../docs/index.ts';
 import { createClaudeContext } from './claude-context.ts';
+import { createToolServer, type ToolServer } from './backend/claude/live-mcp-servers.ts';
 import { basename } from 'node:path';
 
 // Import from session-tools-core: registry + schemas + base descriptions
@@ -168,7 +169,7 @@ export type SessionToolProfileOptions = Pick<SessionToolFilterOptions, 'profile'
 
 // Cache tools by session to avoid recreating them on every query.
 // We cache the tools array (expensive to build) but NOT the MCP server wrapper,
-// because createSdkMcpServer returns an MCP Server instance that holds transport
+// because createToolServer returns an MCP Server instance that holds transport
 // state. The SDK's query() calls connect() on it, setting _transport. On the next
 // query(), connect() is called again — but if the previous Query's subprocess hasn't
 // fully exited yet, _transport is still set and connect() throws
@@ -224,7 +225,7 @@ export function getSessionScopedTools(
   workspaceRootPath: string,
   workspaceId?: string,
   profileOptions?: SessionToolProfileOptions,
-): ReturnType<typeof createSdkMcpServer> {
+): ToolServer {
   // A coding session's tool set depends on its profile inputs, so they are part of its key.
   // The default key is unchanged: the default tool set does not depend on them.
   const cacheKey = profileOptions?.profile === 'coding'
@@ -333,7 +334,7 @@ export function getSessionScopedTools(
 
   // Always create a fresh MCP server wrapper to avoid "Already connected to a transport"
   // race condition when queries are sent back-to-back (see comment on sessionToolsCache).
-  return createSdkMcpServer({
+  return createToolServer({
     name: 'session',
     version: '1.0.0',
     tools,

@@ -1,7 +1,7 @@
 /**
  * AutomationActionRow
  *
- * Inline display of a single automation action (prompt or webhook).
+ * Inline display of a single automation action (prompt, webhook or script).
  * Used within the "Then" section of AutomationInfoPage.
  *
  * Prompt actions surface optional per-action overrides (llmConnection,
@@ -12,9 +12,9 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Info_Badge } from '@/components/info/Info_Badge'
 import { THINKING_LEVELS } from '@craft-agent/shared/agent/thinking-levels'
-import type { AutomationAction, PromptAction } from './types'
+import type { AutomationAction, PromptAction, ScriptAction } from './types'
 import { ActionTypeIcon } from './ActionTypeIcon'
-import { DEFAULT_WEBHOOK_METHOD } from './constants'
+import { DEFAULT_SCRIPT_RUNTIME, DEFAULT_WEBHOOK_METHOD } from './constants'
 
 export interface AutomationActionRowProps {
   action: AutomationAction
@@ -49,6 +49,18 @@ function WebhookText({ action }: { action: Extract<AutomationAction, { type: 'we
       <span className="text-secondary [overflow-wrap:anywhere]">{action.url}</span>
       {action.bodyFormat && (
         <span className="ml-1 text-tertiary">({action.bodyFormat})</span>
+      )}
+    </span>
+  )
+}
+
+function ScriptText({ action }: { action: ScriptAction }) {
+  return (
+    <span className="break-words text-label">
+      <span className="font-mono text-mono-ui font-medium text-accent">{action.runtime ?? DEFAULT_SCRIPT_RUNTIME}</span>{' '}
+      <span className="font-mono text-mono-ui text-secondary [overflow-wrap:anywhere]">{action.script}</span>
+      {action.args && action.args.length > 0 && (
+        <span className="ml-1 font-mono text-mono-ui text-tertiary [overflow-wrap:anywhere]">{action.args.join(' ')}</span>
       )}
     </span>
   )
@@ -105,7 +117,6 @@ function PromptActionBadges({ action, t }: { action: PromptAction; t: (key: stri
 
 export function AutomationActionRow({ action, index, className }: AutomationActionRowProps) {
   const { t } = useTranslation()
-  const isWebhook = action.type === 'webhook'
 
   return (
     <div className={cn('flex items-start gap-3 px-3.5 py-3', className)}>
@@ -119,8 +130,10 @@ export function AutomationActionRow({ action, index, className }: AutomationActi
 
       {/* Content — text-label on the block so the line box matches the 18px index column */}
       <div className="flex-1 min-w-0 text-label">
-        {isWebhook ? (
+        {action.type === 'webhook' ? (
           <WebhookText action={action} />
+        ) : action.type === 'script' ? (
+          <ScriptText action={action} />
         ) : (
           <>
             <PromptText text={action.prompt} t={t} />

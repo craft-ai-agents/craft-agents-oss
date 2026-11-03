@@ -293,6 +293,12 @@ export interface ChatOptions {
   /** Override thinking level for this message only */
   thinkingOverride?: ThinkingLevel;
   /**
+   * Context about the session, on the turns the host picks (a task session's spec: once, and
+   * again after it changes). The model sees it before the message; like `turnContext` it is not
+   * part of the stored message or of the resend after a source activation.
+   */
+  sessionContext?: string;
+  /**
    * Transient host guidance for this turn only (an interruption notice, a
    * decision-model suggestion). The model sees it after the message; it is not
    * part of the stored message or of the resend after a source activation.

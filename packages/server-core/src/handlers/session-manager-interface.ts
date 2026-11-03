@@ -36,6 +36,10 @@ export interface ISessionManager {
   // ---------------------------------------------------------------------------
 
   waitForInit(): Promise<void>
+  /** Resolves once the background disk load has populated the session map (or
+   *  failed). List endpoints await this instead of waitForInit, which now only
+   *  guarantees fast-path init (migrations, auth, config watchers). */
+  waitForSessionsLoaded(): Promise<void>
   initialize(): Promise<void>
   cleanup(): void
   setEventSink(sink: EventSink): void
@@ -57,6 +61,8 @@ export interface ISessionManager {
   /** Resolved working directory of a live session (Tasks Conductor uses it so children inherit
    *  the orchestrator's cwd). */
   getSessionWorkingDirectory(sessionId: string): string | undefined
+  /** Parent of a live sub-session (the Tasks Conductor refuses to run on one). */
+  getSessionParentId(sessionId: string): string | undefined
   /** Calls `listener(sessionId)` each time a session's turn completes; returns an unsubscribe.
    *  (The PR watcher refetches then: a turn is when pushes and `gh pr create` happen.) */
   onTurnComplete?(listener: (sessionId: string) => void): () => void

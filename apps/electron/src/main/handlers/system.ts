@@ -188,7 +188,7 @@ export function registerSystemGuiHandlers(server: RpcServer, deps: HandlerDeps):
   // Badge and window focus
   server.handle(RPC_CHANNELS.badge.REFRESH, async () => {
     try {
-      await sessionManager.waitForInit()
+      await sessionManager.waitForSessionsLoaded()
     } catch {
       // continue
     }

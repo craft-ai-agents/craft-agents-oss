@@ -114,6 +114,18 @@ export function AutomationInfoPage({
           actions={editActions}
         />
 
+        {/* Not running: the server skipped this entry, or its event never runs */}
+        {automation.issues && (
+          <Info_Alert variant="error" icon={<AlertCircle />}>
+            <Info_Alert.Title>{t('automations.notRunningTitle')}</Info_Alert.Title>
+            <Info_Alert.Description>
+              {automation.issues.map((message, i) => (
+                <span key={i} className="block break-words">{message}</span>
+              ))}
+            </Info_Alert.Description>
+          </Info_Alert>
+        )}
+
         {/* Disabled warning */}
         {!automation.enabled && (
           <Info_Alert variant="warning" icon={<PauseCircle />}>
@@ -215,8 +227,11 @@ export function AutomationInfoPage({
           <Info_Table>
             <Info_Table.Row label={t('automations.labelAccessLevel')} value={getPermissionDisplayName(automation.permissionMode)} />
             <Info_Table.Row label={t('automations.labelStatus')}>
-              <Info_Badge color={automation.enabled ? 'success' : 'default'} dot>
-                {automation.enabled ? t('automations.statusActive') : t('automations.statusDisabled')}
+              {/* Enabled is not the same as running: a skipped entry is enabled but never fires */}
+              <Info_Badge color={!automation.enabled ? 'default' : automation.issues ? 'destructive' : 'success'} dot>
+                {!automation.enabled
+                  ? t('automations.statusDisabled')
+                  : automation.issues ? t('automations.notRunning') : t('automations.statusActive')}
               </Info_Badge>
             </Info_Table.Row>
             {automation.labels && automation.labels.length > 0 && (

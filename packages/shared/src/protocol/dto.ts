@@ -114,6 +114,11 @@ export interface Session {
   projectId?: string
   /** Parent session id — when set, this session is a subtask of the parent (undefined = top-level task) */
   parentSessionId?: string
+  /**
+   * Id of the session this one was branched from (undefined = not a branch). Computed on read
+   * from the persisted `branchFromSessionPath`; the session list nests a branch under its source.
+   */
+  branchFromSessionId?: string
   /** Kanban board column id ('todo' | 'in-progress' | 'done'); independent of sessionStatus */
   kanbanColumn?: string
   /** Tasks Conductor: slug of the task spec this session belongs to. */
@@ -430,6 +435,8 @@ export interface PermissionModeState {
 // turnId: Correlation ID from the API's message.id, groups all events in an assistant turn
 export type SessionEvent =
   | { type: 'text_discard'; sessionId: string; turnId: string }
+  // Remove these turns' assistant text and these tool calls (a reply the backend took back)
+  | { type: 'messages_retracted'; sessionId: string; turnIds: string[]; toolUseIds: string[] }
   | { type: 'retry'; sessionId: string; phase: 'backoff'; message: string }
   | { type: 'retry'; sessionId: string; phase: 'active' | 'end' }
   | { type: 'text_delta'; sessionId: string; delta: string; turnId?: string }
@@ -869,6 +876,15 @@ export type TestAutomationActionResult =
 export interface TestAutomationResult {
   actions: TestAutomationActionResult[]
 }
+
+export type { AutomationLoadIssue } from '../automations/types'
+
+/**
+ * `automations:get` returns the raw automations.json with this key added: the
+ * automations that will not run, and why — computed with the same lenient load
+ * the runtime uses, so the screen and the runtime agree. Older clients ignore it.
+ */
+export const AUTOMATIONS_LOAD_ISSUES_KEY = '_loadIssues'
 
 // ---------------------------------------------------------------------------
 // Window types

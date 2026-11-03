@@ -149,6 +149,7 @@ export type {
   ApiTestResult,
   // Session self-management types
   SessionInfo,
+  SessionTaskInfo,
   SessionListItem,
   ListSessionsOptions,
   ListSessionsResult,

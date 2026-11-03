@@ -3,6 +3,8 @@ import type {
   LoadedSource,
   PermissionMode,
   MessagingPlatformRuntimeInfo,
+  TaskGetResult,
+  TaskRunSnapshotDto,
   WhatsAppUiEvent,
 } from '../../shared/types'
 import type { MessagingBinding } from '../atoms/messaging'
@@ -12,6 +14,7 @@ import type {
   PlatformAccessMode,
   PlatformOwner,
 } from '../components/messaging/access/types'
+import { TASK_SPEC_SAMPLES } from './registry/samples/task-specs'
 
 // ============================================================================
 // Messaging mock state + control handle
@@ -741,6 +744,24 @@ export const mockElectronAPI = {
     return () => {
       messagingMockState.waEventListeners.delete(callback)
     }
+  },
+
+  // Task specs for the task brief demos (registry/samples/task-specs.ts), keyed by slug
+  getTask: async (_workspaceId: string, slug: string): Promise<TaskGetResult> => {
+    const spec = (TASK_SPEC_SAMPLES as Record<string, unknown>)[slug]
+    if (!spec) {
+      return { slug, validation: { valid: false, errors: [{ path: 'root', message: `Task "${slug}" not found`, severity: 'error' }], warnings: [] }, run: null }
+    }
+    return { slug, validation: { valid: true, errors: [], warnings: [] }, spec, run: null }
+  },
+
+  runTask: async (_workspaceId: string, req: { slug: string; orchestratorSessionId?: string }): Promise<TaskRunSnapshotDto> => {
+    console.log('[Playground] runTask', req)
+    await new Promise(resolve => setTimeout(resolve, 800))
+    if (req.slug === 'already-running') {
+      throw new Error(`Task "${req.slug}" already has an active run (run-1) on this orchestrator; stop it before starting another.`)
+    }
+    return { slug: req.slug, runId: 'run-1', taskId: req.slug, status: 'running', orchestratorSessionId: req.orchestratorSessionId, nodes: [], tokensUsed: 0 }
   },
 }
 

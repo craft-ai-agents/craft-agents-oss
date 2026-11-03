@@ -1065,6 +1065,12 @@ export function shouldPromptInAskMode(
     };
   }
 
+  // --- Monitor: runs its `command` in a shell as Bash does (a WebSocket watch only reads) ---
+  if (toolName === 'Monitor') {
+    if (input.command === undefined) return null;
+    return shouldPromptInAskMode('Bash', { command: input.command }, permissionManager, permissionsContext, plansFolderPath, onDebug);
+  }
+
   // --- Bash commands ---
   if (toolName === 'Bash') {
     const command = typeof input.command === 'string' ? input.command : '';

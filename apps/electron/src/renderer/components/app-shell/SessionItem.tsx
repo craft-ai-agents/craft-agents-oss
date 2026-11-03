@@ -1,16 +1,16 @@
 import { useTranslation } from "react-i18next"
-import { AlertCircle, CodeXml, Flag, Hand } from "lucide-react"
+import { AlertCircle, ChevronRight, CodeXml, Flag, Hand } from "lucide-react"
 import { useActionLabel } from "@/actions"
 import { cn } from "@/lib/utils"
 import { rendererPerf } from "@/lib/perf"
 import { Spinner } from "@craft-agent/ui"
-import { EntityRow } from "@/components/ui/entity-row"
+import { EntityRow, type TreeGuide } from "@/components/ui/entity-row"
 import { EntityListBadge } from "@/components/ui/entity-list-badge"
 import { SessionMenu } from "./SessionMenu"
 import { BatchSessionMenu } from "./BatchSessionMenu"
 import { CompactSessionMenu } from "./CompactSessionMenu"
 import { SessionStatusIcon } from "./SessionStatusIcon"
-import { SessionBadges } from "./SessionBadges"
+import { SessionBadges, chipButtonProps } from "./SessionBadges"
 import { SessionProjectColorWrapper } from "./SessionProjectColorWrapper"
 import { hasTransferTargets } from "./transfer-targets"
 import { useProjectColorTreatment } from "@/hooks/useProjectColorTreatment"
@@ -48,6 +48,14 @@ export interface SessionItemProps {
   onSelect: () => void
   onToggleSelect?: () => void
   onRangeSelect?: () => void
+  /** Nesting level under the session's list parent (0 = top level) */
+  depth?: number
+  /** Tree lines of the levels above the row (see `EntityRow`) */
+  guides?: readonly TreeGuide[]
+  /** Label entries the row's parent shows too (a task's family shares its label), left out here */
+  inheritedLabels?: readonly string[]
+  /** The sessions nested under this row, when it has any */
+  subSessions?: { count: number; collapsed: boolean; onToggle: () => void }
 }
 
 /**
@@ -55,7 +63,9 @@ export interface SessionItemProps {
  * - leading glyph = the user's workflow status (click to change it)
  * - title (600 when unread) · age (unread: led by an 8px accent dot, age in accent)
  * - subtitle = run state with its own shape and color (needs you · working · failed · plan ready),
- *   else the labels (chips tinted with each label's color), else the session preview
+ *   else the labels (chips tinted with each label's color), else the session preview (top level only)
+ * - sub-sessions: a parent's subtitle line leads with their toggle, under the glyph, where the tree line to
+ *   its nested rows starts; a nested row leaves out the labels its parent shows
  */
 export function SessionItem({
   item,
@@ -66,6 +76,10 @@ export function SessionItem({
   onSelect,
   onToggleSelect,
   onRangeSelect,
+  depth = 0,
+  guides,
+  inheritedLabels,
+  subSessions,
 }: SessionItemProps) {
   const { t } = useTranslation()
   const ctx = useSessionListContext()
@@ -81,6 +95,7 @@ export function SessionItem({
   const chatMatchCount = isActiveSession ? activeMatch!.count : ripgrepMatchCount
   const hasMatch = chatMatchCount != null && chatMatchCount > 0
   const hasLabels = !!(item.labels && item.labels.length > 0 && ctx.flatLabels.length > 0 && item.labels.some(entry => {
+    if (inheritedLabels?.includes(entry)) return false
     const labelId = extractLabelId(entry)
     return ctx.flatLabels.some(l => l.id === labelId)
   }))
@@ -102,8 +117,9 @@ export function SessionItem({
           : null
   const needsAttention = runState === 'needs-you' || runState === 'failed'
   // One line, one subject: run state, else labels (full width), else the preview. Squeezing the preview
-  // and the chips into one line truncated both into fragments ("Run `gh issu…" · "Schedul…").
-  const previewText = runState || hasLabels ? null : getSessionPreviewText(item)
+  // and the chips into one line truncated both into fragments ("Run `gh issu…" · "Schedul…"). A nested
+  // row skips the preview (its prompt, which its parent wrote), so a family stays compact.
+  const previewText = runState || hasLabels || depth > 0 ? null : getSessionPreviewText(item)
 
   // Resolve the bound project so the row can show a project-themed stripe /
   // tint and reveal the project name on hover. Treatment is a user preference
@@ -164,11 +180,56 @@ export function SessionItem({
     </span>
   ) : previewText
 
+  // Sub-session toggle, under the status glyph: the chevron turns like a group header's, and the rows
+  // appear at once. The count is in its name and tooltip.
+  const subSessionToggleLabel = subSessions && (subSessions.collapsed
+    ? t("session.showSubSessions", { count: subSessions.count })
+    : t("session.hideSubSessions", { count: subSessions.count }))
+  const subSessionToggle = subSessions ? (
+    <div
+      {...chipButtonProps(subSessions.onToggle)}
+      data-slot="sub-session-toggle"
+      aria-expanded={!subSessions.collapsed}
+      aria-label={subSessionToggleLabel}
+      title={subSessionToggleLabel}
+      className={cn(
+        // A 20px circle like the status glyph's hover above it, laid out at the glyph's 16px
+        "relative grid size-5 -m-0.5 shrink-0 place-items-center rounded-full text-tertiary cursor-pointer -outline-offset-2",
+        "transition-[background-color,color] duration-micro ease-out-subtle hover:bg-fill-pressed hover:text-foreground hover:duration-instant",
+        // Touch: a 36px-wide hit area down to the row's edge, clear of the status glyph above
+        "@max-mobile/shell:before:absolute @max-mobile/shell:before:-inset-x-2 @max-mobile/shell:before:top-0 @max-mobile/shell:before:-bottom-3",
+      )}
+    >
+      <ChevronRight
+        aria-hidden
+        className={cn(
+          "size-3.5 transition-transform duration-(--spring-snap-dur) ease-(--spring-snap)",
+          !subSessions.collapsed && "rotate-90",
+        )}
+      />
+    </div>
+  ) : undefined
+  // A parent with nothing else on its subtitle line names its sub-sessions there, beside the toggle. The
+  // text toggles too (a mouse convenience: the chevron is the control assistive tech gets).
+  const subSessionCount = subSessions && !subtitle && !hasLabels ? (
+    <span
+      aria-hidden="true"
+      onMouseDown={(e) => { e.stopPropagation(); e.preventDefault() }}
+      onClick={(e) => { e.stopPropagation(); subSessions.onToggle() }}
+      className="cursor-pointer text-tertiary transition-colors duration-micro ease-out-subtle hover:text-foreground hover:duration-instant"
+    >
+      {t("session.subSessionCount", { count: subSessions.count })}
+    </span>
+  ) : null
+
   return (
     <SessionProjectColorWrapper color={projectColor} treatment={projectColorTreatment}>
     <EntityRow
       className="session-item"
       dataAttributes={{ 'data-session-id': item.id }}
+      depth={depth}
+      guides={guides}
+      guideBelow={!!subSessions && !subSessions.collapsed}
       isSelected={isSelected}
       isInMultiSelect={isInMultiSelect}
       // When a project stripe is drawn at the leading edge, suppress EntityRow's
@@ -233,8 +294,9 @@ export function SessionItem({
       icon={<SessionStatusIcon item={item} />}
       title={ctx.searchQuery ? highlightMatch(title, ctx.searchQuery) : title}
       titleClassName={cn(isUnread && "font-semibold", item.isAsyncOperationOngoing && "animate-shimmer-text")}
-      subtitle={subtitle}
-      subtitleTrailing={hasLabels && !needsAttention ? <SessionBadges item={item} /> : undefined}
+      subtitle={subtitle ?? subSessionCount}
+      subtitleLeading={subSessionToggle}
+      subtitleTrailing={hasLabels && !needsAttention ? <SessionBadges item={item} hiddenLabels={inheritedLabels} /> : undefined}
       titleSuffix={
         (projectName || hasMessagingBinding || item.codingMode) ? (
           <div className="flex items-center gap-1">

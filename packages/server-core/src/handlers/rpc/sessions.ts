@@ -139,7 +139,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   // Waits for initialization to complete so sessions are never returned empty during startup
   server.handle(RPC_CHANNELS.sessions.GET, async (ctx) => {
     try {
-      await sessionManager.waitForInit()
+      await sessionManager.waitForSessionsLoaded()
     } catch (error) {
       log.error('GET_SESSIONS continuing after initialization failure:', error)
     }
@@ -167,7 +167,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   // Get unread summary across all workspaces
   server.handle(RPC_CHANNELS.sessions.GET_UNREAD_SUMMARY, async () => {
     try {
-      await sessionManager.waitForInit()
+      await sessionManager.waitForSessionsLoaded()
     } catch (error) {
       log.error('GET_UNREAD_SUMMARY continuing after initialization failure:', error)
     }

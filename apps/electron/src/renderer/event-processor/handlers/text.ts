@@ -5,7 +5,8 @@
  * Pure functions that return new state - no side effects.
  */
 
-import type { SessionState, StreamingState, TextDeltaEvent, TextCompleteEvent, TextDiscardEvent } from '../types'
+import { withoutRetractedMessages } from '@craft-agent/core/types'
+import type { SessionState, StreamingState, TextDeltaEvent, TextCompleteEvent, TextDiscardEvent, MessagesRetractedEvent } from '../types'
 import type { Message } from '../../../shared/types'
 import {
   findStreamingMessage,
@@ -25,6 +26,14 @@ export function handleTextDiscard(state: SessionState, event: TextDiscardEvent):
       )),
     },
     streaming: state.streaming?.turnId === event.turnId ? null : state.streaming,
+  }
+}
+
+/** Remove a reply the backend took back: its turns' text, finished or not, and its tool calls. */
+export function handleMessagesRetracted(state: SessionState, event: MessagesRetractedEvent): SessionState {
+  return {
+    session: { ...state.session, messages: withoutRetractedMessages(state.session.messages, event) },
+    streaming: state.streaming?.turnId && event.turnIds.includes(state.streaming.turnId) ? null : state.streaming,
   }
 }
 

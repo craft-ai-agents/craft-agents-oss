@@ -71,6 +71,7 @@ export const SESSION_PERSISTENT_FIELDS = [
   'taskNodeId',
   'taskNodeCount',
   'taskDraft',
+  'taskContextFingerprint',
 ] as const;
 
 export type SessionPersistentField = typeof SESSION_PERSISTENT_FIELDS[number];
@@ -249,6 +250,8 @@ export interface SessionConfig {
   taskNodeCount?: number;
   /** Tasks Conductor: generate-time draft orchestrator. Hidden from the board until adopted (promoted) by createTask. */
   taskDraft?: boolean;
+  /** Tasks Conductor: fingerprint of the task spec context last sent to this task session's agent (sent again when the spec changes). */
+  taskContextFingerprint?: string;
 }
 
 /**
@@ -370,6 +373,8 @@ export interface SessionHeader {
   taskNodeCount?: number;
   /** Tasks Conductor: generate-time draft orchestrator. Hidden from the board until adopted (promoted) by createTask. */
   taskDraft?: boolean;
+  /** Tasks Conductor: fingerprint of the task spec context last sent to this task session's agent (sent again when the spec changes). */
+  taskContextFingerprint?: string;
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
   messageCount: number;
@@ -472,4 +477,6 @@ export interface SessionMetadata {
   taskNodeCount?: number;
   /** Tasks Conductor: generate-time draft orchestrator. Hidden from the board until adopted (promoted) by createTask. */
   taskDraft?: boolean;
+  /** Tasks Conductor: fingerprint of the task spec context last sent to this task session's agent (sent again when the spec changes). */
+  taskContextFingerprint?: string;
 }

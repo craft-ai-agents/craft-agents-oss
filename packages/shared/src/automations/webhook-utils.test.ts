@@ -2,8 +2,8 @@
  * Tests for webhook utility functions (expandWebhookAction, etc.)
  */
 
-import { describe, it, expect } from 'bun:test';
-import { expandWebhookAction } from './webhook-utils.ts';
+import { describe, it, expect, afterEach } from 'bun:test';
+import { expandWebhookAction, executeWebhookRequest } from './webhook-utils.ts';
 import type { WebhookAction } from './types.ts';
 
 const env = {
@@ -86,5 +86,44 @@ describe('expandWebhookAction', () => {
     expect(result.method).toBe('PUT');
     expect(result.bodyFormat).toBe('json');
     expect(result.captureResponse).toBe(true);
+  });
+});
+
+describe('variable values', () => {
+  // A session name is user/agent-controlled text
+  const valueEnv = {
+    CRAFT_SESSION_NAME: 'Fix "login"\nfor $CRAFT_WH_SECRET',
+    CRAFT_WH_SECRET: 'wh-secret',
+  };
+  const action: WebhookAction = {
+    type: 'webhook',
+    url: 'https://api.example.com/hook',
+    body: { text: 'Session ${CRAFT_SESSION_NAME}', '${CRAFT_WH_SECRET}': ['$CRAFT_SESSION_NAME'] },
+  };
+  const expectedBody = {
+    text: 'Session Fix "login"\nfor $CRAFT_WH_SECRET',
+    'wh-secret': ['Fix "login"\nfor $CRAFT_WH_SECRET'],
+  };
+
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it('keeps quotes and newlines in a JSON body and never expands a value again', () => {
+    expect(expandWebhookAction(action, valueEnv).body).toEqual(expectedBody);
+  });
+
+  it('sends the same valid JSON', async () => {
+    let sentBody: string | undefined;
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      sentBody = init?.body as string;
+      return new Response('ok', { status: 200 });
+    }) as typeof fetch;
+
+    const result = await executeWebhookRequest(action, { env: valueEnv });
+
+    expect(result.success).toBe(true);
+    expect(JSON.parse(sentBody!)).toEqual(expectedBody);
   });
 });
