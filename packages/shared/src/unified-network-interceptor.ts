@@ -1156,7 +1156,8 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
   });
 }
 
-const openAiAdapter: ApiAdapter = {
+/** Exported for focused unit tests. */
+export const openAiAdapter: ApiAdapter = {
   name: 'openai',
 
   shouldIntercept(url: string): boolean {
@@ -1198,11 +1199,8 @@ const openAiAdapter: ApiAdapter = {
       const updatedSchema = injectMetadataIntoToolSchema(params);
       params.properties = updatedSchema.properties;
       params.required = updatedSchema.required;
-      // External MCP servers may set additionalProperties: false which would
-      // cause validation to reject _intent/_displayName in tool inputs.
-      if ((params as Record<string, unknown>).additionalProperties === false) {
-        delete (params as Record<string, unknown>).additionalProperties;
-      }
+      // Keep additionalProperties as sent: _intent and _displayName are declared in
+      // properties and required above, and strict tools require it to stay false.
       modifiedCount++;
     }
 
@@ -1394,7 +1392,8 @@ export function createOpenAiResponsesSseStrippingStream(): TransformStream<Uint8
   });
 }
 
-const openAiResponsesAdapter: ApiAdapter = {
+/** Exported for focused unit tests. */
+export const openAiResponsesAdapter: ApiAdapter = {
   name: 'openai-responses',
 
   shouldIntercept(url: string): boolean {
@@ -1427,9 +1426,8 @@ const openAiResponsesAdapter: ApiAdapter = {
       const updatedSchema = injectMetadataIntoToolSchema(params);
       params.properties = updatedSchema.properties;
       params.required = updatedSchema.required;
-      if ((params as Record<string, unknown>).additionalProperties === false) {
-        delete (params as Record<string, unknown>).additionalProperties;
-      }
+      // Keep additionalProperties as sent: _intent and _displayName are declared in
+      // properties and required above, and strict tools require it to stay false.
       modifiedCount++;
     }
 
