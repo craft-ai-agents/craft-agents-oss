@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test';
 import {
   getSetupNeeds,
+  isDeadRefreshTokenError,
   performTokenRefresh,
   _resetRefreshMutex,
   type AuthState,
@@ -379,4 +380,22 @@ describe('MigrationInfo', () => {
 
     expect(validInfo.reason).toBe('legacy_token');
   });
+});
+
+describe('isDeadRefreshTokenError', () => {
+  it.each([
+    'Token refresh failed: 400 - Refresh token expired',
+    'Token refresh failed: 400 - invalid_grant',
+    'Token refresh failed: 400 - Refresh token not found or invalid',
+    'invalid_refresh_token',
+  ])('clears credentials for %s', (message) => {
+    expect(isDeadRefreshTokenError(message)).toBe(true);
+  });
+
+  it.each(['fetch failed', 'Token refresh failed: 503 - Service Unavailable'])(
+    'keeps credentials for transient failure %s',
+    (message) => {
+      expect(isDeadRefreshTokenError(message)).toBe(false);
+    },
+  );
 });

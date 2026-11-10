@@ -98,6 +98,21 @@ export interface SetupNeeds {
 let refreshInProgress: Promise<TokenResult> | null = null;
 
 /**
+ * Whether a refresh failure means the stored refresh token can never succeed again,
+ * so its credentials should be cleared and the user asked to sign in.
+ * Be conservative - network errors, timeouts and unknown errors keep the credentials.
+ */
+export function isDeadRefreshTokenError(errorMessage: string): boolean {
+  return (
+    errorMessage.includes('invalid_grant') ||
+    errorMessage.includes('Refresh token not found or invalid') ||
+    // refreshClaudeToken reports the server's error_description, e.g. "400 - Refresh token expired"
+    errorMessage.includes('Refresh token expired') ||
+    errorMessage.includes('invalid_refresh_token')
+  );
+}
+
+/**
  * Perform the actual token refresh (internal, called only when holding mutex)
  * Returns TokenResult with accessToken and optional migrationRequired info
  */
@@ -137,12 +152,7 @@ export async function performTokenRefresh(
     const errorMessage = error instanceof Error ? error.message : String(error);
     debug('[auth] Failed to refresh Claude OAuth token:', errorMessage);
 
-    // Only clear credentials for specific OAuth errors that indicate the token is truly invalid
-    // Be conservative - don't clear for network errors, timeouts, or unknown errors
-    const isIncompatibleToken =
-      errorMessage.includes('invalid_grant') ||
-      errorMessage.includes('Refresh token not found or invalid') ||
-      errorMessage.includes('invalid_refresh_token');
+    const isIncompatibleToken = isDeadRefreshTokenError(errorMessage);
 
     let migrationRequired: MigrationInfo | undefined;
 
