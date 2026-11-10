@@ -423,6 +423,23 @@ export function getModelContextWindow(modelId: string): number | undefined {
 }
 
 /**
+ * Context window for a model on a connection: registry metadata first, then the
+ * connection's cached model row (from the provider's model list, e.g. Anthropic's
+ * max_input_tokens) for models newer than this build's registry.
+ */
+export function getConnectionModelContextWindow(
+  modelId: string,
+  connectionModels?: ReadonlyArray<ModelDefinition | string>,
+): number | undefined {
+  const registered = getModelContextWindow(modelId);
+  if (registered !== undefined) return registered;
+  const cached = connectionModels?.find(
+    (model): model is ModelDefinition => typeof model !== 'string' && model.id === modelId,
+  );
+  return cached?.contextWindow;
+}
+
+/**
  * Check if model is an Opus model (for cache TTL decisions).
  */
 export function isOpusModel(modelId: string): boolean {

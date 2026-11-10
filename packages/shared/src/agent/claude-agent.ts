@@ -25,7 +25,7 @@ import type { McpClientPool } from '../mcp/mcp-pool.ts';
 import { proxyToolName } from '../mcp/proxy-tool-name.ts';
 import { loadPlanFromPath } from '../sessions/storage.ts';
 import { loadProjectById, getProjectAssetsPath, listProjectAssets, getProjectMemoryPath, loadProjectMemory } from '../projects/storage.ts';
-import { DEFAULT_MODEL, isClaudeModel, isAdaptiveThinkingAlwaysOnModel, getDefaultSummarizationModel, getModelContextWindow } from '../config/models.ts';
+import { DEFAULT_MODEL, isClaudeModel, isAdaptiveThinkingAlwaysOnModel, getDefaultSummarizationModel, getConnectionModelContextWindow } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { loadPreferences, formatPreferencesForPrompt, getCoAuthorPreference } from '../config/preferences.ts';
 import type { FileAttachment } from '../utils/files.ts';
@@ -970,8 +970,12 @@ export class ClaudeAgent extends BaseAgent {
     // Resolve model: prioritize session model > config model > current Anthropic default.
     const model = config.session?.model ?? config.model ?? DEFAULT_MODEL;
 
-    // Context window from registry (1M for Opus/Sonnet 4.6, 200K for others)
-    const CLAUDE_CONTEXT_WINDOW = getModelContextWindow(model) ?? 200_000;
+    // Context window from registry (1M for Opus/Sonnet 4.6, 200K for others), falling back to
+    // the connection's cached model list for models the registry does not know yet.
+    const CLAUDE_CONTEXT_WINDOW = getConnectionModelContextWindow(
+      model,
+      config.connectionSlug ? getLlmConnection(config.connectionSlug)?.models : undefined,
+    ) ?? 200_000;
 
     // BaseAgent gets the whole config as this.config (and initializes model, thinkingLevel, profile,
     // permissionManager, sourceManager, etc.). Never rebuild it from a field list: see ClaudeAgentConfig.
@@ -1300,7 +1304,11 @@ export class ClaudeAgent extends BaseAgent {
       // Gated by enable1MContext in global config (~/.craft-agent/config.json).
       // The interceptor also reads this to strip the SDK-injected beta header.
       const use1M = this.config.enable1MContext !== false;
-      const effectiveModel = use1M && getModelContextWindow(model) === 1_000_000
+      // Same lookup as the reported window, so a model the picker shows at 1M also runs at 1M.
+      const connectionModels = this.config.connectionSlug
+        ? getLlmConnection(this.config.connectionSlug)?.models
+        : undefined;
+      const effectiveModel = use1M && getConnectionModelContextWindow(model, connectionModels) === 1_000_000
         ? `${model}[1m]`
         : model;
 
