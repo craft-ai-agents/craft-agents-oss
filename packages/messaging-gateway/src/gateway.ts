@@ -126,6 +126,21 @@ interface PendingCompactAccept {
 
 const COMPACT_ACCEPT_TTL_MS = 10 * 60 * 1000
 
+/**
+ * Session events that show the agent got past its pending permission prompts: it
+ * started another tool, produced text, or ended the turn. A `tool_result` only
+ * settles the prompt for its own tool; a new `permission_request` supersedes others.
+ */
+const AGENT_MOVED_ON_EVENT_TYPES = new Set([
+  'tool_start',
+  'text_delta',
+  'text_complete',
+  'complete',
+  'interrupted',
+  'error',
+  'typed_error',
+])
+
 export class MessagingGateway {
   private readonly sessionManager: ISessionManager
   private readonly workspaceId: string
@@ -392,8 +407,9 @@ export class MessagingGateway {
 
   /**
    * Drop entries from `permissionMessages` whose requestId differs from the
-   * event's current permission request (or all of them, for non-permission
-   * events). For each dropped entry we also fire-and-forget a `clearButtons`
+   * event's current permission request, or that the event shows the agent has
+   * moved past (see `AGENT_MOVED_ON_EVENT_TYPES`; a `tool_result` settles only
+   * its own tool's prompt). For each dropped entry we also fire-and-forget a `clearButtons`
    * so Telegram won't deliver any further callbacks for the stale prompt.
    *
    * Same-requestId `permission_request` events are preserved so a re-render
@@ -407,10 +423,23 @@ export class MessagingGateway {
       event.type === 'permission_request'
         ? ((event.request as { requestId?: string } | undefined)?.requestId ?? null)
         : null
+    // Status, info and metadata updates, and results of other (parallel) tools, can
+    // arrive while the agent is still blocked on the prompt; they must not drop it.
+    const resolvedToolUseId =
+      event.type === 'tool_result' && typeof event.toolUseId === 'string' ? event.toolUseId : null
+    if (
+      event.type !== 'permission_request' &&
+      event.type !== 'tool_result' &&
+      !AGENT_MOVED_ON_EVENT_TYPES.has(event.type)
+    ) {
+      return
+    }
 
     for (const [requestId, record] of this.permissionMessages) {
       if (record.sessionId !== event.sessionId) continue
       if (requestId === eventRequestId) continue
+      // A tool result only settles the prompt raised for that tool (`perm-<toolUseId>`).
+      if (event.type === 'tool_result' && requestId !== `perm-${resolvedToolUseId}`) continue
       this.permissionMessages.delete(requestId)
 
       const adapter = this.adapters.get(record.platform)

@@ -361,4 +361,39 @@ describe('MessagingGateway — perm: button (#726)', () => {
     )
     expect(h.sessionManager.respondToPermission).toHaveBeenCalledTimes(1)
   })
+
+  it('status updates and other tools’ results keep a pending prompt tappable (#1130)', async () => {
+    const h = await makeHarness()
+    await registerPrompt(h.gateway, { requestId: 'perm-toolu_A' })
+
+    for (const event of [
+      { type: 'status', sessionId: 'sess-A', message: 'Waiting for permission' },
+      { type: 'tool_result', sessionId: 'sess-A', toolUseId: 'toolu_B', toolName: 'Read', result: 'ok' },
+    ] as SessionEvent[]) {
+      h.gateway.onSessionEvent('session:event', { to: 'workspace', workspaceId: 'ws-test' }, event)
+    }
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(h.adapter.clearButtons).not.toHaveBeenCalled()
+
+    await h.adapter.fireButton(pressFor('perm:allow:perm-toolu_A'))
+    expect(h.sessionManager.respondToPermission).toHaveBeenCalledTimes(1)
+  })
+
+  it('the prompted tool’s own result clears its prompt (#1130)', async () => {
+    const h = await makeHarness()
+    await registerPrompt(h.gateway, { requestId: 'perm-toolu_A' })
+
+    h.gateway.onSessionEvent(
+      'session:event',
+      { to: 'workspace', workspaceId: 'ws-test' },
+      { type: 'tool_result', sessionId: 'sess-A', toolUseId: 'toolu_A', toolName: 'Bash', result: 'ok' } as SessionEvent,
+    )
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(h.adapter.clearButtons).toHaveBeenCalledTimes(1)
+    await h.adapter.fireButton(pressFor('perm:allow:perm-toolu_A'))
+    expect(h.sessionManager.respondToPermission).not.toHaveBeenCalled()
+  })
 })
