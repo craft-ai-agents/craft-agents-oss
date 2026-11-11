@@ -352,3 +352,35 @@ describe('upgradePromptCacheTtl', () => {
     expect((body.tools as any[])[0].cache_control).toEqual({ type: 'ephemeral' });
   });
 });
+
+describe('OpenAI adapters keep strict tool schemas valid', () => {
+  const strictParameters = () => ({
+    type: 'object',
+    properties: { path: { type: 'string' } },
+    required: ['path'],
+    additionalProperties: false,
+  });
+
+  it.each(['chat', 'responses'] as const)(
+    'keeps additionalProperties: false after injecting metadata (%s)',
+    async (api) => {
+      process.env.CRAFT_INTERCEPTOR_DISABLE_AUTO_INSTALL = '1';
+      const { openAiAdapter, openAiResponsesAdapter } = await import('../unified-network-interceptor.ts');
+      // MCP tools receive metadata regardless of the rich-descriptions setting.
+      const name = 'mcp__files__read';
+      const result = api === 'chat'
+        ? openAiAdapter.addMetadataToTools({
+            tools: [{ type: 'function', function: { name, strict: true, parameters: strictParameters() } }],
+          })
+        : openAiResponsesAdapter.addMetadataToTools({
+            tools: [{ type: 'function', name, strict: true, parameters: strictParameters() }],
+          });
+      const tool = (result.tools as Array<Record<string, any>>)[0]!;
+      const schema = api === 'chat' ? tool.function.parameters : tool.parameters;
+
+      expect(schema.additionalProperties).toBe(false);
+      expect(schema.required).toEqual(['_displayName', '_intent', 'path']);
+      expect(Object.keys(schema.properties).sort()).toEqual(['_displayName', '_intent', 'path']);
+    },
+  );
+});
