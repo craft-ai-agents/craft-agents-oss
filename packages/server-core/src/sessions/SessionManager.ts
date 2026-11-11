@@ -5345,12 +5345,7 @@ export class SessionManager implements ISessionManager {
           // it after the current turn (anthropic defaults to 'queue'); an idle
           // target starts processing immediately. sendMessage throws for an
           // unknown session — that rejection propagates to the handler's catch.
-          const targetBusy = this.sessions.get(sessionId)?.isProcessing === true
-          await this.sendMessage(sessionId, message, fileAttachments)
-          return {
-            delivery: targetBusy ? ('queued' as const) : ('delivered' as const),
-            targetBusy,
-          }
+          return this.sendAgentMessageUntilAccepted(sessionId, message, fileAttachments)
         },
         activateSourceInSessionFn: async (sourceSlug: string) => {
           const cb = managed.agent?.onSourceActivationRequest
@@ -6640,6 +6635,44 @@ export class SessionManager implements ISessionManager {
     sessionLog.info(`Deleted session ${sessionId}`)
   }
 
+  /** Acknowledge durable admission, not completion of the recipient's turn. */
+  private sendAgentMessageUntilAccepted(
+    sessionId: string,
+    message: string,
+    attachments?: FileAttachment[],
+  ): Promise<{ delivery: 'queued' | 'delivered'; targetBusy: boolean }> {
+    const targetBusy = this.sessions.get(sessionId)?.isProcessing === true
+    return new Promise((resolve, reject) => {
+      let acked = false
+      const onAck = () => {
+        if (acked) return
+        acked = true
+        resolve({ delivery: targetBusy ? 'queued' : 'delivered', targetBusy })
+      }
+      // sendMessage continues to own streaming, queue draining and cleanup.
+      // Observe its entire promise even after the sender's admission resolves.
+      this.sendMessage(sessionId, message, attachments, undefined, undefined, undefined, undefined, onAck)
+        .then(() => {
+          if (!acked) reject(new Error('sendMessage completed without persisting a user message'))
+        })
+        .catch(error => {
+          if (!acked) {
+            reject(error)
+            return
+          }
+          // Chat errors normally use sendMessage's recipient event path. This
+          // also observes failures outside that inner chat/error boundary.
+          sessionLog.error('Error after inter-agent message acceptance:', error)
+          const workspaceId = this.sessions.get(sessionId)?.workspace.id
+          try {
+            this.sendEvent({ type: 'error', sessionId, error: error instanceof Error ? error.message : String(error) }, workspaceId)
+          } catch (reportError) {
+            sessionLog.error('Could not publish inter-agent delivery error:', reportError)
+          }
+        })
+    })
+  }
+
   async sendMessage(
     sessionId: string,
     message: string,
@@ -6927,128 +6960,129 @@ export class SessionManager implements ISessionManager {
     // A Stop from now on (not a stale stopRequested flag) keeps this turn from starting.
     const turnStopEpoch = managed.stopEpoch ?? 0
 
-    // Pre-enable sources required by invoked skills (Issue #249)
-    // This eliminates the two-turn penalty where the agent discovers missing sources at runtime.
-    // Uses targeted loadSkillBySlug() instead of loadAllSkills() to avoid O(N) filesystem scans.
-    if (options?.skillSlugs?.length) {
-      try {
-        const workspaceRoot = managed.workspace.rootPath
-
-        const requiredSources = new Set<string>()
-        for (const slug of options.skillSlugs) {
-          const skill = loadSkillBySlug(workspaceRoot, slug, managed.workingDirectory)
-          if (skill?.metadata.requiredSources) {
-            for (const src of skill.metadata.requiredSources) {
-              requiredSources.add(src)
-            }
-          }
-        }
-
-        if (requiredSources.size > 0) {
-          const currentSlugs = new Set(managed.enabledSourceSlugs || [])
-          const toEnable: string[] = []
-          const skipped: string[] = []
-          const candidateSlugs = Array.from(requiredSources)
-          const loadedSources = getSourcesBySlugs(workspaceRoot, candidateSlugs)
-          const usableSources = new Set(
-            loadedSources
-              .filter(isSourceUsable)
-              .map(source => source.config.slug)
-          )
-
-          for (const srcSlug of candidateSlugs) {
-            if (currentSlugs.has(srcSlug)) continue
-            if (usableSources.has(srcSlug)) {
-              toEnable.push(srcSlug)
-            } else {
-              skipped.push(srcSlug)
-            }
-          }
-
-          if (skipped.length > 0) {
-            sessionLog.warn(`Skill requires sources that are not usable (missing or unauthenticated): ${skipped.join(', ')}`)
-          }
-
-          if (toEnable.length > 0) {
-            managed.enabledSourceSlugs = [...(managed.enabledSourceSlugs || []), ...toEnable]
-            sessionLog.info(`Pre-enabled sources for skill invocation: ${toEnable.join(', ')}`)
-            this.persistSession(managed)
-            this.sendEvent({
-              type: 'sources_changed',
-              sessionId,
-              enabledSourceSlugs: managed.enabledSourceSlugs,
-            }, managed.workspace.id)
-          }
-        }
-      } catch (e) {
-        sessionLog.warn(`Failed to pre-enable skill sources for session ${sessionId}:`, e)
-      }
-    }
-
-    // Decision-model checks for this turn run while the agent is set up below.
-    const preTurnDecisions = this.startPreTurnDecisions(managed, message, options, { activationResend, authRetry: _isAuthRetry, attachments })
-
-    // Start perf span for entire sendMessage flow
+    // Agent/source preparation belongs to the same lifecycle as streaming:
+    // a post-admission setup failure must release processing and drain queues.
     const sendSpan = perf.span('session.sendMessage', { sessionId })
-
-    const workspaceRootPath = managed.workspace.rootPath
-    const enabledSlugs = managed.enabledSourceSlugs ?? []
-    const hasSources = enabledSlugs.length > 0
-
-    // Load enabled sources up-front so we can refresh tokens BEFORE getOrCreateAgent
-    // runs its internal cold-session build. Otherwise that build sees stale tokens
-    // and emits AUTH_REQUIRED, causing a brief "needs_auth" UI flicker before the
-    // post-build refresh restores state (#710).
-    const sources: LoadedSource[] = hasSources
-      ? getSourcesBySlugs(workspaceRootPath, enabledSlugs)
-      : []
-
-    if (hasSources && managed.tokenRefreshManager) {
-      const refreshResult = await refreshExpiredCredentials(sources, managed.tokenRefreshManager)
-      if (refreshResult.failedSources.length > 0) {
-        sessionLog.warn('[OAuth] Some sources failed token refresh:', refreshResult.failedSources.map(f => f.slug))
-      }
-      if (refreshResult.refreshedCount > 0) {
-        sendSpan.mark('oauth.refreshed')
-      }
-    }
-
-    // Get or create the agent (lazy loading). Its internal cold-session build at
-    // ~L2956 now sees fresh tokens (or correctly-needs_auth failed sources, since
-    // ensureFreshToken mirrors the disk write to source.config in-memory).
-    const agent = await this.getOrCreateAgent(managed)
-    sendSpan.mark('agent.ready')
-
-    // Always set all sources for context (even if none are enabled), including built-ins
-    const allSources = loadAllSources(workspaceRootPath)
-    agent.setAllSources(allSources)
-    sendSpan.mark('sources.loaded')
-
-    // Apply source servers if any are enabled
-    if (hasSources) {
-      const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
-      // Single fresh build — tokens already refreshed above.
-      const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager, agent.getSummarizeCallback())
-      if (errors.length > 0) {
-        sessionLog.warn(`Source build errors:`, errors)
-      }
-
-      const mcpCount = Object.keys(mcpServers).length
-      const apiCount = Object.keys(apiServers).length
-      if (mcpCount > 0 || apiCount > 0 || enabledSlugs.length > 0) {
-        const usableSources = sources.filter(isSourceUsable)
-        const intendedSlugs = usableSources.map(s => s.config.slug)
-        await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
-        sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
-      }
-      sendSpan.mark('servers.applied')
-    }
-
-    // Continued from another session: the summary this first turn carries may still be generating
-    // (the agent above was set up meanwhile)
-    if (managed.pendingHandoffSummary) await this.waitForHandoffSummary(managed)
-
     try {
+      // Pre-enable sources required by invoked skills (Issue #249)
+      // This eliminates the two-turn penalty where the agent discovers missing sources at runtime.
+      // Uses targeted loadSkillBySlug() instead of loadAllSkills() to avoid O(N) filesystem scans.
+      if (options?.skillSlugs?.length) {
+        try {
+          const workspaceRoot = managed.workspace.rootPath
+
+          const requiredSources = new Set<string>()
+          for (const slug of options.skillSlugs) {
+            const skill = loadSkillBySlug(workspaceRoot, slug, managed.workingDirectory)
+            if (skill?.metadata.requiredSources) {
+              for (const src of skill.metadata.requiredSources) {
+                requiredSources.add(src)
+              }
+            }
+          }
+
+          if (requiredSources.size > 0) {
+            const currentSlugs = new Set(managed.enabledSourceSlugs || [])
+            const toEnable: string[] = []
+            const skipped: string[] = []
+            const candidateSlugs = Array.from(requiredSources)
+            const loadedSources = getSourcesBySlugs(workspaceRoot, candidateSlugs)
+            const usableSources = new Set(
+              loadedSources
+                .filter(isSourceUsable)
+                .map(source => source.config.slug)
+            )
+
+            for (const srcSlug of candidateSlugs) {
+              if (currentSlugs.has(srcSlug)) continue
+              if (usableSources.has(srcSlug)) {
+                toEnable.push(srcSlug)
+              } else {
+                skipped.push(srcSlug)
+              }
+            }
+
+            if (skipped.length > 0) {
+              sessionLog.warn(`Skill requires sources that are not usable (missing or unauthenticated): ${skipped.join(', ')}`)
+            }
+
+            if (toEnable.length > 0) {
+              managed.enabledSourceSlugs = [...(managed.enabledSourceSlugs || []), ...toEnable]
+              sessionLog.info(`Pre-enabled sources for skill invocation: ${toEnable.join(', ')}`)
+              this.persistSession(managed)
+              this.sendEvent({
+                type: 'sources_changed',
+                sessionId,
+                enabledSourceSlugs: managed.enabledSourceSlugs,
+              }, managed.workspace.id)
+            }
+          }
+        } catch (e) {
+          sessionLog.warn(`Failed to pre-enable skill sources for session ${sessionId}:`, e)
+        }
+      }
+
+      // Decision-model checks for this turn run while the agent is set up below.
+      const preTurnDecisions = this.startPreTurnDecisions(managed, message, options, { activationResend, authRetry: _isAuthRetry, attachments })
+
+
+      const workspaceRootPath = managed.workspace.rootPath
+      const enabledSlugs = managed.enabledSourceSlugs ?? []
+      const hasSources = enabledSlugs.length > 0
+
+      // Load enabled sources up-front so we can refresh tokens BEFORE getOrCreateAgent
+      // runs its internal cold-session build. Otherwise that build sees stale tokens
+      // and emits AUTH_REQUIRED, causing a brief "needs_auth" UI flicker before the
+      // post-build refresh restores state (#710).
+      const sources: LoadedSource[] = hasSources
+        ? getSourcesBySlugs(workspaceRootPath, enabledSlugs)
+        : []
+
+      if (hasSources && managed.tokenRefreshManager) {
+        const refreshResult = await refreshExpiredCredentials(sources, managed.tokenRefreshManager)
+        if (refreshResult.failedSources.length > 0) {
+          sessionLog.warn('[OAuth] Some sources failed token refresh:', refreshResult.failedSources.map(f => f.slug))
+        }
+        if (refreshResult.refreshedCount > 0) {
+          sendSpan.mark('oauth.refreshed')
+        }
+      }
+
+      // Get or create the agent (lazy loading). Its internal cold-session build at
+      // ~L2956 now sees fresh tokens (or correctly-needs_auth failed sources, since
+      // ensureFreshToken mirrors the disk write to source.config in-memory).
+      const agent = await this.getOrCreateAgent(managed)
+      sendSpan.mark('agent.ready')
+
+      // Always set all sources for context (even if none are enabled), including built-ins
+      const allSources = loadAllSources(workspaceRootPath)
+      agent.setAllSources(allSources)
+      sendSpan.mark('sources.loaded')
+
+      // Apply source servers if any are enabled
+      if (hasSources) {
+        const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
+        // Single fresh build — tokens already refreshed above.
+        const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager, agent.getSummarizeCallback())
+        if (errors.length > 0) {
+          sessionLog.warn(`Source build errors:`, errors)
+        }
+
+        const mcpCount = Object.keys(mcpServers).length
+        const apiCount = Object.keys(apiServers).length
+        if (mcpCount > 0 || apiCount > 0 || enabledSlugs.length > 0) {
+          const usableSources = sources.filter(isSourceUsable)
+          const intendedSlugs = usableSources.map(s => s.config.slug)
+          await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
+          sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
+        }
+        sendSpan.mark('servers.applied')
+      }
+
+      // Continued from another session: the summary this first turn carries may still be generating
+      // (the agent above was set up meanwhile)
+      if (managed.pendingHandoffSummary) await this.waitForHandoffSummary(managed)
+
       sessionLog.info('Starting chat for session:', sessionId)
       sessionLog.info('Workspace:', JSON.stringify(managed.workspace, null, 2))
       sessionLog.info('Message:', message)
