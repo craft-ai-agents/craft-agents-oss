@@ -12,6 +12,7 @@ import {
   cpSync,
   lstatSync,
   readdirSync,
+  readFileSync,
 } from 'fs';
 import { join, dirname } from 'path';
 import { createHash } from 'crypto';
@@ -705,4 +706,115 @@ export function getArtifactName(platform: Platform, arch: Arch): string {
     case 'linux':
       return `Craft-Agents-${arch}.AppImage`;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Nested dependency copies
+// ---------------------------------------------------------------------------
+// The server build copies every dependency out of the repository root, because the
+// hoisted linker installs them there. That is the wrong tree for a workspace package
+// that pins a different major than the root: inside the monorepo it resolves to its
+// own `packages/<pkg>/node_modules` copy, but from the built output it would resolve
+// to the root copy instead. Node looks in `packages/<pkg>/node_modules` first, so
+// re-creating that path in the output is what keeps the shipped tree identical to
+// the one the code was developed and tested against. See OSS #1082: the server
+// shipped zod 4 to session-tools-core, which pins zod 3, and `zod-to-json-schema`
+// returns `{}` for a zod 4 schema — emptying every session tool schema.
+
+/** A nested dependency that the root copy cannot stand in for. */
+export interface NestedShadow {
+  /** Package name, scope included. */
+  dep: string;
+  /** Version installed next to the workspace package. */
+  nested: string;
+  /** Version hoisted at the repository root. */
+  root: string;
+}
+
+/**
+ * Version of `dep` installed directly in `modulesDir`, or null when it is not installed
+ * there. Reads the manifest as a file rather than resolving it, so it reports what is on
+ * disk at that path instead of what Node would find from here.
+ */
+export function installedVersion(modulesDir: string, dep: string): string | null {
+  try {
+    const pkg = JSON.parse(readFileSync(join(modulesDir, dep, 'package.json'), 'utf-8'));
+    return typeof pkg.version === 'string' ? pkg.version : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Major component of a version string: "4.3.5" → "4", "^3.23.0" → "3", garbage → null. */
+export function majorVersion(version: string | null): string | null {
+  const major = version?.trim().replace(/^[^0-9]*/, '').split('.')[0];
+  return major && /^\d+$/.test(major) ? major : null;
+}
+
+/** Package names installed directly in a node_modules directory, scopes expanded. */
+function installedPackages(modulesDir: string): string[] {
+  const names: string[] = [];
+  for (const entry of readdirSync(modulesDir, { withFileTypes: true })) {
+    // Dot entries are caches (.cache, .bin) or bun's own bookkeeping.
+    if (entry.name.startsWith('.')) continue;
+    if (!entry.name.startsWith('@')) {
+      names.push(entry.name);
+      continue;
+    }
+    const scopeDir = join(modulesDir, entry.name);
+    if (!existsSync(scopeDir)) continue;
+    for (const sub of readdirSync(scopeDir, { withFileTypes: true })) {
+      names.push(`${entry.name}/${sub.name}`);
+    }
+  }
+  return names;
+}
+
+/**
+ * Dependencies of a workspace package whose own copy is a different major from the
+ * hoisted one, so the root copy cannot stand in for them.
+ *
+ * Type-only packages are skipped: they are compile-time inputs, nothing resolves them at
+ * runtime, and shipping them would only grow the bundle.
+ */
+export function shadowedNestedDeps(
+  pkgModulesDir: string,
+  rootModulesDir: string,
+): NestedShadow[] {
+  if (!existsSync(pkgModulesDir)) return [];
+  const shadows: NestedShadow[] = [];
+  for (const dep of installedPackages(pkgModulesDir)) {
+    if (dep.startsWith('@types/')) continue;
+    const nested = installedVersion(pkgModulesDir, dep);
+    const root = installedVersion(rootModulesDir, dep);
+    const nestedMajor = majorVersion(nested);
+    const rootMajor = majorVersion(root);
+    // No nested install, no root install to shadow, or the same major resolving
+    // either way: nothing to do. An absent root copy is not a shadow — the nested
+    // one is then the only candidate and already lands via the normal copy path.
+    if (!nested || !root || !nestedMajor || !rootMajor || nestedMajor === rootMajor) continue;
+    shadows.push({ dep, nested, root });
+  }
+  return shadows.sort((a, b) => a.dep.localeCompare(b.dep));
+}
+
+/**
+ * Recreate `pkgModulesDir`'s shadowing nested copies under `destModulesDir`, which must
+ * be the `node_modules` of the same workspace package in the build output. Returns what
+ * was copied, so the caller can log it.
+ */
+export function copyShadowedNestedDeps(
+  pkgModulesDir: string,
+  rootModulesDir: string,
+  destModulesDir: string,
+): NestedShadow[] {
+  const shadows = shadowedNestedDeps(pkgModulesDir, rootModulesDir);
+  for (const { dep } of shadows) {
+    const dest = join(destModulesDir, dep);
+    mkdirSync(dirname(dest), { recursive: true });
+    // `dereference` matches copyDependencyTree: bun may install these as links into its
+    // store, and the build output has to be a self-contained tree.
+    cpSync(join(pkgModulesDir, dep), dest, { recursive: true, dereference: true });
+  }
+  return shadows;
 }
