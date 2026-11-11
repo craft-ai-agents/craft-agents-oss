@@ -6,6 +6,15 @@ import { classifyMarkdownLinkTarget, resolveMarkdownLinkTarget } from '../link-t
 import { markdownUrlTransform } from '../url-transform'
 
 describe('resolveMarkdownLinkTarget', () => {
+  it.each([
+    [String.raw`C:\Users\Tester\output.md`, String.raw`C:\Users\Tester\output.md`],
+    [String.raw`C:\Users/Tester\output.md`, String.raw`C:\Users/Tester\output.md`],
+    ['C:%5CMy%20Docs%5Coutput.md', String.raw`C:\My Docs\output.md`],
+    ['C:%2fUsers/Tester/output.md', 'C:/Users/Tester/output.md'],
+  ])('resolves absolute Windows file target %s', (target, path) => {
+    expect(resolveMarkdownLinkTarget(target!)).toEqual({ kind: 'file', path })
+  })
+
   it('resolves absolute unix file paths as file targets', () => {
     expect(resolveMarkdownLinkTarget('/Users/balintorosz/.craft-agent/sessions/abc/image.jpg')).toEqual({
       kind: 'file',
@@ -96,6 +105,25 @@ describe('markdownUrlTransform', () => {
 })
 
 describe('ReactMarkdown anchor rendering with markdownUrlTransform', () => {
+  it.each([
+    String.raw`C:\Users\Tester\output.md`,
+    String.raw`C:\Users/Tester\output.md`,
+    'C:/Users/Tester/output.md',
+  ])('routes the parsed Windows destination %s through the file handler', (path) => {
+    const targets: ReturnType<typeof resolveMarkdownLinkTarget>[] = []
+    renderToStaticMarkup(React.createElement(ReactMarkdown, {
+      urlTransform: markdownUrlTransform,
+      components: {
+        a: ({ href, children }) => {
+          if (href) targets.push(resolveMarkdownLinkTarget(href))
+          return React.createElement('span', null, children)
+        },
+      },
+      children: `[report](${path})`,
+    }))
+    expect(targets).toEqual([{ kind: 'file', path }])
+  })
+
   function render(markdown: string): string {
     return renderToStaticMarkup(React.createElement(ReactMarkdown, {
       urlTransform: markdownUrlTransform,

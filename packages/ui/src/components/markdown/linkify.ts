@@ -25,6 +25,13 @@ const FILE_PATH_TARGET_REGEX = new RegExp(
   'i'
 )
 
+// Native Windows drive paths need a separate prefix and backslash support.
+// ReactMarkdown percent-encodes backslashes before passing hrefs to the anchor.
+const WINDOWS_FILE_PATH_TARGET_REGEX = new RegExp(
+  String.raw`^[A-Za-z]:(?:[\\/]|%5c|%2f)[\w\-./\\@%]*\.(?:${FILE_EXTENSIONS_PATTERN})$`,
+  'i'
+)
+
 interface DetectedLink {
   type: 'url' | 'email' | 'file'
   text: string
@@ -280,5 +287,6 @@ export function hasLinks(text: string): boolean {
  * Used by click handlers to route local paths to onFileClick instead of onUrlClick.
  */
 export function isFilePathTarget(target: string): boolean {
-  return FILE_PATH_TARGET_REGEX.test(target.trim())
+  const trimmed = target.trim()
+  return FILE_PATH_TARGET_REGEX.test(trimmed) || WINDOWS_FILE_PATH_TARGET_REGEX.test(trimmed)
 }
