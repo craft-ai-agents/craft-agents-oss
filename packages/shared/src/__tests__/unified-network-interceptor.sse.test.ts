@@ -102,6 +102,22 @@ describe('unified-network-interceptor SSE processors', () => {
     rmSync(sessionDir, { recursive: true, force: true });
   });
 
+  it('OpenAI-compatible: preserves finish_reason when the terminal tool delta shares its event', async () => {
+    // Mistral emits the final tool-call delta and finish reason in the same
+    // SSE event. The interceptor must flush the buffered call and forward the
+    // terminal event so downstream SDKs can complete the stream.
+    const sse = [
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_mistral","type":"function","function":{"name":"toolA","arguments":"{\\"value\\":1}"}}]},"finish_reason":"stop"}]}' + '\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const out = await runThroughProcessor(createOpenAiSseStrippingStream(), sse);
+
+    expect(out).toContain('"id":"call_mistral"');
+    expect(out).toContain('"finish_reason":"stop"');
+    expect(out).toContain('[DONE]');
+  });
+
   it('OpenAI: processes tool calls for multiple choices', async () => {
     const sse = [
       'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"toolA","arguments":"{\\"x\\":1,\\"_intent\\":\\"intent-a\\"}"}}]}},{"index":1,"delta":{"tool_calls":[{"index":0,"id":"call_b","type":"function","function":{"name":"toolB","arguments":"{\\"y\\":2,\\"_displayName\\":\\"Display B\\"}"}}]}}]}\n\n',

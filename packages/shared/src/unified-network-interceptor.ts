@@ -1100,8 +1100,20 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
     }
 
     // Suppress all upstream tool_call delta payloads. Consolidated events
-    // are emitted on flush.
+    // are emitted on flush. Some OpenAI-compatible providers (including
+    // Mistral) put the terminal finish reason on the same event as the final
+    // tool delta, so preserve that finish event after flushing the call.
+    const hasFinish = choices.some(choice => choice?.finish_reason === 'tool_calls' || choice?.finish_reason === 'stop');
     if (handledToolCalls) {
+      if (hasFinish) {
+        if (bufferingToolCalls) {
+          flushTrackedCalls(controller);
+        }
+        for (const choice of choices) {
+          if (choice.delta) delete choice.delta.tool_calls;
+        }
+        emitSseLine(JSON.stringify(data), controller);
+      }
       return;
     }
 
@@ -1109,7 +1121,6 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
     const forwardStr = strippedEmptyToolCalls ? JSON.stringify(data) : dataStr;
 
     // On finish, flush buffered tool calls with clean args BEFORE emitting finish event
-    const hasFinish = choices.some(choice => choice?.finish_reason === 'tool_calls' || choice?.finish_reason === 'stop');
     if (hasFinish) {
       if (bufferingToolCalls) {
         flushTrackedCalls(controller);
