@@ -458,6 +458,45 @@ describe('Claude Fable 5.1', () => {
 })
 
 // ============================================================
+// Claude Fable 5.2 registration (Claude Agent SDK path)
+// ============================================================
+
+describe('Claude Fable 5.2', () => {
+  it('is registered as an Anthropic model with the expected metadata', () => {
+    const fable = ANTHROPIC_MODELS.find(m => m.id === 'claude-fable-5-2')
+    expect(fable).toBeDefined()
+    expect(fable!.provider).toBe('anthropic')
+    expect(fable!.name).toBe('Fable 5.2')
+    expect(fable!.shortName).toBe('Fable')
+    expect(fable!.contextWindow).toBe(1_000_000)
+    expect(fable!.descriptionKey).toBe('model.fableDesc')
+    expect(getModelDisplayName('claude-fable-5-2')).toBe('Fable 5.2')
+    expect(getModelContextWindow('claude-fable-5-2')).toBe(1_000_000)
+  })
+
+  it('is listed before Fable 5.1 so the newest Fable wins shortName resolution', () => {
+    const ids = ANTHROPIC_MODELS.map(m => m.id)
+    expect(ids.indexOf('claude-fable-5-2')).toBeGreaterThanOrEqual(0)
+    expect(ids.indexOf('claude-fable-5-2')).toBeLessThan(ids.indexOf('claude-fable-5-1'))
+  })
+
+  it('does NOT become the Anthropic default (Opus 5.5 is the default)', () => {
+    expect(getDefaultModelForConnection('anthropic')).toBe('claude-opus-5-5')
+  })
+
+  it('round-trips through the Bedrock inference-profile mapping without crossing 5.1', () => {
+    expect(toBedrockNativeId('claude-fable-5-2')).toBe('us.anthropic.claude-fable-5-2')
+    expect(toBedrockNativeId('claude-fable-5-2', 'eu')).toBe('eu.anthropic.claude-fable-5-2')
+    expect(fromBedrockNativeId('us.anthropic.claude-fable-5-2')).toBe('claude-fable-5-2')
+    expect(fromBedrockNativeId('eu.anthropic.claude-fable-5-2')).toBe('claude-fable-5-2')
+    expect(fromBedrockNativeId('global.anthropic.claude-fable-5-2')).toBe('claude-fable-5-2')
+    expect(fromBedrockNativeId('anthropic.claude-fable-5-2')).toBe('claude-fable-5-2')
+    expect(getModelDisplayName('us.anthropic.claude-fable-5-2')).toBe('Fable 5.2')
+    expect(fromBedrockNativeId('us.anthropic.claude-fable-5-1')).toBe('claude-fable-5-1')
+  })
+})
+
+// ============================================================
 // Claude Opus 5.5 (new default) and Opus 5 registration
 // ============================================================
 

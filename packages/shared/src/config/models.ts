@@ -17,6 +17,7 @@ const BEDROCK_TO_BARE: Record<string, string> = {
   'us.anthropic.claude-opus-5-5': 'claude-opus-5-5',
   'us.anthropic.claude-opus-5': 'claude-opus-5',
   'us.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'us.anthropic.claude-fable-5-2': 'claude-fable-5-2',
   'us.anthropic.claude-fable-5-1': 'claude-fable-5-1',
   'us.anthropic.claude-fable-5': 'claude-fable-5',
   'us.anthropic.claude-opus-4-7': 'claude-opus-4-7',
@@ -34,6 +35,7 @@ const BEDROCK_TO_BARE: Record<string, string> = {
   'eu.anthropic.claude-opus-5-5': 'claude-opus-5-5',
   'eu.anthropic.claude-opus-5': 'claude-opus-5',
   'eu.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'eu.anthropic.claude-fable-5-2': 'claude-fable-5-2',
   'eu.anthropic.claude-fable-5-1': 'claude-fable-5-1',
   'eu.anthropic.claude-fable-5': 'claude-fable-5',
   'eu.anthropic.claude-opus-4-7': 'claude-opus-4-7',
@@ -50,6 +52,7 @@ const BEDROCK_TO_BARE: Record<string, string> = {
   'global.anthropic.claude-opus-5-5': 'claude-opus-5-5',
   'global.anthropic.claude-opus-5': 'claude-opus-5',
   'global.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'global.anthropic.claude-fable-5-2': 'claude-fable-5-2',
   'global.anthropic.claude-fable-5-1': 'claude-fable-5-1',
   'global.anthropic.claude-fable-5': 'claude-fable-5',
   'global.anthropic.claude-opus-4-7': 'claude-opus-4-7',
@@ -64,6 +67,7 @@ const BEDROCK_TO_BARE: Record<string, string> = {
   'anthropic.claude-opus-5-5': 'claude-opus-5-5',
   'anthropic.claude-opus-5': 'claude-opus-5',
   'anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'anthropic.claude-fable-5-2': 'claude-fable-5-2',
   'anthropic.claude-fable-5-1': 'claude-fable-5-1',
   'anthropic.claude-fable-5': 'claude-fable-5',
   'anthropic.claude-opus-4-7': 'claude-opus-4-7',
@@ -265,8 +269,9 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
     contextWindow: 200_000,
   },
   {
-    id: 'claude-fable-5-1',
-    name: 'Fable 5.1',
+    id: 'claude-fable-5-2',
+    name: 'Fable 5.2',
+    // First 'Fable' entry: findModelIdByShortName('Fable') resolves to it.
     shortName: 'Fable',
     description: 'Next-generation model for complex work',
     descriptionKey: 'model.fableDesc',
@@ -275,10 +280,20 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
     thinkingAlwaysOn: true,
   },
   {
+    id: 'claude-fable-5-1',
+    name: 'Fable 5.1',
+    shortName: 'Fable',
+    description: 'Previous Fable generation',
+    descriptionKey: 'model.fableDesc',
+    provider: 'anthropic',
+    contextWindow: 1_000_000,
+    thinkingAlwaysOn: true,
+  },
+  {
     id: 'claude-fable-5',
     name: 'Fable 5',
-    // shortName intentionally collides with 5.1, which is listed first, so
-    // findModelIdByShortName('Fable') resolves to the newest Fable.
+    // shortName intentionally collides with the newer Fables, which are listed
+    // first, so findModelIdByShortName('Fable') resolves to the newest Fable.
     shortName: 'Fable',
     description: 'Previous Fable generation',
     descriptionKey: 'model.fableDesc',
@@ -442,7 +457,7 @@ export function isClaudeModel(modelId: string): boolean {
 
 /**
  * Models where adaptive thinking is ALWAYS ON and `thinking: { type: 'disabled' }`
- * is rejected by the Messages API (Claude Fable 5 / 5.1, Mythos, the 5.5 family).
+ * is rejected by the Messages API (Claude Fable 5 / 5.1 / 5.2, Mythos, the 5.5 family).
  * Callers must use adaptive thinking + the `effort` parameter to control depth on
  * these models — there is no way to turn thinking off. Opus 5 and earlier,
  * Sonnet and Haiku still accept `disabled`.

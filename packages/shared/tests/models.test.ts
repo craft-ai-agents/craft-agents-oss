@@ -189,6 +189,7 @@ describe('isAdaptiveThinkingAlwaysOnModel', () => {
       'us.anthropic.claude-opus-5-5', 'eu.anthropic.claude-opus-5-5', 'anthropic.claude-opus-5-5',
       // Region prefixes the Bedrock tables do not list still resolve by suffix.
       'au.anthropic.claude-opus-5-5', 'pi/jp.anthropic.claude-opus-5-5',
+      'claude-fable-5-2', 'pi/claude-fable-5-2', 'us.anthropic.claude-fable-5-2',
       'claude-fable-5-1', 'claude-fable-5', 'pi/claude-fable-5-1',
     ]) {
       expect(isAdaptiveThinkingAlwaysOnModel(id)).toBe(true);
