@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { proxyToolName } from '../proxy-tool-name.ts'
+import { nextAvailableProxyName, proxyToolName } from '../proxy-tool-name.ts'
 
 describe('proxyToolName (#864)', () => {
   it('passes an already-valid name through unchanged', () => {
@@ -23,5 +23,27 @@ describe('proxyToolName (#864)', () => {
     const a = proxyToolName('src', 'a.b.c')
     const b = proxyToolName('src', 'a.b.c')
     expect(a).toBe(b)
+  })
+})
+
+describe('nextAvailableProxyName (#1002)', () => {
+  it('returns the base name when it is free', () => {
+    expect(nextAvailableProxyName('mcp__src__pat_batch', new Set())).toBe('mcp__src__pat_batch')
+    expect(nextAvailableProxyName('mcp__src__pat_batch', new Set(['mcp__src__other']))).toBe('mcp__src__pat_batch')
+  })
+
+  it('suffixes the first collision with __2', () => {
+    const taken = new Set(['mcp__src__pat_batch'])
+    expect(nextAvailableProxyName('mcp__src__pat_batch', taken)).toBe('mcp__src__pat_batch__2')
+  })
+
+  it('skips suffixes that are already taken', () => {
+    const taken = new Set(['mcp__src__pat_batch', 'mcp__src__pat_batch__2', 'mcp__src__pat_batch__3'])
+    expect(nextAvailableProxyName('mcp__src__pat_batch', taken)).toBe('mcp__src__pat_batch__4')
+  })
+
+  it('is deterministic for the same taken set', () => {
+    const taken = new Set(['mcp__src__a_b', 'mcp__src__a_b__2'])
+    expect(nextAvailableProxyName('mcp__src__a_b', taken)).toBe(nextAvailableProxyName('mcp__src__a_b', taken))
   })
 })

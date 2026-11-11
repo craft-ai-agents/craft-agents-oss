@@ -21,7 +21,7 @@ import {
   type PoolRequestOptions,
 } from './client.ts';
 import { ApiSourcePoolClient } from './api-source-pool-client.ts';
-import { proxyToolName } from './proxy-tool-name.ts';
+import { nextAvailableProxyName, proxyToolName } from './proxy-tool-name.ts';
 import type { SdkMcpServerConfig } from '../agent/backend/types.ts';
 import type { ContentBlock, Prompt, Resource, ResourceTemplate, Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -216,6 +216,16 @@ export class McpClientPool {
   /** Proxy tool name → { slug, originalName } (e.g., "mcp__linear__createIssue" → { slug: "linear", originalName: "createIssue" }) */
   private proxyTools = new Map<string, { slug: string; originalName: string }>();
 
+  /**
+   * Assigned proxy name per source tool, keyed by JSON `[slug, originalName]`.
+   * This is the single source of truth for which name a tool was registered
+   * under: when two distinct tool names sanitize to the same proxy name, the
+   * later one is assigned a `__2`/`__3` suffix (#1002), so the name cannot be
+   * re-derived from (slug, tool name) alone. Emitters and dispatchers must
+   * look the assigned name up here instead of recomputing it.
+   */
+  private proxyNameByTool = new Map<string, string>();
+
   /** Optional debug logger */
   private debugFn: ((msg: string) => void) | undefined;
 
@@ -263,21 +273,32 @@ export class McpClientPool {
     this.clients.set(slug, client);
     this.toolCache.set(slug, tools);
 
+    const takenNames = new Set(this.proxyTools.keys());
     for (const tool of tools) {
-      const proxyName = proxyToolName(slug, tool.name);
-      const existing = this.proxyTools.get(proxyName);
-      if (existing && existing.originalName !== tool.name) {
-        // Two distinct MCP tool names sanitized to the same proxy name (e.g.
-        // `pat.batch` and `pat_batch`). Keep the first; a silent overwrite would
-        // route later calls to the wrong original tool (#864). Known limitation:
-        // the skipped tool is not callable this session — deterministic
-        // disambiguation (suffixing) is a possible follow-up if this ever hits
-        // a real server. Warn loudly so a "missing" tool is diagnosable.
-        console.warn(`[McpClientPool] Proxy name collision on ${proxyName} (source ${slug}): keeping ${existing.originalName}, skipping ${tool.name} — the skipped tool will not be callable`);
-        this.debug(`Proxy name collision on ${proxyName}: keeping ${existing.originalName}, skipping ${tool.name}`);
+      const toolKey = McpClientPool.toolKey(slug, tool.name);
+      // Re-registering the same tool (duplicate listTools entry, reconnect of
+      // an already-registered client) keeps its existing assignment.
+      const alreadyAssigned = this.proxyNameByTool.get(toolKey);
+      if (alreadyAssigned) {
+        this.proxyTools.set(alreadyAssigned, { slug, originalName: tool.name });
+        takenNames.add(alreadyAssigned);
         continue;
       }
+      const baseName = proxyToolName(slug, tool.name);
+      const proxyName = nextAvailableProxyName(baseName, takenNames);
+      takenNames.add(proxyName);
+      if (proxyName !== baseName) {
+        // Two distinct MCP tool names sanitized to the same proxy name (e.g.
+        // `pat.batch` and `pat_batch`). A silent overwrite would route later
+        // calls to the wrong original tool (#864), and keep-first would make
+        // the later tool uncallable — so the later tool gets a deterministic
+        // suffix instead (#1002). Assignments follow registration order, so
+        // the same tool list always produces the same names across reconnects.
+        console.warn(`[McpClientPool] Proxy name collision on ${baseName} (source ${slug}): registering ${tool.name} as ${proxyName} to keep both tools callable`);
+        this.debug(`Proxy name collision on ${baseName}: registering ${tool.name} as ${proxyName}`);
+      }
       this.proxyTools.set(proxyName, { slug, originalName: tool.name });
+      this.proxyNameByTool.set(toolKey, proxyName);
     }
 
     // In the background: a slow server must not hold up the source's tools (the probe can
@@ -400,6 +421,11 @@ export class McpClientPool {
     for (const [proxyName, info] of this.proxyTools) {
       if (info.slug === slug) this.proxyTools.delete(proxyName);
     }
+    for (const toolKey of this.proxyNameByTool.keys()) {
+      try {
+        if ((JSON.parse(toolKey) as [string, string])[0] === slug) this.proxyNameByTool.delete(toolKey);
+      } catch { /* keys are only written by toolKey(); ignore malformed ones */ }
+    }
     this.toolCache.delete(slug);
     this.features.delete(slug);
     this.activeConfigs.delete(slug);
@@ -416,6 +442,7 @@ export class McpClientPool {
     this.toolCache.clear();
     this.features.clear();
     this.proxyTools.clear();
+    this.proxyNameByTool.clear();
     this.activeConfigs.clear();
     this.debug('Disconnected all MCP clients');
   }
@@ -550,9 +577,11 @@ export class McpClientPool {
     for (const slug of targetSlugs) {
       const tools = this.toolCache.get(slug) || [];
       for (const tool of tools) {
-        const name = proxyToolName(slug, tool.name);
-        // Skip a name that collided after sanitization — keep the first, matching
-        // registerClient so the emitted defs and the dispatch map stay in sync (#864).
+        // Emit the name registerClient assigned this tool — after a collision
+        // that is the suffixed name, not the recomputed base name — so the
+        // emitted defs and the dispatch map stay in sync (#864, #1002). The
+        // `seen` guard only dedupes a server listing the exact same tool twice.
+        const name = this.resolveProxyName(slug, tool.name);
         if (seen.has(name)) continue;
         seen.add(name);
         // Strip $schema — AJV (Pi agent) fails on unregistered meta-schema URIs.
@@ -644,6 +673,23 @@ export class McpClientPool {
    */
   isProxyTool(toolName: string): boolean {
     return this.proxyTools.has(toolName);
+  }
+
+  /** Map key for one source tool in `proxyNameByTool`. */
+  private static toolKey(slug: string, originalName: string): string {
+    return JSON.stringify([slug, originalName]);
+  }
+
+  /**
+   * The proxy name a source tool was assigned at registration. Callers that
+   * need to invoke or reference a tool by its (slug, original name) pair must
+   * use this instead of recomputing `proxyToolName(...)`: after a collision
+   * the assigned name carries a `__2`/`__3` suffix (#1002), and recomputing
+   * would silently address the first colliding tool instead. Falls back to
+   * the plain sanitized name for tools this pool has not registered.
+   */
+  resolveProxyName(slug: string, originalName: string): string {
+    return this.proxyNameByTool.get(McpClientPool.toolKey(slug, originalName)) ?? proxyToolName(slug, originalName);
   }
 
   // ============================================================
