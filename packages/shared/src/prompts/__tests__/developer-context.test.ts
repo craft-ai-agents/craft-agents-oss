@@ -63,6 +63,25 @@ describe('git developer context', () => {
     expect(block).toContain('- CLAUDE.md (root)');
     expect(block).toContain('- packages/shared/CLAUDE.md');
   });
+
+  // OSS #1140: the whole git root was globbed and capped to the 30 shallowest
+  // files before filtering, so a big unrelated tree hid the selected path's files.
+  it('keeps ancestor and subtree context files when unrelated trees fill the cap', () => {
+    const { root, packageDir } = createGitFixture();
+    for (let i = 0; i < 40; i++) {
+      const dir = join(root, 'other', `p${String(i).padStart(2, '0')}`);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'CLAUDE.md'), '# Unrelated\n');
+    }
+    writeFileSync(join(root, 'packages', 'AGENTS.md'), '# Packages\n');
+    mkdirSync(join(packageDir, 'src', 'deep'), { recursive: true });
+    writeFileSync(join(packageDir, 'src', 'deep', 'claude.md'), '# Deep\n');
+
+    const block = getProjectContextFilesPrompt(packageDir);
+
+    expect(block).toContain('- CLAUDE.md (root)\n- packages/AGENTS.md\n- packages/shared/CLAUDE.md\n- packages/shared/src/deep/claude.md');
+    expect(block).not.toContain('other/');
+  });
 });
 
 function createGitFixture(): { root: string; packageDir: string } {
