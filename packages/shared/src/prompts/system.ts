@@ -3,7 +3,7 @@ import { getBrowserToolEnabled, getRtkEnabled } from '../config/storage.ts';
 import { getRtkPath } from '../agent/core/rtk-detector.ts';
 import { debug } from '../utils/debug.ts';
 import { existsSync, readFileSync, readdirSync } from 'fs';
-import { dirname, join, relative, basename, resolve } from 'path';
+import { join, relative, basename, resolve } from 'path';
 import { DOC_REFS, APP_ROOT } from '../docs/index.ts';
 import { PERMISSION_MODE_CONFIG } from '../agent/mode-types.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
@@ -313,27 +313,35 @@ function findRelevantProjectContextFiles(workingDirectory: string): { contextRoo
   }
 
   const contextRoot = resolve(gitRoot);
-  const allFiles = findAllProjectContextFiles(contextRoot);
   const selectedRel = normalizePromptPath(relative(contextRoot, resolvedWorkingDirectory));
   if (!selectedRel || selectedRel === '.') {
-    return { contextRoot, contextFiles: allFiles };
+    return { contextRoot, contextFiles: findAllProjectContextFiles(contextRoot) };
   }
 
-  const relevant = allFiles.filter((file) => {
-    const normalizedFile = normalizePromptPath(file);
-    const dir = normalizePromptPath(dirname(normalizedFile));
-    const normalizedDir = dir === '.' ? '' : dir;
-
-    // Always include root instructions, include ancestors of the selected CWD,
-    // and include context files below the selected subtree. This keeps nested
-    // package sessions useful without dumping every unrelated monorepo package.
-    return normalizedDir === '' ||
-      selectedRel === normalizedDir ||
-      selectedRel.startsWith(`${normalizedDir}/`) ||
-      normalizedDir.startsWith(`${selectedRel}/`);
+  // Root instructions, the selected CWD's ancestors, and the selected subtree.
+  // Only the subtree is walked: globbing the whole git root blocks the main
+  // thread for tens of seconds when the root is large (e.g. a home directory
+  // under git), and capping before filtering dropped the relevant files.
+  const segments = selectedRel.split('/');
+  const ancestorFiles = segments.flatMap((_, depth) => {
+    const dirRel = segments.slice(0, depth).join('/');
+    return listContextFilesIn(join(contextRoot, dirRel)).map((name) => (dirRel ? `${dirRel}/${name}` : name));
   });
+  const subtreeFiles = findAllProjectContextFiles(resolvedWorkingDirectory)
+    .map((file) => `${selectedRel}/${normalizePromptPath(file)}`);
 
-  return { contextRoot, contextFiles: relevant.length > 0 ? relevant : allFiles.slice(0, 1) };
+  return { contextRoot, contextFiles: [...ancestorFiles, ...subtreeFiles].slice(0, MAX_CONTEXT_FILES) };
+}
+
+/** Context files directly inside one directory, alphabetical (case-insensitive match). */
+function listContextFilesIn(directory: string): string[] {
+  try {
+    return readdirSync(directory)
+      .filter((name) => CONTEXT_FILE_PATTERNS.includes(name.toLowerCase()))
+      .sort((a, b) => a.localeCompare(b));
+  } catch {
+    return [];
+  }
 }
 
 function normalizePromptPath(value: string): string {
