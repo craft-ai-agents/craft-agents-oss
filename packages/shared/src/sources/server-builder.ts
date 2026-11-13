@@ -17,6 +17,7 @@ import { isSourceUsable } from './storage.ts';
 import { createApiServer, type SummarizeCallback } from './api-tools.ts';
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { debug } from '../utils/debug.ts';
+import { expandVars, resolveStdioConfig } from '../utils/paths.ts';
 
 /**
  * Standard error messages for server build failures.
@@ -34,7 +35,7 @@ export const SERVER_BUILD_ERRORS = {
  */
 export type McpServerConfig =
   | { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }
-  | { type: 'stdio'; command: string; args?: string[]; env?: Record<string, string> };
+  | { type: 'stdio'; command: string; args?: string[]; env?: Record<string, string>; cwd?: string };
 
 /**
  * Source with its credential pre-loaded
@@ -96,11 +97,22 @@ export class SourceServerBuilder {
         debug(`[SourceServerBuilder] Stdio source ${source.config.slug} missing command`);
         return null;
       }
+      // Resolve platform overrides + expand path variables (runtime-only).
+      const resolved = resolveStdioConfig(
+        mcp,
+        source.workspaceRootPath,
+        source.folderPath,
+      );
+      if (!resolved) {
+        debug(`[SourceServerBuilder] Failed to resolve stdio config for ${source.config.slug}`);
+        return null;
+      }
       return {
         type: 'stdio',
-        command: mcp.command,
-        args: mcp.args,
-        env: mcp.env,
+        command: resolved.command,
+        args: resolved.args,
+        env: resolved.env,
+        cwd: source.folderPath,
       };
     }
 
