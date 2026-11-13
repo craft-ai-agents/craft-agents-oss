@@ -4,10 +4,82 @@
  * Parses NO_PROXY rules and determines whether a given URL should bypass the proxy.
  */
 
+import type { NetworkProxySettings } from '@craft-agent/shared/config/types';
+
 /** Split a comma-separated string into trimmed, non-empty entries. */
 export function splitCommaSeparated(str: string | undefined): string[] {
   if (!str) return [];
   return str.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+/** Ensure a proxy value such as `host:port` is a valid URL for undici. */
+export function normalizeProxyUrl(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+}
+
+/**
+ * Parse Windows' ProxyServer value.
+ *
+ * Windows stores either one proxy for all protocols (`host:port`) or a
+ * semicolon-separated map (`http=host:port;https=host:port`).
+ */
+export function parseWindowsProxyServer(
+  proxyServer: string | undefined,
+): Pick<NetworkProxySettings, 'httpProxy' | 'httpsProxy'> {
+  if (!proxyServer?.trim()) return {};
+
+  const entries = proxyServer.split(';').map(entry => entry.trim()).filter(Boolean);
+  const mapped: Record<string, string> = {};
+  for (const entry of entries) {
+    const separator = entry.indexOf('=');
+    if (separator > 0) {
+      mapped[entry.slice(0, separator).toLowerCase()] = entry.slice(separator + 1);
+    }
+  }
+
+  if (Object.keys(mapped).length > 0) {
+    return {
+      httpProxy: normalizeProxyUrl(mapped.http ?? mapped.https),
+      httpsProxy: normalizeProxyUrl(mapped.https ?? mapped.http),
+    };
+  }
+
+  const proxy = normalizeProxyUrl(proxyServer);
+  return { httpProxy: proxy, httpsProxy: proxy };
+}
+
+/** Convert Windows' semicolon-separated ProxyOverride value to NO_PROXY form. */
+export function parseWindowsProxyOverride(proxyOverride: string | undefined): string | undefined {
+  const normalized = proxyOverride
+    ?.split(';')
+    .flatMap(entry => entry.trim().toLowerCase() === '<local>'
+      ? ['localhost', '127.0.0.1', '::1']
+      : entry.trim().replace(/^\*\./, '.'))
+    .filter(Boolean)
+    .join(',');
+  return normalized || undefined;
+}
+
+/** Parse `reg query` output for the Windows Internet Settings key. */
+export function parseWindowsInternetSettings(output: string): NetworkProxySettings | undefined {
+  const values: Record<string, string> = {};
+  for (const line of output.split(/\r?\n/)) {
+    const match = line.match(/^\s*(ProxyEnable|ProxyServer|ProxyOverride)\s+REG_\w+\s+(.+)$/i);
+    if (match) values[match[1].toLowerCase()] = match[2].trim();
+  }
+
+  if (Number.parseInt(values.proxyenable ?? '', 0) !== 1) return undefined;
+
+  const proxies = parseWindowsProxyServer(values.proxyserver);
+  if (!proxies.httpProxy && !proxies.httpsProxy) return undefined;
+
+  return {
+    enabled: true,
+    ...proxies,
+    noProxy: parseWindowsProxyOverride(values.proxyoverride),
+  };
 }
 
 export interface NoProxyRule {
