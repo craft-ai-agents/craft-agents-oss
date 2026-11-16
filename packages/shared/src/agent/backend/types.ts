@@ -197,6 +197,13 @@ export interface CoreBackendConfig {
   envOverrides?: Record<string, string>;
 
   /**
+   * Claude only: the credentials and endpoint of an agent that never runs postInit (the Settings
+   * connection test). Its CLI starts with them and without any Claude auth variable from
+   * process.env (`buildClaudeSubprocessEnv`); postInit replaces them with what it resolves.
+   */
+  connectionEnv?: Record<string, string>;
+
+  /**
    * Centralized MCP client pool for source tool execution.
    * Owns all MCP source connections in the main process.
    */

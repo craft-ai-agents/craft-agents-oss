@@ -9,6 +9,9 @@ import {
   maskApiKey,
   isMaskedApiKey,
   resolveSetupTestApiKey,
+  storeSetupOAuthToken,
+  deleteConnectionCredentials,
+  releaseLegacyClaudeSlot,
 } from './connection-setup-logic'
 
 describe('validateSetupTestInput', () => {
@@ -208,5 +211,113 @@ describe('resolveSetupTestApiKey', () => {
   it('requires a key for remote endpoints and allows none for loopback', async () => {
     expect(await resolveSetupTestApiKey({ apiKey: '', allowEmptyApiKey: false }, store)).toEqual({ ok: false, error: 'API key is required' })
     expect(await resolveSetupTestApiKey({ apiKey: undefined, allowEmptyApiKey: true }, store)).toEqual({ ok: true, apiKey: '', source: 'input' })
+  })
+})
+
+describe('storeSetupOAuthToken', () => {
+  type Entry = { accessToken: string; refreshToken?: string; expiresAt?: number }
+  function storeWith(entries: Record<string, Entry>) {
+    return {
+      entries,
+      getLlmOAuth: async (slug: string) => entries[slug] ?? null,
+      setLlmOAuth: async (slug: string, credentials: Entry) => {
+        entries[slug] = credentials
+      },
+    }
+  }
+
+  it('keeps the refresh token and expiry the sign-in stored with the same access token', async () => {
+    const store = storeWith({ 'claude-max': { accessToken: 'at', refreshToken: 'rt', expiresAt: 1 } })
+
+    expect(await storeSetupOAuthToken(store, 'claude-max', 'at')).toBe(false)
+    expect(store.entries['claude-max']).toEqual({ accessToken: 'at', refreshToken: 'rt', expiresAt: 1 })
+  })
+
+  it('stores a token the connection does not hold yet', async () => {
+    const store = storeWith({ 'claude-max': { accessToken: 'old', refreshToken: 'rt' } })
+
+    expect(await storeSetupOAuthToken(store, 'claude-max', 'new')).toBe(true)
+    expect(await storeSetupOAuthToken(store, 'claude-max-2', 'other')).toBe(true)
+    expect(store.entries).toEqual({ 'claude-max': { accessToken: 'new' }, 'claude-max-2': { accessToken: 'other' } })
+  })
+})
+
+describe('deleteConnectionCredentials', () => {
+  function store() {
+    const deleted: string[] = []
+    return {
+      deleted,
+      deleteLlmCredentials: async (slug: string) => { deleted.push(slug) },
+      delete: async (id: { type: string }) => { deleted.push(id.type); return true },
+    }
+  }
+  const claude = { slug: 'claude-max', providerType: 'anthropic', authType: 'oauth' }
+
+  it('deletes the legacy Claude sign-in with the default Claude connection', async () => {
+    const s = store()
+    await deleteConnectionCredentials(s, claude, true)
+    expect(s.deleted).toEqual(['claude-max', 'claude_oauth'])
+  })
+
+  it('keeps it when another connection is deleted', async () => {
+    const notDefault = store()
+    await deleteConnectionCredentials(notDefault, claude, false)
+    expect(notDefault.deleted).toEqual(['claude-max'])
+
+    const apiKey = store()
+    await deleteConnectionCredentials(apiKey, { slug: 'anthropic-api', providerType: 'anthropic', authType: 'api_key' }, true)
+    expect(apiKey.deleted).toEqual(['anthropic-api'])
+  })
+})
+
+describe('releaseLegacyClaudeSlot', () => {
+  type Tokens = { accessToken: string; refreshToken?: string; expiresAt?: number }
+  function store(legacy: Tokens | null, own: Record<string, Tokens> = {}) {
+    const s = {
+      legacy,
+      own,
+      getClaudeOAuthCredentials: async () => s.legacy,
+      getLlmOAuth: async (slug: string) => s.own[slug] ?? null,
+      setLlmOAuth: async (slug: string, tokens: Tokens) => { s.own[slug] = tokens },
+      delete: async () => { s.legacy = null; return true },
+    }
+    return s
+  }
+  const slot = { accessToken: 'slot-access', refreshToken: 'slot-refresh', expiresAt: 1 }
+  const claude = { slug: 'claude-max', providerType: 'anthropic', authType: 'oauth' }
+
+  it("moves the slot to the previous default's own entry when it ran on it", async () => {
+    const s = store(slot)
+    await releaseLegacyClaudeSlot(s, claude, true, 'claude-work')
+    expect(s.legacy).toBeNull()
+    expect(s.own['claude-max']).toEqual(slot)
+    expect(s.own['claude-work']).toBeUndefined()
+  })
+
+  it('deletes it without copying when the previous default did not run on it', async () => {
+    const hasOwn = store(slot, { 'claude-max': { accessToken: 'own' } })
+    await releaseLegacyClaudeSlot(hasOwn, claude, true, 'claude-work')
+    expect(hasOwn.legacy).toBeNull()
+    expect(hasOwn.own['claude-max']).toEqual({ accessToken: 'own' })
+
+    // Another connection had credentials of its own, so the slot may hold that account.
+    const signedOut = store(slot)
+    await releaseLegacyClaudeSlot(signedOut, claude, false, 'claude-work')
+    expect(signedOut.legacy).toBeNull()
+    expect(signedOut.own).toEqual({})
+  })
+
+  it('leaves it alone unless the default moves away from a Claude sign-in', async () => {
+    for (const [previous, next] of [
+      [null, 'claude-max'],
+      [claude, 'claude-max'],
+      [{ slug: 'openai', providerType: 'pi', authType: 'api_key' }, 'claude-max'],
+      [{ slug: 'anthropic-api', providerType: 'anthropic', authType: 'api_key' }, 'claude-max'],
+    ] as const) {
+      const s = store(slot)
+      await releaseLegacyClaudeSlot(s, previous, true, next)
+      expect(s.legacy).toEqual(slot)
+      expect(s.own).toEqual({})
+    }
   })
 })

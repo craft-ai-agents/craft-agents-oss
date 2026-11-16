@@ -6,40 +6,59 @@
  * - Setup needs derivation from auth state
  * - Migration detection for legacy CLI tokens
  */
-import { describe, it, expect, beforeEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   getSetupNeeds,
+  isDeadRefreshTokenError,
   performTokenRefresh,
   _resetRefreshMutex,
   type AuthState,
   type TokenResult,
   type MigrationInfo,
 } from '../state.ts';
+import { refreshClaudeToken } from '../claude-token.ts';
 
 // ============================================
 // Mock credential manager
 // ============================================
 
-function createMockCredentialManager(initialCreds?: {
-  accessToken: string;
-  refreshToken?: string;
-  expiresAt?: number;
-  source?: 'native' | 'cli';
-}) {
-  let storedCreds = initialCreds;
+type StoredOAuth = { accessToken: string; refreshToken?: string; expiresAt?: number; source?: 'native' | 'cli' };
 
-  return {
-    getClaudeOAuthCredentials: async () => storedCreds ?? null,
-    setClaudeOAuthCredentials: async (creds: {
-      accessToken: string;
-      refreshToken?: string;
-      expiresAt?: number;
-      source?: 'native' | 'cli';
-    }) => {
-      storedCreds = creds;
+/** In-memory legacy global slot and per-connection `llm_oauth::<slug>` entries. */
+function createMockCredentialManager(legacy: StoredOAuth | null, connections: Record<string, StoredOAuth>) {
+  const store = {
+    legacy,
+    connections,
+    deleted: [] as string[],
+    getClaudeOAuthCredentials: async () => store.legacy,
+    setClaudeOAuthCredentials: async (creds: StoredOAuth) => {
+      store.legacy = creds;
     },
-    getApiKey: async () => null,
+    delete: async (id: { type: string }) => {
+      if (id.type !== 'claude_oauth') return false;
+      store.legacy = null;
+      return true;
+    },
+    getLlmOAuth: async (slug: string) => store.connections[slug] ?? null,
+    setLlmOAuth: async (slug: string, creds: StoredOAuth) => {
+      store.connections[slug] = creds;
+    },
+    deleteLlmCredentials: async (slug: string) => {
+      store.deleted.push(slug);
+      delete store.connections[slug];
+    },
   };
+  return store;
+}
+
+const asManager = (store: ReturnType<typeof createMockCredentialManager>) =>
+  store as unknown as Parameters<typeof performTokenRefresh>[0];
+
+/** Answers every fetch (the token endpoint) with `answer`; restored after each test. */
+const realFetch = globalThis.fetch;
+let answer: () => Response;
+function stubTokenEndpoint() {
+  globalThis.fetch = (async () => answer()) as unknown as typeof fetch;
 }
 
 // ============================================
@@ -187,68 +206,182 @@ describe('getSetupNeeds', () => {
 // ============================================
 
 describe('performTokenRefresh', () => {
+  const signedIn = (): StoredOAuth => ({ accessToken: 'old-access', refreshToken: 'old-refresh', expiresAt: 1, source: 'native' });
+  const expired = () => Response.json({ error: 'invalid_grant', error_description: 'Refresh token expired' }, { status: 400 });
+  const DEFAULT_CONNECTION = { isDefaultConnection: true, fromLegacySlot: false };
+
   beforeEach(() => {
     _resetRefreshMutex();
+    stubTokenEndpoint();
   });
 
-  describe('successful refresh', () => {
-    it('should return accessToken on successful refresh', async () => {
-      // Mock the refreshClaudeToken import
-      const mockRefresh = mock(async () => ({
-        accessToken: 'new-access-token',
-        refreshToken: 'new-refresh-token',
-        expiresAt: Date.now() + 3600000,
-      }));
-
-      // We need to test with a real-ish scenario
-      // Since we can't easily mock the import, test the interface
-      const manager = createMockCredentialManager();
-
-      // For this test, we'll verify the TokenResult structure
-      const successResult: TokenResult = {
-        accessToken: 'new-access-token',
-      };
-
-      expect(successResult.accessToken).toBe('new-access-token');
-      expect(successResult.migrationRequired).toBeUndefined();
-    });
-
-    it('should not include migration info on success', async () => {
-      const successResult: TokenResult = {
-        accessToken: 'refreshed-token',
-      };
-
-      expect(successResult.migrationRequired).toBeUndefined();
-    });
+  afterEach(() => {
+    globalThis.fetch = realFetch;
   });
 
-  describe('failed refresh with migration', () => {
-    it('should return migration info for CLI tokens on invalid_grant error', () => {
-      // Simulate the result from a failed refresh with CLI source
-      const failedResult: TokenResult = {
-        accessToken: null,
-        migrationRequired: {
-          reason: 'legacy_token',
-          message: 'Your Claude authentication needs to be refreshed. Please sign in again.',
-        },
-      };
+  it('clears the default connection and empties the legacy slot when the refresh token expired', async () => {
+    answer = expired;
+    const store = createMockCredentialManager(signedIn(), { 'claude-max': signedIn() });
 
-      expect(failedResult.accessToken).toBeNull();
-      expect(failedResult.migrationRequired).toBeDefined();
-      expect(failedResult.migrationRequired?.reason).toBe('legacy_token');
+    const result = await performTokenRefresh(asManager(store), 'old-refresh', 'native', 'claude-max', DEFAULT_CONNECTION);
+
+    expect(result).toEqual({ accessToken: null, migrationRequired: undefined });
+    expect(store.legacy).toBeNull();
+    expect(store.deleted).toEqual(['claude-max']);
+  });
+
+  it('clears only a non-default connection', async () => {
+    answer = expired;
+    const store = createMockCredentialManager(signedIn(), { 'claude-max': signedIn(), 'claude-work': signedIn() });
+
+    await performTokenRefresh(asManager(store), 'old-refresh', 'native', 'claude-work', {
+      isDefaultConnection: false,
+      fromLegacySlot: false,
     });
 
-    it('should not return migration info for native tokens that fail', () => {
-      // Native tokens that fail (e.g., revoked) don't need migration
-      // they just need re-authentication
-      const failedNativeResult: TokenResult = {
-        accessToken: null,
-        // No migrationRequired because source was 'native'
-      };
+    expect(store.deleted).toEqual(['claude-work']);
+    expect(store.legacy).toEqual(signedIn());
+    expect(store.connections['claude-max']).toEqual(signedIn());
+  });
 
-      expect(failedNativeResult.accessToken).toBeNull();
-      expect(failedNativeResult.migrationRequired).toBeUndefined();
+  it.each([
+    ['a 503', () => new Response('Service Unavailable', { status: 503 }), 'Token refresh failed: 503 - Service Unavailable'],
+    ['a 429', () => Response.json({ error: 'rate_limit_error' }, { status: 429 }), 'Token refresh failed: 429 - rate_limit_error'],
+    ['a network error', (): Response => { throw new TypeError('fetch failed'); }, 'fetch failed'],
+  ])('keeps the credentials after %s', async (_failure, respond, refreshError) => {
+    answer = respond;
+    const store = createMockCredentialManager(signedIn(), { 'claude-max': signedIn() });
+
+    const result = await performTokenRefresh(asManager(store), 'old-refresh', 'native', 'claude-max', DEFAULT_CONNECTION);
+
+    expect(result).toEqual({ accessToken: null, transientRefreshError: refreshError });
+    expect(store.deleted).toEqual([]);
+    expect(store.legacy).toEqual(signedIn());
+    expect(store.connections['claude-max']).toEqual(signedIn());
+  });
+
+  it('stores refreshed tokens on the connection, and in the legacy slot only when read from it', async () => {
+    answer = () => Response.json({ access_token: 'new-access', refresh_token: 'new-refresh', expires_in: 3600 });
+    const ownEntry = createMockCredentialManager(signedIn(), { 'claude-max': signedIn() });
+    const legacySlot = createMockCredentialManager(signedIn(), {});
+
+    expect(await performTokenRefresh(asManager(ownEntry), 'old-refresh', 'native', 'claude-max', DEFAULT_CONNECTION))
+      .toEqual({ accessToken: 'new-access' });
+    expect(ownEntry.connections['claude-max']).toMatchObject({ accessToken: 'new-access', refreshToken: 'new-refresh' });
+    expect(ownEntry.legacy).toEqual(signedIn());
+
+    await performTokenRefresh(asManager(legacySlot), 'old-refresh', 'native', 'claude-max', {
+      isDefaultConnection: true,
+      fromLegacySlot: true,
     });
+    expect(legacySlot.connections['claude-max']).toMatchObject({ accessToken: 'new-access', refreshToken: 'new-refresh' });
+    expect(legacySlot.legacy).toMatchObject({ accessToken: 'new-access', refreshToken: 'new-refresh', source: 'native' });
+  });
+
+  it("signs out a connection whose refreshed tokens belong to another account", async () => {
+    answer = () => Response.json({ access_token: 'new-access', refresh_token: 'new-refresh', expires_in: 3600, account: { uuid: 'account-b' } });
+    const store = createMockCredentialManager(signedIn(), { 'claude-max': signedIn(), 'claude-work': signedIn() });
+
+    const result = await performTokenRefresh(asManager(store), 'old-refresh', 'native', 'claude-work', {
+      isDefaultConnection: false,
+      fromLegacySlot: false,
+      expectedAccountUuid: 'account-a',
+    });
+
+    expect(result).toEqual({ accessToken: null });
+    expect(store.deleted).toEqual(['claude-work']);
+    expect(store.connections['claude-max']).toEqual(signedIn());
+    expect(store.legacy).toEqual(signedIn());
+  });
+
+  // From its own entry too: the slot would otherwise hand the default connection the same account.
+  it.each([
+    ['the legacy slot', true],
+    ['its own entry', false],
+  ])('empties the legacy slot when the default connection read another account from %s', async (_source, fromLegacySlot) => {
+    answer = () => Response.json({ access_token: 'new-access', refresh_token: 'new-refresh', expires_in: 3600, account: { uuid: 'account-b' } });
+    const store = createMockCredentialManager(signedIn(), fromLegacySlot ? {} : { 'claude-max': signedIn() });
+
+    const result = await performTokenRefresh(asManager(store), 'old-refresh', 'native', 'claude-max', {
+      isDefaultConnection: true,
+      fromLegacySlot,
+      expectedAccountUuid: 'account-a',
+    });
+
+    expect(result).toEqual({ accessToken: null });
+    expect(store.legacy).toBeNull();
+    expect(store.connections['claude-max']).toBeUndefined();
+  });
+
+  it.each([
+    ['the same account', { account: { uuid: 'account-a' } }, 'account-a'],
+    ['a response without the account', {}, 'account-a'],
+    ['a connection whose sign-in recorded no account', { account: { uuid: 'account-b' } }, undefined],
+  ])('keeps the refreshed tokens for %s', async (_case, identity, expectedAccountUuid) => {
+    answer = () => Response.json({ access_token: 'new-access', refresh_token: 'new-refresh', expires_in: 3600, ...identity });
+    const store = createMockCredentialManager(null, { 'claude-work': signedIn() });
+
+    const result = await performTokenRefresh(asManager(store), 'old-refresh', 'native', 'claude-work', {
+      isDefaultConnection: false,
+      fromLegacySlot: false,
+      expectedAccountUuid,
+    });
+
+    expect(result).toEqual({ accessToken: 'new-access' });
+    expect(store.connections['claude-work']).toMatchObject({ accessToken: 'new-access', refreshToken: 'new-refresh' });
+    expect(store.deleted).toEqual([]);
+  });
+
+  it('asks to sign in again when a dead token came from the CLI or an unknown source', async () => {
+    answer = () => Response.json({ error: 'invalid_grant' }, { status: 400 });
+    const store = createMockCredentialManager({ accessToken: 'cli-access', refreshToken: 'cli-refresh' }, {});
+
+    const result = await performTokenRefresh(asManager(store), 'cli-refresh', undefined, 'claude-max', {
+      isDefaultConnection: true,
+      fromLegacySlot: true,
+    });
+
+    expect(result.accessToken).toBeNull();
+    expect(result.migrationRequired?.reason).toBe('legacy_token');
+  });
+});
+
+describe('refreshClaudeToken error message', () => {
+  beforeEach(stubTokenEndpoint);
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it.each([
+    ['code and description', '{"error":"invalid_grant","error_description":"Refresh token expired"}', 'invalid_grant: Refresh token expired'],
+    ['description alone', '{"error_description":"Refresh token expired"}', 'Refresh token expired'],
+    ['code alone', '{"error":"invalid_grant"}', 'invalid_grant'],
+    ['raw text without either', 'Bad Request', 'Bad Request'],
+  ])('reports the %s', async (_label, body, message) => {
+    answer = () => new Response(body, { status: 400 });
+
+    await expect(refreshClaudeToken('old-refresh')).rejects.toThrow(`Token refresh failed: 400 - ${message}`);
+  });
+});
+
+describe('isDeadRefreshTokenError', () => {
+  it.each([
+    'Token refresh failed: 400 - Refresh token expired',
+    'Token refresh failed: 400 - invalid_grant',
+    'Token refresh failed: 400 - invalid_grant: Refresh token expired',
+    'Token refresh failed: 400 - Refresh token not found or invalid',
+    'invalid_refresh_token',
+  ])('clears credentials for %s', (message) => {
+    expect(isDeadRefreshTokenError(message)).toBe(true);
+  });
+
+  it.each([
+    'fetch failed',
+    'Token refresh failed: 503 - Service Unavailable',
+    'Token refresh failed: 429 - rate_limit_error',
+    'Token refresh failed: 502 - invalid_grant',
+  ])('keeps credentials for transient failure %s', (message) => {
+    expect(isDeadRefreshTokenError(message)).toBe(false);
   });
 });
 

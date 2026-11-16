@@ -2508,6 +2508,11 @@ export class SessionManager implements ISessionManager {
    */
   async reinitializeAuth(connectionSlug?: string): Promise<void> {
     try {
+      // A slug means its credentials changed (SETUP: a new key or sign-in). Running agents on it
+      // keep what their postInit resolved, and a Claude agent's CLIs start with that: resolve it
+      // again. Before process.env below, which has to end on this connection.
+      if (connectionSlug) await this.reresolveAgentCredentials(connectionSlug)
+
       const manager = getCredentialManager()
 
       // Get the connection to use (explicit parameter or default)
@@ -2547,6 +2552,20 @@ export class SessionManager implements ISessionManager {
       sessionLog.error('Failed to reinitialize auth:', error)
       throw error
     }
+  }
+
+  /**
+   * Run postInit again for the running agents on a connection, so their next title, completion or
+   * turn uses its new credentials. A keep-alive session's live CLI keeps the ones it started with
+   * until it restarts (a revoked credential ends in the auth retry, which recreates the agent).
+   */
+  private async reresolveAgentCredentials(connectionSlug: string): Promise<void> {
+    const agents = [...this.sessions.values()]
+      .filter(managed => managed.llmConnection === connectionSlug && managed.agent)
+      .map(managed => managed.agent!)
+    await Promise.all(agents.map(agent => agent.postInit().catch(error => {
+      sessionLog.warn(`Re-resolving credentials for ${connectionSlug} failed:`, error)
+    })))
   }
 
   async initialize(): Promise<void> {
@@ -10049,6 +10068,23 @@ export class SessionManager implements ISessionManager {
 
     if (messages.length === 0) return null
 
+    const agent = this.createHandoffSummaryAgent(managed)
+    try {
+      // On the session's own connection or not at all: without postInit the CLI started from
+      // process.env, which holds another session's credentials, or none (the user's own login).
+      const { authInjected, authWarning } = await agent.postInit()
+      if (!authInjected) {
+        sessionLog.warn(`[handoff] No summary for ${managed.id}: ${authWarning ?? 'no credentials'}`)
+        return null
+      }
+      return await generateConversationSummary(messages, agent.runMiniCompletion.bind(agent))
+    } finally {
+      agent.destroy()
+    }
+  }
+
+  /** The one-shot agent that writes a handoff summary: the session's connection, its mini model. */
+  private createHandoffSummaryAgent(managed: ManagedSession): AgentInstance {
     const workspaceRootPath = managed.workspace.rootPath
     const wsConfig = loadWorkspaceConfig(workspaceRootPath)
     const defaultModel = wsConfig?.defaults?.model
@@ -10067,7 +10103,7 @@ export class SessionManager implements ISessionManager {
       ...(miniModel ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: miniModel } : {}),
     }
 
-    const agent = createBackendFromResolvedContext({
+    return createBackendFromResolvedContext({
       context: backendContext,
       hostRuntime: buildBackendHostRuntimeContext(),
       coreConfig: {
@@ -10090,12 +10126,6 @@ export class SessionManager implements ISessionManager {
       },
       providerOptions: { piAuthProvider: backendContext.connection?.piAuthProvider },
     })
-
-    try {
-      return await generateConversationSummary(messages, agent.runMiniCompletion.bind(agent))
-    } finally {
-      agent.destroy()
-    }
   }
 
   async exportRemoteSessionTransfer(sessionId: string, workspaceId: string): Promise<RemoteSessionTransferPayload | null> {

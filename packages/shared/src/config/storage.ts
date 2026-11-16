@@ -2721,7 +2721,8 @@ function ensureDefaultLlmConnection(config: StoredConfig): boolean {
  * Called on app startup (async operation, credentials use encrypted storage).
  *
  * Migration mapping:
- * - claude_oauth::global → llm_oauth::claude-max
+ * - claude_oauth::global refresh token → the Claude connection with the same access token
+ * - claude_oauth::global → llm_oauth::claude-max (when claude-max would read it)
  * - anthropic_api_key::global → llm_api_key::anthropic-api
  *
  * After successful migration, legacy credentials are deleted to prevent
@@ -2731,12 +2732,18 @@ export async function migrateLegacyCredentials(): Promise<void> {
   const manager = getCredentialManager();
   const debug = (await import('../utils/debug.ts')).debug;
 
+  // Claude connections whose refresh token was left only in claude_oauth::global
+  const { restoreClaudeOAuthRefreshTokens, usesLegacyClaudeOAuthSlot } = await import('../auth/state.ts');
+  await restoreClaudeOAuthRefreshTokens(manager);
+
   // Migrate Claude OAuth: claude_oauth::global → llm_oauth::claude-max
   const legacyClaudeOAuth = await manager.getClaudeOAuthCredentials();
   if (legacyClaudeOAuth?.accessToken) {
-    // Only migrate if llm_oauth::claude-max doesn't exist yet
+    // Only migrate if llm_oauth::claude-max doesn't exist yet, and only into the
+    // connection that would read the slot: every sign-in used to write it, so it
+    // can hold another connection's account.
     const existingLlmOAuth = await manager.getLlmOAuth('claude-max');
-    if (!existingLlmOAuth) {
+    if (!existingLlmOAuth && await usesLegacyClaudeOAuthSlot(manager, 'claude-max')) {
       await manager.setLlmOAuth('claude-max', {
         accessToken: legacyClaudeOAuth.accessToken,
         refreshToken: legacyClaudeOAuth.refreshToken,

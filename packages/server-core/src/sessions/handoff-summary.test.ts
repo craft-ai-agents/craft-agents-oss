@@ -108,3 +108,50 @@ describe('handoff summary in the background', () => {
     expect(turns).toEqual([{ message: 'carry on', summary: undefined }])
   })
 })
+
+// The summary agent is a one-shot ClaudeAgent: without postInit its CLI started from process.env,
+// which holds another session's credentials (another account, or a gateway), or none at all.
+describe('handoff summary agent', () => {
+  let tmpRoot: string
+  let sm: SessionManager
+
+  beforeEach(() => {
+    tmpRoot = mkdtempSync(join(tmpdir(), 'sm-handoff-agent-'))
+    sm = new SessionManager()
+    sm.setEventSink(() => {})
+  })
+
+  afterEach(() => {
+    rmSync(tmpRoot, { recursive: true, force: true })
+  })
+
+  it("summarizes only with the session connection's credentials", async () => {
+    const workspace = { id: 'ws-test', name: 'Test Workspace', rootPath: tmpRoot, createdAt: Date.now() }
+    const managed = createManagedSession({ id: 'source', name: 'source' }, workspace as never, { messagesLoaded: true })
+    managed.messages = [
+      { id: 'm1', role: 'user', content: 'Fix the login bug', timestamp: 1 },
+      { id: 'm2', role: 'assistant', content: 'Fixed it in auth.ts', timestamp: 2 },
+    ] as never
+    const calls: string[] = []
+    let authInjected = false
+    ;(sm as any).createHandoffSummaryAgent = () => ({
+      postInit: async () => {
+        calls.push('postInit')
+        return { authInjected, authWarning: 'Failed to get OAuth token for: claude-max' }
+      },
+      runMiniCompletion: async () => {
+        calls.push('runMiniCompletion')
+        return 'The user asked to fix the login bug; it is fixed in auth.ts.'
+      },
+      destroy: () => { calls.push('destroy') },
+    })
+
+    expect(await (sm as any).generateSessionHandoffSummary(managed)).toBeNull()
+    expect(calls).toEqual(['postInit', 'destroy'])
+
+    calls.length = 0
+    authInjected = true
+    expect(await (sm as any).generateSessionHandoffSummary(managed)).toBe('The user asked to fix the login bug; it is fixed in auth.ts.')
+    expect(calls).toEqual(['postInit', 'runMiniCompletion', 'destroy'])
+  })
+})

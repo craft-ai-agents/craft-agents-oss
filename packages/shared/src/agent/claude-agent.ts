@@ -34,6 +34,7 @@ import { consumeLlmQueryMessages } from './claude-llm-query.ts';
 import { debug } from '../utils/debug.ts';
 import { estimateTokensDensityAware, guardLargeResult, tokenLimitFor } from '../utils/large-response.ts';
 import { PendingSteers } from './backend/claude/pending-steers.ts';
+import { authFailureError, type ClaudeAuthFailure } from './backend/claude/auth-failure.ts';
 import type { RedirectMetadata, PendingSteer } from './backend/types.ts';
 import { SourceActivationDrainController } from './source-activation-drain.ts';
 import { resolveKeepBackgroundTasksAlive, createPushableInputStream, type PushableInputStream } from './backend/claude/persistent-input.ts';
@@ -497,6 +498,10 @@ export class ClaudeAgent extends BaseAgent {
   private lastStderrOutput: string[] = [];
   /** Accepted text steers, owned by the foreground turn. */
   private pendingSteers = new PendingSteers();
+  /** Why the last postInit() could not resolve this connection's credentials; null once it could. */
+  private authFailure: ClaudeAuthFailure | null = null;
+  /** This connection's credentials and endpoint for its CLI processes: the last successful postInit()'s, else config.connectionEnv. */
+  private connectionEnv: Record<string, string> | null = null;
 
   /**
    * WS2 keep-alive: when true, use one long-lived streaming-input `query()` per
@@ -979,6 +984,7 @@ export class ClaudeAgent extends BaseAgent {
 
     this.isHeadless = config.isHeadless ?? false;
     this.automationSystem = config.automationSystem;
+    this.connectionEnv = config.connectionEnv ?? null;
 
     // Initialize event adapter for SDK message → AgentEvent conversion
     this.eventAdapter = new ClaudeEventAdapter({
@@ -1042,16 +1048,32 @@ export class ClaudeAgent extends BaseAgent {
    * Post-construction auth setup.
    * Fetches credentials and sets process.env before the SDK subprocess spawns.
    * The subprocess spawns lazily on first chat(), so postInit() is early enough.
+   * A failure is recorded, and turns and completions then fail closed (recheckAuthFailure).
    */
   override async postInit(): Promise<PostInitResult> {
+    try {
+      return await this.injectConnectionAuth();
+    } catch (error) {
+      // The credential store could not be read or written: fail closed like any other failure,
+      // or the next turn would start the CLI with whatever process.env holds. The credentials
+      // may be fine, so it is a retryable error, not an expired sign-in.
+      const message = error instanceof Error ? error.message : String(error);
+      return this.recordAuthFailure({
+        kind: 'unavailable',
+        warning: `Could not resolve credentials for ${this.config.connectionSlug}: ${message}`,
+      });
+    }
+  }
+
+  private async injectConnectionAuth(): Promise<PostInitResult> {
     const slug = this.config.connectionSlug;
     if (!slug) {
-      return { authInjected: false, authWarning: 'No connection slug available', authWarningLevel: 'error' };
+      return this.recordAuthFailure({ kind: 'connection', warning: 'No connection slug available' });
     }
 
     const connection = getLlmConnection(slug);
     if (!connection) {
-      return { authInjected: false, authWarning: `Connection not found: ${slug}`, authWarningLevel: 'error' };
+      return this.recordAuthFailure({ kind: 'connection', warning: `Connection not found: ${slug}` });
     }
 
     // Clear all auth env vars first for clean state.
@@ -1064,13 +1086,26 @@ export class ClaudeAgent extends BaseAgent {
 
     // Resolve auth env vars via shared utility
     const manager = getCredentialManager();
-    const result = await resolveAuthEnvVars(connection, slug, manager, getValidClaudeOAuthToken);
+    let transientRefreshError: string | undefined;
+    const result = await resolveAuthEnvVars(connection, slug, manager, async (connectionSlug) => {
+      const token = await getValidClaudeOAuthToken(connectionSlug);
+      transientRefreshError = token.transientRefreshError;
+      return token;
+    });
 
     if (!result.success) {
-      return { authInjected: false, authWarning: result.warning, authWarningLevel: 'error' };
+      return this.recordAuthFailure({
+        kind: connection.authType === 'oauth' ? 'oauth' : 'api_key',
+        warning: result.warning ?? `No credentials for: ${slug}`,
+        transientRefreshError,
+      });
     }
+    this.authFailure = null;
 
-    // Apply env vars to process.env (for SDK subprocess) and envOverrides (per-session isolation)
+    // This agent's CLI processes start with these (buildClaudeSubprocessEnv). process.env gets
+    // them too, for code that still reads the ambient credentials, but the next session's
+    // postInit overwrites them there: a CLI started from it ran on that session's account.
+    this.connectionEnv = result.envVars;
     for (const [key, value] of Object.entries(result.envVars)) {
       process.env[key] = value;
     }
@@ -1084,6 +1119,24 @@ export class ClaudeAgent extends BaseAgent {
     }
 
     return { authInjected: true };
+  }
+
+  private recordAuthFailure(failure: ClaudeAuthFailure): PostInitResult {
+    this.authFailure = failure;
+    this.connectionEnv = null;
+    return { authInjected: false, authWarning: failure.warning, authWarningLevel: 'error' };
+  }
+
+  /**
+   * Fail closed: without its connection's credentials the CLI would sign in with
+   * whatever it finds (another session's token left in process.env, or the
+   * user's own Claude Code login). A recorded failure gets one more postInit(),
+   * since it may have passed (network back, signed in again); returns what
+   * still fails, or null.
+   */
+  private async recheckAuthFailure(): Promise<ClaudeAuthFailure | null> {
+    if (this.authFailure) await this.postInit();
+    return this.authFailure;
   }
 
   // Config watcher methods (startConfigWatcher, stopConfigWatcher) are now inherited from BaseAgent
@@ -1151,6 +1204,14 @@ export class ClaudeAgent extends BaseAgent {
     this.toolHandoff = null;
 
     try {
+      // Never start the CLI without this connection's credentials (see recheckAuthFailure).
+      const authFailure = await this.recheckAuthFailure();
+      if (authFailure) {
+        yield { type: 'typed_error', error: authFailureError(authFailure) };
+        yield { type: 'complete' };
+        return;
+      }
+
       const sessionId = this.config.session?.id || `temp-${Date.now()}`;
 
       // Pin system prompt components on first chat() call for consistency after compaction
@@ -1310,7 +1371,7 @@ export class ClaudeAgent extends BaseAgent {
       const resolvedCwd = this.resolveSpawnCwd({ isRetry: _isRetry, sessionId });
 
       const options: Options = {
-        ...getDefaultOptions(this.config.envOverrides),
+        ...getDefaultOptions(this.config.envOverrides, this.connectionEnv ?? undefined),
         model: effectiveModel,
         // Compact earlier than the SDK default (the model's full window, 1M on first-party Opus even
         // without the [1m] suffix): every call re-reads the whole context. Subagents inherit it.
@@ -3386,10 +3447,12 @@ This is a branched conversation. All prior messages in this conversation are par
     if (!this.config.miniModel) {
       throw new Error('ClaudeAgent.runMiniCompletion: config.miniModel is required');
     }
+    const authFailure = await this.recheckAuthFailure();
+    if (authFailure) throw new Error(authFailure.warning);
     const model = this.config.miniModel;
 
     const options = {
-      ...getTextCompletionOptions(this.config.envOverrides),
+      ...getTextCompletionOptions(this.config.envOverrides, this.connectionEnv ?? undefined),
       model,
       maxTurns: 1,
       systemPrompt: 'Reply with ONLY the requested text. No explanation.', // Minimal - no Claude Code preset
@@ -3519,10 +3582,12 @@ This is a branched conversation. All prior messages in this conversation are par
   // ============================================================
 
   async queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
+    const authFailure = await this.recheckAuthFailure();
+    if (authFailure) throw new Error(authFailure.warning);
     const model = request.model ?? this.config.miniModel ?? getDefaultSummarizationModel();
 
     const options = {
-      ...getTextCompletionOptions(this.config.envOverrides),
+      ...getTextCompletionOptions(this.config.envOverrides, this.connectionEnv ?? undefined),
       model,
       // Reasoning-model outputs (Opus extended thinking) can span multiple SDK-counted
       // turns even with no tools exposed. Tool surface here is empty (only the SDK's own

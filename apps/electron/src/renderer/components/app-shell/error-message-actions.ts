@@ -8,6 +8,8 @@ export interface HandleErrorMessageActionOptions {
   sessionId?: string
   onOpenUrl?: (url: string) => void
   onOpenSettings?: () => void
+  /** Sign in again: the connections and their sign-in live in Settings → AI. */
+  onReauthenticate?: () => void
   onRetryFocus?: (detail?: { sessionId?: string }) => void
   onRetry?: () => void
 }
@@ -25,6 +27,7 @@ export function handleErrorMessageAction(
     sessionId,
     onOpenUrl,
     onOpenSettings = () => navigate(routes.view.settings()),
+    onReauthenticate = () => navigate(routes.view.settings('ai')),
     onRetryFocus = dispatchFocusInputEvent,
     onRetry,
   }: HandleErrorMessageActionOptions = {},
@@ -38,6 +41,11 @@ export function handleErrorMessageAction(
 
   if (action.action === 'settings') {
     onOpenSettings()
+    return
+  }
+
+  if (action.action === 'reauth') {
+    onReauthenticate()
     return
   }
 

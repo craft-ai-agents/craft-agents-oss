@@ -1113,7 +1113,8 @@ export interface ResolvedAuthEnvVars {
  * Provider-agnostic: switches on providerType to determine which env vars
  * to set and how to retrieve credentials. Shared by:
  * - `SessionManager.reinitializeAuth()` (applies to process.env)
- * - `ClaudeAgent.postInit()` (applies to process.env + envOverrides)
+ * - `ClaudeAgent.postInit()` (keeps them for its own CLI processes, see buildClaudeSubprocessEnv,
+ *   and applies them to process.env)
  *
  * Providers that handle auth internally (openai, copilot, pi) return
  * empty envVars — their auth is managed in postInit() via native mechanisms.
