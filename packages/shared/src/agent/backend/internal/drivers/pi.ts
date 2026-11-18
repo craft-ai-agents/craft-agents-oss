@@ -172,17 +172,25 @@ async function fetchCopilotModels(
 }
 
 /**
- * Lightweight direct HTTP test for Pi providers that expose an Anthropic-compatible
- * messages endpoint. Avoids spawning a full Pi subprocess (which can exceed the
- * 20s test timeout due to SDK initialization overhead).
+ * Build a versioned API URL from a user-supplied base URL, without doubling the
+ * '/v1' segment. OpenAI-compatible endpoints are conventionally documented (and
+ * placeholder-hinted in our own setup form) as ending in '/v1', so users commonly
+ * enter e.g. 'https://api.example.com/v1' as the base URL. If we always appended
+ * '/v1/<path>' on top of that, we'd request '.../v1/v1/<path>' and get a 404.
  */
-async function testAnthropicCompatible(
-  apiKey: string,
-  baseUrl: string,
-  model: string,
+function buildApiUrl(baseUrl: string, path: string): string {
+  const trimmed = baseUrl.replace(/\/$/, '');
+  const hasV1Suffix = /\/v1$/i.test(trimmed);
+  return hasV1Suffix ? `${trimmed}${path}` : `${trimmed}/v1${path}`;
+}
+
+/** Shared fetch-with-timeout for the lightweight connection-test HTTP calls below. */
+async function postJsonWithTimeout(
+  url: string,
+  headers: Record<string, string>,
+  body: unknown,
   timeoutMs: number,
 ): Promise<{ success: boolean; error?: string }> {
-  const url = `${baseUrl.replace(/\/$/, '')}/v1/messages`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -190,16 +198,8 @@ async function testAnthropicCompatible(
     const res = await fetch(url, {
       method: 'POST',
       signal: controller.signal,
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 16,
-        messages: [{ role: 'user', content: 'Say ok' }],
-      }),
+      headers,
+      body: JSON.stringify(body),
     });
 
     if (res.ok) return { success: true };
@@ -214,6 +214,59 @@ async function testAnthropicCompatible(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Lightweight direct HTTP test for Pi providers that expose an Anthropic-compatible
+ * messages endpoint. Avoids spawning a full Pi subprocess (which can exceed the
+ * 20s test timeout due to SDK initialization overhead).
+ */
+async function testAnthropicCompatible(
+  apiKey: string,
+  baseUrl: string,
+  model: string,
+  timeoutMs: number,
+): Promise<{ success: boolean; error?: string }> {
+  return postJsonWithTimeout(
+    buildApiUrl(baseUrl, '/messages'),
+    {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    {
+      model,
+      max_tokens: 16,
+      messages: [{ role: 'user', content: 'Say ok' }],
+    },
+    timeoutMs,
+  );
+}
+
+/**
+ * Lightweight direct HTTP test for Pi providers that expose an OpenAI-compatible
+ * chat completions endpoint. Mirrors testAnthropicCompatible() above — avoids
+ * spawning a full Pi subprocess just to check that credentials work.
+ */
+async function testOpenAICompatible(
+  apiKey: string,
+  baseUrl: string,
+  model: string,
+  timeoutMs: number,
+): Promise<{ success: boolean; error?: string }> {
+  return postJsonWithTimeout(
+    buildApiUrl(baseUrl, '/chat/completions'),
+    {
+      'content-type': 'application/json',
+      'authorization': `Bearer ${apiKey}`,
+    },
+    {
+      model,
+      max_tokens: 16,
+      messages: [{ role: 'user', content: 'Say ok' }],
+    },
+    timeoutMs,
+  );
 }
 
 export const piDriver: ProviderDriver = {
@@ -272,24 +325,34 @@ export const piDriver: ProviderDriver = {
       return null;
     }
 
-    // Resolve the model's API type from the Pi SDK registry.
-    // For anthropic-messages providers, do a lightweight direct HTTP test
-    // instead of spawning a full Pi subprocess (which can exceed the timeout).
-    let modelApi: string | undefined;
+    // Resolve the model's API type.
+    // For a user-configured custom endpoint (arbitrary base URL + explicit protocol
+    // toggle), trust that toggle directly — factory.ts stamps piAuthProvider as the
+    // literal 'anthropic'/'openai' marker for these connections, which is NOT a real
+    // Pi SDK provider id. Looking that up in the registry below would match against
+    // known providers' own model catalogs (e.g. real OpenAI's 'gpt-4'), not the
+    // user's custom model id, silently resolving to the wrong api type.
+    // For anthropic-messages and openai-completions providers, do a lightweight
+    // direct HTTP test instead of spawning a full Pi subprocess (which can
+    // exceed the timeout).
+    let modelApi: string | undefined = args.connection?.customEndpoint?.api;
     let modelBaseUrl: string | undefined;
-    try {
-      const { getModels } = await import('@earendil-works/pi-ai/compat');
-      const models = getModels(piAuthProvider as Parameters<typeof getModels>[0]);
-      const requestedId = args.model.startsWith('pi/') ? args.model.slice(3) : args.model;
-      const match = models.find(m => m.id === requestedId) || models[0];
-      if (match) {
-        modelApi = (match as { api?: string }).api;
-        modelBaseUrl = (match as { baseUrl?: string }).baseUrl;
-      }
-    } catch { /* ignore — fall through to subprocess */ }
+    if (!modelApi) {
+      try {
+        const { getModels } = await import('@earendil-works/pi-ai/compat');
+        const models = getModels(piAuthProvider as Parameters<typeof getModels>[0]);
+        const requestedId = args.model.startsWith('pi/') ? args.model.slice(3) : args.model;
+        const match = models.find(m => m.id === requestedId) || models[0];
+        if (match) {
+          modelApi = (match as { api?: string }).api;
+          modelBaseUrl = (match as { baseUrl?: string }).baseUrl;
+        }
+      } catch { /* ignore — fall through to subprocess */ }
+    }
 
-    if (modelApi !== 'anthropic-messages') {
-      // Non-Anthropic API types need the full Pi SDK — let factory.ts handle it
+    if (modelApi !== 'anthropic-messages' && modelApi !== 'openai-completions') {
+      // Other API types (Responses, Bedrock, Vertex, ...) need the full Pi SDK —
+      // let factory.ts handle it
       return null;
     }
 
@@ -298,13 +361,15 @@ export const piDriver: ProviderDriver = {
       return { success: false, error: 'Could not determine API endpoint for provider' };
     }
 
-    // Strip Pi SDK's 'pi/' prefix — Anthropic-compatible endpoints only accept bare model IDs
+    // Strip Pi SDK's 'pi/' prefix — compatible endpoints only accept bare model IDs
     let bareModel = args.model.startsWith('pi/') ? args.model.slice(3) : args.model;
     // MiniMax CN API doesn't accept the 'MiniMax-' prefix on model names
     if (piAuthProvider === 'minimax-cn' && bareModel.startsWith('MiniMax-')) {
       bareModel = bareModel.slice('MiniMax-'.length);
     }
-    return testAnthropicCompatible(args.apiKey, baseUrl, bareModel, args.timeoutMs);
+    return modelApi === 'anthropic-messages'
+      ? testAnthropicCompatible(args.apiKey, baseUrl, bareModel, args.timeoutMs)
+      : testOpenAICompatible(args.apiKey, baseUrl, bareModel, args.timeoutMs);
   },
   validateStoredConnection: async () => ({ success: true }),
 };
