@@ -250,6 +250,29 @@ describe('detectLinks', () => {
 })
 
 describe('isFilePathTarget', () => {
+  it.each([
+    String.raw`C:\Users\Tester\output.md`,
+    String.raw`C:\Users/Tester\output.md`,
+    'C:/Users/Tester/output.md',
+    'd:/output.PDF',
+    'C:%5CUsers%5CTester%5Coutput.md',
+    'C:%2fUsers/Tester/output.md',
+    String.raw`C:\My%20Docs\output.md`,
+  ])('accepts absolute Windows file target %s', (target) => {
+    expect(isFilePathTarget(target)).toBe(true)
+  })
+
+  it.each([
+    'C:output.md',
+    String.raw`C:\Users\Tester\output.unsupported`,
+    'https://example.com/output.md',
+    'mailto:tester@example.com',
+    'custom://example.com/output.md',
+    'javascript:output.md',
+  ])('rejects non-file or unsupported target %s', (target) => {
+    expect(isFilePathTarget(target)).toBe(false)
+  })
+
   it('accepts absolute unix image paths', () => {
     expect(isFilePathTarget('/Users/balintorosz/.craft-agent/sessions/abc/image.jpg')).toBe(true)
   })
