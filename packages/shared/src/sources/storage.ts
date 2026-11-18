@@ -415,6 +415,10 @@ export function isSourceUsable(source: LoadedSource): boolean {
 export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): LoadedSource[] {
   const sources: LoadedSource[] = [];
   for (const slug of slugs) {
+    // Runtime data may contain malformed entries despite the static type.
+    // Ignore them so one bad slug cannot break all source loading for a session.
+    if (typeof slug !== 'string' || slug.length === 0) continue;
+
     // Load user-configured source from disk
     const source = loadSource(workspaceRootPath, slug);
     if (source) {
