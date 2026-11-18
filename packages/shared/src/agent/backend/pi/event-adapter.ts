@@ -17,8 +17,9 @@ import type {
 } from '@earendil-works/pi-agent-core';
 import type {
   AgentSessionEvent,
+  JsonAgentSessionEvent,
 } from '@earendil-works/pi-coding-agent';
-import type { AssistantMessage, AssistantMessageEvent } from '@earendil-works/pi-ai';
+import type { AssistantMessage } from '@earendil-works/pi-ai';
 import { isContextOverflow, isRetryableAssistantError } from '@earendil-works/pi-ai';
 import { BaseEventAdapter } from '../base-event-adapter.ts';
 import { PI_TOOL_NAME_MAP } from './constants.ts';
@@ -64,7 +65,7 @@ const RETRYABLE_PROVIDER_SIDE_PATTERN =
  * Combined event type the adapter can handle.
  * AgentSessionEvent is a superset of PiAgentEvent (adds compaction_*, auto_retry_*, queue_update).
  */
-type PiEvent = (PiAgentEvent | AgentSessionEvent | { type: 'context_usage' }) & PiContextUsagePayload;
+type PiEvent = (PiAgentEvent | AgentSessionEvent | JsonAgentSessionEvent | { type: 'context_usage' }) & PiContextUsagePayload;
 
 /**
  * Maps Pi SDK events to Craft AgentEvents for UI compatibility.
@@ -508,7 +509,7 @@ export class PiEventAdapter extends BaseEventAdapter {
 
       case 'message_update': {
         // Pi SDK emits message_update only for assistant messages (streaming deltas)
-        const amEvent: AssistantMessageEvent = event.assistantMessageEvent;
+        const amEvent = event.assistantMessageEvent;
         if (amEvent.type === 'text_delta' && amEvent.delta) {
           this.hasStreamedDeltas = true;
           if (!this.messageSubTurnId) {
