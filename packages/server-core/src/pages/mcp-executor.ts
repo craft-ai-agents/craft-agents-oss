@@ -21,7 +21,7 @@ import {
   TokenRefreshManager,
   type LoadedSource,
 } from '@craft-agent/shared/sources'
-import { McpClientPool, proxyToolName } from '@craft-agent/shared/mcp'
+import { McpClientPool } from '@craft-agent/shared/mcp'
 import type { Logger } from '@craft-agent/server-core/runtime'
 import { buildServersFromSources } from '../sources/build-servers'
 import { assertPageSourceUsable } from './source-gate'
@@ -95,7 +95,7 @@ export function createPagesMcpExecutor(deps: PagesMcpExecutorDeps) {
 
     await deps.pool.ensureConnected(sourceSlug, config)
 
-    const result = await deps.pool.callTool(proxyToolName(sourceSlug, toolName), args, {
+    const result = await deps.pool.callTool(deps.pool.resolveProxyName(sourceSlug, toolName), args, {
       signal: options.signal,
     })
     if (result.isError) {

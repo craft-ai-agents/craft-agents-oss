@@ -8,6 +8,7 @@ import { describe, test, expect } from 'bun:test';
 import { McpClientPool } from '../mcp-pool.ts';
 import type { PoolClient } from '../client.ts';
 import type { SdkMcpServerConfig } from '../../agent/backend/types.ts';
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 class TestPool extends McpClientPool {
   connectCalls: Array<{ slug: string; config: SdkMcpServerConfig }> = [];
@@ -76,5 +77,101 @@ describe('McpClientPool.ensureConnected', () => {
       if (prev === undefined) delete process.env.CRAFT_LOCAL_MCP_ENABLED;
       else process.env.CRAFT_LOCAL_MCP_ENABLED = prev;
     }
+  });
+});
+
+// ============================================================
+// Proxy name collisions (#1002): two distinct tool names that sanitize to
+// the same proxy name must BOTH stay callable, under deterministic names.
+// ============================================================
+
+class CollisionPool extends McpClientPool {
+  calledOriginalNames: string[] = [];
+
+  async addSource(slug: string, toolNames: string[]): Promise<void> {
+    const self = this;
+    const tools = toolNames.map((name): Tool => ({
+      name,
+      description: `Tool ${name}`,
+      inputSchema: { type: 'object' as const, properties: {} },
+    }));
+    const fake: PoolClient = {
+      listTools: async () => tools,
+      callTool: async (name: string) => {
+        self.calledOriginalNames.push(name);
+        return { content: [{ type: 'text', text: `ok:${name}` }] };
+      },
+      close: async () => {},
+    };
+    await this.registerClient(slug, fake);
+  }
+}
+
+describe('McpClientPool proxy name collisions (#1002)', () => {
+  test('both colliding tools stay registered, the later one suffixed', async () => {
+    const pool = new CollisionPool();
+    await pool.addSource('src', ['pat.batch', 'pat_batch']);
+
+    const defNames = pool.getProxyToolDefs().map((d) => d.name);
+    expect(defNames).toEqual(['mcp__src__pat_batch', 'mcp__src__pat_batch__2']);
+    expect(pool.resolveProxyName('src', 'pat.batch')).toBe('mcp__src__pat_batch');
+    expect(pool.resolveProxyName('src', 'pat_batch')).toBe('mcp__src__pat_batch__2');
+    expect(pool.isProxyTool('mcp__src__pat_batch__2')).toBe(true);
+  });
+
+  test('each proxy name dispatches to its own original tool', async () => {
+    const pool = new CollisionPool();
+    await pool.addSource('src', ['pat.batch', 'pat_batch']);
+
+    const first = await pool.callTool('mcp__src__pat_batch', {});
+    const second = await pool.callTool('mcp__src__pat_batch__2', {});
+    expect(first.isError).toBe(false);
+    expect(second.isError).toBe(false);
+    expect(first.content).toContain('pat.batch');
+    expect(second.content).toContain('pat_batch');
+    expect(pool.calledOriginalNames).toEqual(['pat.batch', 'pat_batch']);
+  });
+
+  test('triple collision suffixes in list order', async () => {
+    const pool = new CollisionPool();
+    await pool.addSource('src', ['a.b', 'a_b', 'a/b']);
+
+    expect(pool.getProxyToolDefs().map((d) => d.name)).toEqual([
+      'mcp__src__a_b',
+      'mcp__src__a_b__2',
+      'mcp__src__a_b__3',
+    ]);
+  });
+
+  test('a tool literally named like a suffix is disambiguated further, not overwritten', async () => {
+    const pool = new CollisionPool();
+    await pool.addSource('src', ['a.b', 'a_b', 'a_b__2']);
+
+    expect(pool.resolveProxyName('src', 'a_b__2')).toBe('mcp__src__a_b__2__2');
+    const result = await pool.callTool('mcp__src__a_b__2__2', {});
+    expect(result.isError).toBe(false);
+    expect(pool.calledOriginalNames).toEqual(['a_b__2']);
+  });
+
+  test('assignments are deterministic and non-colliding tools keep their plain names', async () => {
+    const names = ['createIssue', 'pat.batch', 'pat_batch'];
+    const poolA = new CollisionPool();
+    await poolA.addSource('src', names);
+    const poolB = new CollisionPool();
+    await poolB.addSource('src', names);
+
+    expect(poolA.getProxyToolDefs().map((d) => d.name)).toEqual(poolB.getProxyToolDefs().map((d) => d.name));
+    expect(poolA.resolveProxyName('src', 'createIssue')).toBe('mcp__src__createIssue');
+  });
+
+  test('disconnect frees the assigned names for a clean re-register', async () => {
+    const pool = new CollisionPool();
+    await pool.addSource('src', ['pat.batch', 'pat_batch']);
+    await pool.disconnect('src');
+    expect(pool.isProxyTool('mcp__src__pat_batch')).toBe(false);
+    expect(pool.isProxyTool('mcp__src__pat_batch__2')).toBe(false);
+
+    await pool.addSource('src', ['pat_batch']);
+    expect(pool.resolveProxyName('src', 'pat_batch')).toBe('mcp__src__pat_batch');
   });
 });
