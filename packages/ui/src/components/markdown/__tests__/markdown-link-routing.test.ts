@@ -2,7 +2,12 @@ import { describe, it, expect } from 'bun:test'
 import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
-import { classifyMarkdownLinkTarget, resolveMarkdownLinkTarget } from '../link-target'
+import {
+  classifyMarkdownLinkTarget,
+  describeFileLinkClick,
+  resolveMarkdownLinkTarget,
+  type FileLinkClickEvent,
+} from '../link-target'
 import { markdownUrlTransform } from '../url-transform'
 
 describe('resolveMarkdownLinkTarget', () => {
@@ -142,5 +147,31 @@ describe('classifyMarkdownLinkTarget', () => {
 
   it('classifies mailto links as url', () => {
     expect(classifyMarkdownLinkTarget('mailto:test@example.com')).toBe('url')
+  })
+})
+
+describe('describeFileLinkClick', () => {
+  const box = (left: number, top: number, width: number, height = 18) => ({ left, top, width, height, bottom: top + height })
+  // A link that wraps onto a second line: one box per line, the bounding box spans both.
+  const firstLine = box(300, 100, 200)
+  const secondLine = box(16, 118, 140)
+  const link = (lines: ReturnType<typeof box>[]) => ({
+    getClientRects: () => lines,
+    getBoundingClientRect: () => box(16, 100, 484, 36),
+  }) as unknown as FileLinkClickEvent['currentTarget']
+
+  it('anchors on the line that was clicked', () => {
+    const click = describeFileLinkClick({ currentTarget: link([firstLine, secondLine]), detail: 1, clientY: 125, altKey: false })
+    expect(click).toEqual({ anchor: { x: 16, y: 118, width: 140, height: 18 }, altKey: false })
+  })
+
+  it('anchors a keyboard activation (no pointer position) on the first line', () => {
+    const click = describeFileLinkClick({ currentTarget: link([firstLine, secondLine]), detail: 0, clientY: 0, altKey: false })
+    expect(click.anchor).toEqual({ x: 300, y: 100, width: 200, height: 18 })
+  })
+
+  it('falls back to the bounding box when the link has no line boxes', () => {
+    const click = describeFileLinkClick({ currentTarget: link([]), detail: 1, clientY: 110, altKey: true })
+    expect(click).toEqual({ anchor: { x: 16, y: 100, width: 484, height: 36 }, altKey: true })
   })
 })

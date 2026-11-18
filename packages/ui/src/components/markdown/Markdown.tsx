@@ -18,7 +18,7 @@ import { MarkdownLatexBlock } from './MarkdownLatexBlock'
 import { MarkdownPdfBlock } from './MarkdownPdfBlock'
 import { MarkdownDocBlock } from './MarkdownDocBlock'
 import { preprocessLinks } from './linkify'
-import { resolveMarkdownLinkTarget } from './link-target'
+import { describeFileLinkClick, resolveMarkdownLinkTarget, type FileOpenHandler } from './link-target'
 import remarkCollapsibleSections from './remarkCollapsibleSections'
 import { CollapsibleSection } from './CollapsibleSection'
 import { useCollapsibleMarkdown } from './CollapsibleMarkdownContext'
@@ -70,9 +70,9 @@ export interface MarkdownProps {
    */
   onUrlClick?: (url: string) => void
   /**
-   * Callback when a file path is clicked
+   * Callback when a file path is clicked; gets the click (link box, ⌥) as its second argument
    */
-  onFileClick?: (path: string) => void
+  onFileClick?: FileOpenHandler
   /**
    * Enable collapsible headings
    * Requires wrapping in CollapsibleMarkdownProvider
@@ -128,7 +128,7 @@ function stableHash(input: string): string {
 function createComponents(
   mode: RenderMode,
   onUrlClick?: (url: string) => void,
-  onFileClick?: (path: string) => void,
+  onFileClick?: FileOpenHandler,
   collapsibleContext?: CollapsibleContext | null,
   firstMermaidCodeRef?: React.RefObject<string | null>,
   hideFirstMermaidExpand: boolean = true,
@@ -203,7 +203,7 @@ function createComponents(
       const sanitized = trimmedHref ? defaultUrlTransform(trimmedHref) : ''
       const safeHref = sanitized ? sanitized : undefined
 
-      const handleClick = (e: React.MouseEvent) => {
+      const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
         e.preventDefault()
 
         // Some AI outputs include raw HTML anchors with empty href but path text content.
@@ -218,7 +218,7 @@ function createComponents(
 
         const resolvedTarget = resolveMarkdownLinkTarget(target)
         if (resolvedTarget.kind === 'file' && onFileClick) {
-          onFileClick(resolvedTarget.path)
+          onFileClick(resolvedTarget.path, describeFileLinkClick(e))
         } else if (resolvedTarget.kind === 'url' && onUrlClick) {
           onUrlClick(resolvedTarget.url)
         }

@@ -89,6 +89,14 @@ export function isSignInPopupUrl(url: string): boolean {
   }
 }
 
+/**
+ * Keep a browser window or popup out of the macOS Window menu, which lists the app windows
+ * (`menu.ts`). These windows carry no title of their own, so they would show as "Craft Agents".
+ */
+function excludeFromWindowsMenu(window: BrowserWindow): void {
+  if (process.platform === 'darwin') window.excludedFromShownWindowsMenu = true
+}
+
 const THEME_COLOR_EXTRACTOR_FN = String.raw`
 () => {
   const toHex = (r, g, b) => '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
@@ -474,6 +482,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
         sandbox: true,
       },
     })
+    excludeFromWindowsMenu(window)
 
     const toolbarView = new BrowserView({
       webPreferences: {
@@ -3203,6 +3212,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   private registerPopupWindow(parentInstance: BrowserInstance, popupWindow: BrowserWindow, sourceUrl?: string): void {
+    excludeFromWindowsMenu(popupWindow)
     const popupWcId = popupWindow.webContents.id
     this.popupWebContentsIdByWindow.set(popupWindow, popupWcId)
     const existingParent = this.popupParentByWebContentsId.get(popupWcId)

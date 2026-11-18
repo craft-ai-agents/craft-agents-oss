@@ -178,9 +178,13 @@ export async function rebuildMenu(): Promise<void> {
       ]
     },
 
-    // Window menu (from shared schema + macOS-specific items)
+    // Window menu (from shared schema + macOS-specific items). `role: 'window'` makes it the macOS
+    // Windows menu, so AppKit appends the open windows itself (key window checked, minimized ones
+    // marked, titles kept current). Windows that aren't app windows (the in-app browser and its
+    // popups) opt out with `excludedFromShownWindowsMenu`.
     {
       label: i18n.t(WINDOW_MENU.labelKey),
+      role: 'window' as const,
       submenu: [
         ...WINDOW_MENU.items.map(toElectronMenuItem),
         ...(isMac ? [

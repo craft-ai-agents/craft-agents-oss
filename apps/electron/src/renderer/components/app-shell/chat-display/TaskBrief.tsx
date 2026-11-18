@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Pencil, Play } from 'lucide-react'
 import { toast } from 'sonner'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner, type FileOpenHandler } from '@craft-agent/ui'
 import { Markdown } from '@/components/markdown'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -27,7 +27,7 @@ interface TaskBriefProps {
   onRun?: () => void
   onEdit?: () => void
   onOpenUrl?: (url: string) => void
-  onOpenFile?: (path: string) => void
+  onOpenFile?: FileOpenHandler
 }
 
 /** An unrun task's goal, acceptance criteria and subtasks, with Run and Edit. */
@@ -85,7 +85,7 @@ interface TaskBriefStateProps {
   title?: string
   compact?: boolean
   onOpenUrl?: (url: string) => void
-  onOpenFile?: (path: string) => void
+  onOpenFile?: FileOpenHandler
   /** Shown when the task has no readable spec */
   fallback: React.ReactNode
 }

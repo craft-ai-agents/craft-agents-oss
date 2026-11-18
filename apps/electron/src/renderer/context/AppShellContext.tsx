@@ -10,6 +10,7 @@ import * as React from 'react'
 import { createContext, useContext, useCallback } from 'react'
 import { useAtomValue } from 'jotai'
 import type { ChatDisplayHandle } from '@/components/app-shell/ChatDisplay'
+import type { FileOpenHandler } from '@craft-agent/ui'
 import type {
   Session,
   Workspace,
@@ -112,7 +113,7 @@ export interface AppShellContextType {
   ) => void
 
   // File/URL handlers - these can open in tabs or external apps
-  onOpenFile: (path: string) => void
+  onOpenFile: FileOpenHandler
   onOpenUrl: (url: string) => void
 
   // Workspace

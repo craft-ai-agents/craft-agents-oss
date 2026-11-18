@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Markdown } from '../markdown'
+import { Markdown, type FileOpenHandler } from '../markdown'
 import type { AnnotationV1 } from '@craft-agent/core'
 import { type IslandTransitionConfig } from '../ui'
 import { AnnotationIslandMenu } from '../annotations/AnnotationIslandMenu'
@@ -53,7 +53,7 @@ export interface AnnotatableMarkdownDocumentProps {
   onRemoveAnnotation?: (messageId: string, annotationId: string) => void
   onUpdateAnnotation?: (messageId: string, annotationId: string, patch: Partial<AnnotationV1>) => void
   onOpenUrl?: (url: string) => void
-  onOpenFile?: (path: string) => void
+  onOpenFile?: FileOpenHandler
   sendMessageKey?: 'enter' | 'cmd-enter'
   islandZIndex?: React.CSSProperties['zIndex']
   openAnnotationRequest?: ExternalOpenAnnotationRequest | null

@@ -8,7 +8,7 @@ import { ListTodo } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useCopyToClipboard } from '../../lib/use-copy-to-clipboard'
 import { TWEEN } from '../../motion/presets'
-import { Markdown, RunCommandProvider, useRunCommand } from '../markdown'
+import { Markdown, RunCommandProvider, useRunCommand, type FileOpenHandler } from '../markdown'
 import { type IslandTransitionConfig } from '../ui'
 import { AnnotationIslandMenu } from '../annotations/AnnotationIslandMenu'
 import {
@@ -176,7 +176,7 @@ export interface TurnCardProps {
   /** Callback when activity group expansion changes */
   onExpandedActivityGroupsChange?: (groups: Set<string>) => void
   /** Callback when file path is clicked */
-  onOpenFile?: (path: string) => void
+  onOpenFile?: FileOpenHandler
   /** Callback when URL is clicked */
   onOpenUrl?: (url: string) => void
   /** Callback to open response in Monaco editor */
@@ -391,7 +391,7 @@ export interface ResponseCardProps {
   /** When streaming started - used for buffering timeout calculation */
   streamStartTime?: number
   /** Callback to open file in editor */
-  onOpenFile?: (path: string) => void
+  onOpenFile?: FileOpenHandler
   /** Callback to open URL */
   onOpenUrl?: (url: string) => void
   /** Callback to open response in Monaco editor */

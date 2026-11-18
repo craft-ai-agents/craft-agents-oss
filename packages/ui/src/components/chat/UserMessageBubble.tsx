@@ -17,7 +17,7 @@ import type { StoredAttachment, ContentBadge } from '@craft-agent/core'
 import { normalizePath } from '@craft-agent/core/utils'
 import { cn } from '../../lib/utils'
 import { useCopyToClipboard } from '../../lib/use-copy-to-clipboard'
-import { Markdown } from '../markdown'
+import { Markdown, type FileOpenHandler } from '../markdown'
 import { FileTypeIcon, getFileTypeLabel } from './attachment-helpers'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '../tooltip'
 import { TurnIconButton } from './turn/TurnIconButton'
@@ -174,7 +174,7 @@ function InlineFileBadge({
   onFileClick
 }: {
   badge: ContentBadge
-  onFileClick?: (path: string) => void
+  onFileClick?: FileOpenHandler
 }) {
   // Strip .craft-agent workspace/session path prefix for cleaner tooltip display
   // e.g. "/Users/.../workspaces/{id}/sessions/{id}/plans/foo.md" → "plans/foo.md"
@@ -228,7 +228,7 @@ function renderContentWithBadges(
   content: string,
   badges: ContentBadge[],
   onUrlClick?: (url: string) => void,
-  onFileClick?: (path: string) => void
+  onFileClick?: FileOpenHandler
 ): ReactNode {
   if (badges.length === 0) {
     return (
@@ -316,7 +316,7 @@ export interface UserMessageBubbleProps {
   /** Callback when a URL is clicked */
   onUrlClick?: (url: string) => void
   /** Callback when a file path is clicked */
-  onFileClick?: (path: string) => void
+  onFileClick?: FileOpenHandler
   /** Stored attachments (images, documents) */
   attachments?: StoredAttachment[]
   /** Content badges for inline display (sources, skills) */

@@ -9,6 +9,7 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { AlertCircle } from 'lucide-react'
+import type { FileLinkClick } from '@craft-agent/ui'
 import { ChatDisplay, type ChatDisplayHandle } from '@/components/app-shell/ChatDisplay'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ChatHeader } from '@/components/app-shell/chat-header/ChatHeader'
@@ -318,8 +319,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     await window.electronAPI.sessionCommand(session.id, { type: 'updateWorkingDirectory', dir: path })
   }, [session])
 
+  // Keeps the link click (`click`) on every path, so the file-link menu opens next to the link.
   const handleOpenFile = React.useCallback(
-    async (path: string) => {
+    async (path: string, click?: FileLinkClick) => {
       // Resolve bare relative paths against session working directory,
       // or workspace root as a fallback when workingDirectory is not set.
       const resolved = (() => {
@@ -351,12 +353,12 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             const files = matches.filter((m) => m.type === 'file' && m.name === fileName)
             const exact = files.find((m) => m.path === resolved)
             if (exact) {
-              onOpenFile(exact.path)
+              onOpenFile(exact.path, click)
               return
             }
 
             if (files.length === 1) {
-              onOpenFile(files[0].path)
+              onOpenFile(files[0].path, click)
               toast.info(t('chat.openedClosestMatch', { path: files[0].relativePath }))
               return
             }
@@ -366,9 +368,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
         }
       }
 
-      onOpenFile(resolved)
+      onOpenFile(resolved, click)
     },
-    [onOpenFile, workingDirectory, activeWorkspace?.rootPath]
+    [onOpenFile, workingDirectory, activeWorkspace?.rootPath, t]
   )
 
   const handleOpenUrl = React.useCallback(

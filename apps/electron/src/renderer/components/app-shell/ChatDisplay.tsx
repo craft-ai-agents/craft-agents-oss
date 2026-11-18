@@ -26,6 +26,7 @@ import {
   type ActivityItem,
   type FileChange,
   type DiffViewerSettings,
+  type FileOpenHandler,
   RunCommandProvider,
 } from "@craft-agent/ui"
 import { useFocusZone } from "@/hooks/keyboard"
@@ -145,7 +146,7 @@ function getTurnKey(turn: Turn): string {
 interface ChatDisplayProps {
   session: Session | null
   onSendMessage: (message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => void
-  onOpenFile: (path: string) => void
+  onOpenFile: FileOpenHandler
   onOpenUrl: (url: string) => void
   // Model selection
   currentModel: string

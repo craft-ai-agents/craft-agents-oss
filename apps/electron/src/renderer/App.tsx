@@ -75,11 +75,12 @@ import { useLinkInterceptor, type FilePreviewState } from '@/hooks/useLinkInterc
 import { useTransportConnectionState } from '@/hooks/useTransportConnectionState'
 import { useStaleSessionRecovery } from '@/hooks/useStaleSessionRecovery'
 import { TransportConnectionBanner, shouldShowTransportConnectionBanner } from '@/components/app-shell/TransportConnectionBanner'
+import { FileLinkActionMenu } from '@/components/app-shell/FileLinkActionMenu'
 import {
   markBackgroundTaskSignal,
   markLiveBackgroundTasksOrphaned,
 } from '@/components/app-shell/background-task-chip-state'
-import { getFileManagerName } from '@/lib/platform'
+import { getFileManagerName, isWebUI } from '@/lib/platform'
 import { rendererLog } from '@/lib/logger'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
@@ -1760,6 +1761,8 @@ export default function App() {
     readFile: (path) => window.electronAPI.readFile(path),
     readFileDataUrl: (path) => window.electronAPI.readFileDataUrl(path),
     readFileBinary: (path) => window.electronAPI.readFileBinary(path),
+    // The Web UI can't open or reveal local files, so its file links keep the direct preview.
+    fileLinkMenu: !isWebUI,
   })
 
   const connectionState = useTransportConnectionState()
@@ -2163,6 +2166,15 @@ export default function App() {
               isDark={isDark}
             />
           )}
+
+          {/* File-link menu — opened by the link interceptor when a local file link is clicked */}
+          <FileLinkActionMenu
+            menu={linkInterceptor.fileLinkMenu}
+            onClose={linkInterceptor.closeFileLinkMenu}
+            onOpenExternal={linkInterceptor.openFileExternal}
+            onPreview={linkInterceptor.previewFile}
+            onReveal={linkInterceptor.showInFolder}
+          />
         </NavigationProvider>
         </TooltipProvider>
         </ModalProvider>

@@ -32,6 +32,7 @@ import { kanbanComponents } from './kanban'
 import { taskEditorComponents } from './task-editor'
 import { primitivesComponents } from './primitives'
 import { chatStartersComponents } from './chat-starters'
+import { fileLinkOpenMenuComponents } from './file-link-open-menu'
 
 export * from './types'
 
@@ -53,6 +54,7 @@ export const componentRegistry: ComponentEntry[] = [
   ...toastsComponents,
   ...slashCommandComponents,
   ...markdownComponents,
+  ...fileLinkOpenMenuComponents,
   ...iconComponents,
   ...oauthComponents,
   ...sessionListComponents,
