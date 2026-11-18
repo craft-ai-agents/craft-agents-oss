@@ -411,10 +411,18 @@ export function isSourceUsable(source: LoadedSource): boolean {
 
 /**
  * Get sources by slugs for a workspace.
+ *
+ * Slugs can come from hand-editable state (workspace `defaults.enabledSourceSlugs`,
+ * session headers), so anything that is not a non-empty string is skipped instead of
+ * being forwarded to path resolution. A single `null` entry used to make every send
+ * fail with `The "path" argument must be of type string. Received null`.
  */
-export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): LoadedSource[] {
+export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[] | null | undefined): LoadedSource[] {
   const sources: LoadedSource[] = [];
-  for (const slug of slugs) {
+  for (const slug of slugs ?? []) {
+    if (typeof slug !== 'string' || slug.trim() === '') {
+      continue;
+    }
     // Load user-configured source from disk
     const source = loadSource(workspaceRootPath, slug);
     if (source) {
