@@ -1847,7 +1847,41 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
   async evaluate(id: string, expression: string): Promise<unknown> {
     const instance = this.requireAliveInstance(id)
-    return instance.pageView.webContents.executeJavaScript(expression)
+    const { webContents } = instance.pageView
+
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        webContents.removeListener('did-stop-loading', execute)
+        webContents.removeListener('did-navigate', onNavigate)
+        webContents.removeListener('render-process-gone', onRendererGone)
+        webContents.removeListener('destroyed', onDestroyed)
+      }
+      const fail = (error: unknown) => {
+        cleanup()
+        reject(error)
+      }
+      const onNavigate = () => fail(new Error(
+        'The page navigated during evaluate. The script result was lost, and actions before navigation may already have taken effect.',
+      ))
+      const onRendererGone = () => fail(new Error('The page renderer exited during evaluate.'))
+      const onDestroyed = () => fail(new Error('The page closed during evaluate.'))
+      const execute = () => {
+        webContents.once('did-navigate', onNavigate)
+        void webContents.executeJavaScript(expression).then((value) => {
+          cleanup()
+          resolve(value)
+        }, fail)
+      }
+
+      webContents.once('render-process-gone', onRendererGone)
+      webContents.once('destroyed', onDestroyed)
+      // Electron waits for a pending load before evaluation. That navigation does not interrupt a script.
+      if (!webContents.getURL() || webContents.isLoadingMainFrame()) {
+        webContents.once('did-stop-loading', execute)
+      } else {
+        execute()
+      }
+    })
   }
 
   /**

@@ -5,6 +5,7 @@
  * session binding, and navigation behavior.
  */
 
+import { EventEmitter } from 'node:events'
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 
 const createdWindows: any[] = []
@@ -17,17 +18,19 @@ const mockIpcMainHandle = mock(() => {})
 let nextMockWebContentsId = 1
 
 function createMockWebContents() {
-  const listeners: Record<string, Function[]> = {}
+  const events = new EventEmitter()
   let currentUrl = 'about:blank'
   return {
     id: nextMockWebContentsId++,
     userAgent: 'Mock Chrome Electron/99.0.0',
     session: {},
     isDestroyed: mock(() => false),
-    on: (event: string, cb: Function) => {
-      if (!listeners[event]) listeners[event] = []
-      listeners[event].push(cb)
-    },
+    on: events.on.bind(events),
+    once: events.once.bind(events),
+    removeListener: events.removeListener.bind(events),
+    emit: events.emit.bind(events),
+    listenerCount: events.listenerCount.bind(events),
+    isLoadingMainFrame: mock(() => false),
     loadURL: mock(async (url: string) => {
       currentUrl = url
       const isToolbarUrl = typeof url === 'string' && url.includes('browser-toolbar.html')
@@ -75,10 +78,7 @@ function createMockWebContents() {
       sendCommand: mock(async () => ({ nodes: [] })),
       on: mock(() => {}),
     },
-    _listeners: listeners,
-    _emit: (event: string, ...args: any[]) => {
-      for (const cb of listeners[event] || []) cb({}, ...args)
-    },
+    _emit: (event: string, ...args: any[]) => events.emit(event, {}, ...args),
   }
 }
 
@@ -88,7 +88,7 @@ function createMockWebContents() {
  * the mock's `_emit` (which prepends one).
  */
 function emitDidCreateWindow(webContents: any, popupWindow: any, details: { url?: string }): void {
-  for (const cb of webContents._listeners['did-create-window'] || []) cb(popupWindow, details)
+  webContents.emit('did-create-window', popupWindow, details)
 }
 
 function createMockBrowserView() {
@@ -1573,6 +1573,59 @@ describe('BrowserPaneManager', () => {
 
       expect(await manager.detectSecurityChallenge('sc-script-error')).toEqual(NONE)
       expect(await manager.detectSecurityChallenge('sc-missing')).toEqual(NONE)
+    })
+  })
+
+  describe('evaluate', () => {
+    const outcome = (evaluation: Promise<unknown>) => Promise.race([
+      evaluation,
+      Bun.sleep(150).then(() => 'still pending'),
+    ])
+
+    it('rejects a pending script when the main frame replaces its document', async () => {
+      const id = manager.createInstance('eval-navigation')
+      const view = (manager as any).instances.get(id).pageView.webContents
+      const navigationListeners = view.listenerCount('did-navigate')
+      view.executeJavaScript = mock(() => new Promise(() => {}))
+
+      const result = outcome(manager.evaluate(id, 'work()'))
+      view._emit('did-navigate', 'https://example.com/next')
+
+      await expect(result).rejects.toThrow(/navigated/)
+      expect(view.listenerCount('did-navigate')).toBe(navigationListeners)
+    })
+
+    it('evaluates on the new page when a document is already loading', async () => {
+      const id = manager.createInstance('eval-loading')
+      const view = (manager as any).instances.get(id).pageView.webContents
+      view.isLoadingMainFrame.mockReturnValue(true)
+      view.executeJavaScript = mock(async () => {
+        if (view.isLoadingMainFrame()) {
+          await new Promise<void>((resolve) => view.once('did-stop-loading', resolve))
+        }
+        return 'new page'
+      })
+      const result = outcome(manager.evaluate(id, 'document.title'))
+
+      view._emit('did-navigate', 'https://example.com/next')
+      view.isLoadingMainFrame.mockReturnValue(false)
+      view._emit('did-stop-loading')
+
+      await expect(result).resolves.toBe('new page')
+    })
+
+    it.each([
+      ['render-process-gone', /renderer exited/],
+      ['destroyed', /page closed/],
+    ] as const)('ends a pending evaluation on %s', async (event, message) => {
+      const id = manager.createInstance('eval-interrupted')
+      const view = (manager as any).instances.get(id).pageView.webContents
+      view.executeJavaScript = mock(() => new Promise(() => {}))
+      const result = outcome(manager.evaluate(id, 'work()'))
+
+      view._emit(event, { reason: 'crashed' })
+
+      await expect(result).rejects.toThrow(message)
     })
   })
 
