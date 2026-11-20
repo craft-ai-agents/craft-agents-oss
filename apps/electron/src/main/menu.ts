@@ -183,6 +183,7 @@ export async function rebuildMenu(): Promise<void> {
     // marked, titles kept current). Windows that aren't app windows (the in-app browser and its
     // popups) opt out with `excludedFromShownWindowsMenu`.
     {
+      role: 'windowMenu' as const,
       label: i18n.t(WINDOW_MENU.labelKey),
       role: 'window' as const,
       submenu: [
