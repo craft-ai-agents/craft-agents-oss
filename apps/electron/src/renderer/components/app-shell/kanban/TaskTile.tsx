@@ -2,12 +2,11 @@ import * as React from 'react'
 import { Check, ChevronDown, ChevronRight, Flag, MessageSquare, Pencil, Play, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAtomValue } from 'jotai'
-import { formatDistanceToNowStrict, type Locale } from 'date-fns'
 import { AnimatedCollapsibleContent, Spinner } from '@craft-agent/ui'
 import { DEFAULT_MODEL, getModelShortName } from '@config/models'
 import { cn } from '@/lib/utils'
 import { getProviderIcon } from '@/lib/provider-icons'
-import { shortTimeLocale } from '@/utils/session'
+import { formatShortAge } from '@/utils/session'
 import { kanbanLivePulseAtom } from '@/atoms/kanban'
 import { Button, IconButton } from '@/components/ui/button'
 import type { ProjectColorTreatment } from '@/utils/project-colors'
@@ -132,10 +131,7 @@ export function TaskTile({
   const isLive = livePulseEnabled && !!task.isProcessing && task.column === 'in-progress'
 
   const relativeTime = task.lastMessageAt
-    ? formatDistanceToNowStrict(new Date(task.lastMessageAt), {
-        locale: shortTimeLocale as Locale,
-        roundingMethod: 'floor',
-      })
+    ? formatShortAge(task.lastMessageAt)
     : null
   const hasMessages = typeof task.messageCount === 'number' && task.messageCount > 0
 

@@ -56,6 +56,7 @@ export interface WorkspaceConfig {
     cyclablePermissionModes?: PermissionMode[]; // Which modes can be cycled with SHIFT+TAB (min 2, default: Explore, Ask, Execute)
     workingDirectory?: string;
     thinkingLevel?: ThinkingLevel; // Default thinking level for new sessions (default: 'medium')
+    codingMode?: boolean; // Start new sessions in coding mode (default: off)
     colorTheme?: string; // Color theme override for this workspace (preset ID). Undefined = inherit from app default.
   };
 

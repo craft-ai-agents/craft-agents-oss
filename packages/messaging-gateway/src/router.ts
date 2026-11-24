@@ -88,12 +88,14 @@ export class Router {
           bindingId: binding.id,
           attachmentCount: fileAttachments?.length ?? 0,
         })
-        await this.sessionManager.sendMessage(
+        // Admission only, never the turn: platforms like Telegram (grammY) handle
+        // one update at a time, so awaiting the turn here held back every later
+        // update, including the taps on the permission prompts this turn waits
+        // for (craft-agents-oss#1130). Turn failures arrive as session events.
+        await this.sessionManager.admitMessage(
           binding.sessionId,
           msg.text,
           fileAttachments,
-          undefined, // storedAttachments (handled by session layer)
-          undefined, // SendMessageOptions
         )
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error'

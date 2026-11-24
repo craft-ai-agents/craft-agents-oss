@@ -3,6 +3,8 @@ import type {
   LoadedSource,
   PermissionMode,
   MessagingPlatformRuntimeInfo,
+  TaskGetResult,
+  TaskRunSnapshotDto,
   WhatsAppUiEvent,
 } from '../../shared/types'
 import type { MessagingBinding } from '../atoms/messaging'
@@ -12,6 +14,7 @@ import type {
   PlatformAccessMode,
   PlatformOwner,
 } from '../components/messaging/access/types'
+import { TASK_SPEC_SAMPLES } from './registry/samples/task-specs'
 
 // ============================================================================
 // Messaging mock state + control handle
@@ -231,6 +234,35 @@ export const mockElectronAPI = {
     return null
   },
 
+  // Coding mode worktree picker: a bare-layout repo from a recent folder, a plain clone in the
+  // workspace folder, and two GitHub-only repos. Creating fails for a branch named "taken".
+  listCodingRepos: async (workspaceId: string, recentDirs: string[]) => {
+    console.log('[Playground] listCodingRepos called:', workspaceId, recentDirs)
+    await new Promise(resolve => setTimeout(resolve, 500))
+    return {
+      local: [
+        { kind: 'local' as const, name: 'craft-agents', nameWithOwner: 'craft-ai-agents/craft-agents', gitDir: '/Users/demo/Workspace/CraftAgentsDev/.bare', worktreeParent: '/Users/demo/Workspace/CraftAgentsDev', worktrees: 31, origin: 'recent' as const },
+        { kind: 'local' as const, name: 'blurhash-rs', nameWithOwner: 'demo/blurhash-rs', gitDir: '/Users/demo/Workspace/blurhash-rs/.git', worktreeParent: '/Users/demo/Workspace', worktrees: 1, origin: 'workspace' as const },
+      ],
+      github: [
+        { kind: 'github' as const, nameWithOwner: 'demo/embercourt', description: 'Card game server', isPrivate: true, updatedAt: Date.now() - 86_400_000 },
+        { kind: 'github' as const, nameWithOwner: 'demo/gyul.ai', isPrivate: false, updatedAt: Date.now() - 3 * 86_400_000 },
+      ],
+      cloneRoot: '/Users/demo/Workspace',
+    }
+  },
+
+  createCodingWorktree: async (workspaceId: string, request: { gitDir?: string; cloneNameWithOwner?: string; branch: string }) => {
+    console.log('[Playground] createCodingWorktree called:', workspaceId, request)
+    await new Promise(resolve => setTimeout(resolve, request.cloneNameWithOwner ? 1800 : 900))
+    if (request.branch.endsWith('taken')) throw new Error(`a branch named '${request.branch}' already exists`)
+    const slug = request.branch.split('/').pop()
+    const path = request.gitDir?.endsWith('/.bare')
+      ? `/Users/demo/Workspace/CraftAgentsDev/${slug}`
+      : `/Users/demo/Workspace/${(request.cloneNameWithOwner ?? request.gitDir ?? 'repo').split('/').filter(p => p && p !== '.git').pop()}-${slug}`
+    return { path, branch: request.branch, base: 'origin/main', cloned: !!request.cloneNameWithOwner }
+  },
+
   getBackgroundTaskOutput: async (sessionId: string, taskId: string) => {
     console.log('[Playground] getBackgroundTaskOutput called:', sessionId, taskId)
     if (taskId.startsWith('agent-')) {
@@ -307,6 +339,15 @@ export const mockElectronAPI = {
   showInFolder: async (path: string) => {
     console.log('[Playground] showInFolder called:', path)
     alert(`Would reveal in file manager:\n${path}`)
+  },
+
+  getHomeDir: async () => '/Users/you',
+
+  testRemoteConnection: async (_url: string, _token: string) => ({ ok: true }),
+
+  removeWorkspace: async (workspaceId: string) => {
+    console.log('[Playground] removeWorkspace called:', workspaceId)
+    return true
   },
 
   // NavigationProvider subscribes to deep-link IPC on mount; in the playground
@@ -703,6 +744,24 @@ export const mockElectronAPI = {
     return () => {
       messagingMockState.waEventListeners.delete(callback)
     }
+  },
+
+  // Task specs for the task brief demos (registry/samples/task-specs.ts), keyed by slug
+  getTask: async (_workspaceId: string, slug: string): Promise<TaskGetResult> => {
+    const spec = (TASK_SPEC_SAMPLES as Record<string, unknown>)[slug]
+    if (!spec) {
+      return { slug, validation: { valid: false, errors: [{ path: 'root', message: `Task "${slug}" not found`, severity: 'error' }], warnings: [] }, run: null }
+    }
+    return { slug, validation: { valid: true, errors: [], warnings: [] }, spec, run: null }
+  },
+
+  runTask: async (_workspaceId: string, req: { slug: string; orchestratorSessionId?: string }): Promise<TaskRunSnapshotDto> => {
+    console.log('[Playground] runTask', req)
+    await new Promise(resolve => setTimeout(resolve, 800))
+    if (req.slug === 'already-running') {
+      throw new Error(`Task "${req.slug}" already has an active run (run-1) on this orchestrator; stop it before starting another.`)
+    }
+    return { slug: req.slug, runId: 'run-1', taskId: req.slug, status: 'running', orchestratorSessionId: req.orchestratorSessionId, nodes: [], tokensUsed: 0 }
   },
 }
 

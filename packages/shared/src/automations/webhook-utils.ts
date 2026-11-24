@@ -7,7 +7,7 @@
  */
 
 import type { WebhookAction, WebhookActionResult } from './types.ts';
-import { expandEnvVars } from './utils.ts';
+import { expandEnvVars, expandEnvVarsInJson } from './utils.ts';
 import { DEFAULT_WEBHOOK_METHOD, HISTORY_FIELD_MAX_LENGTH } from './constants.ts';
 
 /**
@@ -100,7 +100,7 @@ export function expandWebhookAction(action: WebhookAction, env: Record<string, s
   if (typeof action.body === 'string') {
     expanded.body = expandEnvVars(action.body, env);
   } else if (action.body !== undefined && typeof action.body === 'object' && action.body !== null) {
-    expanded.body = JSON.parse(expandEnvVars(JSON.stringify(action.body), env));
+    expanded.body = expandEnvVarsInJson(action.body, env);
   }
 
   if (action.auth) {
@@ -219,8 +219,7 @@ export async function executeWebhookRequest(
         if (typeof action.body === 'string') {
           requestBody = env ? expandEnvVars(action.body, env) : action.body;
         } else {
-          const raw = JSON.stringify(action.body);
-          requestBody = env ? expandEnvVars(raw, env) : raw;
+          requestBody = JSON.stringify(env ? expandEnvVarsInJson(action.body, env) : action.body);
         }
       } else if (bodyFormat === 'form') {
         if (!headers['Content-Type'] && !headers['content-type']) {

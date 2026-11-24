@@ -94,6 +94,9 @@ export {
   type RunCommandHandler,
   shellCommandFromBlock,
   consoleSnippetCommand,
+  describeFileLinkClick,
+  type FileLinkClick,
+  type FileOpenHandler,
 } from './components/markdown'
 
 // UI primitives

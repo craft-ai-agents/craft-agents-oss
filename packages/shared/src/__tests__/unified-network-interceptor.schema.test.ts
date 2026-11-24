@@ -352,3 +352,76 @@ describe('upgradePromptCacheTtl', () => {
     expect((body.tools as any[])[0].cache_control).toEqual({ type: 'ephemeral' });
   });
 });
+
+// craft-agents-oss#1134 (OpenAI) and #1096 (Anthropic): metadata injection must
+// leave every schema valid for the API it goes to. MCP tool names get metadata
+// whatever the "Rich tool descriptions" setting says, so these cases don't
+// depend on the local config.
+describe('adapters keep tool schemas valid after injecting metadata', () => {
+  type Api = 'anthropic' | 'chat' | 'responses';
+  type Schema = Record<string, any>;
+
+  // Where each API puts a tool's strict flag and schema.
+  const toolShapes: Record<Api, {
+    tool: (name: string, strict: boolean, schema: Schema) => Record<string, unknown>;
+    schemaOf: (tool: Record<string, any>) => Schema;
+  }> = {
+    anthropic: {
+      tool: (name, strict, schema) => ({ name, ...(strict ? { strict: true } : {}), input_schema: schema }),
+      schemaOf: (tool) => tool.input_schema,
+    },
+    chat: {
+      tool: (name, strict, schema) => ({ type: 'function', function: { name, strict, parameters: schema } }),
+      schemaOf: (tool) => tool.function.parameters,
+    },
+    responses: {
+      tool: (name, strict, schema) => ({ type: 'function', name, strict, parameters: schema }),
+      schemaOf: (tool) => tool.parameters,
+    },
+  };
+
+  let adapters: Record<Api, { addMetadataToTools(body: Record<string, unknown>): Record<string, unknown> }>;
+  beforeAll(async () => {
+    process.env.CRAFT_INTERCEPTOR_DISABLE_AUTO_INSTALL = '1';
+    const mod = await import('../unified-network-interceptor.ts');
+    adapters = { anthropic: mod.anthropicAdapter, chat: mod.openAiAdapter, responses: mod.openAiResponsesAdapter };
+  });
+
+  // [api, strict, additionalProperties sent, additionalProperties expected]
+  // - Strict tools need additionalProperties: false, so every adapter keeps it.
+  // - Anthropic sets false on every tool it touches (e98daa7f).
+  // - The OpenAI adapters keep what was sent (undefined = absent).
+  it.each([
+    ['anthropic', true, false, false],
+    ['chat', true, false, false],
+    ['responses', true, false, false],
+    ['anthropic', false, undefined, false],
+    ['anthropic', false, true, false],
+    ['anthropic', false, false, false],
+    ['chat', false, undefined, undefined],
+    ['chat', false, true, true],
+    ['chat', false, false, false],
+    ['responses', false, undefined, undefined],
+    ['responses', false, true, true],
+    ['responses', false, false, false],
+  ] as const)('%s, strict %p, sent additionalProperties %p -> %p', (api, strict, sent, expected) => {
+    const schema: Schema = {
+      type: 'object',
+      properties: { path: { type: 'string' } },
+      required: ['path'],
+      ...(sent === undefined ? {} : { additionalProperties: sent }),
+    };
+    const body = { tools: [toolShapes[api].tool('mcp__files__read', strict, schema)] };
+
+    const result = adapters[api].addMetadataToTools(body);
+    const out = toolShapes[api].schemaOf((result.tools as Array<Record<string, any>>)[0]!);
+
+    if (expected === undefined) {
+      expect('additionalProperties' in out).toBe(false);
+    } else {
+      expect(out.additionalProperties).toBe(expected);
+    }
+    expect(Object.keys(out.properties)).toEqual(['_displayName', '_intent', 'path']);
+    expect(out.required).toEqual(['_displayName', '_intent', 'path']);
+  });
+});

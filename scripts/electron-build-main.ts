@@ -6,6 +6,8 @@
 import { spawn } from "bun";
 import { existsSync, readFileSync, statSync, mkdirSync } from "fs";
 import { join } from "path";
+import { compileCraftyInput } from "./build/crafty-input";
+import { buildPiAgentServer as bundlePiAgentServer } from "../packages/pi-agent-server/build.ts";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const DIST_DIR = join(ROOT_DIR, "apps/electron/dist");
@@ -13,11 +15,11 @@ const OUTPUT_FILE = join(DIST_DIR, "main.cjs");
 const INTERCEPTOR_SOURCE = join(ROOT_DIR, "packages/shared/src/unified-network-interceptor.ts");
 const INTERCEPTOR_OUTPUT = join(DIST_DIR, "interceptor.cjs");
 const SESSION_TOOLS_CORE_DIR = join(ROOT_DIR, "packages/session-tools-core");
-const PI_AGENT_SERVER_DIR = join(ROOT_DIR, "packages/pi-agent-server");
-const PI_AGENT_SERVER_OUTPUT = join(PI_AGENT_SERVER_DIR, "dist/index.js");
 const WA_WORKER_DIR = join(ROOT_DIR, "packages/messaging-whatsapp-worker");
 const WA_WORKER_SOURCE = join(WA_WORKER_DIR, "src/worker.ts");
 const WA_WORKER_OUTPUT = join(WA_WORKER_DIR, "dist/worker.cjs");
+const CRAFTY_NATIVE_SOURCE = join(ROOT_DIR, "apps/electron/src/crafty-native/host.ts");
+const CRAFTY_NATIVE_OUTPUT = join(DIST_DIR, "crafty-native.cjs");
 
 // Load .env file if it exists
 function loadEnvFile(): void {
@@ -168,51 +170,14 @@ async function buildInterceptor(): Promise<void> {
 }
 
 // Build the Pi Agent Server (subprocess for Pi SDK sessions)
-// Optional: skips if package directory is missing (e.g., not synced to OSS).
 async function buildPiAgentServer(): Promise<void> {
-  if (!existsSync(join(PI_AGENT_SERVER_DIR, "src"))) {
-    console.log("⏭️  Pi agent server skipped (package not found)");
-    return;
-  }
-
   console.log("🥧 Building Pi Agent Server...");
-
-  // Ensure dist directory exists
-  const distDir = join(PI_AGENT_SERVER_DIR, "dist");
-  if (!existsSync(distDir)) {
-    mkdirSync(distDir, { recursive: true });
-  }
-
-  // Use --target=bun --format=esm because the Pi SDK (@earendil-works/pi-coding-agent)
-  // is ESM-only. --target=node --format=cjs leaves ESM deps as external require()
-  // calls that fail at runtime since there are no node_modules relative to dist/.
-  const proc = spawn({
-    cmd: [
-      "bun", "build",
-      join(PI_AGENT_SERVER_DIR, "src/index.ts"),
-      "--outfile", PI_AGENT_SERVER_OUTPUT,
-      "--target", "bun",
-      "--format", "esm",
-      "--external", "koffi",
-    ],
-    cwd: ROOT_DIR,
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-
-  const exitCode = await proc.exited;
-
-  if (exitCode !== 0) {
-    console.error("❌ Pi agent server build failed with exit code", exitCode);
-    process.exit(exitCode);
-  }
-
-  // Verify output exists
-  if (!existsSync(PI_AGENT_SERVER_OUTPUT)) {
-    console.error("❌ Pi agent server output not found at", PI_AGENT_SERVER_OUTPUT);
+  try {
+    await bundlePiAgentServer();
+  } catch (err) {
+    console.error("❌ Pi agent server build failed:", err);
     process.exit(1);
   }
-
   console.log("✅ Pi agent server built successfully");
 }
 
@@ -269,6 +234,64 @@ async function buildWhatsAppWorker(): Promise<void> {
   console.log("✅ WhatsApp worker built successfully");
 }
 
+// Build Crafty's native host (spike): a utility process that loads the selection-hook N-API
+// module. The module stays external; electron-builder.yml ships it (and node-gyp-build, which
+// loads its prebuild) from the root node_modules into app/node_modules on macOS. It's declared in
+// the root package.json, not the app's, so @electron/rebuild never compiles it.
+async function buildCraftyNative(): Promise<void> {
+  console.log("🖱️  Building Crafty native host...");
+
+  for (const pkg of ["selection-hook", "node-gyp-build"]) {
+    if (!existsSync(join(ROOT_DIR, "node_modules", pkg, "package.json"))) {
+      console.error(`❌ ${pkg} not found in the root node_modules, where electron-builder.yml ships it from. Run 'bun install'.`);
+      process.exit(1);
+    }
+  }
+
+  const proc = spawn({
+    cmd: [
+      "bun", "run", "esbuild",
+      CRAFTY_NATIVE_SOURCE,
+      "--bundle",
+      "--platform=node",
+      "--format=cjs",
+      `--outfile=${CRAFTY_NATIVE_OUTPUT}`,
+      "--external:electron",
+      "--external:selection-hook",
+    ],
+    cwd: ROOT_DIR,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    console.error("❌ Crafty native host build failed with exit code", exitCode);
+    process.exit(exitCode);
+  }
+
+  if (!existsSync(CRAFTY_NATIVE_OUTPUT)) {
+    console.error("❌ Crafty native host output not found at", CRAFTY_NATIVE_OUTPUT);
+    process.exit(1);
+  }
+
+  console.log("✅ Crafty native host built successfully");
+}
+
+// Crafty's native input addon (spike: the double-tap trigger), loaded by the native host. Without it
+// the double-tap is gone, so a Mac build fails rather than ship without it.
+async function buildCraftyInput(): Promise<void> {
+  if (process.platform !== "darwin") return;
+  console.log("⌘  Building Crafty native input addon...");
+  try {
+    await compileCraftyInput(ROOT_DIR);
+  } catch (error) {
+    console.error("❌ Crafty native input addon build failed:", error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
+  console.log("✅ Crafty native input addon built successfully");
+}
+
 async function main(): Promise<void> {
   loadEnvFile();
 
@@ -288,6 +311,10 @@ async function main(): Promise<void> {
 
   // Build WhatsApp worker (Baileys subprocess — optional package)
   await buildWhatsAppWorker();
+
+  // Build Crafty's native host (utility process with the selection-hook module)
+  await buildCraftyNative();
+  await buildCraftyInput();
 
   const buildDefines = getBuildDefines();
 

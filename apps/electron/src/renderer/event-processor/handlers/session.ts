@@ -12,6 +12,7 @@ import type {
   ErrorEvent,
   TypedErrorEvent,
   SourcesChangedEvent,
+  CodingModeChangedEvent,
   LabelsChangedEvent,
   ProjectIdChangedEvent,
   SessionStatusChangedEvent,
@@ -22,6 +23,7 @@ import type {
   SessionUnarchivedEvent,
   NameChangedEvent,
   PermissionRequestEvent,
+  PermissionResolvedEvent,
   CredentialRequestEvent,
   PlanSubmittedEvent,
   StatusEvent,
@@ -677,6 +679,27 @@ export function handleSourcesChanged(
 }
 
 /**
+ * Handle coding_mode_changed - update the session and let the parent sync its session options
+ */
+export function handleCodingModeChanged(
+  state: SessionState,
+  event: CodingModeChangedEvent
+): ProcessResult {
+  const { session, streaming } = state
+
+  return {
+    state: {
+      session: {
+        ...session,
+        codingMode: event.codingMode || undefined,
+      },
+      streaming,
+    },
+    effects: [{ type: 'coding_mode_changed', sessionId: event.sessionId, codingMode: event.codingMode }],
+  }
+}
+
+/**
  * Handle labels_changed - update session's labels
  */
 export function handleLabelsChanged(
@@ -851,6 +874,22 @@ export function handlePermissionRequest(
     effects: [{
       type: 'permission_request',
       request: event.request,
+    }]
+  }
+}
+
+/**
+ * Handle permission_resolved - the prompt was answered elsewhere (or here): drop it
+ */
+export function handlePermissionResolved(
+  state: SessionState,
+  event: PermissionResolvedEvent
+): ProcessResult {
+  return {
+    state,
+    effects: [{
+      type: 'permission_resolved',
+      requestId: event.requestId,
     }]
   }
 }

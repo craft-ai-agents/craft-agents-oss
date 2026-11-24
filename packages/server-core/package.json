@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/server-core",
-  "version": "0.15.2",
+  "version": "0.16.0",
   "license": "Apache-2.0",
   "description": "Reusable headless server infrastructure for Craft Agent",
   "type": "module",
@@ -27,6 +27,7 @@
   "dependencies": {
     "@craft-agent/core": "workspace:*",
     "@craft-agent/shared": "workspace:*",
+    "heic-convert": "^2.1.0",
     "jose": "^6.0.0",
     "ws": "^8.19.0",
     "sharp": "0.34.5",
@@ -34,6 +35,7 @@
   },
   "devDependencies": {
     "typescript": "^5.8.2",
+    "@types/heic-convert": "^2.1.1",
     "@types/node": "^22.0.0"
   }
 }

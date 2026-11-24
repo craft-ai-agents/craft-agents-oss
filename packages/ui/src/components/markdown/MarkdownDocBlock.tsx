@@ -43,6 +43,7 @@ import {
 import { usePlatform } from '../../context/PlatformContext'
 import { useTranslation } from 'react-i18next'
 import { Markdown } from './Markdown'
+import type { FileOpenHandler } from './link-target'
 import {
   parseMarkdownPreviewSpec,
   normalizePreviewItems,
@@ -70,7 +71,7 @@ export interface MarkdownDocBlockProps {
   code: string
   className?: string
   onUrlClick?: (url: string) => void
-  onFileClick?: (path: string) => void
+  onFileClick?: FileOpenHandler
 }
 
 export function MarkdownDocBlock({ code, className, onUrlClick, onFileClick }: MarkdownDocBlockProps) {

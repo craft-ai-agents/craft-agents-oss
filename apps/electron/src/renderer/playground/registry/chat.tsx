@@ -12,6 +12,10 @@ import { EmptyStateHint, getHintCount, getHintTemplate } from '@/components/chat
 import { NewChatEmptyState } from '@/components/app-shell/chat-display/TranscriptStates'
 import { NewChatSuggestions } from '@/components/app-shell/chat-display/NewChatSuggestions'
 import { pickNewChatSuggestions } from '@/components/app-shell/chat-display/new-chat-suggestions'
+import { TaskBrief } from '@/components/app-shell/chat-display/TaskBrief'
+import { taskBriefFromSpec } from '@/components/app-shell/chat-display/task-brief'
+import { CHAT_LAYOUT } from '@/config/layout'
+import { TASK_SPEC_SAMPLES, TASK_SPEC_SAMPLE_OPTIONS, type TaskSpecSample } from './samples/task-specs'
 import type { LoadedSource } from '@craft-agent/shared/sources/types'
 import { Button } from '@/components/ui/button'
 import { motion } from 'motion/react'
@@ -586,6 +590,9 @@ interface InputContainerPlaygroundProps {
   attachmentCount?: number
   showFollowUps?: boolean
   followUpCount?: number
+  showCodingMode?: boolean
+  codingMode?: boolean
+  conversationStarted?: boolean
 }
 
 function InputContainerPlayground({
@@ -611,8 +618,15 @@ function InputContainerPlayground({
   attachmentCount = 2,
   showFollowUps = false,
   followUpCount = 2,
+  showCodingMode = true,
+  codingMode = false,
+  conversationStarted = true,
 }: InputContainerPlaygroundProps) {
   const playgroundSessionId = 'playground-session'
+  const [coding, setCoding] = React.useState(codingMode)
+  React.useEffect(() => {
+    setCoding(codingMode)
+  }, [codingMode])
   const [model, setModel] = React.useState(currentModel)
   const [mode, setMode] = React.useState<PermissionMode>(permissionMode)
   const [inputValue, setInputValue] = React.useState('')
@@ -799,6 +813,14 @@ function InputContainerPlayground({
             workingDirectory: showWorkingDirectory ? cwd : undefined,
             onWorkingDirectoryChange: showWorkingDirectory ? setCwd : undefined,
             followUpItems,
+            isEmptySession: !conversationStarted,
+            workspaceId: 'playground-workspace',
+            sessionId: playgroundSessionId,
+            codingMode: coding,
+            onCodingModeChange: showCodingMode ? setCoding : undefined,
+            onContinueWithCodingMode: showCodingMode
+              ? (enabled: boolean) => console.log('[Playground] Continue in a new session, coding mode:', enabled)
+              : undefined,
             onSubmit: mockInputCallbacks.onSubmit,
             onModelChange: setModel,
             onInputChange: setInputValue,
@@ -1015,6 +1037,26 @@ function NewChatEmptyStatePreview({ sources = 'connected', compact = false }: { 
   )
 }
 
+/** The task brief an unrun task session shows in its transcript column, for a task.yaml sample */
+function TaskBriefPreview({ sample = 'gitignore-the-workspace', starting = false, compact = false }: { sample?: TaskSpecSample; starting?: boolean; compact?: boolean }) {
+  const brief = taskBriefFromSpec(TASK_SPEC_SAMPLES[sample])
+  return (
+    <div className={cn('mx-auto w-full', compact ? 'max-w-[390px]' : CHAT_LAYOUT.maxWidth, compact ? CHAT_LAYOUT.compactContainerPadding : CHAT_LAYOUT.containerPadding)}>
+      {brief && (
+        <TaskBrief
+          brief={brief}
+          compact={compact}
+          starting={starting}
+          onRun={() => console.log('[playground] run task', sample)}
+          onEdit={() => console.log('[playground] edit task', sample)}
+          onOpenUrl={(url) => console.log('[playground] open url', url)}
+          onOpenFile={(path) => console.log('[playground] open file', path)}
+        />
+      )}
+    </div>
+  )
+}
+
 // Generate variants for all hints dynamically
 const emptyStateHintVariants = Array.from({ length: getHintCount() }, (_, i) => ({
   name: `Hint ${i + 1}`,
@@ -1045,6 +1087,26 @@ export const chatComponents: ComponentEntry[] = [
       { name: 'Compact', props: { sources: 'connected', compact: true } },
     ],
     mockData: () => ({}),
+  },
+  {
+    id: 'task-brief',
+    name: 'TaskBrief',
+    category: 'Chat',
+    description: 'What a task session shows before its first run, instead of the new-chat empty state: goal, acceptance criteria and subtasks from task.yaml, with Run task and Edit task',
+    component: TaskBriefPreview,
+    props: [
+      { name: 'sample', description: 'task.yaml sample', control: { type: 'select', options: TASK_SPEC_SAMPLE_OPTIONS }, defaultValue: 'gitignore-the-workspace' },
+      { name: 'starting', description: 'The run call is in flight', control: { type: 'boolean' }, defaultValue: false },
+      { name: 'compact', description: 'Phone-width column', control: { type: 'boolean' }, defaultValue: false },
+    ],
+    variants: [
+      { name: 'Created by an agent', props: { sample: 'gitignore-the-workspace' } },
+      { name: 'Four subtasks', props: { sample: 'ship-the-release' } },
+      { name: 'Goal only', props: { sample: 'tidy-the-readme' } },
+      { name: 'Long markdown goal', props: { sample: 'audit-auth' } },
+      { name: 'Starting', props: { sample: 'ship-the-release', starting: true } },
+      { name: 'Compact', props: { sample: 'ship-the-release', compact: true } },
+    ],
   },
   {
     id: 'empty-state-hint',
@@ -1522,6 +1584,24 @@ export const chatComponents: ComponentEntry[] = [
         control: { type: 'number', min: 1, max: 4, step: 1 },
         defaultValue: 2,
       },
+      {
+        name: 'showCodingMode',
+        description: 'Show the Coding mode chip next to the folder chip',
+        control: { type: 'boolean' },
+        defaultValue: true,
+      },
+      {
+        name: 'codingMode',
+        description: 'Coding mode is on for this session',
+        control: { type: 'boolean' },
+        defaultValue: false,
+      },
+      {
+        name: 'conversationStarted',
+        description: 'The session has messages: coding mode is fixed and the chip offers a new session instead',
+        control: { type: 'boolean' },
+        defaultValue: true,
+      },
     ],
     mockData: () => ({}),
     variants: [
@@ -1529,6 +1609,31 @@ export const chatComponents: ComponentEntry[] = [
         name: 'Default (Comprehensive)',
         description: 'App-like full setup with badges, labels, statuses, sources, and working directory',
         props: {},
+      },
+      {
+        name: 'Coding Mode: New Session (Off)',
+        description: 'Before the first message the Coding chip toggles the mode; turning it on asks for a new worktree (mock repos) or an existing folder',
+        props: { conversationStarted: false, codingMode: false },
+      },
+      {
+        name: 'Coding Mode: New Session (On)',
+        description: 'Coding mode turned on before the first message (accent tint)',
+        props: { conversationStarted: false, codingMode: true },
+      },
+      {
+        name: 'Coding Mode: Started Session (On)',
+        description: 'Mode is fixed once the conversation starts; the chip opens "Continue in a new standard session"',
+        props: { conversationStarted: true, codingMode: true },
+      },
+      {
+        name: 'Coding Mode: Started Session (Off)',
+        description: 'Icon-only chip in a started standard session; opens "Continue in a new Coding session"',
+        props: { conversationStarted: true, codingMode: false },
+      },
+      {
+        name: 'Coding Mode: Compact',
+        description: 'Compact/mobile composer: icon-only chip',
+        props: { compactMode: true, conversationStarted: false, codingMode: true },
       },
       {
         name: 'Working Dir History (Few)',

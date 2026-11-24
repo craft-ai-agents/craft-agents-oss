@@ -22,6 +22,7 @@ export const KEYS = {
   collapsedSidebarItems: 'collapsed-sidebar-items',
   chatGroupingMode: 'chat-grouping-mode', // How to group chats: 'date' | 'status'
   collapsedSessionGroups: 'collapsed-session-groups', // Collapsed group keys in session list
+  collapsedSessionFamilies: 'collapsed-session-families', // Sessions whose sub-sessions are hidden (workspace-scoped via suffix)
 
   // Focus mode
   focusModeEnabled: 'focus-mode-enabled',
@@ -60,6 +61,9 @@ export const KEYS = {
   // Workspace navigation state (workspace-scoped via suffix = workspaceSlug)
   // Stores the full URL search string so switching back restores panels/focus/sidebar
   workspaceUrl: 'workspace-url',
+
+  // Crafty: the model menu's last pick (connection, model, thinking level) for the next question
+  craftyModelChoice: 'crafty-model-choice',
 } as const
 
 export type StorageKey = typeof KEYS[keyof typeof KEYS]

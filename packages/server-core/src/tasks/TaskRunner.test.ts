@@ -67,6 +67,10 @@ class MockHost implements ConductorSessionHost {
   getSessionWorkingDirectory(sessionId: string): string | undefined {
     return this.workingDirById.get(sessionId);
   }
+  parentById = new Map<string, string>();
+  getSessionParentId(sessionId: string): string | undefined {
+    return this.parentById.get(sessionId);
+  }
 
   // --- test helpers (sessionId is derived from the node title, which defaults to the node id) ---
   sessionIdFor(nodeId: string): string {
@@ -297,6 +301,19 @@ describe('TaskRunner (Conductor)', () => {
     runner2.run('cwd', { runId: 'r2', orchestratorSessionId: 'orch' })
     await tick()
     expect(host.created.find((c) => c.options.name === 'a')?.options.workingDirectory).toBe('/spec/dir')
+  })
+
+  it('refuses to run on a sub-session, but accepts an orchestrator id it does not know', async () => {
+    saveTaskSpec(root, specOf({ id: 'sub', title: 'Sub', goal: 'g', nodes: [{ id: 'a', prompt: 'a' }] }))
+    host.parentById.set('child', 'orch')
+    const runner = makeRunner()
+    expect(() => runner.run('sub', { runId: 'r1', orchestratorSessionId: 'child' })).toThrow('sub-session of orch')
+    await tick()
+    expect(host.created).toEqual([])
+
+    runner.run('sub', { runId: 'r2', orchestratorSessionId: 'unknown' })
+    await tick()
+    expect(host.dispatchedNames()).toEqual(['a'])
   })
 
   it('moves the orchestrator tile to in-progress on start and done on completion', async () => {

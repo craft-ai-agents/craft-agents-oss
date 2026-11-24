@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
+import * as fs from 'node:fs';
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
   collectGitDeveloperContext,
@@ -62,6 +63,54 @@ describe('git developer context', () => {
     expect(block).toContain(`context_root="${root}"`);
     expect(block).toContain('- CLAUDE.md (root)');
     expect(block).toContain('- packages/shared/CLAUDE.md');
+  });
+
+  // OSS #1140: the whole git root was globbed and capped to the 30 shallowest
+  // files before filtering, so a big unrelated tree hid the selected path's files.
+  it('keeps ancestor and subtree context files when unrelated trees fill the cap', () => {
+    const { root, packageDir } = createGitFixture();
+    for (let i = 0; i < 40; i++) {
+      const dir = join(root, 'other', `p${String(i).padStart(2, '0')}`);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'CLAUDE.md'), '# Unrelated\n');
+    }
+    writeFileSync(join(root, 'packages', 'AGENTS.md'), '# Packages\n');
+    mkdirSync(join(packageDir, 'src', 'deep'), { recursive: true });
+    writeFileSync(join(packageDir, 'src', 'deep', 'claude.md'), '# Deep\n');
+
+    const block = getProjectContextFilesPrompt(packageDir);
+
+    expect(block).toContain('- CLAUDE.md (root)\n- packages/AGENTS.md\n- packages/shared/CLAUDE.md\n- packages/shared/src/deep/claude.md');
+    expect(block).not.toContain('other/');
+  });
+
+  it('lists nothing when only folders beside the working folder have context files', () => {
+    const { root, packageDir } = createGitFixture();
+    rmSync(join(root, 'CLAUDE.md'));
+    rmSync(join(packageDir, 'CLAUDE.md'));
+    mkdirSync(join(root, 'other'));
+    writeFileSync(join(root, 'other', 'CLAUDE.md'), '# Unrelated\n');
+
+    expect(getProjectContextFilesPrompt(packageDir)).toBe('');
+  });
+
+  it('reads the git root and each folder above the working folder once, and nothing beside it', () => {
+    const { root, packageDir } = createGitFixture();
+    mkdirSync(join(root, 'other', 'deep'), { recursive: true });
+    mkdirSync(join(root, 'packages', 'neighbour', 'src'), { recursive: true });
+    mkdirSync(join(packageDir, 'src'), { recursive: true });
+    const readdir = spyOn(fs, 'readdirSync');
+
+    try {
+      getProjectContextFilesPrompt(packageDir);
+
+      const read = readdir.mock.calls.map(([dir]) => String(dir));
+      const outside = read.filter((dir) => dir !== packageDir && !dir.startsWith(packageDir + sep));
+      expect(outside).toEqual([root, join(root, 'packages')]);
+      expect(read).toContain(join(packageDir, 'src'));
+    } finally {
+      readdir.mockRestore();
+    }
   });
 });
 

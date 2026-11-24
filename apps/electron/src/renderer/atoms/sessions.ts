@@ -29,6 +29,8 @@ export interface SessionMeta {
   lastReadMessageId?: string
   workingDirectory?: string
   enabledSourceSlugs?: string[]
+  /** Coding mode: lean coding prompt and session tools (shown as a glyph in the session list) */
+  codingMode?: boolean
   /** Shared viewer URL (if shared via viewer) */
   sharedUrl?: string
   /** Shared session ID in viewer (for revoke) */
@@ -79,6 +81,8 @@ export interface SessionMeta {
   projectId?: string
   /** Parent session id — when set, this session is a subtask of the parent (undefined = top-level task) */
   parentSessionId?: string
+  /** Id of the session this one was branched from (undefined = not a branch) */
+  branchFromSessionId?: string
   /** Kanban board column id ('todo' | 'in-progress' | 'done'); independent of sessionStatus */
   kanbanColumn?: string
   /** Tasks Conductor: slug of the task spec this session belongs to (orchestrator + child nodes) */

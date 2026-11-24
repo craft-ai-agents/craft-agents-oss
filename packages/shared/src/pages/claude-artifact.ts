@@ -31,7 +31,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs
 import { tmpdir } from 'os';
 import { join } from 'path';
 import type { PageClaudeArtifactInfo, PageConfig, PageKind } from '@craft-agent/core';
-import { getDefaultOptions } from '../agent/options.ts';
+import { CLAUDE_AUTH_ENV_KEYS, getDefaultOptions } from '../agent/options.ts';
 import { isAdaptiveThinkingAlwaysOnModel } from '../config/models.ts';
 import {
   computePageContentDigest,
@@ -153,36 +153,14 @@ function buildPublishPrompt(request: ClaudeArtifactPublishRequest): string {
   ].join('\n');
 }
 
-/**
- * Env vars that carry Claude credentials or API routing. The host env may hold
- * another connection's values (an API key, a custom base URL, Bedrock routing),
- * and the Artifact tool needs a claude.ai account, so all of them are dropped
- * and only the publishing connection's own auth env is applied.
- */
-export const CLAUDE_AUTH_ENV_KEYS = [
-  'ANTHROPIC_API_KEY',
-  'ANTHROPIC_AUTH_TOKEN',
-  'ANTHROPIC_BASE_URL',
-  'ANTHROPIC_UNIX_SOCKET',
-  'CLAUDE_CODE_OAUTH_TOKEN',
-  'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR',
-  'CLAUDE_CODE_OAUTH_REFRESH_TOKEN',
-  'CLAUDE_CODE_OAUTH_SCOPES',
-  'CLAUDE_CODE_SESSION_ACCESS_TOKEN',
-  'CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST',
-  'CLAUDE_CODE_HOST_AUTH_ENV_VAR',
-  'CLAUDE_CODE_USE_BEDROCK',
-  'CLAUDE_CODE_USE_VERTEX',
-  'CLAUDE_CODE_USE_FOUNDRY',
-] as const;
-
 /** Inherited when Craft itself runs inside a Claude Code session; they would make the CLI that session's child. */
 const NESTED_SESSION_ENV_KEYS = ['CLAUDECODE', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_SESSION_ID'] as const;
 
 /**
- * Env for the publishing query: `baseEnv` without Claude credentials, routing or
- * nested-session markers, plus the connection's `authEnv` and the Artifact
- * opt-in.
+ * Env for the publishing query: `baseEnv` without Claude credentials, routing
+ * ({@link CLAUDE_AUTH_ENV_KEYS}) or nested-session markers, plus the publishing
+ * connection's `authEnv` (the Artifact tool needs a claude.ai account) and the
+ * Artifact opt-in.
  */
 export function claudeArtifactEnv(
   baseEnv: Record<string, string | undefined>,

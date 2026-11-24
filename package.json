@@ -1,6 +1,6 @@
 {
   "name": "craft-agent",
-  "version": "0.15.2",
+  "version": "0.16.0",
   "license": "Apache-2.0",
   "description": "Claude Code-like agent for Craft documents",
   "type": "module",
@@ -27,7 +27,7 @@
     "pages-worker:deploy": "cd workers/pages && bun run deploy",
     "typecheck:shared": "cd packages/shared && bun run tsc --noEmit",
     "typecheck:staged": "bash scripts/typecheck-staged.sh",
-    "typecheck:all": "cd packages/core && bun run tsc --noEmit && cd ../shared && bun run tsc --noEmit && cd ../server-core && bun run tsc --noEmit && cd ../server && bun run tsc --noEmit && cd ../session-tools-core && bun run tsc --noEmit && cd ../pi-agent-server && bun run typecheck && cd ../../apps/electron && bun run typecheck && cd ../../packages/ui && bun run tsc --noEmit && cd ../.. && bun run typecheck:pages-worker",
+    "typecheck:all": "cd packages/core && bun run tsc --noEmit && cd ../shared && bun run tsc --noEmit && cd ../server-core && bun run tsc --noEmit && cd ../server && bun run tsc --noEmit && cd ../session-tools-core && bun run tsc --noEmit && cd ../messaging-gateway && bun run typecheck && cd ../pi-agent-server && bun run typecheck && cd ../../apps/electron && bun run typecheck && cd ../../packages/ui && bun run tsc --noEmit && cd ../.. && bun run typecheck:pages-worker",
     "server:start": "bun run packages/server/src/index.ts",
     "server:dev": "bun run server:build:subprocess && CRAFT_DEBUG=true CRAFT_BUNDLED_ASSETS_ROOT=$PWD/apps/electron bun run packages/server/src/index.ts",
     "server:build": "bun run scripts/build-server.ts",
@@ -135,6 +135,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "husky": "^9.1.7",
+    "node-api-headers": "^1.9.0",
     "openai": "^6.18.0",
     "postcss": "^8.5.6",
     "react-devtools-core": "^6.1.1",
@@ -144,7 +145,7 @@
     "vite": "^6.2.4"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.296",
+    "@anthropic-ai/claude-agent-sdk": "0.3.321",
     "@anthropic-ai/sdk": "^0.100.0",
     "@dnd-kit/dom": "^0.4.0-beta-20260227032529",
     "@dnd-kit/helpers": "^0.4.0-beta-20260227032529",
@@ -199,6 +200,7 @@
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
+    "selection-hook": "^2.1.2",
     "semver": "^7.7.3",
     "shiki": "^3.19.0",
     "tailwind-merge": "^3.4.0",

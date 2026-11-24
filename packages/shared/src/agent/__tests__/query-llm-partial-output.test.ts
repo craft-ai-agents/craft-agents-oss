@@ -137,6 +137,20 @@ describe('consumeLlmQueryMessages', () => {
     expect(result.warning).toMatch(/Structured output retries exhausted/i);
   });
 
+  it('refused structured output (SDK ≥0.3.302: error result, no payload) — returns the refusal text + warning', async () => {
+    const iter = scriptIterator([
+      assistantMsg("I can't help with that."),
+      errorResult('error_during_execution', { stop_reason: 'refusal', errors: ['refused'] }),
+    ]);
+
+    const result = await consumeLlmQueryMessages(iter);
+
+    // The refusal is never passed off as structured output
+    expect(result.text).toBe("I can't help with that.");
+    expect(result.warning).toBeDefined();
+    expect(result.warning).toContain('refused');
+  });
+
   it('non-error exception with some text — still recovers', async () => {
     const iter = scriptIterator(
       [assistantMsg('Some output.')],

@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/pi-agent-server",
-  "version": "0.15.2",
+  "version": "0.16.0",
   "license": "Apache-2.0",
   "description": "Out-of-process Pi agent server communicating via JSONL over stdio",
   "type": "module",
@@ -9,7 +9,7 @@
     "pi-agent-server": "./dist/index.js"
   },
   "scripts": {
-    "build": "bun build src/index.ts --outdir=dist --target=bun --format=esm --external koffi",
+    "build": "bun run build.ts",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "validate": "bun run typecheck && bun run build"
   },

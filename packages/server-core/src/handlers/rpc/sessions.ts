@@ -139,7 +139,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   // Waits for initialization to complete so sessions are never returned empty during startup
   server.handle(RPC_CHANNELS.sessions.GET, async (ctx) => {
     try {
-      await sessionManager.waitForInit()
+      await sessionManager.waitForSessionsLoaded()
     } catch (error) {
       log.error('GET_SESSIONS continuing after initialization failure:', error)
     }
@@ -167,7 +167,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   // Get unread summary across all workspaces
   server.handle(RPC_CHANNELS.sessions.GET_UNREAD_SUMMARY, async () => {
     try {
-      await sessionManager.waitForInit()
+      await sessionManager.waitForSessionsLoaded()
     } catch (error) {
       log.error('GET_UNREAD_SUMMARY continuing after initialization failure:', error)
     }
@@ -204,7 +204,8 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   // Send a message to a session (with optional file attachments).
   //
   // Behavior:
-  //   - Awaits until the user message is persisted to disk, then returns
+  //   - Awaits until the user message is persisted to disk and admitted
+  //     (queued, steered, or its turn has started), then returns
   //     `{ accepted: true, messageId }`. This guarantees the message survives
   //     a mid-stream crash (#616).
   //   - The actual model-streaming work continues in the background; results
@@ -331,6 +332,13 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
           throw new Error(`Invalid thinking level: ${command.level}. Valid values: ${VALID_THINKING_LEVELS_LIST}`)
         }
         return sessionManager.setSessionThinkingLevel(sessionId, command.level)
+      case 'setCodingMode':
+        if (typeof command.enabled !== 'boolean') {
+          throw new Error(`Invalid coding mode value: ${String(command.enabled)}. Expected a boolean`)
+        }
+        return sessionManager.setSessionCodingMode(sessionId, command.enabled)
+      case 'continueInNewSession':
+        return sessionManager.continueSessionInNewSession(sessionId, command.codingMode === true)
       case 'updateWorkingDirectory':
         return sessionManager.updateWorkingDirectory(sessionId, command.dir)
       case 'setSources':

@@ -100,12 +100,25 @@ describe('resolvePresetStateForBaseUrlChange', () => {
 })
 
 describe('resolveCustomEndpointPayload', () => {
-  const BRANDED = new Set(['manifest'])
+  const BRANDED = new Set(['manifest', 'opencode-go'])
 
   it('routes branded openai-compat presets through openai-completions regardless of toggle', () => {
     expect(resolveCustomEndpointPayload({
       activePreset: 'manifest',
       baseUrl: 'https://app.manifest.build/v1',
+      customApi: 'anthropic-messages',
+      brandedOpenAiCompatPresets: BRANDED,
+      fallbackPiAuthProvider: undefined,
+    })).toEqual({
+      customEndpoint: { api: 'openai-completions' },
+      piAuthProvider: 'openai',
+    })
+  })
+
+  it('pins OpenCode Go to openai-completions (branded openai-compat preset)', () => {
+    expect(resolveCustomEndpointPayload({
+      activePreset: 'opencode-go',
+      baseUrl: 'https://opencode.ai/zen/go/v1',
       customApi: 'anthropic-messages',
       brandedOpenAiCompatPresets: BRANDED,
       fallbackPiAuthProvider: undefined,

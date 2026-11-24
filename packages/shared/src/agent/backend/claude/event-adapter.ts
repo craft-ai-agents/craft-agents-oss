@@ -10,14 +10,15 @@
  * - Handles stream_event for real-time text deltas and tool start detection
  * - Manages pendingText for deferred text_complete (waits for stop_reason from message_delta)
  * - Tracks usage per-message (not cumulative) for accurate context window display
+ * - Takes back the frames of a reply the model's safeguards stopped (refusal fallback)
  */
 
 import type { SDKMessage, SDKAssistantMessageError } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentEvent, ContextUsageSnapshot } from '@craft-agent/core/types';
 import { contextAfterCompaction, contextFromClaude } from '../../context-usage.ts';
-import type { AgentError } from '../../errors.ts';
+import { createAgentError, type AgentError } from '../../errors.ts';
 import { BaseEventAdapter } from '../base-event-adapter.ts';
-import { ToolIndex, extractToolStarts, extractToolResults, isParentTaskTool, type ContentBlock } from '../../tool-matching.ts';
+import { ToolIndex, extractToolStarts, extractToolResults, isParentTaskTool, type ContentBlock, type ToolResultBlock, type ToolUseBlock } from '../../tool-matching.ts';
 import { classifyClaudeTaskNotification, classifyClaudeTaskProgress } from './task-notification.ts';
 
 /**
@@ -83,10 +84,22 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
   private emittedToolStarts = new Set<string>();
   private activeParentTools = new Set<string>();
   private pendingText: string | null = null;
+  /** Turn of `pendingText` (the API message its text came from). */
+  private pendingTextTurnId: string | undefined;
+  /** The session agent's last API message ended with stop_reason "refusal" (until the next one starts). */
+  private refusalStopped = false;
   private manualCompactionRequested = false;
   private manualCompactionBoundarySeen = false;
 
   // Session-persistent state (survives across turns)
+  /**
+   * What each SDK frame put in the transcript, by the frame's uuid: the turn its text went to, the
+   * tool calls it made (assistant frame) or answered (user frame). Read when the CLI takes frames
+   * back (`retract`). Bounded; oldest entries drop first.
+   */
+  private frames = new Map<string, { textTurnId?: string; toolUseIds: string[] }>();
+  /** Tool calls the CLI took back: a result that still arrives for one is dropped. Bounded. */
+  private retractedToolUseIds = new Set<string>();
   /**
    * Tool calls made by the session's own agent (top-level, no parent tool use), and the tasks they
    * started. Background-task completions are attributed through these: a subagent's own background
@@ -115,6 +128,8 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
     this.emittedToolStarts = new Set();
     this.activeParentTools = new Set();
     this.pendingText = null;
+    this.pendingTextTurnId = undefined;
+    this.refusalStopped = false;
     this.lastAssistantUsage = null;
     this.manualCompactionRequested = false;
     this.manualCompactionBoundarySeen = false;
@@ -217,7 +232,7 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
         type: 'text_complete',
         text: this.pendingText,
         isIntermediate: false,
-        turnId: this.currentTurnId || undefined,
+        turnId: this.pendingTextTurnId ?? (this.currentTurnId || undefined),
       };
       this.pendingText = null;
       return event;
@@ -260,6 +275,14 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
   private async adaptAssistant(message: SDKMessage, events: AgentEvent[]): Promise<void> {
     // Check for SDK-level errors FIRST (auth, network, rate limits, etc.)
     if ('error' in message && message.error) {
+      const refusal = refusalError(message);
+      if (refusal) {
+        // It arrives before the stopped reply's message_delta: show that text first
+        const stopped = this.flushPending();
+        if (stopped) events.push(stopped);
+        events.push(refusal);
+        return;
+      }
       const errorEvent = await this.callbacks.mapSDKError(
         message.error as SDKAssistantMessageError,
       );
@@ -271,6 +294,9 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
     if ('isReplay' in message && message.isReplay) {
       return;
     }
+
+    // A fallback model's answer names the stopped reply's frames it replaces
+    this.retract((message as { supersedes?: unknown }).supersedes, events);
 
     // Track usage from non-sidechain assistant messages
     const isSidechain = (message as any).parent_tool_use_id !== null;
@@ -348,9 +374,16 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
 
     events.push(...toolStartEvents);
 
+    const turnId = this.currentTurnId || undefined;
+    this.rememberFrame(message, {
+      textTurnId: textContent ? turnId : undefined,
+      toolUseIds: (content as ContentBlock[]).flatMap(block => block.type === 'tool_use' ? [(block as ToolUseBlock).id] : []),
+    });
+
     if (textContent) {
       // Don't emit text_complete yet — wait for message_delta to get stop_reason
       this.pendingText = textContent;
+      this.pendingTextTurnId = turnId;
     }
   }
 
@@ -364,24 +397,28 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
       );
     }
 
+    const isSessionAgent = !(message as any).parent_tool_use_id;
+
     // Capture turn ID from message_start
     if (event.type === 'message_start') {
       const messageId = event.message?.id;
       if (messageId) {
         this.currentTurnId = messageId;
       }
+      if (isSessionAgent) this.refusalStopped = false;
     }
 
     // message_delta contains the actual stop_reason — emit pending text now
     if (event.type === 'message_delta') {
       const stopReason = event.delta?.stop_reason;
+      if (stopReason === 'refusal' && isSessionAgent) this.refusalStopped = true;
       if (this.pendingText) {
         const isIntermediate = stopReason === 'tool_use';
         events.push({
           type: 'text_complete',
           text: this.pendingText,
           isIntermediate,
-          turnId: this.currentTurnId || undefined,
+          turnId: this.pendingTextTurnId ?? (this.currentTurnId || undefined),
           parentToolUseId: (message as any).parent_tool_use_id || undefined,
         });
         this.pendingText = null;
@@ -442,13 +479,16 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
       const sdkParentId = (message as any).parent_tool_use_id;
       const toolUseResultValue = (message as any).tool_use_result;
 
+      this.rememberFrame(message, {
+        toolUseIds: contentBlocks.flatMap(block => block.type === 'tool_result' ? [(block as ToolResultBlock).tool_use_id] : []),
+      });
       const resultEvents = extractToolResults(
         contentBlocks,
         sdkParentId,
         toolUseResultValue,
         this.toolIndex,
         this.currentTurnId || undefined,
-      );
+      ).filter(event => event.type !== 'tool_result' || !this.retractedToolUseIds.has(event.toolUseId));
 
       // Remove completed Task/Agent tools from activeParentTools
       for (const event of resultEvents) {
@@ -655,7 +695,64 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
       }
     } else if (msg.subtype === 'task_updated') {
       if (typeof msg.task_id === 'string' && msg.patch?.is_backgrounded === true) this.pushBackgroundedTask(msg.task_id, events);
+    } else if (msg.subtype === 'informational') {
+      // The CLI's notice after a stopped reply ("…'s safeguards stopped the response above ·
+      // continuing once with that noted"); its other notices are not shown
+      const notice = typeof msg.content === 'string' ? msg.content.trim() : '';
+      if (this.refusalStopped && notice) {
+        this.refusalStopped = false;
+        events.push({ type: 'model_refusal', message: notice });
+      }
+    } else if (msg.subtype === 'model_refusal_fallback') {
+      // A stopped reply is answered again on a fallback model (`scope` 'local': only a subagent's
+      // answer, the session's model stays)
+      this.retract(msg.retracted_message_uuids, events);
+      const fallbackModel = msg.scope !== 'local' && typeof msg.fallback_model === 'string' && msg.fallback_model
+        ? msg.fallback_model
+        : undefined;
+      const notice = typeof msg.content === 'string' && msg.content.trim()
+        ? msg.content.trim()
+        : `The model's safeguards stopped its reply. ${msg.fallback_model ?? 'Another model'} answers instead.`;
+      events.push({ type: 'model_refusal', message: notice, ...(fallbackModel ? { fallbackModel } : {}) });
     }
+  }
+
+  /** Remember what a frame put in the transcript, for `retract`. */
+  private rememberFrame(message: SDKMessage, frame: { textTurnId?: string; toolUseIds: string[] }): void {
+    const uuid = (message as { uuid?: unknown }).uuid;
+    if (typeof uuid !== 'string' || (!frame.textTurnId && frame.toolUseIds.length === 0)) return;
+    this.frames.set(uuid, frame);
+    trimOldest(this.frames, 500);
+  }
+
+  /**
+   * The CLI took back frames it sent: a reply the model's safeguards stopped, which a fallback model
+   * answers instead (`supersedes` on the answer's first frame, `retracted_message_uuids` on its
+   * notice; both name the same frames, and a frame is taken back once). Unfinished text is discarded,
+   * finished text and the tool calls are removed, and a result that still comes for one is dropped.
+   */
+  private retract(uuids: unknown, events: AgentEvent[]): void {
+    if (!Array.isArray(uuids)) return;
+    const turnIds = new Set<string>();
+    const toolUseIds = new Set<string>();
+    for (const uuid of uuids) {
+      const frame = typeof uuid === 'string' ? this.frames.get(uuid) : undefined;
+      if (!frame) continue;
+      this.frames.delete(uuid);
+      if (frame.textTurnId) turnIds.add(frame.textTurnId);
+      for (const id of frame.toolUseIds) toolUseIds.add(id);
+    }
+    if (turnIds.size === 0 && toolUseIds.size === 0) return;
+    if (this.pendingText !== null && this.pendingTextTurnId && turnIds.has(this.pendingTextTurnId)) {
+      this.pendingText = null;
+      events.push({ type: 'text_discard', turnId: this.pendingTextTurnId });
+    }
+    for (const id of toolUseIds) {
+      this.retractedToolUseIds.add(id);
+      this.activeParentTools.delete(id);
+    }
+    trimOldest(this.retractedToolUseIds, 500);
+    events.push({ type: 'messages_retracted', turnIds: [...turnIds], toolUseIds: [...toolUseIds] });
   }
 
   /** Remember top-level tool calls so later task events can be attributed to the session's agent. */
@@ -706,6 +803,29 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
       });
     }
   }
+}
+
+/**
+ * The assistant error frame that ends a turn whose reply the model's safeguards stopped when no
+ * model answers it instead (stop_reason "refusal"; the SDK's `model_refusal_no_fallback` notice just
+ * before it has no text). Its text is Anthropic's explanation ("API Error: Opus 5.5's safeguards
+ * flagged this session (…). …\n\nTry rephrasing …\n\nLearn more: …\n\nRequest ID: …"): the prose
+ * becomes the message, the labelled lines at its end the details. Null for any other error frame.
+ */
+export function refusalError(message: SDKMessage): { type: 'typed_error'; error: AgentError } | null {
+  const frame = (message as { message?: { stop_reason?: unknown; content?: unknown } }).message;
+  if (frame?.stop_reason !== 'refusal') return null;
+  const blocks: unknown[] = Array.isArray(frame.content) ? frame.content : [];
+  const text = blocks
+    .map(block => (block as { type?: unknown }).type === 'text' ? String((block as { text?: unknown }).text ?? '') : '')
+    .join('');
+  const paragraphs = text.trim().replace(/^API Error:\s*/, '').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+  let prose = paragraphs.length;
+  while (prose > 0 && /^[A-Z][\w ]{0,24}: \S/.test(paragraphs[prose - 1]!) && !paragraphs[prose - 1]!.includes('\n')) prose--;
+  const error = createAgentError('model_refusal');
+  if (prose > 0) error.message = paragraphs.slice(0, prose).join(' ');
+  if (prose < paragraphs.length) error.details = paragraphs.slice(prose);
+  return { type: 'typed_error', error };
 }
 
 /** Shown for a tool call the SDK moved to the background (see `isDetachedToolCallResult`). */

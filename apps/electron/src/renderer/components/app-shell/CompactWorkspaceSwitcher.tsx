@@ -7,6 +7,7 @@ import { useSetAtom } from "jotai"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
+import { isWebUI } from "@/lib/platform"
 import { fullscreenOverlayOpenAtom } from "@/atoms/overlay"
 import {
   Drawer,
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/drawer"
 import { WorkspaceAvatar } from "@/components/ui/workspace-avatar"
 import { WorkspaceCreationScreen } from "@/components/workspace"
+import { RemoveWorkspaceDialog } from "@/components/workspace/RemoveWorkspaceDialog"
 import { waitForTransportConnected } from '@/lib/transport-wait'
 import { useWorkspaceIcons } from "@/hooks/useWorkspaceIcon"
 import { useTransportConnectionState } from "@/hooks/useTransportConnectionState"
@@ -51,6 +53,7 @@ export function CompactWorkspaceSwitcher({
   const [open, setOpen] = useState(false)
   const [showCreationScreen, setShowCreationScreen] = useState(false)
   const [reconnectTarget, setReconnectTarget] = useState<Workspace | null>(null)
+  const [pendingRemoval, setPendingRemoval] = useState<Workspace | null>(null)
   const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
   const selectedWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
   const workspaceIconMap = useWorkspaceIcons(workspaces)
@@ -126,17 +129,15 @@ export function CompactWorkspaceSwitcher({
     onSelect(workspace.id)
   }
 
-  const handleRemoveWorkspace = useCallback(async (workspace: Workspace) => {
+  /** Close the sheet, then ask in RemoveWorkspaceDialog. */
+  const handleRemoveWorkspace = useCallback((workspace: Workspace) => {
     if (workspace.id === activeWorkspaceId) {
       toast.error(t('toast.cannotRemoveActiveWorkspace'))
       return
     }
-    const removed = await window.electronAPI.removeWorkspace(workspace.id)
-    if (removed) {
-      toast.success(t('toast.removedWorkspace', { name: workspace.name }))
-      onWorkspaceRemoved?.()
-    }
-  }, [activeWorkspaceId, onWorkspaceRemoved, t])
+    setOpen(false)
+    setPendingRemoval(workspace)
+  }, [activeWorkspaceId, t])
 
   const handleCloseCreationScreen = useCallback(() => {
     setShowCreationScreen(false)
@@ -171,6 +172,13 @@ export function CompactWorkspaceSwitcher({
           />
         )}
       </AnimatePresence>
+
+      <RemoveWorkspaceDialog
+        workspace={pendingRemoval}
+        iconUrl={pendingRemoval ? workspaceIconMap.get(pendingRemoval.id) : undefined}
+        onClose={() => setPendingRemoval(null)}
+        onRemoved={onWorkspaceRemoved}
+      />
 
       <Drawer open={open} onOpenChange={(next) => { setOpen(next); if (next) checkRemoteHealth() }}>
         <DrawerTrigger asChild>
@@ -255,7 +263,7 @@ export function CompactWorkspaceSwitcher({
                       )}
                     </div>
                   </button>
-                  {!isActive && (
+                  {!isActive && !isWebUI && (
                     <button
                       type="button"
                       onClick={() => handleRemoveWorkspace(workspace)}

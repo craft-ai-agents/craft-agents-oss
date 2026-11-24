@@ -6,6 +6,7 @@
  */
 
 import type { PlatformServices } from '../runtime/platform'
+import { ensureDecodableImage } from '@craft-agent/server-core/services'
 
 export interface ElectronPlatformOptions {
   app: Electron.App
@@ -33,15 +34,19 @@ export function createElectronPlatform(opts: ElectronPlatformOptions): PlatformS
     systemDarkMode: () => nativeTheme.shouldUseDarkColors,
     imageProcessor: {
       async getMetadata(buffer) {
-        const img = nativeImage.createFromBuffer(buffer)
+        const decodable = await ensureDecodableImage(buffer)
+        const img = typeof decodable === 'string'
+          ? nativeImage.createFromPath(decodable)
+          : nativeImage.createFromBuffer(decodable)
         if (img.isEmpty()) return null
         const { width, height } = img.getSize()
         return (width && height) ? { width, height } : null
       },
       async process(input, processOpts = {}) {
-        const img = typeof input === 'string'
-          ? nativeImage.createFromPath(input)
-          : nativeImage.createFromBuffer(input)
+        const decodable = await ensureDecodableImage(input)
+        const img = typeof decodable === 'string'
+          ? nativeImage.createFromPath(decodable)
+          : nativeImage.createFromBuffer(decodable)
         if (img.isEmpty()) throw new Error('Invalid image input')
 
         let result = img

@@ -6,6 +6,7 @@ import type { MenuItem } from '../shared/menu-schema'
 import type { WindowManager } from './window-manager'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import { mainLog, isDebugMode } from './logger'
+import { resetZoomOfFocusedWindow } from './zoom'
 
 type ClientResolver = (webContentsId: number) => string | undefined
 
@@ -177,9 +178,13 @@ export async function rebuildMenu(): Promise<void> {
       ]
     },
 
-    // Window menu (from shared schema + macOS-specific items)
+    // Window menu (from shared schema + macOS-specific items). `role: 'window'` makes it the macOS
+    // Windows menu, so AppKit appends the open windows itself (key window checked, minimized ones
+    // marked, titles kept current). Windows that aren't app windows (the in-app browser and its
+    // popups) opt out with `excludedFromShownWindowsMenu`.
     {
       label: i18n.t(WINDOW_MENU.labelKey),
+      role: 'window' as const,
       submenu: [
         ...WINDOW_MENU.items.map(toElectronMenuItem),
         ...(isMac ? [
@@ -276,6 +281,10 @@ function toElectronMenuItem(item: MenuItem): Electron.MenuItemConstructorOptions
   }
 
   if (item.type === 'role') {
+    // The resetZoom role goes to 100%; Reset Zoom returns to the default zoom (Settings → Appearance)
+    if (item.role === 'resetZoom') {
+      return { label: i18n.t(item.labelKey), accelerator: 'CmdOrCtrl+0', click: resetZoomOfFocusedWindow }
+    }
     // Use Electron's built-in role - it handles accelerators automatically
     return { role: item.role as Electron.MenuItemConstructorOptions['role'] }
   }

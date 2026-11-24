@@ -5,8 +5,9 @@
  * Format: Line 1 = SessionHeader, Lines 2+ = StoredMessage (one per line)
  */
 
-import { openSync, readSync, closeSync, readFileSync, writeFileSync, renameSync, unlinkSync } from 'fs';
-import { open, readFile } from 'fs/promises';
+import { openSync, readSync, closeSync, statSync, readFileSync, writeFileSync, renameSync, unlinkSync } from 'fs';
+import type { Stats } from 'fs';
+import { open, stat, readFile } from 'fs/promises';
 import { dirname } from 'path';
 import type { SessionHeader, StoredSession, StoredMessage, SessionTokenUsage } from './types.ts';
 import type { PermissionMode } from '../agent/mode-types.ts';
@@ -14,7 +15,34 @@ import { parsePermissionMode } from '../agent/mode-types.ts';
 import { toPortablePath, expandPath, normalizePath } from '../utils/paths.ts';
 import { debug } from '../utils/debug.ts';
 import { safeJsonParse } from '../utils/files.ts';
+import { withTimeout } from '../utils/async.ts';
 import { pickSessionFields } from './utils.ts';
+
+/**
+ * Per-file backstop timeout for an async session-header read. Resident 8 KiB
+ * reads are sub-millisecond; this only fires for a pathologically slow read we
+ * couldn't rule out from metadata (e.g. a non-macOS cloud file). Generous so a
+ * healthy-but-slow disk is never dropped.
+ */
+export const SESSION_HEADER_READ_TIMEOUT_MS = 2000;
+
+/**
+ * Heuristic for a cloud-evicted (dataless / File-Provider-offloaded) file on
+ * macOS: it reports a logical size but zero allocated blocks, so its content is
+ * not resident. Opening/reading it would block on hydration (iCloud / File
+ * Provider) — potentially the Electron main thread — so callers skip these
+ * instead of reading them. `stat` itself is metadata-only and does NOT trigger
+ * materialization, which is what makes this check safe.
+ *
+ * Guarded to darwin: `blocks` isn't a reliable residency signal for Windows
+ * cloud reparse points, and session.jsonl is never sparse, so on macOS
+ * `size > 0 && blocks === 0` reliably means "not resident".
+ *
+ * Exported for unit testing the heuristic; not re-exported from the package barrel.
+ */
+export function isLikelyEvicted(stats: Pick<Stats, 'size' | 'blocks'>): boolean {
+  return process.platform === 'darwin' && stats.size > 0 && stats.blocks === 0;
+}
 
 // ============================================================
 // Session Path Portability
@@ -78,11 +106,18 @@ function normalizeHeaderPermissionModes<T extends SessionHeader>(header: T): T {
  * Uses low-level fs to read minimal bytes for fast list loading.
  */
 export function readSessionHeader(sessionFile: string): SessionHeader | null {
+  let fd: number | undefined;
   try {
-    const fd = openSync(sessionFile, 'r');
+    // Skip cloud-evicted files: reading one would block this (often the Electron
+    // main) thread on hydration. statSync is metadata-only and never materializes.
+    if (isLikelyEvicted(statSync(sessionFile))) {
+      debug('[jsonl] Skipping cloud-evicted session header (sync):', sessionFile);
+      return null;
+    }
+
+    fd = openSync(sessionFile, 'r');
     const buffer = Buffer.alloc(8192); // 8KB is plenty for metadata header
     const bytesRead = readSync(fd, buffer, 0, 8192, 0);
-    closeSync(fd);
 
     const content = buffer.toString('utf-8', 0, bytesRead);
     const firstNewline = content.indexOf('\n');
@@ -93,6 +128,12 @@ export function readSessionHeader(sessionFile: string): SessionHeader | null {
   } catch (error) {
     debug('[jsonl] Failed to read session header:', sessionFile, error);
     return null;
+  } finally {
+    // Always release the descriptor — a throw between openSync and the old
+    // closeSync (e.g. readSync EINTR on a dataless file) used to leak it.
+    if (fd !== undefined) {
+      try { closeSync(fd); } catch { /* already closed / gone */ }
+    }
   }
 }
 
@@ -238,25 +279,53 @@ function extractPreview(messages: StoredMessage[]): string | undefined {
 }
 
 /**
- * Async version of readSessionHeader for parallel I/O.
- * Uses fs/promises for non-blocking reads.
+ * Async version of readSessionHeader for parallel I/O off the main thread.
+ * Uses fs/promises so reads run on the libuv threadpool.
+ *
+ * Resilience (see #1113): a `stat` pre-check skips cloud-evicted files without
+ * opening them, and the whole operation is wrapped in a per-file timeout
+ * backstop. The inner read never rejects (errors resolve to `null`); if the
+ * backstop fires, the abandoned read still settles and closes its own handle in
+ * the background, so there is no descriptor leak and no unhandled rejection.
  */
-export async function readSessionHeaderAsync(sessionFile: string): Promise<SessionHeader | null> {
-  try {
-    const handle = await open(sessionFile, 'r');
+export async function readSessionHeaderAsync(
+  sessionFile: string,
+  opts?: { timeoutMs?: number },
+): Promise<SessionHeader | null> {
+  const timeoutMs = opts?.timeoutMs ?? SESSION_HEADER_READ_TIMEOUT_MS;
+
+  const read: Promise<SessionHeader | null> = (async () => {
     try {
-      const buffer = Buffer.alloc(8192);
-      const { bytesRead } = await handle.read(buffer, 0, 8192, 0);
-      const content = buffer.toString('utf-8', 0, bytesRead);
-      const firstNewline = content.indexOf('\n');
-      const firstLine = firstNewline > 0 ? content.slice(0, firstNewline) : content;
-      const parsed = safeJsonParse(expandSessionPath(firstLine, dirname(sessionFile))) as SessionHeader;
-      return normalizeHeaderPermissionModes(parsed);
-    } finally {
-      await handle.close();
+      // Skip cloud-evicted files without opening them (see isLikelyEvicted).
+      if (isLikelyEvicted(await stat(sessionFile))) {
+        debug('[jsonl] Skipping cloud-evicted session header (async):', sessionFile);
+        return null;
+      }
+
+      const handle = await open(sessionFile, 'r');
+      try {
+        const buffer = Buffer.alloc(8192);
+        const { bytesRead } = await handle.read(buffer, 0, 8192, 0);
+        const content = buffer.toString('utf-8', 0, bytesRead);
+        const firstNewline = content.indexOf('\n');
+        const firstLine = firstNewline > 0 ? content.slice(0, firstNewline) : content;
+        const parsed = safeJsonParse(expandSessionPath(firstLine, dirname(sessionFile))) as SessionHeader;
+        return normalizeHeaderPermissionModes(parsed);
+      } finally {
+        await handle.close().catch(() => { /* already closed / gone */ });
+      }
+    } catch (error) {
+      debug('[jsonl] Failed to read session header async:', sessionFile, error);
+      return null;
     }
+  })();
+
+  try {
+    return await withTimeout(read, timeoutMs, `Session header read timed out after ${timeoutMs}ms: ${sessionFile}`);
   } catch (error) {
-    debug('[jsonl] Failed to read session header async:', sessionFile, error);
+    // Backstop fired. `read` keeps running, resolves to null on its own, and
+    // closes its handle — nothing to clean up here beyond logging.
+    debug('[jsonl] Session header read timed out:', sessionFile, error);
     return null;
   }
 }

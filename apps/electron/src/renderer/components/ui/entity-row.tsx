@@ -5,7 +5,8 @@
  * first line; an optional subtitle line (12px secondary) with right-aligned chips; an optional badge row.
  * 36px single-line / 54px two-line. Mail-style: the row spans the panel edge to edge (square
  * `fill-hover` / `fill-selected`, no inset pill), rows are divided by a hairline that starts at the text
- * edge, and selection is a fill, never weight.
+ * edge, and selection is a fill, never weight. A nested row (`depth`) moves in one glyph step per level and
+ * can draw tree lines in the glyph columns it passes (`guides`, `guideBelow`).
  *
  * The "⋯" actions button is a sibling of the row button (never nested inside it), named, and REPLACES the
  * trailing meta on hover/focus instead of overlapping it. In the compact (touch) layout it is always
@@ -43,6 +44,40 @@ import { cn } from '@/lib/utils'
  *  <300ms, so the window doesn't eat real taps. */
 const SUPPRESS_ACTIVATION_MS = 300
 
+/** One nesting step is a glyph plus its gap, so a nested row's glyph lands on its parent's text edge */
+const INDENT_STEP_PX = 26
+const MAX_INDENT_LEVELS = 3
+
+/**
+ * A tree line in the glyph column of one nesting level above a row: `pass` runs by, `branch` turns into
+ * the row and runs on to a later sibling, `last` turns into the row and ends, `none` draws nothing.
+ */
+export type TreeGuide = 'none' | 'pass' | 'branch' | 'last'
+
+/** Where a guide turns into its row: the glyph's centre, the top padding plus half the title line. Desktop
+ *  9px + 18px; the compact shell's `.entity-row-btn` rule in index.css makes it 11px + 20px. */
+const GUIDE_TURN_Y = 18
+const COMPACT_GUIDE_TURN_Y = 21
+const GUIDE_RADIUS = 6
+
+/**
+ * The tree lines of a row as one SVG path (x from the gutter), so lines that meet never double their
+ * translucent color. A line runs under the centre of its level's glyph (+0.5 keeps 1px crisp); a turn
+ * curves into the next level's glyph and stops 4px short of it. `V 999` is clipped at the row's edge.
+ */
+function guidePath(guides: readonly TreeGuide[], turnY: number): string {
+  return guides.map((guide, level) => {
+    const x = level * INDENT_STEP_PX + 8.5
+    const turn = `A ${GUIDE_RADIUS} ${GUIDE_RADIUS} 0 0 0 ${x + GUIDE_RADIUS} ${turnY} H ${(level + 1) * INDENT_STEP_PX - 4}`
+    switch (guide) {
+      case 'pass': return `M ${x} 0 V 999`
+      case 'branch': return `M ${x} 0 V 999 M ${x} ${turnY - GUIDE_RADIUS} ${turn}`
+      case 'last': return `M ${x} 0 V ${turnY - GUIDE_RADIUS} ${turn}`
+      case 'none': return ''
+    }
+  }).join(' ')
+}
+
 export interface EntityRowProps {
   /** Left icon area — rendered in-flow as a flex child before the content column.
    *  Consumers can pass multiple icons (e.g. via a fragment) for a horizontal icon group. */
@@ -51,8 +86,8 @@ export interface EntityRowProps {
   title: React.ReactNode
   /** Additional className on the title wrapper (e.g. shimmer animation) */
   titleClassName?: string
-  /** Content rendered inline after the title (e.g. timestamp). On hover, swapped with the more button.
-   *  When set, the title row becomes single-line (truncated) and the absolute more button is hidden. */
+  /** Content rendered inline after the title (e.g. timestamp). On hover and focus (desktop) the "⋯" button
+   *  takes its place. When set, the title row becomes single-line (truncated). */
   titleTrailing?: React.ReactNode
   /** Content rendered inline immediately after the title, on the same row.
    *  Lives between the title and the trailing slot. Use for tiny, high-priority
@@ -61,6 +96,9 @@ export interface EntityRowProps {
   titleSuffix?: React.ReactNode
   /** Optional subtitle line beneath the title */
   subtitle?: React.ReactNode
+  /** Content in the glyph column of the subtitle line, under the icon (e.g. a disclosure toggle); keeps the
+   *  row at two lines */
+  subtitleLeading?: React.ReactNode
   /** Right-aligned content on the subtitle line (e.g. label chips); keeps the row at two lines */
   subtitleTrailing?: React.ReactNode
   /** Badge/subtitle row beneath the title */
@@ -71,6 +109,13 @@ export interface EntityRowProps {
   children?: React.ReactNode
   /** Absolutely-positioned overlay (e.g. match count badge) */
   overlay?: React.ReactNode
+  /** Nesting level (e.g. a sub-session under its parent): the glyph and text move in one step per level,
+   *  up to 3. The fill, the multi-select bar and the hairline's far end stay at the panel edges. */
+  depth?: number
+  /** Tree lines of the levels above this row, one per level from the outermost (see `TreeGuide`) */
+  guides?: readonly TreeGuide[]
+  /** Starts a tree line under `subtitleLeading`, down to the row's edge, for the nested rows that follow */
+  guideBelow?: boolean
 
   // --- Interaction ---
   /** Selection state */
@@ -130,11 +175,15 @@ export function EntityRow({
   titleTrailing,
   titleSuffix,
   subtitle,
+  subtitleLeading,
   subtitleTrailing,
   badges,
   trailing,
   children,
   overlay,
+  depth = 0,
+  guides,
+  guideBelow = false,
   isSelected = false,
   isInMultiSelect = false,
   suppressSelectionBar = false,
@@ -271,6 +320,14 @@ export function EntityRow({
   const anyMenuOpen = menuOpen || contextMenuOpen || compactMenuOpen
   const hasMoreButton = (!!menuContent || useCompactMenu) && !hideMoreButton
   const moreLabel = moreButtonLabel ?? t('common.more')
+  const indentLevels = Math.min(Math.max(depth, 0), MAX_INDENT_LEVELS)
+  const indentStyle = indentLevels > 0
+    ? ({ '--row-indent': `${indentLevels * INDENT_STEP_PX}px` } as React.CSSProperties)
+    : undefined
+  // Past the deepest indent, rows share their parent's column: no turn into them, no line down from it
+  const levelGuides = guides?.slice(0, indentLevels)
+  const shownGuides = levelGuides?.some(guide => guide !== 'none') ? levelGuides : undefined
+  const drawGuideBelow = guideBelow && depth < MAX_INDENT_LEVELS
   const iconSpacer = icon ? (
     <div className="shrink-0 flex items-center gap-2 [&>*]:size-4 invisible" aria-hidden="true">
       {icon}
@@ -281,14 +338,16 @@ export function EntityRow({
   // Layout grid: the row fills the panel edge to edge and pads the 16px gutter, so the glyph lands on
   // the gutter (where the panel title and group labels start) and the text 26px further in (42px). The
   // hairline below each row starts at that text edge and runs to the panel edge (hidden on the selected
-  // row, whose fill already separates it).
+  // row, whose fill already separates it). A nested row (`depth`) moves the glyph, the text and the
+  // hairline's start in by `--row-indent`.
   const innerContent = (
     <div
       className={cn(
         "relative group select-none",
         "after:pointer-events-none after:absolute after:right-0 after:bottom-0 after:h-px after:bg-separator in-data-[selected]:after:hidden",
-        icon ? "after:left-[calc(var(--gutter)+26px)]" : "after:left-gutter",
+        icon ? "after:left-[calc(var(--gutter)+26px+var(--row-indent,0px))]" : "after:left-[calc(var(--gutter)+var(--row-indent,0px))]",
       )}
+      style={indentStyle}
     >
       {/* Multi-select marker. Single selection is the row fill alone; suppressed when an outer
           wrapper draws its own leading stripe (e.g. project color) at the same edge. */}
@@ -306,6 +365,7 @@ export function EntityRow({
           (isSelected || isInMultiSelect)
             ? "bg-fill-selected"
             : "hover:bg-fill-hover",
+          indentLevels > 0 && "pl-[calc(var(--gutter)+var(--row-indent))]",
           // Touch: the always-visible actions button sits at the right edge (its 36px box + 6px inset)
           hasMoreButton && useCompactMenu && "pr-11",
           (buttonProps as Record<string, unknown>)?.className as string | undefined,
@@ -351,9 +411,18 @@ export function EntityRow({
           </div>
 
           {/* Subtitle line */}
-          {(subtitle || subtitleTrailing) && (
+          {(subtitle || subtitleTrailing || subtitleLeading) && (
             <div data-slot="entity-row-subtitle" className="flex items-center gap-2.5 w-full min-w-0 text-label-sm text-secondary">
-              {iconSpacer}
+              {subtitleLeading ? (
+                // The glyph column (a single 16px glyph). The line down to the nested rows starts 2px under a
+                // centred 16px control and ends at the row's edge, past the bottom padding (11px compact).
+                <div className={cn(
+                  "relative shrink-0 self-stretch flex w-4 items-center justify-center",
+                  drawGuideBelow && "after:pointer-events-none after:absolute after:left-2 after:top-[calc(50%+10px)] after:-bottom-[9px] @max-mobile/shell:after:-bottom-[11px] after:border-l after:border-strong",
+                )}>
+                  {subtitleLeading}
+                </div>
+              ) : iconSpacer}
               {subtitle && <div className="min-w-0 flex-1 truncate">{subtitle}</div>}
               {subtitleTrailing && (
                 // A stable, row-owned budget prevents chip fitting from measuring its own output.
@@ -389,6 +458,18 @@ export function EntityRow({
           )}
         </div>
       </button>
+
+      {shownGuides && (
+        <svg
+          data-slot="entity-row-guides"
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 h-full fill-none stroke-[var(--border-strong)]"
+          style={{ left: 'var(--gutter)', width: indentLevels * INDENT_STEP_PX }}
+        >
+          <path d={guidePath(shownGuides, GUIDE_TURN_Y)} className="@max-mobile/shell:hidden" />
+          <path d={guidePath(shownGuides, COMPACT_GUIDE_TURN_Y)} className="hidden @max-mobile/shell:inline" />
+        </svg>
+      )}
 
       {/* Children rendered below the button */}
       {children}

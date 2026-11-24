@@ -9,6 +9,7 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { AlertCircle } from 'lucide-react'
+import type { FileLinkClick } from '@craft-agent/ui'
 import { ChatDisplay, type ChatDisplayHandle } from '@/components/app-shell/ChatDisplay'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ChatHeader } from '@/components/app-shell/chat-header/ChatHeader'
@@ -20,6 +21,7 @@ import { coerceInputText } from '@/lib/input-text'
 import { deriveSessionMessagesLoadState, formatSessionLoadFailure } from '@/lib/session-load'
 import { ensureSessionMessagesLoadedAtom, forceSessionMessagesReloadAtom, loadedSessionsAtom, sessionMetaMapAtom } from '@/atoms/sessions'
 import { getSessionTitle } from '@/utils/session'
+import { usePrWatch } from '@/hooks/usePrWatch'
 // Model resolution: connection.defaultModel (no hardcoded defaults)
 import { resolveEffectiveConnectionSlug, isSessionConnectionUnavailable } from '@config/llm-connections'
 
@@ -305,6 +307,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
 
   // Working directory for this session
   const workingDirectory = session?.workingDirectory
+  // Coding mode's header PR chip: desktop only, with a folder. The chip itself renders only once that
+  // folder is a git repo whose branch has a PR (see ChatHeaderPrChip).
+  const prWatch = usePrWatch(sessionId, !!sessionOpts.codingMode && !!workingDirectory && !isCompactMode, workingDirectory)
   const activeWorkspace = React.useMemo(
     () => workspaces.find((w) => w.id === activeWorkspaceId) || null,
     [workspaces, activeWorkspaceId]
@@ -314,8 +319,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     await window.electronAPI.sessionCommand(session.id, { type: 'updateWorkingDirectory', dir: path })
   }, [session])
 
+  // Keeps the link click (`click`) on every path, so the file-link menu opens next to the link.
   const handleOpenFile = React.useCallback(
-    async (path: string) => {
+    async (path: string, click?: FileLinkClick) => {
       // Resolve bare relative paths against session working directory,
       // or workspace root as a fallback when workingDirectory is not set.
       const resolved = (() => {
@@ -347,12 +353,12 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             const files = matches.filter((m) => m.type === 'file' && m.name === fileName)
             const exact = files.find((m) => m.path === resolved)
             if (exact) {
-              onOpenFile(exact.path)
+              onOpenFile(exact.path, click)
               return
             }
 
             if (files.length === 1) {
-              onOpenFile(files[0].path)
+              onOpenFile(files[0].path, click)
               toast.info(t('chat.openedClosestMatch', { path: files[0].relativePath }))
               return
             }
@@ -362,9 +368,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
         }
       }
 
-      onOpenFile(resolved)
+      onOpenFile(resolved, click)
     },
-    [onOpenFile, workingDirectory, activeWorkspace?.rootPath]
+    [onOpenFile, workingDirectory, activeWorkspace?.rootPath, t]
   )
 
   const handleOpenUrl = React.useCallback(
@@ -444,6 +450,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
               onRespondToCredential={onRespondToCredential}
               thinkingLevel={sessionOpts.thinkingLevel}
               onThinkingLevelChange={(level) => setOption('thinkingLevel', level)}
+              codingMode={sessionOpts.codingMode}
+              onCodingModeChange={(enabled) => setOption('codingMode', enabled)}
               permissionMode={sessionOpts.permissionMode}
               previousPermissionMode={sessionOpts.previousPermissionMode}
               onPermissionModeChange={setPermissionMode}
@@ -497,6 +505,15 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
         sharedUrl={sharedUrl}
         workingDirectory={workingDirectory}
         sessionFolderPath={session?.sessionFolderPath}
+        prWatch={prWatch.state}
+        prWatchNav={prWatch.nav}
+        prWatchActiveOrigin={prWatch.activeOrigin}
+        onRefreshPrWatch={prWatch.refresh}
+        onUnbindPr={prWatch.unbind}
+        onSetPrAutoMerge={prWatch.setAutoMerge}
+        prWatchAutoFix={prWatch.autoFix}
+        onSetPrAutoFix={prWatch.setAutoFix}
+        onPrCardOpenChange={prWatch.onCardOpenChange}
       />
       <div className="flex-1 flex flex-col min-h-0">
         <ChatDisplay
@@ -518,6 +535,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
           onRespondToCredential={onRespondToCredential}
           thinkingLevel={sessionOpts.thinkingLevel}
           onThinkingLevelChange={(level) => setOption('thinkingLevel', level)}
+          codingMode={sessionOpts.codingMode}
+          onCodingModeChange={(enabled) => setOption('codingMode', enabled)}
           permissionMode={sessionOpts.permissionMode}
           previousPermissionMode={sessionOpts.previousPermissionMode}
           onPermissionModeChange={setPermissionMode}

@@ -19,15 +19,28 @@ function createCtx(
 }
 
 describe('handleSendAgentMessage delivery ack', () => {
-  it('reports a delivered ack when the target was idle', async () => {
-    const { ctx } = createCtx({ delivery: 'delivered', targetBusy: false });
+  it('reports a started turn when the target was idle, and that this is not its reply', async () => {
+    const { ctx } = createCtx({ delivery: 'started' });
     const res = await handleSendAgentMessage(ctx, { sessionId: 'target-9', message: 'hi' });
     expect(res.isError).toBeFalsy();
-    expect(JSON.stringify(res)).toContain('delivered');
+    const text = JSON.stringify(res);
+    expect(text).toContain('delivered');
+    expect(text).toContain('started a turn');
+    expect(text).toContain('This is not a reply');
+  });
+
+  it('reports a steered message as delivered into the running turn, not as queued', async () => {
+    const { ctx } = createCtx({ delivery: 'steered' });
+    const res = await handleSendAgentMessage(ctx, { sessionId: 'target-9', message: 'also this' });
+    expect(res.isError).toBeFalsy();
+    const text = JSON.stringify(res);
+    expect(text).toContain('into the turn it is running');
+    expect(text).not.toContain('queued');
+    expect(text).toContain('This is not a reply');
   });
 
   it('reports a queued (busy) ack when the target was mid-turn', async () => {
-    const { ctx } = createCtx({ delivery: 'queued', targetBusy: true });
+    const { ctx } = createCtx({ delivery: 'queued' });
     const res = await handleSendAgentMessage(ctx, { sessionId: 'target-9', message: 'status?' });
     expect(res.isError).toBeFalsy();
     const text = JSON.stringify(res);
@@ -37,7 +50,7 @@ describe('handleSendAgentMessage delivery ack', () => {
   });
 
   it('wraps the message with a sender envelope', async () => {
-    const { ctx, calls } = createCtx({ delivery: 'delivered', targetBusy: false }, { name: 'Monitor' });
+    const { ctx, calls } = createCtx({ delivery: 'started' }, { name: 'Monitor' });
     await handleSendAgentMessage(ctx, { sessionId: 'target-9', message: 'ping' });
     expect(calls).toHaveLength(1);
     expect(calls[0].message).toContain('sender-1');
@@ -45,7 +58,7 @@ describe('handleSendAgentMessage delivery ack', () => {
   });
 
   it('rejects a self-send', async () => {
-    const { ctx } = createCtx({ delivery: 'delivered', targetBusy: false });
+    const { ctx } = createCtx({ delivery: 'started' });
     const res = await handleSendAgentMessage(ctx, { sessionId: 'sender-1', message: 'loop' });
     expect(res.isError).toBe(true);
   });

@@ -115,6 +115,29 @@ export function buildCraftPiSettings(purpose: CraftPiSessionPurpose = 'main'): P
   };
 }
 
+const isPositiveInt = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && (value as number) > 0;
+
+/**
+ * Pi compacts once context exceeds `contextWindow − reserveTokens` and has no
+ * threshold setting of its own, so Craft's "Compact context at" (config.json
+ * `autoCompactWindow`) becomes a per-model reserve. Never below Pi's own
+ * reserve: a window at or beyond the model's limit keeps Pi's default trigger.
+ */
+export function compactionReserveFor(
+  contextWindow: unknown,
+  baseReserve: number,
+  autoCompactWindow: number | undefined,
+): number {
+  if (!isPositiveInt(contextWindow) || !isPositiveInt(autoCompactWindow)) return baseReserve;
+  return Math.max(baseReserve, contextWindow - autoCompactWindow);
+}
+
+export interface CraftSettingsManagerOptions {
+  /** Compact once context reaches this many tokens (config.json `autoCompactWindow`). */
+  autoCompactWindow?: number;
+}
+
 /**
  * Fresh in-memory settings manager for one Pi session. Cheap to create; not
  * shared between the main session and `queryLlm` ephemeral sessions so a
@@ -122,6 +145,23 @@ export function buildCraftPiSettings(purpose: CraftPiSessionPurpose = 'main'): P
  */
 export function createCraftSettingsManager(
   purpose: CraftPiSessionPurpose = 'main',
+  { autoCompactWindow }: CraftSettingsManagerOptions = {},
 ): SettingsManager {
-  return SettingsManager.inMemory(buildCraftPiSettings(purpose), { projectTrusted: false });
+  const manager = SettingsManager.inMemory(buildCraftPiSettings(purpose), { projectTrusted: false });
+  if (!isPositiveInt(autoCompactWindow)) return manager;
+
+  // The reserve depends on the active model's window, which can change mid-session.
+  // Every SDK compaction check (and Craft's context bar) reads it through
+  // getCompactionSettings(model), so this one hook covers all model switches.
+  // SettingsManager has a private constructor, so it can't be subclassed instead.
+  const getCompactionSettings = manager.getCompactionSettings.bind(manager);
+  manager.getCompactionSettings = (model) => {
+    const settings = getCompactionSettings(model);
+    const contextWindow = (model as { contextWindow?: unknown } | undefined)?.contextWindow;
+    return {
+      ...settings,
+      reserveTokens: compactionReserveFor(contextWindow, settings.reserveTokens, autoCompactWindow),
+    };
+  };
+  return manager;
 }

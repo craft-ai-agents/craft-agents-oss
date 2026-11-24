@@ -9,7 +9,7 @@ import { PreviewOverlay } from './PreviewOverlay'
 import { ContentFrame } from './ContentFrame'
 import { ShikiCodeViewer } from '../code-viewer/ShikiCodeViewer'
 import { TerminalOutput } from '../terminal/TerminalOutput'
-import { Markdown } from '../markdown'
+import { Markdown, type FileOpenHandler } from '../markdown'
 import { CodeBlock } from '../markdown/CodeBlock'
 import { detectLanguage } from './GenericOverlay'
 import type { OverlayCard } from '../../lib/tool-parsers'
@@ -21,7 +21,7 @@ export interface ActivityCardsOverlayProps {
   title: string
   theme?: 'light' | 'dark'
   onOpenUrl?: (url: string) => void
-  onOpenFile?: (path: string) => void
+  onOpenFile?: FileOpenHandler
 }
 
 const craftAgentDarkTheme = {

@@ -54,6 +54,17 @@ describe('buildBackendRuntimeSignature', () => {
     expect(disabled).not.toBe(enabled)
   })
 
+  // An edited output cap must refresh live sessions, or it only applies after restart.
+  it('changes when the custom endpoint maxTokens changes', () => {
+    const withCap = (maxTokens?: number) => sig({
+      ...baseCompat,
+      customEndpoint: { api: 'openai-completions', supportsImages: true, maxTokens },
+    })
+
+    expect(withCap(32_768)).not.toBe(withCap(undefined))
+    expect(withCap(32_768)).not.toBe(withCap(65_536))
+  })
+
   it('ignores non-runtime metadata such as lastUsedAt', () => {
     expect(sig({ ...baseCompat, lastUsedAt: 1 })).toBe(sig({ ...baseCompat, lastUsedAt: 2 }))
   })

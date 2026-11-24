@@ -55,6 +55,12 @@ import {
   handleWritePageData,
   handleDeletePage,
 } from './handlers/pages.ts';
+import {
+  handlePrStatus,
+  handlePrBind,
+  handlePrUnbind,
+  handlePrSetAutoMerge,
+} from './handlers/pr-tools.ts';
 import { handleArchiveSession } from './handlers/archive-session.ts';
 import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
 import { handleListMessagingChannels, handleUnbindMessagingChannel } from './handlers/messaging.ts';
@@ -235,6 +241,9 @@ export const SpawnSessionSchema = z.object({
     .describe('Reasoning level for the new session. Silently ignored on non-reasoning models (e.g. gpt-4o, gemini-2.5-flash). Omit to inherit the workspace default.'),
   labels: z.array(z.string()).optional().describe('Labels for the new session'),
   workingDirectory: z.string().optional().describe('Working directory for the new session'),
+  projectId: z.string().optional().describe('Workspace project id to bind the new session to. Inherits the project working directory unless overridden.'),
+  codingMode: z.boolean().optional().describe('Start the new session in Coding mode (true) or the default mode (false). Omit to inherit the spawning session\'s mode.'),
+  worktreePath: z.string().optional().describe('Absolute path of an existing git worktree or checkout for the new session to work in. Starts it in Coding mode there; fails if the path is not inside a git work tree. Use instead of workingDirectory.'),
   attachments: z.array(z.object({
     path: z.string().describe('Absolute file path on disk'),
     name: z.string().optional().describe('Display name (defaults to file basename)'),
@@ -263,7 +272,7 @@ export const ArchiveSessionSchema = z.object({
 
 export const CreateTaskSchema = z.object({
   title: z.string().describe('Short task title shown on the board (also drives the slug)'),
-  description: z.string().describe('What the task should accomplish — becomes the task goal and the initial node prompt'),
+  description: z.string().describe('What the task should accomplish — becomes the task goal and the initial node prompt. Self-contained: the agent that works on it sees none of this conversation'),
   acceptanceCriteria: z.string().optional().describe('Freeform rubric the final result is verified against'),
   sources: z.array(z.string()).optional().describe('Source slugs to enable on the task sessions'),
   skills: z.array(z.string()).optional().describe('Skill slugs applied to dispatched task prompts'),
@@ -330,6 +339,25 @@ export const WritePageDataSchema = z.object({
 
 export const DeletePageSchema = z.object({
   slug: z.string().describe('Slug of the page to delete'),
+});
+
+// PR tools (Coding mode)
+export const PrStatusSchema = z.object({
+  session_id: z.string().optional().describe("Another session whose pinned PRs to read (cache-only, no live fetch). Omit for the current session's live status."),
+});
+
+export const PrBindSchema = z.object({
+  pr: z.string().describe('PR to pin: a full PR URL (https://github.com/owner/repo/pull/123), owner/repo#123, or a bare number for the current repo.'),
+});
+
+export const PrUnbindSchema = z.object({
+  pr: z.string().describe('PR to unpin from this session: the PR URL, owner/repo#123, or its number.'),
+});
+
+export const PrSetAutoMergeSchema = z.object({
+  pr: z.string().describe('PR to change: a full PR URL, owner/repo#123, or a bare number for the current repo.'),
+  enabled: z.boolean().describe('true enables GitHub auto-merge (GitHub merges once required checks pass and reviews are in); false disables it.'),
+  method: z.enum(['merge', 'squash', 'rebase']).optional().describe('Merge method to use when enabling (default: the repository\'s default for you). Must be one the repository allows.'),
 });
 
 export const ListSessionsSchema = z.object({
@@ -606,7 +634,9 @@ Use this to delegate tasks to parallel sessions — research, analysis, drafts, 
 Call with help=true first to discover available connections, models, and sources.
 When spawning, the 'prompt' parameter is required.
 
-Optional overrides: \`model\`, \`llmConnection\`, \`permissionMode\`, \`thinkingLevel\`, \`enabledSourceSlugs\`, \`labels\`, \`workingDirectory\`. Omitted fields inherit from the spawning session or the workspace default.
+Optional overrides: \`model\`, \`llmConnection\`, \`permissionMode\`, \`thinkingLevel\`, \`enabledSourceSlugs\`, \`labels\`, \`workingDirectory\`, \`projectId\`, \`codingMode\`. Omitted fields inherit from the spawning session or the workspace default.
+
+For coding work in parallel, give the child its own worktree: create it first (e.g. \`git worktree add ../<repo>-<branch> -b <branch>\` from the repository), then pass its path as \`worktreePath\`. The child starts in Coding mode in that checkout, so its edits never collide with yours.
 
 \`thinkingLevel\` is silently ignored on non-reasoning models (e.g. gpt-4o, gemini-2.5-flash) — the SDK drops the reasoning param rather than erroring. Use it when you want to force deeper reasoning on a supported model, or set it to \`off\` when spawning a session that doesn't need to think.
 
@@ -640,7 +670,7 @@ Use it for durable project knowledge: a decision, a gotcha, a convention, a user
 
   create_task: `Create a Craft Agents Task on the kanban board — writes tasks/<slug>/task.yaml and creates its orchestrator session. CREATION ONLY: the task lands in "todo" and is NOT run; starting it is the user's (or an automation's) decision.
 
-Provide title + description (the description becomes the task goal and the initial node prompt). Optional: acceptanceCriteria (verification rubric), sources / skills (workspace slugs), llmConnection + model, workingDirectory, projectId. When projectId is omitted, the task inherits the invoking session's project.
+Provide title + description (the description becomes the task goal and the initial node prompt). The description is all the agent that later works on the task gets, so make it self-contained: what to do, where (files, links, ids) and the decisions already made. Never point back at this conversation ("as discussed above", "item 3 of the plan"). Optional: acceptanceCriteria (verification rubric), sources / skills (workspace slugs), llmConnection + model, workingDirectory, projectId. When projectId is omitted, the task inherits the invoking session's project.
 
 Returns { slug, orchestratorSessionId, taskLabelId, warnings } — unknown source/skill slugs are reported as warnings, not errors. Use it when the user asks to capture or queue work as a task; to execute work right now, use the current session or spawn_session instead.`,
 
@@ -670,15 +700,31 @@ Data model: kv is key → any JSON value; series are named lists of { t: epoch m
 
 A published page is unpublished first (best effort); the result reports publicCopyMayRemain when the remote copy could not be confirmed removed.`,
 
+  pr_status: `Read the pull requests this Coding session is tracking: its branch's PR plus any PRs pinned with pr_bind, deduped. Returns each PR's state, check rollup, review decision, merge state, unresolved threads, local ahead/dirty, and auto-merge state (autoMergeBlocked: why GitHub won't turn it on) — the same data the chat-header PR chip shows.
+
+Use it to check "where's my PR / are checks green / can it merge" without leaving the chat. Pass session_id to read ANOTHER session's pinned PRs (cache-only — it does not fetch GitHub for a session you're not in). Omit it for the current session's live status. Read-only; never pushes or merges.`,
+
+  pr_bind: `Pin a pull request to this session so it shows in the chat-header PR carousel and is tracked alongside the branch's own PR. A session can track several PRs at once. A PR you open with \`gh pr create\` is pinned automatically, so don't pin it again.
+
+Give a full PR URL (https://github.com/owner/repo/pull/123), owner/repo#123, or a bare number for the current repo. The PR is verified (a credential is resolved and the PR fetched) before it is pinned — a bad URL, an inaccessible repo, or a missing PR returns an error and pins nothing. Use it to watch a dependency's PR, restore a dismissed one, or follow a PR the branch watcher didn't auto-discover. Pinning is local to this session; it does not change anything on GitHub.`,
+
+  pr_unbind: `Remove a pinned PR from this session's carousel (undoes pr_bind). Give the PR URL, owner/repo#123, or its number. The branch's own PR is auto-discovered and cannot be unbound this way — it reappears while you're on that branch. Nothing on GitHub changes.`,
+
+  pr_set_auto_merge: `Enable or disable GitHub auto-merge on one of this session's PRs (GitHub merges it automatically once required checks pass and reviews are satisfied). Give a PR URL, owner/repo#123, or a number for the current repo; enabled true/false; optional method (merge/squash/rebase, default: the repository's default — must be one the repo allows). GitHub only takes auto-merge when the repository allows it and the PR still waits on required checks or reviews; pr_status's autoMergeBlocked says when it won't, and why.
+
+This changes state on GitHub and can lead to the PR merging without further action. Ask the user before enabling auto-merge unless they've already told you to for this PR — enabling it is an outward, hard-to-undo action.`,
+
   get_session_info: `Get metadata about the current session or a specific session by ID.
 
-Returns labels, status, name, permission mode, projectId (if the session is bound to a project), workingDirectory, and other details.
+Returns labels, status, name, permission mode, projectId (if the session is bound to a project), parentSessionId (for a sub-session), workingDirectory, and other details.
+For a task's session (a Tasks board item, e.g. one create_task made), \`task\` holds the task itself: goal, acceptance criteria, subtasks and the path of its task.yaml. Read it before working on a task.
 Call with no arguments to introspect your own session state.`,
 
   list_sessions: `List sessions in the workspace. Returns total count + paginated results.
 
 Use filters (status, label, search) to narrow results instead of fetching everything. Default limit is 20 sessions.
-Use get_session_info for full details on a specific session (list-then-detail pattern).`,
+Sessions of a Tasks board item carry taskSlug; sub-sessions carry parentSessionId.
+Use get_session_info for full details on a specific session (list-then-detail pattern), including a task's goal and subtasks.`,
 
   list_background_tasks: `List background agents/tasks tracked for a session (running, finished, or orphaned).
 
@@ -792,6 +838,11 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'update_page', description: TOOL_DESCRIPTIONS.update_page, inputSchema: UpdatePageSchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdatePage },
   { name: 'write_page_data', description: TOOL_DESCRIPTIONS.write_page_data, inputSchema: WritePageDataSchema, executionMode: 'registry', safeMode: 'block', handler: handleWritePageData },
   { name: 'delete_page', description: TOOL_DESCRIPTIONS.delete_page, inputSchema: DeletePageSchema, executionMode: 'registry', safeMode: 'block', handler: handleDeletePage },
+  // PR tools (Coding mode — use the grouped ctx.prWatch callbacks; server-side watcher holds credentials)
+  { name: 'pr_status', description: TOOL_DESCRIPTIONS.pr_status, inputSchema: PrStatusSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handlePrStatus },
+  { name: 'pr_bind', description: TOOL_DESCRIPTIONS.pr_bind, inputSchema: PrBindSchema, executionMode: 'registry', safeMode: 'block', handler: handlePrBind },
+  { name: 'pr_unbind', description: TOOL_DESCRIPTIONS.pr_unbind, inputSchema: PrUnbindSchema, executionMode: 'registry', safeMode: 'block', handler: handlePrUnbind },
+  { name: 'pr_set_auto_merge', description: TOOL_DESCRIPTIONS.pr_set_auto_merge, inputSchema: PrSetAutoMergeSchema, executionMode: 'registry', safeMode: 'block', handler: handlePrSetAutoMerge },
   { name: 'get_session_info', description: TOOL_DESCRIPTIONS.get_session_info, inputSchema: GetSessionInfoSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetSessionInfo },
   { name: 'list_sessions', description: TOOL_DESCRIPTIONS.list_sessions, inputSchema: ListSessionsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSessions },
   { name: 'list_background_tasks', description: TOOL_DESCRIPTIONS.list_background_tasks, inputSchema: ListBackgroundTasksSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListBackgroundTasks },
@@ -802,6 +853,69 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'unbind_messaging_channel', description: TOOL_DESCRIPTIONS.unbind_messaging_channel, inputSchema: UnbindMessagingChannelSchema, executionMode: 'registry', safeMode: 'block', handler: handleUnbindMessagingChannel },
 ];
 
+/**
+ * Agent profile: the prompt and session-tool set a session runs with.
+ * - `default`: the full Craft Agent toolset (desktop workflows, sources, Pages, browser…), without
+ *   the Coding-only tools in {@link CODING_ONLY_TOOLS}.
+ * - `coding`: coding mode — a lean prompt and only the tools in {@link CODING_PROFILE_TOOLS}.
+ */
+export type AgentProfile = 'default' | 'coding';
+
+/**
+ * Session tools a `coding` profile keeps, and the condition each one needs. Everything else
+ * (session labels/status/archive, board tasks, inter-session and gateway messaging, config/skill
+ * validation, template/sandbox helpers, `decide`, preferences) serves desktop workflows and is dropped.
+ * - `always`: kept in every coding session (feature flags and settings still apply)
+ * - `sources`: kept while the session has at least one enabled source (auth + MCP resources)
+ * - `project`: kept while the session is bound to a project
+ */
+export const CODING_PROFILE_TOOLS: Readonly<Record<string, 'always' | 'sources' | 'project'>> = {
+  SubmitPlan: 'always',
+  list_background_tasks: 'always',
+  send_developer_feedback: 'always',
+  // Diagrams, large data tables, focused LLM calls, and delegating to or reading other sessions
+  mermaid_validate: 'always',
+  transform_data: 'always',
+  call_llm: 'always',
+  spawn_session: 'always',
+  get_session_info: 'always',
+  list_sessions: 'always',
+  // PR tools are core to Coding mode; each returns a clean "unavailable" result off a GitHub checkout
+  // (no async git gating — see plan D7), so they are always offered there (and only there: CODING_ONLY_TOOLS).
+  pr_status: 'always',
+  pr_bind: 'always',
+  pr_unbind: 'always',
+  pr_set_auto_merge: 'always',
+  // The built-in browser (still behind its setting) checks the web UI being built; Pages hold the
+  // reports and dashboards a coding session produces.
+  browser_tool: 'always',
+  list_pages: 'always',
+  get_page: 'always',
+  create_page: 'always',
+  update_page: 'always',
+  write_page_data: 'always',
+  delete_page: 'always',
+  project_memory_append: 'project',
+  // The agent turns a source on with source_test, which restarts the turn with the source's tools;
+  // the `sources` tools below join from the next turn once a source is enabled.
+  source_test: 'always',
+  source_oauth_trigger: 'sources',
+  source_google_oauth_trigger: 'sources',
+  source_slack_oauth_trigger: 'sources',
+  source_microsoft_oauth_trigger: 'sources',
+  source_credential_prompt: 'sources',
+  source_list_resources: 'sources',
+  source_read_resource: 'sources',
+  source_list_prompts: 'sources',
+  source_get_prompt: 'sources',
+};
+
+/**
+ * Session tools only the `coding` profile offers: the PR tools act on the session's PR carousel,
+ * which only Coding sessions have, so other sessions would just pay for their descriptions.
+ */
+export const CODING_ONLY_TOOLS: ReadonlySet<string> = new Set(['pr_status', 'pr_bind', 'pr_unbind', 'pr_set_auto_merge']);
+
 export interface SessionToolFilterOptions {
   /** Include the experimental send_developer_feedback tool. */
   includeDeveloperFeedback?: boolean;
@@ -811,6 +925,24 @@ export interface SessionToolFilterOptions {
    * forgets the option hides it instead of advertising a tool that cannot run.
    */
   includeDecide?: boolean;
+  /** Include `browser_tool` (the "Built-in browser" setting). Defaults to true. */
+  includeBrowser?: boolean;
+  /** Agent profile. `coding` keeps only {@link CODING_PROFILE_TOOLS}; `default` (when unset) drops {@link CODING_ONLY_TOOLS}. */
+  profile?: AgentProfile;
+  /** Coding profile: the session has at least one enabled source (keeps the `sources` tools). */
+  hasEnabledSources?: boolean;
+  /** Coding profile: the session is bound to a project (keeps the `project` tools). */
+  hasProject?: boolean;
+}
+
+/** Whether a coding-profile session keeps the tool `name` (see {@link CODING_PROFILE_TOOLS}). */
+function keptInCodingProfile(name: string, options: SessionToolFilterOptions | undefined): boolean {
+  switch (CODING_PROFILE_TOOLS[name]) {
+    case 'always': return true;
+    case 'sources': return options?.hasEnabledSources === true;
+    case 'project': return options?.hasProject === true;
+    default: return false;
+  }
 }
 
 /**
@@ -822,12 +954,23 @@ export interface SessionToolFilterOptions {
 export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionToolDef[] {
   const includeDeveloperFeedback = options?.includeDeveloperFeedback ?? true;
   const includeDecide = options?.includeDecide ?? false;
+  const includeBrowser = options?.includeBrowser ?? true;
+  const coding = options?.profile === 'coding';
 
   return SESSION_TOOL_DEFS.filter(def => {
     if (!includeDeveloperFeedback && def.name === 'send_developer_feedback') {
       return false;
     }
     if (!includeDecide && def.name === 'decide') {
+      return false;
+    }
+    if (!includeBrowser && def.name === 'browser_tool') {
+      return false;
+    }
+    if (coding && !keptInCodingProfile(def.name, options)) {
+      return false;
+    }
+    if (!coding && CODING_ONLY_TOOLS.has(def.name)) {
       return false;
     }
     return true;
@@ -935,17 +1078,12 @@ export interface JsonSchemaToolDef {
  * Convert session tool definitions to JSON Schema format.
  *
  * @param opts.prefix - Optional prefix for tool names (e.g., 'mcp__session__' for Pi)
- * @param opts.includeDeveloperFeedback - Include experimental feedback tool in output
- * @param opts.includeDecide - Include the decision-layer `decide` tool (default false)
+ * @param opts - Same visibility filters as {@link getSessionToolDefs} (feature flags, profile)
  * @returns Array of tool definitions with JSON Schema inputSchema
  */
-export function getToolDefsAsJsonSchema(opts?: {
-  prefix?: string;
-  includeDeveloperFeedback?: boolean;
-  includeDecide?: boolean;
-}): JsonSchemaToolDef[] {
+export function getToolDefsAsJsonSchema(opts?: SessionToolNameOptions): JsonSchemaToolDef[] {
   const prefix = opts?.prefix || '';
-  const defs = getSessionToolDefs({ includeDeveloperFeedback: opts?.includeDeveloperFeedback, includeDecide: opts?.includeDecide });
+  const defs = getSessionToolDefs(opts);
 
   return defs.map(def => {
     // Explicit `as any` avoids TS2589 ("type instantiation is excessively deep")

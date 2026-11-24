@@ -110,6 +110,12 @@ export interface CustomEndpointConfig {
   api: CustomEndpointApi;
   /** Explicit capability hint for arbitrary endpoints — never guessed automatically. */
   supportsImages?: boolean;
+  /**
+   * Output-token cap for every model on this endpoint (positive integer; default 8192).
+   * Pi also bounds compaction summaries by it, so raise it when long sessions fail
+   * to compact. Must not exceed what the server accepts.
+   */
+  maxTokens?: number;
 }
 
 /**
@@ -834,6 +840,7 @@ const BEDROCK_MODEL_MAP: Record<string, string> = {
   'claude-opus-5': 'us.anthropic.claude-opus-5',
   'claude-opus-4-8': 'us.anthropic.claude-opus-4-8',
   'claude-opus-4-7': 'us.anthropic.claude-opus-4-7',
+  'claude-fable-5-2': 'us.anthropic.claude-fable-5-2',
   'claude-fable-5-1': 'us.anthropic.claude-fable-5-1',
   'claude-fable-5': 'us.anthropic.claude-fable-5',
   'claude-sonnet-5-5': 'us.anthropic.claude-sonnet-5-5',
@@ -851,6 +858,7 @@ const BEDROCK_MODEL_MAP: Record<string, string> = {
   'anthropic.claude-opus-4-8': 'us.anthropic.claude-opus-4-8',
   'anthropic.claude-opus-4-7': 'us.anthropic.claude-opus-4-7',
   'anthropic.claude-opus-4-6-v1': 'us.anthropic.claude-opus-4-6-v1',
+  'anthropic.claude-fable-5-2': 'us.anthropic.claude-fable-5-2',
   'anthropic.claude-fable-5-1': 'us.anthropic.claude-fable-5-1',
   'anthropic.claude-fable-5': 'us.anthropic.claude-fable-5',
   'anthropic.claude-sonnet-5-5': 'us.anthropic.claude-sonnet-5-5',
@@ -868,6 +876,7 @@ const BEDROCK_REVERSE_MAP: Record<string, string> = {
   'us.anthropic.claude-opus-5-5': 'claude-opus-5-5',
   'us.anthropic.claude-opus-5': 'claude-opus-5',
   'us.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'us.anthropic.claude-fable-5-2': 'claude-fable-5-2',
   'us.anthropic.claude-fable-5-1': 'claude-fable-5-1',
   'us.anthropic.claude-fable-5': 'claude-fable-5',
   'us.anthropic.claude-opus-4-7': 'claude-opus-4-7',
@@ -884,6 +893,7 @@ const BEDROCK_REVERSE_MAP: Record<string, string> = {
   'eu.anthropic.claude-opus-5-5': 'claude-opus-5-5',
   'eu.anthropic.claude-opus-5': 'claude-opus-5',
   'eu.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'eu.anthropic.claude-fable-5-2': 'claude-fable-5-2',
   'eu.anthropic.claude-fable-5-1': 'claude-fable-5-1',
   'eu.anthropic.claude-fable-5': 'claude-fable-5',
   'eu.anthropic.claude-opus-4-7': 'claude-opus-4-7',
@@ -900,6 +910,7 @@ const BEDROCK_REVERSE_MAP: Record<string, string> = {
   'global.anthropic.claude-opus-5-5': 'claude-opus-5-5',
   'global.anthropic.claude-opus-5': 'claude-opus-5',
   'global.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'global.anthropic.claude-fable-5-2': 'claude-fable-5-2',
   'global.anthropic.claude-fable-5-1': 'claude-fable-5-1',
   'global.anthropic.claude-fable-5': 'claude-fable-5',
   'global.anthropic.claude-opus-4-7': 'claude-opus-4-7',
@@ -914,6 +925,7 @@ const BEDROCK_REVERSE_MAP: Record<string, string> = {
   'anthropic.claude-opus-5-5': 'claude-opus-5-5',
   'anthropic.claude-opus-5': 'claude-opus-5',
   'anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'anthropic.claude-fable-5-2': 'claude-fable-5-2',
   'anthropic.claude-fable-5-1': 'claude-fable-5-1',
   'anthropic.claude-fable-5': 'claude-fable-5',
   'anthropic.claude-opus-4-7': 'claude-opus-4-7',
@@ -1101,7 +1113,8 @@ export interface ResolvedAuthEnvVars {
  * Provider-agnostic: switches on providerType to determine which env vars
  * to set and how to retrieve credentials. Shared by:
  * - `SessionManager.reinitializeAuth()` (applies to process.env)
- * - `ClaudeAgent.postInit()` (applies to process.env + envOverrides)
+ * - `ClaudeAgent.postInit()` (keeps them for its own CLI processes, see buildClaudeSubprocessEnv,
+ *   and applies them to process.env)
  *
  * Providers that handle auth internally (openai, copilot, pi) return
  * empty envVars — their auth is managed in postInit() via native mechanisms.

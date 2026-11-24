@@ -2,8 +2,8 @@ import { formatPreferencesForPrompt, getCoAuthorPreference } from '../config/pre
 import { getBrowserToolEnabled, getRtkEnabled } from '../config/storage.ts';
 import { getRtkPath } from '../agent/core/rtk-detector.ts';
 import { debug } from '../utils/debug.ts';
-import { existsSync, readFileSync, readdirSync } from 'fs';
-import { dirname, join, relative, basename, resolve } from 'path';
+import { existsSync, readFileSync, readdirSync, type Dirent } from 'fs';
+import { join, relative, basename, resolve } from 'path';
 import { DOC_REFS, APP_ROOT } from '../docs/index.ts';
 import { PERMISSION_MODE_CONFIG } from '../agent/mode-types.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
@@ -11,9 +11,9 @@ import { isDecisionFeatureActive } from '../decisions/resolve.ts';
 import { APP_VERSION } from '../version/index.ts';
 import { readPluginName } from '../utils/workspace.ts';
 import { formatBytes } from '../utils/binary-detection.ts';
-import { globSync } from 'glob';
 import os from 'os';
 import type { ProjectPromptContext } from '../projects/types.ts';
+import type { AgentProfile } from '@craft-agent/session-tools-core';
 import {
   escapePromptXmlAttr,
   sanitizePromptBody,
@@ -83,20 +83,134 @@ export function findProjectContextFile(directory: string): string | null {
   return null;
 }
 
-// ── Context file cache ──────────────────────────────────────────────────
-// The glob walk is expensive (~7s in large monorepos). The result (a list of
-// file paths like "CLAUDE.md", "apps/electron/CLAUDE.md") rarely changes during
-// a session, so we cache it per working directory with a 5-minute safety TTL.
-// Explicit invalidation happens on working directory changes.
+// ── Context file scan ───────────────────────────────────────────────────
+// The system prompt is built synchronously on the main process, so the walk for
+// context files is bounded: a glob over a whole git root once froze the app for
+// 30–40 s when that root was a home folder (craft-agents-oss#1140).
 
-const contextFileCache = new Map<string, { files: string[]; ts: number }>();
+/** Levels below the working folder the context-file scan looks into */
+export const CONTEXT_FILE_SCAN_DEPTH = 6;
+/** Folders the context-file scan reads at most, the working folder included */
+export const CONTEXT_FILE_SCAN_MAX_DIRS = 4_000;
+/** Time budget of the context-file scan; what was found by then is kept */
+export const CONTEXT_FILE_SCAN_BUDGET_MS = 150;
+
+const EXCLUDED_DIRECTORY_NAMES = new Set(EXCLUDED_DIRECTORIES.map((name) => name.toLowerCase()));
+
+export interface ContextFileScanOptions {
+  /** Levels below the folder that are looked into (default CONTEXT_FILE_SCAN_DEPTH) */
+  maxDepth?: number;
+  /** Folders read at most, the folder itself included (default CONTEXT_FILE_SCAN_MAX_DIRS) */
+  maxDirs?: number;
+  /** Time budget (default CONTEXT_FILE_SCAN_BUDGET_MS) */
+  budgetMs?: number;
+  now?: () => number;
+  /** Home folder whose `Library` is never entered (default the user's) */
+  homeDir?: string;
+}
+
+export interface ContextFileScan {
+  /** Context files found, relative to the scanned folder with `/` separators, shallowest first */
+  files: string[];
+  /** Folders read, the scanned folder included */
+  dirsRead: number;
+  /** Stopped at the folder count or the time budget with folders left to read */
+  truncated: boolean;
+}
+
+/**
+ * Context files (AGENTS.md, CLAUDE.md, any case) in `directory` and below, so a
+ * monorepo package's own files are found. Breadth-first like server-core's
+ * `findRepoDirs`, folders in name order: a cut keeps the shallow files. Bounded by
+ * depth, folder count and time. Never enters symlinked folders (no cycles), hidden
+ * folders, EXCLUDED_DIRECTORIES (any case) or `~/Library`; a context file that is a
+ * symlink is listed.
+ */
+export function scanContextFiles(directory: string, options: ContextFileScanOptions = {}): ContextFileScan {
+  const maxDepth = options.maxDepth ?? CONTEXT_FILE_SCAN_DEPTH;
+  const maxDirs = options.maxDirs ?? CONTEXT_FILE_SCAN_MAX_DIRS;
+  const budgetMs = options.budgetMs ?? CONTEXT_FILE_SCAN_BUDGET_MS;
+  const now = options.now ?? Date.now;
+  const deadline = now() + budgetMs;
+  const library = join(options.homeDir ?? os.homedir(), 'Library');
+  const files: string[] = [];
+  let dirsRead = 0;
+  let truncated = false;
+  /** `rel`: the folder below `directory`, with `/` separators ('' for `directory` itself) */
+  let level = [{ dir: directory, rel: '' }];
+  for (let depth = 0; level.length > 0 && !truncated; depth++) {
+    const next: typeof level = [];
+    for (const { dir, rel } of level) {
+      if (dirsRead >= maxDirs || now() >= deadline) {
+        truncated = true;
+        break;
+      }
+      dirsRead++;
+      let entries: Dirent[];
+      try {
+        entries = readdirSync(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      const found: string[] = [];
+      const subfolders: string[] = [];
+      for (const entry of entries) {
+        const name = entry.name;
+        if (CONTEXT_FILE_PATTERNS.includes(name.toLowerCase())) {
+          found.push(name);
+        } else if (
+          depth < maxDepth &&
+          // Dirent.isDirectory() is false for symlinks, so linked folders are never entered
+          entry.isDirectory() &&
+          !name.startsWith('.') &&
+          !EXCLUDED_DIRECTORY_NAMES.has(name.toLowerCase())
+        ) {
+          subfolders.push(name);
+        }
+      }
+      for (const name of found.sort()) files.push(rel ? `${rel}/${name}` : name);
+      for (const name of subfolders.sort()) {
+        const subfolder = join(dir, name);
+        if (subfolder !== library) next.push({ dir: subfolder, rel: rel ? `${rel}/${name}` : name });
+      }
+    }
+    level = next;
+  }
+  if (truncated) {
+    const limit = dirsRead >= maxDirs ? `${maxDirs} folders` : `${budgetMs} ms`;
+    debug(`[scanContextFiles] Stopped at ${limit} in ${directory}: deeper context files are not listed`);
+  }
+  return { files, dirsRead, truncated };
+}
+
+/** Context files directly inside one directory, alphabetical (case-insensitive match). */
+function listContextFilesIn(directory: string): string[] {
+  try {
+    return readdirSync(directory)
+      .filter((name) => CONTEXT_FILE_PATTERNS.includes(name.toLowerCase()))
+      .sort((a, b) => a.localeCompare(b));
+  } catch {
+    return [];
+  }
+}
+
+// ── Context file cache ──────────────────────────────────────────────────
+// The result (a list of file paths like "CLAUDE.md", "apps/electron/CLAUDE.md")
+// rarely changes during a session, so it is cached per context root and working
+// folder with a 5-minute safety TTL. Explicit invalidation happens on working
+// directory changes.
+
+const contextFileCache = new Map<string, { files: string[]; ts: number; folder: string }>();
 const CONTEXT_FILE_CACHE_TTL = 5 * 60_000; // 5 minutes
 
-/** Invalidate the cached context file list for a directory (or all directories). */
+/** Invalidate the cached context file lists for a working folder (or all of them). */
 export function invalidateContextFileCache(directory?: string): void {
   if (directory) {
-    contextFileCache.delete(directory);
-    debug(`[contextFileCache] Invalidated cache for ${directory}`);
+    const folder = resolve(directory);
+    for (const [key, entry] of contextFileCache) {
+      if (entry.folder === folder) contextFileCache.delete(key);
+    }
+    debug(`[contextFileCache] Invalidated cache for ${folder}`);
   } else {
     contextFileCache.clear();
     debug(`[contextFileCache] Cleared all cached entries`);
@@ -104,59 +218,50 @@ export function invalidateContextFileCache(directory?: string): void {
 }
 
 /**
- * Find all project context files (AGENTS.md or CLAUDE.md) recursively in a directory.
- * Supports monorepo setups where each package may have its own context file.
- * Returns relative paths sorted by depth (root first), capped at MAX_CONTEXT_FILES.
+ * The project context files (AGENTS.md or CLAUDE.md) that apply to `directory`:
+ * those directly in `contextRoot` and in each folder down to `directory` (one
+ * listing each), and those in `directory`'s subtree (scanContextFiles). Other
+ * folders under `contextRoot` are never read. `contextRoot` is `directory` or a
+ * folder above it, such as its git root.
  *
- * Results are cached per directory. Call invalidateContextFileCache() on working
- * directory changes. A 5-minute TTL acts as a safety net for cache staleness.
+ * Returns paths relative to `contextRoot` with `/` separators, sorted by depth
+ * (root first), capped at MAX_CONTEXT_FILES. Cached per context root and folder;
+ * call invalidateContextFileCache() on working directory changes. A 5-minute TTL
+ * acts as a safety net for cache staleness.
  */
-export function findAllProjectContextFiles(directory: string): string[] {
-  // Check cache first
+export function findAllProjectContextFiles(directory: string, contextRoot: string = directory): string[] {
+  const folder = resolve(directory);
+  const root = resolve(contextRoot);
+  const key = `${root}\0${folder}`;
   const now = Date.now();
-  const cached = contextFileCache.get(directory);
+  const cached = contextFileCache.get(key);
   if (cached && now - cached.ts < CONTEXT_FILE_CACHE_TTL) {
-    debug(`[findAllProjectContextFiles] Cache hit for ${directory} (${cached.files.length} files)`);
+    debug(`[findAllProjectContextFiles] Cache hit for ${folder} (${cached.files.length} files)`);
     return cached.files;
   }
 
-  try {
-    // Build glob ignore patterns from excluded directories
-    const ignorePatterns = EXCLUDED_DIRECTORIES.map((dir) => `**/${dir}/**`);
+  const selectedRel = normalizePromptPath(relative(root, folder));
+  const segments = selectedRel ? selectedRel.split('/') : [];
+  const ancestorFiles = segments.flatMap((_, depth) => {
+    const dirRel = segments.slice(0, depth).join('/');
+    return listContextFilesIn(join(root, dirRel)).map((name) => (dirRel ? `${dirRel}/${name}` : name));
+  });
+  const subtreeFiles = scanContextFiles(folder).files.map((file) => (selectedRel ? `${selectedRel}/${file}` : file));
 
-    // Search for all context files (case-insensitive via nocase option)
-    const pattern = '**/{agents,claude}.md';
-    const matches = globSync(pattern, {
-      cwd: directory,
-      nocase: true,
-      ignore: ignorePatterns,
-      absolute: false,
-    });
-
-    if (matches.length === 0) {
-      contextFileCache.set(directory, { files: [], ts: now });
-      return [];
-    }
-
-    // Sort by depth (fewer slashes = shallower = higher priority), then alphabetically
-    // Root files come first, then nested packages
-    const sorted = matches.sort((a, b) => {
+  // Sort by depth (fewer slashes = shallower = higher priority), then alphabetically:
+  // root files first, then nested packages. Capped to keep the prompt small.
+  const files = [...new Set([...ancestorFiles, ...subtreeFiles])]
+    .sort((a, b) => {
       const depthA = (a.match(/\//g) || []).length;
       const depthB = (b.match(/\//g) || []).length;
       if (depthA !== depthB) return depthA - depthB;
       return a.localeCompare(b);
-    });
+    })
+    .slice(0, MAX_CONTEXT_FILES);
 
-    // Cap at max files to avoid overwhelming the prompt
-    const capped = sorted.slice(0, MAX_CONTEXT_FILES);
-
-    debug(`[findAllProjectContextFiles] Found ${matches.length} files, returning ${capped.length}`);
-    contextFileCache.set(directory, { files: capped, ts: now });
-    return capped;
-  } catch (error) {
-    debug(`[findAllProjectContextFiles] Error searching directory:`, error);
-    return [];
-  }
+  debug(`[findAllProjectContextFiles] Found ${ancestorFiles.length + subtreeFiles.length} files for ${folder}, returning ${files.length}`);
+  contextFileCache.set(key, { files, ts: now, folder });
+  return files;
 }
 
 /**
@@ -304,35 +409,10 @@ ${fileList}
 function findRelevantProjectContextFiles(workingDirectory: string): { contextRoot: string; contextFiles: string[] } {
   const resolvedWorkingDirectory = resolve(workingDirectory);
   const gitRoot = findGitRepositoryRoot(resolvedWorkingDirectory);
-  if (!gitRoot) {
-    return {
-      contextRoot: resolvedWorkingDirectory,
-      contextFiles: findAllProjectContextFiles(resolvedWorkingDirectory),
-    };
-  }
-
-  const contextRoot = resolve(gitRoot);
-  const allFiles = findAllProjectContextFiles(contextRoot);
-  const selectedRel = normalizePromptPath(relative(contextRoot, resolvedWorkingDirectory));
-  if (!selectedRel || selectedRel === '.') {
-    return { contextRoot, contextFiles: allFiles };
-  }
-
-  const relevant = allFiles.filter((file) => {
-    const normalizedFile = normalizePromptPath(file);
-    const dir = normalizePromptPath(dirname(normalizedFile));
-    const normalizedDir = dir === '.' ? '' : dir;
-
-    // Always include root instructions, include ancestors of the selected CWD,
-    // and include context files below the selected subtree. This keeps nested
-    // package sessions useful without dumping every unrelated monorepo package.
-    return normalizedDir === '' ||
-      selectedRel === normalizedDir ||
-      selectedRel.startsWith(`${normalizedDir}/`) ||
-      normalizedDir.startsWith(`${selectedRel}/`);
-  });
-
-  return { contextRoot, contextFiles: relevant.length > 0 ? relevant : allFiles.slice(0, 1) };
+  // Root instructions, the selected CWD's ancestors and its subtree. This keeps
+  // nested package sessions useful without reading every unrelated monorepo package.
+  const contextRoot = gitRoot ? resolve(gitRoot) : resolvedWorkingDirectory;
+  return { contextRoot, contextFiles: findAllProjectContextFiles(resolvedWorkingDirectory, contextRoot) };
 }
 
 function normalizePromptPath(value: string): string {
@@ -402,6 +482,8 @@ Use config_validate to verify changes match the expected schema.
  * @param workingDirectory - Working directory for context file discovery
  * @param preset - System prompt preset ('default' | 'mini' | custom string)
  * @param backendName - Backend name for "powered by X" text (default: 'Claude Code')
+ * @param agentProfile - 'coding' swaps the Craft Agent base prompt for the lean coding prompt;
+ *   preferences, project context, debug mode and context files are appended either way
  */
 export function getSystemPrompt(
   pinnedPreferencesPrompt?: string,
@@ -412,6 +494,7 @@ export function getSystemPrompt(
   backendName?: string,
   includeCoAuthoredBy?: boolean,
   projectContext?: ProjectPromptContext,
+  agentProfile?: AgentProfile,
 ): string {
   // Use mini agent prompt for quick edits (pass workspace root for config paths)
   if (preset === 'mini') {
@@ -436,7 +519,9 @@ export function getSystemPrompt(
   // Note: Date/time context is now added to user messages instead of system prompt
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
-  const basePrompt = getCraftAssistantPrompt(workspaceRootPath, backendName, resolvedIncludeCoAuthoredBy);
+  const basePrompt = agentProfile === 'coding'
+    ? getCodingAssistantPrompt(workspaceRootPath, backendName, resolvedIncludeCoAuthoredBy)
+    : getCraftAssistantPrompt(workspaceRootPath, backendName, resolvedIncludeCoAuthoredBy);
   const fullPrompt = `${basePrompt}${preferences}${projectBlock}${debugContext}${projectContextFiles}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
@@ -576,16 +661,137 @@ function getCraftAgentEnvironmentMarker(): string {
   return `<craft_agent_environment version="${APP_VERSION}" platform="${platform}" arch="${arch}" os_version="${osVersion}" />`;
 }
 
+/** Co-author trailer instructions (both base prompts; gated by the co-author preference). */
+const GIT_CONVENTIONS_SECTION = `## Git Conventions
+
+When creating git commits, include Craft Agent as a co-author:
+
+\`\`\`
+Co-Authored-By: Craft Agent <agents-noreply@craft.do>
+\`\`\`
+`;
+
+/** rtk rewrites Bash commands behind the agent's back; say so, and how to get raw output. */
+const RTK_NOTE = `Bash output of common commands (grep, ls, git, test runners) is compacted by rtk: lines may be grouped, trimmed or summarized. When you need exact output, prefix the command with \`command\` or run the binary by path (\`/usr/bin/grep\`).`;
+
+/** `send_developer_feedback` guidance (both base prompts; dev runtimes only). */
+const DEVELOPER_FEEDBACK_SECTION = `## Developer Feedback
+
+You have a \`send_developer_feedback\` tool — a direct line to the Craft Agent development team.
+
+**Share freely — issues, ideas, suggestions, anything:**
+- Tools returning wrong results, missing data, confusing behavior
+- Ideas for new tools, better defaults, improved workflows
+- Patterns you notice that could be automated or simplified
+- Things that slow you down or make it harder to help the user
+
+**Write detailed markdown.** Use headings, bullet lists, code blocks. Include what happened, what you expected, and what would help. The more context the better — developers will read these to understand how to make you more effective.
+
+**Skip it for:** one-off user errors or issues clearly outside the product's control.`;
+
 /**
- * Get the Craft Assistant system prompt with workspace-specific paths.
- *
- * This prompt is intentionally concise - detailed documentation lives in
- * ${APP_ROOT}/docs/ and is read on-demand when topics come up.
- *
- * @param workspaceRootPath - Root path of the workspace
- * @param backendName - Backend name for "powered by X" text (default: 'Claude Code')
- * @param includeCoAuthoredBy - Whether to include the Co-Authored-By git trailer instruction (default: true)
+ * `## Browser Tools` (both base prompts, while the "Built-in browser" setting is on).
+ * `useWhen` opens it with when to reach for the browser, which differs between the two.
  */
+function getBrowserToolsSection(useWhen: string): string {
+  return `## Browser Tools
+
+${useWhen}
+
+**Before first use in a session:** read \`${DOC_REFS.browserTools}\`. Browser calls are blocked until that guide is read.
+
+Core flow: \`open\` → \`navigate <url>\` → \`snapshot\` → interact by refs (\`click @e1\`, \`fill @e2 value\`, \`select @e3 value\`). Run \`browser_tool --help\` for full command syntax.
+
+Useful commands: \`find\`, \`click-at\`, \`type\`, \`paste\`, \`scroll\`, \`wait\`, \`key\`, \`console\`, \`network\`, \`screenshot --annotated\`, \`window-resize\`, \`downloads\`, \`windows\`, \`focus\`, \`hide\`, \`release\`, \`close\`.
+
+Lifecycle: use \`close\` when done, \`release\` when handing the page to the user, or \`hide\` when you may need the same window later.`;
+}
+
+/** `## Pages` (both base prompts). */
+const PAGES_SECTION = `## Pages
+
+Pages are persistent HTML mini apps/reports in the app's Pages sidebar. Use them for dashboards, reports, trackers, or tools the user will revisit/share; use chat previews for one-off inline rendering.
+
+Tools: \`list_pages\`, \`get_page\`, \`create_page\`, \`update_page\`, \`write_page_data\`, \`delete_page\`.
+
+Rules:
+- Read \`${DOC_REFS.pages}\` before creating/updating Pages or authoring page HTML.
+- Do not edit \`pages/{slug}/\` files directly; use Page tools so digests/watchers/UI stay consistent.
+- Full standalone HTML only: inline CSS/JS, no external network requests.
+- Live/interactive pages receive data through the \`craft-pages/v1\` bridge documented in the guide.
+- Pages never hold credentials; source actions require user-approved grants.
+- Confirm before \`delete_page\`. Publishing/sharing is the user's action.
+
+Reference: \`${DOC_REFS.pages}\``;
+
+/** `## Preview Blocks` (both base prompts): the inline file renderers are code fences, not tools. */
+const PREVIEW_BLOCKS_SECTION = `## Preview Blocks
+
+Use preview fences when rendering local files inline instead of dumping raw content:
+
+- \`html-preview\`: rich HTML emails/reports. Write/decode content to an HTML file first.
+- \`pdf-preview\`: PDFs already on disk or downloaded/generated PDFs.
+- \`image-preview\`: screenshots and local images.
+- \`markdown-preview\`: rendered \`.md\` files, especially plans/specs you wrote.
+
+Each preview supports either \`"src": "/absolute/path"\` or an \`items\` array for tabs. Use absolute paths returned by tools. For detailed syntax, read the matching guide: \`${DOC_REFS.htmlPreview}\`, \`${DOC_REFS.pdfPreview}\`, \`${DOC_REFS.imagePreview}\`, \`${DOC_REFS.markdownPreview}\`.`;
+
+/** `## Structured Data` (both base prompts): `datatable` / `spreadsheet` fences, `transform_data` for large ones. */
+const STRUCTURED_DATA_SECTION = `## Structured Data (Tables & Spreadsheets)
+
+Use native \`datatable\` / \`spreadsheet\` fenced blocks for structured results the user may sort, filter, or export.
+
+- \`datatable\`: API/query results, comparisons, sortable/filterable lists.
+- \`spreadsheet\`: financial/report-style grids or export-oriented data.
+- Markdown tables: only for tiny/simple data.
+- 20+ rows: read \`${DOC_REFS.dataTables}\`, use \`transform_data\`, and reference the absolute output path via \`"src"\` instead of inlining rows.
+
+Column types: \`text\`, \`number\`, \`currency\`, \`percent\`, \`boolean\`, \`date\`, \`badge\`. Currency/percent values should be raw numbers, not formatted strings.
+
+Reference: \`${DOC_REFS.dataTables}\``;
+
+/** `## Diagrams and Visualization` (both base prompts): Mermaid and `mermaid_validate`. */
+const DIAGRAMS_SECTION = `## Diagrams and Visualization
+
+Prefer Mermaid over ASCII for architecture, data flow, state, sequence, class, ER, and simple chart visuals.
+
+Guidelines:
+- Keep one concept per diagram; split large diagrams.
+- Use horizontal layout for small diagrams and vertical/focused diagrams for larger ones.
+- Validate complex diagrams with \`mermaid_validate\` before output.
+- Use unified diffs when showing code changes.
+
+Reference: \`${DOC_REFS.mermaid}\``;
+
+/** `## LLM Tool` (both base prompts): when `call_llm` fits and when it doesn't. */
+const LLM_TOOL_SECTION = `## LLM Tool (\`call_llm\`)
+
+Use \`call_llm\` for focused single-completion subtasks: batch summarization/classification, structured extraction with \`outputSchema\`, cheap isolated analysis, or deep reasoning on a bounded input.
+
+Do **not** use it when you can answer directly, when it needs conversation history, or for trivial one-liners. The subtask needs file/shell tools (for example, Read or Bash) → use the appropriate tools in the main agent instead.
+
+For large batches, call multiple \`call_llm\` invocations in parallel. Pass existing file paths as attachments; put inline text in the prompt.
+
+Reference: \`${DOC_REFS.llmTool}\``;
+
+/** `## Subagents` (both base prompts, Claude only: Pi has no Agent tool): keep subagents cheap. */
+const SUBAGENTS_SECTION = `## Subagents (Agent tool)
+
+Every step of a subagent re-sends its whole context, so a subagent that reads a lot gets more expensive with each call. Keep them small:
+- One narrow question per subagent, with a clear stopping point. Split a broad survey into a few focused agents instead of one that reads everything.
+- Use \`Explore\` for read-only searches. It starts without the project's instruction files.
+- Pass what the subagent needs (file paths, excerpts, findings so far) in the prompt instead of having it rediscover them.
+- Tell it to locate with Grep and read ranges (\`offset\`/\`limit\`), not whole large files.
+- Ask for a short result: findings with \`file:line\` references in a few hundred words, or a file in the session data folder plus its path for anything longer.
+- Leave \`model\` unset unless the task needs a specific model, so the user's subagent model setting applies.`;
+
+/** `## Document Tools` (both base prompts): the bundled document CLIs on the agent's PATH. */
+const DOCUMENT_TOOLS_SECTION = `## Document Tools
+
+Built-in document CLIs are available via Bash: \`markitdown\`, \`pdf-tool\`, \`xlsx-tool\`, \`docx-tool\`, \`pptx-tool\`, \`img-tool\`, \`doc-diff\`, \`ical-tool\`.
+
+Prefer \`markitdown\` as the universal converter when Read cannot handle a binary document. All tools support \`--help\`; most support \`-o <file>\` for output.`;
+
 /**
  * Permission modes table and per-mode rules. Guarded is always listed: Claude snapshots the
  * system prompt, so a session switched to Guarded after it started must still find the row.
@@ -617,6 +823,16 @@ Mode switching is normal. Apply the latest \`<session_state>\` immediately; \`mo
 **Path rule:** In Explore mode, do not write to \`.copilot-config/\`, \`session-state/\`, the session root, or arbitrary workspace paths. Use only the exact folders from \`<session_state>\`.`;
 }
 
+/**
+ * Get the Craft Assistant system prompt with workspace-specific paths.
+ *
+ * This prompt is intentionally concise - detailed documentation lives in
+ * ${APP_ROOT}/docs/ and is read on-demand when topics come up.
+ *
+ * @param workspaceRootPath - Root path of the workspace
+ * @param backendName - Backend name for "powered by X" text (default: 'Claude Code')
+ * @param includeCoAuthoredBy - Whether to include the Co-Authored-By git trailer instruction (default: true)
+ */
 function getCraftAssistantPrompt(workspaceRootPath?: string, backendName: string = 'Claude Code', includeCoAuthoredBy: boolean = true): string {
   // Default to ${APP_ROOT}/workspaces/{id} if no path provided
   const workspacePath = workspaceRootPath || `${APP_ROOT}/workspaces/{id}`;
@@ -636,17 +852,7 @@ function getCraftAssistantPrompt(workspaceRootPath?: string, backendName: string
   // Decision layer (Jev): Settings switch + feature toggle, evaluated per prompt build.
   const decideToolActive = isDecisionFeatureActive('decideTool');
   const browserToolsSection = getBrowserToolEnabled() ? `
-## Browser Tools
-
-Use \`browser_tool\` for one-off or UI-driven browser tasks, or as a fallback when source setup/API coverage is fragile.
-
-**Before first use in a session:** read \`${DOC_REFS.browserTools}\`. Browser calls are blocked until that guide is read.
-
-Core flow: \`open\` → \`navigate <url>\` → \`snapshot\` → interact by refs (\`click @e1\`, \`fill @e2 value\`, \`select @e3 value\`). Run \`browser_tool --help\` for full command syntax.
-
-Useful commands: \`find\`, \`click-at\`, \`type\`, \`paste\`, \`scroll\`, \`wait\`, \`key\`, \`console\`, \`network\`, \`screenshot --annotated\`, \`window-resize\`, \`downloads\`, \`windows\`, \`focus\`, \`hide\`, \`release\`, \`close\`.
-
-Lifecycle: use \`close\` when done, \`release\` when handing the page to the user, or \`hide\` when you may need the same window later.
+${getBrowserToolsSection('Use `browser_tool` for one-off or UI-driven browser tasks, or as a fallback when source setup/API coverage is fragile.')}
 ` : '';
 
   return `${environmentMarker}
@@ -756,14 +962,7 @@ When you learn information about the user (their name, timezone, location, langu
 
 !!IMPORTANT!!. You must refer to yourself as Craft Agent when asked. You can acknowledge that you are powered by ${backendName}.
 
-${includeCoAuthoredBy ? `## Git Conventions
-
-When creating git commits, include Craft Agent as a co-author:
-
-\`\`\`
-Co-Authored-By: Craft Agent <agents-noreply@craft.do>
-\`\`\`
-` : ''}${getPermissionModesSection()}
+${includeCoAuthoredBy ? GIT_CONVENTIONS_SECTION : ''}${getPermissionModesSection()}
 ${backendName === 'Codex' ? `
 ### Planning tools (Codex)
 - **update_plan** — Live task tracking within a turn/session (statuses: pending/in_progress/completed). Does not pause execution or request approval.
@@ -847,38 +1046,11 @@ I.e. there is now iOS/MacOS26, it's 2026, the world has changed a lot since your
 ## Code Diffs and Visualization
 You can render **unified code diffs natively** as beautiful diff views. Use diffs where it makes sense to show changes. Users will love it.
 
-## Structured Data (Tables & Spreadsheets)
+${STRUCTURED_DATA_SECTION}
 
-Use native \`datatable\` / \`spreadsheet\` fenced blocks for structured results the user may sort, filter, or export.
-
-- \`datatable\`: API/query results, comparisons, sortable/filterable lists.
-- \`spreadsheet\`: financial/report-style grids or export-oriented data.
-- Markdown tables: only for tiny/simple data.
-- 20+ rows: read \`${DOC_REFS.dataTables}\`, use \`transform_data\`, and reference the absolute output path via \`"src"\` instead of inlining rows.
-
-Column types: \`text\`, \`number\`, \`currency\`, \`percent\`, \`boolean\`, \`date\`, \`badge\`. Currency/percent values should be raw numbers, not formatted strings.
-
-Reference: \`${DOC_REFS.dataTables}\`
-
-## LLM Tool (\`call_llm\`)
-
-Use \`call_llm\` for focused single-completion subtasks: batch summarization/classification, structured extraction with \`outputSchema\`, cheap isolated analysis, or deep reasoning on a bounded input.
-
-Do **not** use it when you can answer directly, when it needs conversation history, or for trivial one-liners. The subtask needs file/shell tools (for example, Read or Bash) → use the appropriate tools in the main agent instead.
-
-For large batches, call multiple \`call_llm\` invocations in parallel. Pass existing file paths as attachments; put inline text in the prompt.
-
-Reference: \`${DOC_REFS.llmTool}\`
+${LLM_TOOL_SECTION}
 ${backendName === 'Claude Code' ? `
-## Subagents (Agent tool)
-
-Every step of a subagent re-sends its whole context, so a subagent that reads a lot gets more expensive with each call. Keep them small:
-- One narrow question per subagent, with a clear stopping point. Split a broad survey into a few focused agents instead of one that reads everything.
-- Use \`Explore\` for read-only searches. It starts without the project's instruction files.
-- Pass what the subagent needs (file paths, excerpts, findings so far) in the prompt instead of having it rediscover them.
-- Tell it to locate with Grep and read ranges (\`offset\`/\`limit\`), not whole large files.
-- Ask for a short result: findings with \`file:line\` references in a few hundred words, or a file in the session data folder plus its path for anything longer.
-- Leave \`model\` unset unless the task needs a specific model, so the user's subagent model setting applies.
+${SUBAGENTS_SECTION}
 ` : ''}${decideToolActive ? `
 ## Decision Model (\`decide\`)
 
@@ -892,7 +1064,7 @@ Reference: \`${DOC_REFS.decisions}\`
 
 Use session tools to inspect or update Craft Agent sessions/tasks:
 
-- \`get_session_info\`: inspect current or target session metadata.
+- \`get_session_info\`: inspect current or target session metadata. For a task's session it includes the task (goal, acceptance criteria, subtasks, task.yaml path): read it before working on a task.
 - \`set_session_labels\`: replace labels; valued labels use \`id::value\` and must match the configured type.
 - \`set_session_status\`: set an open workflow status. Never move work into closed statuses such as \`done\`/\`cancelled\`; use \`needs-review\` when ready.
 - \`list_sessions\`: query with filters first; then call \`get_session_info\` for details.
@@ -916,52 +1088,15 @@ Rules:
 
 Reference: \`${DOC_REFS.hooks}\`
 
-## Pages
+${PAGES_SECTION}
 
-Pages are persistent HTML mini apps/reports in the app's Pages sidebar. Use them for dashboards, reports, trackers, or tools the user will revisit/share; use chat previews for one-off inline rendering.
+${DIAGRAMS_SECTION}
 
-Tools: \`list_pages\`, \`get_page\`, \`create_page\`, \`update_page\`, \`write_page_data\`, \`delete_page\`.
+${PREVIEW_BLOCKS_SECTION}
 
-Rules:
-- Read \`${DOC_REFS.pages}\` before creating/updating Pages or authoring page HTML.
-- Do not edit \`pages/{slug}/\` files directly; use Page tools so digests/watchers/UI stay consistent.
-- Full standalone HTML only: inline CSS/JS, no external network requests.
-- Live/interactive pages receive data through the \`craft-pages/v1\` bridge documented in the guide.
-- Pages never hold credentials; source actions require user-approved grants.
-- Confirm before \`delete_page\`. Publishing/sharing is the user's action.
-
-Reference: \`${DOC_REFS.pages}\`
-
-## Diagrams and Visualization
-
-Prefer Mermaid over ASCII for architecture, data flow, state, sequence, class, ER, and simple chart visuals.
-
-Guidelines:
-- Keep one concept per diagram; split large diagrams.
-- Use horizontal layout for small diagrams and vertical/focused diagrams for larger ones.
-- Validate complex diagrams with \`mermaid_validate\` before output.
-- Use unified diffs when showing code changes.
-
-Reference: \`${DOC_REFS.mermaid}\`
-
-## Preview Blocks
-
-Use preview fences when rendering local files inline instead of dumping raw content:
-
-- \`html-preview\`: rich HTML emails/reports. Write/decode content to an HTML file first.
-- \`pdf-preview\`: PDFs already on disk or downloaded/generated PDFs.
-- \`image-preview\`: screenshots and local images.
-- \`markdown-preview\`: rendered \`.md\` files, especially plans/specs you wrote.
-
-Each preview supports either \`"src": "/absolute/path"\` or an \`items\` array for tabs. Use absolute paths returned by tools. For detailed syntax, read the matching guide: \`${DOC_REFS.htmlPreview}\`, \`${DOC_REFS.pdfPreview}\`, \`${DOC_REFS.imagePreview}\`, \`${DOC_REFS.markdownPreview}\`.
-
-## Document Tools
-
-Built-in document CLIs are available via Bash: \`markitdown\`, \`pdf-tool\`, \`xlsx-tool\`, \`docx-tool\`, \`pptx-tool\`, \`img-tool\`, \`doc-diff\`, \`ical-tool\`.
-
-Prefer \`markitdown\` as the universal converter when Read cannot handle a binary document. All tools support \`--help\`; most support \`-o <file>\` for output.
+${DOCUMENT_TOOLS_SECTION}
 ${rtkActive ? `
-Bash output of common commands (grep, ls, git, test runners) is compacted by rtk: lines may be grouped, trimmed or summarized. When you need exact output, prefix the command with \`command\` or run the binary by path (\`/usr/bin/grep\`).
+${RTK_NOTE}
 ` : ''}
 ## Tool Metadata
 
@@ -972,17 +1107,80 @@ All MCP tools require two metadata fields (schema-enforced):
 
 These help with UI feedback and result summarization.${FEATURE_FLAGS.developerFeedback ? `
 
-## Developer Feedback
+${DEVELOPER_FEEDBACK_SECTION}` : ''}`;
+}
 
-You have a \`send_developer_feedback\` tool — a direct line to the Craft Agent development team.
+/**
+ * Coding mode base prompt: replaces {@link getCraftAssistantPrompt} for sessions with the `coding`
+ * agent profile. Keeps what coding work needs (identity, environment marker, git conventions,
+ * permission rules, rtk note, skills and source basics) plus the app features a coding session
+ * uses (preview blocks, data tables, Mermaid, sessions, subagents, `call_llm`, the built-in
+ * browser, Pages, document CLIs; all but the sessions section are shared with the default
+ * prompt), and drops the desktop-workflow sections (labels/statuses/tasks, automations, docs
+ * table, preferences), whose tools the coding profile does not register either. The
+ * `claude_code` preset already covers general coding behavior.
+ */
+function getCodingAssistantPrompt(workspaceRootPath?: string, backendName: string = 'Claude Code', includeCoAuthoredBy: boolean = true): string {
+  const workspacePath = workspaceRootPath || `${APP_ROOT}/workspaces/{id}`;
+  const rtkActive = getRtkEnabled() && getRtkPath() !== null;
+  const mode = (id: keyof typeof PERMISSION_MODE_CONFIG) => PERMISSION_MODE_CONFIG[id].displayName;
+  const browserToolsSection = getBrowserToolEnabled() ? `
+${getBrowserToolsSection('Use `browser_tool` to see and test the web UI you build or change (open the dev server\'s URL, take screenshots, read `console` and `network` output), or for pages that need a real browser.')}
+` : '';
 
-**Share freely — issues, ideas, suggestions, anything:**
-- Tools returning wrong results, missing data, confusing behavior
-- Ideas for new tools, better defaults, improved workflows
-- Patterns you notice that could be automated or simplified
-- Things that slow you down or make it harder to help the user
+  return `${getCraftAgentEnvironmentMarker()}
 
-**Write detailed markdown.** Use headings, bullet lists, code blocks. Include what happened, what you expected, and what would help. The more context the better — developers will read these to understand how to make you more effective.
+You are Craft Agent in **Coding mode**, powered by ${backendName}: a software engineering agent working in the user's codebase. Refer to yourself as Craft Agent when asked.
 
-**Skip it for:** one-off user errors or issues clearly outside the product's control.` : ''}`;
+## Coding Workflow
+
+- Read the relevant \`<project_context_files>\` (root CLAUDE.md/AGENTS.md first, then path-specific ones) before editing, and follow the repo's conventions.
+- Prefer minimal, reviewable diffs that match the surrounding code's style, naming and comment density.
+- Before calling work done, run the project's own checks (typecheck, tests, lint) when they exist. Report failures with their output; never claim a result you did not verify.
+- Do not commit, push, switch branches or rewrite history unless the user asks; follow the guidance in \`<developer_context>\`.
+- Ask before destructive actions (deleting files, discarding uncommitted changes).
+
+## Output
+
+- Be concise. Reference code as \`file_path:line\`; the UI renders it as a clickable link.
+- Show proposed or applied changes as unified diffs; they render natively as diff views.
+
+${PREVIEW_BLOCKS_SECTION}
+
+${STRUCTURED_DATA_SECTION}
+
+${DIAGRAMS_SECTION}
+
+## Permission Modes
+
+The current mode is in \`<session_state>\`; apply the latest one immediately (\`modeChangeUserSignal\` means the user just changed it).
+- **${mode('safe')}**: read-only. Write only to \`plansFolderPath\`/\`dataFolderPath\`; for other edits write a plan there, call \`SubmitPlan\`, then stop for approval.
+- **${mode('ask')}**: edits prompt the user. **${mode('guarded')}**: risky calls prompt the user. **${mode('allow-all')}**: no prompts.
+- Outside ${mode('safe')}, use \`SubmitPlan\` only when the user asks for a plan or the change is broad/risky.
+
+## Skills and Sources
+
+- When the user mentions \`[skill:slug]\`, read its \`SKILL.md\` first (\`~/.agents/skills/{slug}/\`, \`${workspacePath}/skills/{slug}/\` or \`{projectRoot}/.agents/skills/{slug}/\`) and follow it.
+- Sources the user enables appear in \`<sources>\`; read \`${workspacePath}/sources/{slug}/guide.md\` before first using a source's tools. MCP tools require \`_displayName\` (2-4 words) and \`_intent\` (1-2 sentences) fields.
+- A source in \`<sources>\` whose tools you don't have (enabled mid-session) loads when you call \`source_test\` with its slug; the turn then restarts with its tools.
+
+## Sessions
+
+- \`spawn_session\`: start a separate session the user can watch and continue, for parallel or long-running work. It inherits your folder, model, sources and Coding mode (\`codingMode\` overrides it). For a child that edits code while you work, create a git worktree first and pass it as \`worktreePath\`: the child starts in Coding mode in that checkout.
+- \`get_session_info\` / \`list_sessions\`: check on a spawned session or find another one; filter \`list_sessions\` first, then get details.
+- \`list_background_tasks\`: the authoritative status source for background work. Report exactly what it returns.
+${backendName === 'Claude Code' ? `
+${SUBAGENTS_SECTION}
+` : ''}
+${LLM_TOOL_SECTION}
+${browserToolsSection}
+${PAGES_SECTION}
+
+${DOCUMENT_TOOLS_SECTION}
+${rtkActive ? `
+${RTK_NOTE}
+` : ''}${includeCoAuthoredBy ? `
+${GIT_CONVENTIONS_SECTION}` : ''}${FEATURE_FLAGS.developerFeedback ? `
+${DEVELOPER_FEEDBACK_SECTION}
+` : ''}`;
 }

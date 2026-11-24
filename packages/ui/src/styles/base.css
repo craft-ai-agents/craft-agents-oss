@@ -504,10 +504,19 @@ html[data-font="inter"] {
   50% { opacity: 0.5; }
 }
 
+/* Armed auto-fix (PR card's Fix toggle): the wrench turns slowly while it watches for review comments */
+.animate-autofix-spin {
+  animation: autofix-spin 3s linear infinite;
+  transform-origin: 50% 50%;
+}
+@keyframes autofix-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Reduced motion: decorative loops stop (the spinner stays — it is the progress signal) and
    drawers fade instead of sliding. */
 @media (prefers-reduced-motion: reduce) {
-  :root:not([data-motion="full"]) :is(.skeleton, .animate-shimmer-text, .animate-shimmer-loading),
+  :root:not([data-motion="full"]) :is(.skeleton, .animate-shimmer-text, .animate-shimmer-loading, .animate-autofix-spin),
   :root:not([data-motion="full"]) .animate-shimmer::after {
     animation: none;
   }
@@ -518,7 +527,7 @@ html[data-font="inter"] {
     animation-name: ca-fade-out !important;
   }
 }
-:root[data-motion="reduced"] :is(.skeleton, .animate-shimmer-text, .animate-shimmer-loading),
+:root[data-motion="reduced"] :is(.skeleton, .animate-shimmer-text, .animate-shimmer-loading, .animate-autofix-spin),
 :root[data-motion="reduced"] .animate-shimmer::after {
   animation: none;
 }

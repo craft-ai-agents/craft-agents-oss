@@ -55,7 +55,7 @@ export type {
   AuthRequestType,
   AuthStatus,
 } from './message.ts';
-export { generateMessageId } from './message.ts';
+export { generateMessageId, withoutRetractedMessages } from './message.ts';
 
 // Message persistence mappers
 export { messageToStored, storedToMessage } from './message-mapper.ts';

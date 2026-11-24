@@ -10,7 +10,7 @@
  */
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
-import { z } from 'zod';
+import { SpawnSessionSchema, TOOL_DESCRIPTIONS } from '@craft-agent/session-tools-core';
 import type { SpawnSessionResult, SpawnSessionHelpResult } from './base-agent.ts';
 
 export type SpawnSessionFn = (input: Record<string, unknown>) => Promise<SpawnSessionResult | SpawnSessionHelpResult>;
@@ -40,48 +40,10 @@ export interface SpawnSessionToolOptions {
 export function createSpawnSessionTool(options: SpawnSessionToolOptions) {
   return tool(
     'spawn_session',
-    `Create a new session that runs independently with its own prompt, connection, model, and sources.
-
-Use this to delegate tasks to parallel sessions — research, analysis, drafts, or any work that benefits from separate context.
-
-Call with help=true first to discover available connections, models, and sources.
-When spawning, the 'prompt' parameter is required.
-
-Optional overrides: model, llmConnection, permissionMode, thinkingLevel, enabledSourceSlugs, labels, workingDirectory. Omitted fields inherit from the spawning session or the workspace default.
-
-thinkingLevel is silently ignored on non-reasoning models (e.g. gpt-4o, gemini-2.5-flash) — the SDK drops the reasoning param rather than erroring.
-
-The spawned session appears in the session list and runs fire-and-forget.
-Only use 'attachments' for existing file paths on disk — the tool reads them automatically.`,
-    {
-      help: z.boolean().optional()
-        .describe('If true, returns available connections, models, and sources instead of creating a session'),
-      prompt: z.string().optional()
-        .describe('Instructions for the new session (required when not in help mode)'),
-      name: z.string().optional()
-        .describe('Session name'),
-      llmConnection: z.string().optional()
-        .describe('Connection slug (e.g., "anthropic-api", "codex")'),
-      model: z.string().optional()
-        .describe('Model ID override'),
-      enabledSourceSlugs: z.array(z.string()).optional()
-        .describe('Source slugs to enable in the new session'),
-      permissionMode: z.enum(['safe', 'ask', 'guarded', 'allow-all']).optional()
-        .describe('Permission mode for the new session'),
-      thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional()
-        .describe('Reasoning level for the new session. Silently ignored on non-reasoning models (e.g. gpt-4o, gemini-2.5-flash). Omit to inherit the workspace default.'),
-      labels: z.array(z.string()).optional()
-        .describe('Labels for the new session'),
-      workingDirectory: z.string().optional()
-        .describe('Working directory for the new session'),
-      projectId: z.string().optional()
-        .describe('Workspace project id to bind the new session to. Inherits the project working directory unless overridden.'),
-      attachments: z.array(z.object({
-        path: z.string().describe('Absolute file path on disk'),
-        name: z.string().optional().describe('Display name (defaults to file basename)'),
-      })).optional()
-        .describe('Files to include with the prompt'),
-    },
+    TOOL_DESCRIPTIONS.spawn_session,
+    // Same schema as the Pi backend; the cast bridges the Zod generic variance of `.shape` (see registryTool).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    SpawnSessionSchema.shape as any,
     async (args) => {
       const spawnFn = options.getSpawnSessionFn();
       if (!spawnFn) {

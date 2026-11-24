@@ -12,7 +12,11 @@
 import * as React from 'react'
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Webhook } from 'lucide-react'
+import { useAtomValue } from 'jotai'
+import { AlertCircle, Webhook } from 'lucide-react'
+import { automationLoadIssuesAtom } from '@/atoms/automations'
+import { Info_Alert } from '@/components/info/Info_Alert'
+import { Info_Badge } from '@/components/info/Info_Badge'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
@@ -108,7 +112,12 @@ function AutomationItem({
         getEventDisplayName(automation.event),
         automation.actions.some(a => a.type === 'prompt') ? t('automations.badgePrompt') : null,
         automation.actions.some(a => a.type === 'webhook') ? t('automations.badgeWebhook') : null,
+        automation.actions.some(a => a.type === 'script') ? t('automations.badgeScript') : null,
       ].filter(Boolean).join(' · ')}
+      subtitleTrailing={automation.issues ? (
+        // ml-auto: a status, so it sits on the row's right edge (the trailing slot is a left-filled 55% label budget)
+        <Info_Badge color="destructive" className="ml-auto shrink-0">{t('automations.notRunning')}</Info_Badge>
+      ) : undefined}
       titleTrailing={
         automation.lastExecutedAt ? (
           <Tooltip>
@@ -137,6 +146,33 @@ function AutomationItem({
       }
       contextMenuContent={isMultiSelectActive && isInMultiSelect ? <BatchAutomationMenu /> : undefined}
     />
+  )
+}
+
+// ============================================================================
+// NotRunningBanner
+// ============================================================================
+
+/**
+ * Shown when something in automations.json won't run. Rows that won't run carry
+ * a "Not running" chip (their detail page says why); problems no row can show —
+ * e.g. the file isn't valid JSON — are listed here.
+ */
+function NotRunningBanner({ fileIssues, hasRowIssues }: { fileIssues: string[]; hasRowIssues: boolean }) {
+  const { t } = useTranslation()
+  if (fileIssues.length === 0 && !hasRowIssues) return null
+  return (
+    <div className="px-gutter pt-2 pb-1">
+      <Info_Alert variant="error" inline icon={<AlertCircle />}>
+        <Info_Alert.Title>{t('automations.notRunningBannerTitle')}</Info_Alert.Title>
+        <Info_Alert.Description>
+          {fileIssues.map((message, i) => (
+            <span key={i} className="block break-words">{message}</span>
+          ))}
+          <span className="block">{t('automations.notRunningBannerHint')}</span>
+        </Info_Alert.Description>
+      </Info_Alert>
+    </div>
   )
 }
 
@@ -187,6 +223,9 @@ export function AutomationsListPanel({
     isMultiSelectActive,
     isSelected: isInSelection,
   } = useAutomationSelection()
+
+  const fileIssues = useAtomValue(automationLoadIssuesAtom)
+  const banner = <NotRunningBanner fileIssues={fileIssues} hasRowIssues={automations.some(a => a.issues)} />
 
   const isSearchMode = searchActive && searchQuery.length >= 2
 
@@ -239,6 +278,7 @@ export function AutomationsListPanel({
   if (automations.length === 0) {
     return (
       <div className={cn('flex flex-col flex-1 min-h-0', className)}>
+        {banner}
         <EntityListEmptyScreen
           icon={<Webhook />}
           title={t('automations.noAutomationsConfigured')}
@@ -276,6 +316,8 @@ export function AutomationsListPanel({
           resultCount={isSearchMode ? filteredAutomations.length : undefined}
         />
       )}
+
+      {banner}
 
       {/* Filtered empty state */}
       {filteredAutomations.length === 0 ? (

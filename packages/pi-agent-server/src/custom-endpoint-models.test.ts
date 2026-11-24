@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import {
+  DEFAULT_CUSTOM_ENDPOINT_MAX_TOKENS,
   buildCustomEndpointModelDef,
   normalizeCustomEndpointModelEntry,
   stripPiPrefix,
@@ -64,6 +65,22 @@ describe('buildCustomEndpointModelDef', () => {
     const model = buildCustomEndpointModelDef('vision-model', undefined, { supportsImages: true, contextWindow: 262_144 })
     expect(model.input).toEqual(['text', 'image'])
     expect(model.contextWindow).toBe(262_144)
+  })
+
+  // Regression: craft-agents-oss#1100 — Pi caps compaction summaries at model.maxTokens,
+  // so a fixed 8192 made long-session compaction fail on custom endpoints.
+  it('caps output at the conservative default when the connection sets no maxTokens', () => {
+    expect(buildCustomEndpointModelDef('my-model').maxTokens).toBe(DEFAULT_CUSTOM_ENDPOINT_MAX_TOKENS)
+  })
+
+  it('honors the connection-level maxTokens override', () => {
+    expect(buildCustomEndpointModelDef('my-model', { maxTokens: 32_768 }).maxTokens).toBe(32_768)
+  })
+
+  it('ignores maxTokens values that are not positive integers', () => {
+    for (const maxTokens of [0, -1, 1.5, Number.NaN, '32768' as unknown as number]) {
+      expect(buildCustomEndpointModelDef('my-model', { maxTokens }).maxTokens).toBe(DEFAULT_CUSTOM_ENDPOINT_MAX_TOKENS)
+    }
   })
 
   // Regression: craft-agents-oss#1022 — strict OpenAI-compatible gateways 400 on the

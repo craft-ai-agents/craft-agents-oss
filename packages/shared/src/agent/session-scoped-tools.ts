@@ -15,10 +15,11 @@
  * - call_llm (backend-specific, not in registry)
  */
 
-import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
+import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { getSessionPlansPath, getSessionPath } from '../sessions/storage.ts';
 import { DOC_REFS } from '../docs/index.ts';
 import { createClaudeContext } from './claude-context.ts';
+import { createToolServer, type ToolServer } from './backend/claude/live-mcp-servers.ts';
 import { basename } from 'node:path';
 
 // Import from session-tools-core: registry + schemas + base descriptions
@@ -30,6 +31,7 @@ import {
   // Types
   type ToolResult,
   type AuthRequest,
+  type SessionToolFilterOptions,
 } from '@craft-agent/session-tools-core';
 import { createLLMTool, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
 import { createSpawnSessionTool, type SpawnSessionFn } from './spawn-session-tool.ts';
@@ -162,9 +164,12 @@ function convertResult(result: ToolResult): { content: Array<{ type: 'text'; tex
 // Cache for Session-Scoped Tools
 // ============================================================
 
+/** Profile inputs for the session tool set (see `getSessionToolDefs` in session-tools-core). */
+export type SessionToolProfileOptions = Pick<SessionToolFilterOptions, 'profile' | 'hasEnabledSources' | 'hasProject'>;
+
 // Cache tools by session to avoid recreating them on every query.
 // We cache the tools array (expensive to build) but NOT the MCP server wrapper,
-// because createSdkMcpServer returns an MCP Server instance that holds transport
+// because createToolServer returns an MCP Server instance that holds transport
 // state. The SDK's query() calls connect() on it, setting _transport. On the next
 // query(), connect() is called again — but if the previous Query's subprocess hasn't
 // fully exited yet, _transport is still set and connect() throws
@@ -218,9 +223,14 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
 export function getSessionScopedTools(
   sessionId: string,
   workspaceRootPath: string,
-  workspaceId?: string
-): ReturnType<typeof createSdkMcpServer> {
-  const cacheKey = `${sessionId}::${workspaceRootPath}`;
+  workspaceId?: string,
+  profileOptions?: SessionToolProfileOptions,
+): ToolServer {
+  // A coding session's tool set depends on its profile inputs, so they are part of its key.
+  // The default key is unchanged: the default tool set does not depend on them.
+  const cacheKey = profileOptions?.profile === 'coding'
+    ? `${sessionId}::${workspaceRootPath}::coding:${profileOptions.hasEnabledSources ? 1 : 0}:${profileOptions.hasProject ? 1 : 0}`
+    : `${sessionId}::${workspaceRootPath}`;
 
   // Return cached tools if available, but always create a fresh MCP server wrapper
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -260,45 +270,54 @@ export function getSessionScopedTools(
     // Ensure backend-mode tool wiring is in sync with core metadata.
     assertClaudeBackendSessionToolParity();
 
-    // Create tools from the canonical registry — all tools with handlers.
-    // Tool visibility is centrally filtered in session-tools-core to avoid backend drift.
-    tools = getSessionToolDefs({
+    // Tool visibility is centrally filtered in session-tools-core to avoid backend drift:
+    // feature flags, the "Built-in browser" setting and the agent profile (coding mode).
+    const defs = getSessionToolDefs({
       includeDeveloperFeedback: FEATURE_FLAGS.developerFeedback,
       // `decide` is advertised only while the decision layer is on; the tool list
       // is built per agent, so toggling the setting applies to new sessions.
       includeDecide: isDecisionFeatureActive('decideTool'),
-    })
-      .filter(def => def.handler !== null) // Skip backend-specific tools (call_llm)
+      // Users with external browser tools (Playwright, Puppeteer, etc.) can disable the built-in one.
+      includeBrowser: getBrowserToolEnabled(),
+      ...profileOptions,
+    });
+    const visible = new Set(defs.map(def => def.name));
+
+    // Registry tools — all tools with handlers
+    tools = defs
+      .filter(def => def.handler !== null) // Backend-specific tools are added below
       .map(def => registryTool(def.name, def.inputSchema.shape));
 
     // Add call_llm — backend-specific (not in registry handler)
-    const sessionPath = getSessionPath(workspaceRootPath, sessionId);
-    tools.push(
-      createLLMTool({
-        sessionId,
-        sessionPath,
-        getQueryFn: () => {
-          const callbacks = getSessionScopedToolCallbacks(sessionId);
-          return callbacks?.queryFn;
-        },
-      }),
-    );
+    if (visible.has('call_llm')) {
+      const sessionPath = getSessionPath(workspaceRootPath, sessionId);
+      tools.push(
+        createLLMTool({
+          sessionId,
+          sessionPath,
+          getQueryFn: () => {
+            const callbacks = getSessionScopedToolCallbacks(sessionId);
+            return callbacks?.queryFn;
+          },
+        }),
+      );
+    }
 
     // Add spawn_session — backend-specific (not in registry handler)
-    tools.push(
-      createSpawnSessionTool({
-        sessionId,
-        getSpawnSessionFn: () => {
-          const callbacks = getSessionScopedToolCallbacks(sessionId);
-          return callbacks?.spawnSessionFn;
-        },
-      }),
-    );
+    if (visible.has('spawn_session')) {
+      tools.push(
+        createSpawnSessionTool({
+          sessionId,
+          getSpawnSessionFn: () => {
+            const callbacks = getSessionScopedToolCallbacks(sessionId);
+            return callbacks?.spawnSessionFn;
+          },
+        }),
+      );
+    }
 
     // Add browser_* tools — backend-specific (requires BrowserPaneManager in Electron)
-    // Gated by the "Built-in browser" setting so users with external browser tools
-    // (Playwright, Puppeteer, etc.) can disable the built-in one.
-    if (getBrowserToolEnabled()) {
+    if (visible.has('browser_tool')) {
       tools.push(
         ...createBrowserTools({
           sessionId,
@@ -315,7 +334,7 @@ export function getSessionScopedTools(
 
   // Always create a fresh MCP server wrapper to avoid "Already connected to a transport"
   // race condition when queries are sent back-to-back (see comment on sessionToolsCache).
-  return createSdkMcpServer({
+  return createToolServer({
     name: 'session',
     version: '1.0.0',
     tools,

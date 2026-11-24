@@ -42,6 +42,7 @@ import { getFileManagerName } from '@/lib/platform'
 import type { SessionMeta } from '@/atoms/sessions'
 import { getSessionStatus, hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
 import { MessagingSessionMenuItem } from '@/components/messaging/MessagingSessionMenuItem'
+import { SendCraftyHereMenuItem } from '@/components/crafty/SendCraftyHereMenuItem'
 import { useSessionMenuActions } from '@/hooks/useSessionMenuActions'
 
 export interface SessionMenuProjectOption {
@@ -152,6 +153,9 @@ export function SessionMenu({
 
       {/* Connect to Messaging — pairing code flow */}
       <MessagingSessionMenuItem sessionId={sessionId} />
+
+      {/* Crafty (macOS, when switched on): its questions land in this session */}
+      <SendCraftyHereMenuItem sessionId={sessionId} workspaceId={item.workspaceId} isArchived={isArchived} />
 
       <Separator />
 

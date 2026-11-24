@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'fs/promises'
 import { join } from 'path'
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { RPC_CHANNELS, AUTOMATIONS_LOAD_ISSUES_KEY } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { appendAutomationHistoryEntry } from '@craft-agent/shared/automations/history-store'
 import { AUTOMATION_HISTORY_MAX_RUNS_PER_MATCHER } from '@craft-agent/shared/automations/constants'
@@ -81,10 +81,26 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
       const configPath = resolveAutomationsConfigPath(workspace.rootPath)
       log.info(`AUTOMATIONS_GET: Reading config from: ${configPath}`)
       const content = await readFile(configPath, 'utf-8')
-      const parsed = JSON.parse(content)
-      const eventCount = parsed?.automations ? Object.keys(parsed.automations).length : 0
-      log.info(`AUTOMATIONS_GET: Loaded ${eventCount} event type(s) from ${configPath}`)
-      return parsed
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(content)
+      } catch (parseError) {
+        // Show why on the Automations screen instead of an unexplained empty list.
+        const message = parseError instanceof Error ? parseError.message : String(parseError)
+        log.warn(`AUTOMATIONS_GET: ${configPath} is not valid JSON: ${message}`)
+        return { automations: {}, [AUTOMATIONS_LOAD_ISSUES_KEY]: [{ messages: [`automations.json is not valid JSON: ${message}`] }] }
+      }
+      // The raw config is what the screen lists; the same lenient load the runtime
+      // uses says which entries won't run and why, so the two always agree.
+      const { loadAutomationsConfigLenient } = await import('@craft-agent/shared/automations')
+      const { issues } = loadAutomationsConfigLenient(parsed)
+      const raw = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown>
+        : { automations: {} }
+      const eventMap = raw.automations
+      const eventCount = eventMap && typeof eventMap === 'object' ? Object.keys(eventMap).length : 0
+      log.info(`AUTOMATIONS_GET: Loaded ${eventCount} event type(s) from ${configPath}${issues.length > 0 ? `, ${issues.length} will not run` : ''}`)
+      return { ...raw, [AUTOMATIONS_LOAD_ISSUES_KEY]: issues }
     } catch (error) {
       if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
         log.info(`AUTOMATIONS_GET: No automations.json found for workspace ${workspaceId}`)

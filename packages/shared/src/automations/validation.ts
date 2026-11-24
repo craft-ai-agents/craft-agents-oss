@@ -2,14 +2,16 @@
  * Automation System Validation
  *
  * Validators for automations.json configuration files.
- * Used by PreToolUse automations and workspace validators.
+ * Used by the automation runtime (lenient load), config_validate, the
+ * craft-agent CLI and the config-file write checks (strict).
  */
 
 import { readFileSync, existsSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { resolveAutomationsConfigPath } from './resolve-config-path.ts';
 import { AUTOMATIONS_CONFIG_FILE } from './constants.ts';
-import { AutomationsConfigSchema, zodErrorToIssues, DEPRECATED_EVENT_ALIASES } from './schemas.ts';
+import { AutomationsConfigSchema, AutomationMatcherSchema, zodErrorToIssues, DEPRECATED_EVENT_ALIASES, VALID_EVENTS } from './schemas.ts';
+import { AGENT_EVENTS } from './types.ts';
 import { isValidLabelId } from '../labels/storage.ts';
 import { extractLabelId } from '../labels/values.ts';
 import { getLlmConnection } from '../config/storage.ts';
@@ -17,7 +19,14 @@ import { getDefaultModelsForConnection } from '../config/llm-connections.ts';
 import type { ModelDefinition } from '../config/models.ts';
 import { Cron } from 'croner';
 import type { ValidationResult, ValidationIssue } from '../config/validators.ts';
-import type { AutomationsConfig, AutomationsValidationResult } from './types.ts';
+import type {
+  AutomationsConfig,
+  AutomationsValidationResult,
+  AutomationMatcher,
+  AutomationEvent,
+  AutomationLoadIssue,
+  AutomationsLenientLoadResult,
+} from './types.ts';
 import { MAX_CONDITION_DEPTH_EXCLUSIVE, CONDITION_DEPTH_WARNING_THRESHOLD } from './conditions-constants.ts';
 
 /**
@@ -47,6 +56,119 @@ export function validateAutomationsConfig(content: unknown): AutomationsValidati
 }
 
 /**
+ * Lenient load for the runtime and the Automations screen: keep every matcher
+ * that validates, skip and report the rest.
+ *
+ * The strict validateAutomationsConfig rejects the whole file when a single
+ * matcher is bad, so one leftover `command` action (removed in v0.5.1) or one
+ * typo'd cron silently stopped every automation in the workspace, while the
+ * screen still listed them all. Here each matcher is checked on its own — the
+ * same schema and semantic checks — and issues carry the matcher's RAW event
+ * name and index so the screen can mark the row it shows.
+ *
+ * Writers (the craft-agent CLI, resource import) keep using the strict
+ * validator, so nothing ever saves an invalid file.
+ */
+export function loadAutomationsConfigLenient(raw: unknown): AutomationsLenientLoadResult {
+  const config: AutomationsConfig = { automations: {} };
+  const issues: AutomationLoadIssue[] = [];
+
+  if (!isPlainObject(raw)) {
+    issues.push({ messages: ['automations.json must contain a JSON object'] });
+    return { config, issues };
+  }
+
+  const eventMap = raw.automations;
+  if (eventMap === undefined) return { config, issues };
+  if (!isPlainObject(eventMap)) {
+    issues.push({ messages: ['"automations" must be an object that maps event names to lists of automations'] });
+    return { config, issues };
+  }
+
+  for (const [rawEvent, matchers] of Object.entries(eventMap)) {
+    if (!Array.isArray(matchers)) {
+      issues.push({ event: rawEvent, messages: [`"${rawEvent}" must be a list of automations`] });
+      continue;
+    }
+
+    const known = VALID_EVENTS.includes(rawEvent);
+    const event = DEPRECATED_EVENT_ALIASES[rawEvent] ?? rawEvent;
+    if (known && event !== rawEvent) {
+      console.warn(`[automations] Deprecated event name "${rawEvent}" — use "${event}" instead`);
+    }
+
+    matchers.forEach((matcher, index) => {
+      const ref: AutomationLoadIssue = { event: rawEvent, index, messages: [] };
+      if (isPlainObject(matcher)) {
+        if (typeof matcher.id === 'string') ref.id = matcher.id;
+        if (typeof matcher.name === 'string') ref.name = matcher.name;
+      }
+
+      if (!known) {
+        issues.push({ ...ref, messages: [`Unknown event "${rawEvent}"`] });
+        return;
+      }
+
+      const parsed = AutomationMatcherSchema.safeParse(matcher);
+      if (!parsed.success) {
+        issues.push({ ...ref, messages: describeMatcherSchemaIssues(matcher, parsed.error.issues) });
+        return;
+      }
+
+      const valid = parsed.data as AutomationMatcher;
+      const errors: ValidationIssue[] = [];
+      validateMatcherSemantics(event, valid, index, AUTOMATIONS_CONFIG_FILE, errors, []);
+      if (errors.length > 0) {
+        issues.push({ ...ref, messages: errors.map(e => e.message) });
+        return;
+      }
+
+      const list = config.automations[event as AutomationEvent] ?? [];
+      list.push(valid);
+      config.automations[event as AutomationEvent] = list;
+
+      // Loaded (it is valid) but it will never fire — say so on the screen too.
+      if ((AGENT_EVENTS as string[]).includes(event)) {
+        issues.push({ ...ref, messages: [agentEventNeverRunsMessage(event)] });
+      }
+    });
+  }
+
+  return { config, issues };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Turn zod issues for one matcher into readable messages. Zod reports an
+ * unknown action type as `invalid_union` / "Invalid input" at
+ * `actions.N.type`, which says nothing; name the type instead, and point the
+ * removed `command` action at its replacement.
+ */
+function describeMatcherSchemaIssues(
+  matcher: unknown,
+  zodIssues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey>; message: string }>,
+): string[] {
+  const actions = isPlainObject(matcher) && Array.isArray(matcher.actions) ? matcher.actions : [];
+  const messages = zodIssues.map((issue) => {
+    const [first, actionIndex, field] = issue.path;
+    if (first === 'actions' && typeof actionIndex === 'number' && field === 'type') {
+      const action = actions[actionIndex];
+      const type = isPlainObject(action) ? action.type : undefined;
+      if (type === 'command') {
+        return `Action ${actionIndex + 1} uses the removed "command" type; use a "script" action instead`;
+      }
+      return `Action ${actionIndex + 1} has an unknown type ${JSON.stringify(type)}; use "prompt", "webhook" or "script"`;
+    }
+    const path = issue.path.map(String).join('.');
+    return path ? `${path}: ${issue.message}` : issue.message;
+  });
+  return [...new Set(messages)];
+}
+
+/**
  * Run semantic validation checks for matcher definitions.
  * Shared by both object-based runtime validation and JSON-content validation.
  */
@@ -61,127 +183,160 @@ function runMatcherSemanticValidations(
     for (let i = 0; i < matchers.length; i++) {
       const matcher = matchers[i];
       if (!matcher) continue;
-      // Warn about allow-all permission mode
-      if (matcher.permissionMode === 'allow-all') {
-        warnings.push({
-          file,
-          path: `automations.${event}[${i}].permissionMode`,
-          message: 'permissionMode "allow-all" bypasses all security checks — use with caution',
-          severity: 'warning',
-          suggestion: 'Consider using "safe" or "ask" permission mode instead',
-        });
-      }
-
-      if (matcher.matcher) {
-        // ReDoS prevention: limit regex complexity
-        const MAX_REGEX_LENGTH = 500;
-        if (matcher.matcher.length > MAX_REGEX_LENGTH) {
-          errors.push({
-            file,
-            path: `automations.${event}[${i}].matcher`,
-            message: `Regex pattern too long (${matcher.matcher.length} chars, max ${MAX_REGEX_LENGTH})`,
-            severity: 'error',
-            suggestion: 'Simplify the regex pattern or split into multiple matchers',
-          });
-        } else {
-          try {
-            // Validate regex syntax
-            new RegExp(matcher.matcher);
-
-            // Reject catastrophic backtracking (ReDoS) patterns
-            // Detect nested quantifiers: a group containing a quantifier that itself has a quantifier
-            const nestedQuantifiers = /\([^)]*[+*][^)]*\)[+*{]/;
-            // Also detect repeated alternation like (a|a)+ and adjacent greedy quantifiers like .*.*
-            const riskyPatterns = /(\.\*){2,}|(\.\+){2,}|\([^)]*\|[^)]*\)[+*{]/;
-            if (nestedQuantifiers.test(matcher.matcher) || riskyPatterns.test(matcher.matcher)) {
-              errors.push({
-                file,
-                path: `automations.${event}[${i}].matcher`,
-                message: 'Regex pattern rejected: potential catastrophic backtracking (ReDoS)',
-                severity: 'error',
-                suggestion: 'Avoid nested quantifiers like (a+)+, (.*)+, (.+)*, ([a-z]+)+, and repeated alternation like (a|a)+',
-              });
-            }
-          } catch (e) {
-            errors.push({
-              file,
-              path: `automations.${event}[${i}].matcher`,
-              message: `Invalid regex pattern: ${e instanceof Error ? e.message : 'Unknown error'}`,
-              severity: 'error',
-              suggestion: 'Fix the regex pattern or remove the matcher to match all events',
-            });
-          }
-        }
-      }
-
-      // Validate cron expressions
-      if (matcher.cron) {
-        try {
-          new Cron(matcher.cron);
-        } catch (e) {
-          errors.push({
-            file,
-            path: `automations.${event}[${i}].cron`,
-            message: `Invalid cron expression: ${e instanceof Error ? e.message : 'Unknown error'}`,
-            severity: 'error',
-            suggestion: 'Use standard 5-field cron format: minute hour day-of-month month day-of-week',
-          });
-        }
-      }
-
-      // Validate timezone
-      if (matcher.timezone) {
-        try {
-          Intl.DateTimeFormat(undefined, { timeZone: matcher.timezone });
-        } catch {
-          errors.push({
-            file,
-            path: `automations.${event}[${i}].timezone`,
-            message: `Invalid timezone: ${matcher.timezone}`,
-            severity: 'error',
-            suggestion: 'Use IANA timezone format like "Europe/Budapest" or "America/New_York"',
-          });
-        }
-      }
-
-      // Warn about webhook URLs with $VAR templates (can't validate until runtime)
-      if (matcher.actions) {
-        for (let j = 0; j < matcher.actions.length; j++) {
-          const action = matcher.actions[j];
-          if (action && typeof action === 'object' && 'type' in action && action.type === 'webhook' && 'url' in action && typeof action.url === 'string' && action.url.includes('$')) {
-            warnings.push({
-              file,
-              path: `automations.${event}[${i}].actions[${j}].url`,
-              message: 'Webhook URL contains variable templates — will be validated at runtime after expansion',
-              severity: 'warning',
-              suggestion: 'Ensure the referenced CRAFT_WH_* variables are set in your shell profile',
-            });
-          }
-        }
-      }
-
-      // Warn if cron is used on non-SchedulerTick event
-      if (matcher.cron && event !== 'SchedulerTick') {
-        warnings.push({
-          file,
-          path: `automations.${event}[${i}].cron`,
-          message: 'Cron expressions are only used for SchedulerTick events',
-          severity: 'warning',
-          suggestion: 'Move this automation to the SchedulerTick event or use matcher instead',
-        });
-      }
-
-      // Validate conditions
-      if (matcher.conditions && Array.isArray(matcher.conditions)) {
-        validateConditionsArray(matcher.conditions, `automations.${event}[${i}].conditions`, event, file, errors, warnings, 0);
-      }
+      validateMatcherSemantics(event, matcher, i, file, errors, warnings);
     }
   }
 }
 
 /**
+ * Agent hook events are accepted in automations.json but never run actions
+ * (executeAgentEvent only matches, buildSdkHooks returns {}). See #1117.
+ */
+function agentEventNeverRunsMessage(event: string): string {
+  return `Automations on the agent event "${event}" never run: agent hook events don't trigger actions. Use an app event such as LabelAdd, SessionStatusChange or SchedulerTick.`;
+}
+
+/**
+ * Semantic checks for one matcher (regex, cron, timezone, conditions, …).
+ * Paths use the event and index given, so callers decide which numbering they report.
+ */
+function validateMatcherSemantics(
+  event: string,
+  matcher: AutomationMatcher,
+  i: number,
+  file: string,
+  errors: ValidationIssue[],
+  warnings: ValidationIssue[],
+): void {
+  if ((AGENT_EVENTS as string[]).includes(event)) {
+    warnings.push({
+      file,
+      path: `automations.${event}[${i}]`,
+      message: agentEventNeverRunsMessage(event),
+      severity: 'warning',
+      suggestion: 'Move the automation to an app event, or delete it',
+    });
+  }
+
+  // Warn about allow-all permission mode
+  if (matcher.permissionMode === 'allow-all') {
+    warnings.push({
+      file,
+      path: `automations.${event}[${i}].permissionMode`,
+      message: 'permissionMode "allow-all" bypasses all security checks — use with caution',
+      severity: 'warning',
+      suggestion: 'Consider using "safe" or "ask" permission mode instead',
+    });
+  }
+
+  if (matcher.matcher) {
+    // ReDoS prevention: limit regex complexity
+    const MAX_REGEX_LENGTH = 500;
+    if (matcher.matcher.length > MAX_REGEX_LENGTH) {
+      errors.push({
+        file,
+        path: `automations.${event}[${i}].matcher`,
+        message: `Regex pattern too long (${matcher.matcher.length} chars, max ${MAX_REGEX_LENGTH})`,
+        severity: 'error',
+        suggestion: 'Simplify the regex pattern or split into multiple matchers',
+      });
+    } else {
+      try {
+        // Validate regex syntax
+        new RegExp(matcher.matcher);
+
+        // Reject catastrophic backtracking (ReDoS) patterns
+        // Detect nested quantifiers: a group containing a quantifier that itself has a quantifier
+        const nestedQuantifiers = /\([^)]*[+*][^)]*\)[+*{]/;
+        // Also detect repeated alternation like (a|a)+ and adjacent greedy quantifiers like .*.*
+        const riskyPatterns = /(\.\*){2,}|(\.\+){2,}|\([^)]*\|[^)]*\)[+*{]/;
+        if (nestedQuantifiers.test(matcher.matcher) || riskyPatterns.test(matcher.matcher)) {
+          errors.push({
+            file,
+            path: `automations.${event}[${i}].matcher`,
+            message: 'Regex pattern rejected: potential catastrophic backtracking (ReDoS)',
+            severity: 'error',
+            suggestion: 'Avoid nested quantifiers like (a+)+, (.*)+, (.+)*, ([a-z]+)+, and repeated alternation like (a|a)+',
+          });
+        }
+      } catch (e) {
+        errors.push({
+          file,
+          path: `automations.${event}[${i}].matcher`,
+          message: `Invalid regex pattern: ${e instanceof Error ? e.message : 'Unknown error'}`,
+          severity: 'error',
+          suggestion: 'Fix the regex pattern or remove the matcher to match all events',
+        });
+      }
+    }
+  }
+
+  // Validate cron expressions
+  if (matcher.cron) {
+    try {
+      new Cron(matcher.cron);
+    } catch (e) {
+      errors.push({
+        file,
+        path: `automations.${event}[${i}].cron`,
+        message: `Invalid cron expression: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        severity: 'error',
+        suggestion: 'Use standard 5-field cron format: minute hour day-of-month month day-of-week',
+      });
+    }
+  }
+
+  // Validate timezone
+  if (matcher.timezone) {
+    try {
+      Intl.DateTimeFormat(undefined, { timeZone: matcher.timezone });
+    } catch {
+      errors.push({
+        file,
+        path: `automations.${event}[${i}].timezone`,
+        message: `Invalid timezone: ${matcher.timezone}`,
+        severity: 'error',
+        suggestion: 'Use IANA timezone format like "Europe/Budapest" or "America/New_York"',
+      });
+    }
+  }
+
+  // Warn about webhook URLs with $VAR templates (can't validate until runtime)
+  if (matcher.actions) {
+    for (let j = 0; j < matcher.actions.length; j++) {
+      const action = matcher.actions[j];
+      if (action && typeof action === 'object' && 'type' in action && action.type === 'webhook' && 'url' in action && typeof action.url === 'string' && action.url.includes('$')) {
+        warnings.push({
+          file,
+          path: `automations.${event}[${i}].actions[${j}].url`,
+          message: 'Webhook URL contains variable templates — will be validated at runtime after expansion',
+          severity: 'warning',
+          suggestion: 'Ensure the referenced CRAFT_WH_* variables are set in your shell profile',
+        });
+      }
+    }
+  }
+
+  // Warn if cron is used on non-SchedulerTick event
+  if (matcher.cron && event !== 'SchedulerTick') {
+    warnings.push({
+      file,
+      path: `automations.${event}[${i}].cron`,
+      message: 'Cron expressions are only used for SchedulerTick events',
+      severity: 'warning',
+      suggestion: 'Move this automation to the SchedulerTick event or use matcher instead',
+    });
+  }
+
+  // Validate conditions
+  if (matcher.conditions && Array.isArray(matcher.conditions)) {
+    validateConditionsArray(matcher.conditions, `automations.${event}[${i}].conditions`, event, file, errors, warnings, 0);
+  }
+}
+
+/**
  * Validate automations config from a JSON string (no disk reads).
- * Used by PreToolUse automation to validate before writing to disk.
+ * Used by the config-file write checks to validate content before it reaches disk.
  * Follows the same pattern as other config validators in validators.ts.
  */
 export function validateAutomationsContent(jsonString: string, fileName?: string): ValidationResult {

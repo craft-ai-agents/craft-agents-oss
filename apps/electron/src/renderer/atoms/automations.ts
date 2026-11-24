@@ -14,3 +14,10 @@ import type { AutomationListItem } from '../components/automations/types'
  * AppShell loads automations.json, parses via parseAutomationsConfig(), and sets this atom.
  */
 export const automationsAtom = atom<AutomationListItem[]>([])
+
+/**
+ * Problems in automations.json that no listed automation shows (the whole file
+ * isn't valid JSON, an event value isn't a list, …). Row-level problems ride on
+ * AutomationListItem.issues. The list panel shows these in its banner.
+ */
+export const automationLoadIssuesAtom = atom<string[]>([])

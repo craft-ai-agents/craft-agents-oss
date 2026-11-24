@@ -579,7 +579,7 @@ const MOCK_BROWSER_PRESETS: Record<BrowserTabStripMockPreset, BrowserInstanceInf
     },
     {
       id: 'mock-4',
-      url: 'https://github.com/lukilabs/craft-agents-oss',
+      url: 'https://github.com/craft-ai-agents/craft-agents-oss',
       title: 'GitHub',
       favicon: null,
       isLoading: false,
@@ -688,7 +688,7 @@ const MOCK_BROWSER_PRESETS: Record<BrowserTabStripMockPreset, BrowserInstanceInf
     },
     {
       id: 'run-3',
-      url: 'https://github.com/lukilabs/craft-agents-oss/pulls',
+      url: 'https://github.com/craft-ai-agents/craft-agents-oss/pulls',
       title: 'GitHub PRs',
       favicon: null,
       isLoading: true,
@@ -780,7 +780,7 @@ const MOCK_BROWSER_PRESETS: Record<BrowserTabStripMockPreset, BrowserInstanceInf
     },
     {
       id: 'mix-4',
-      url: 'https://github.com/lukilabs/craft-agents-oss',
+      url: 'https://github.com/craft-ai-agents/craft-agents-oss',
       title: 'Craft Agents OSS Repo with a Surprisingly Long Branch and Compare View Name',
       favicon: null,
       isLoading: false,

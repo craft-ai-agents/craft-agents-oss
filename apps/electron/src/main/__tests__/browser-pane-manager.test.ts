@@ -346,6 +346,18 @@ describe('BrowserPaneManager', () => {
     expect((manager as any).popupWindowsByParentInstanceId.has('popup-parent')).toBe(false)
   })
 
+  it('keeps browser windows and their popups out of the macOS Window menu', () => {
+    manager.createInstance('window-menu')
+    const instance = (manager as any).instances.get('window-menu')
+    const popupWindow = createMockWindow({ width: 520, height: 720 })
+    emitDidCreateWindow(instance.pageView.webContents, popupWindow, { url: 'https://accounts.google.com/signin' })
+
+    // The property is macOS-only; elsewhere it is left unset.
+    const expected = process.platform === 'darwin' ? true : undefined
+    expect(instance.window.excludedFromShownWindowsMenu).toBe(expected)
+    expect((popupWindow as any).excludedFromShownWindowsMenu).toBe(expected)
+  })
+
   it('destroys instances', () => {
     manager.createInstance('d1')
     manager.destroyInstance('d1')

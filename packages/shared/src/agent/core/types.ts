@@ -100,6 +100,8 @@ export interface PromptBuilderConfig {
   systemPromptPreset?: 'default' | 'mini' | string;
   /** Whether running in headless mode */
   isHeadless?: boolean;
+  /** Agent profile; `coding` trims the per-message context (see PromptBuilder) */
+  agentProfile?: import('@craft-agent/session-tools-core').AgentProfile;
   /** Optional pre-resolved project snapshot for prompt injection (lets tests pin a value) */
   project?: import('../../projects/types.ts').ProjectPromptContext;
 }

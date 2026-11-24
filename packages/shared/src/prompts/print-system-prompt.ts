@@ -4,6 +4,7 @@
  * Shows both the static system prompt and dynamic user message context components.
  *
  * Run with: bun run print:system-prompt
+ * Coding mode (agent profile `coding`): bun run print:system-prompt --coding
  */
 
 import { getSystemPrompt, getDateTimeContext, getWorkingDirectoryContext } from './system.ts';
@@ -67,10 +68,15 @@ printAnnotation('  7. Project context block (if session is bound to a project)')
 printAnnotation('  8. Debug Mode Context (if enabled) - formatDebugModeContext()');
 printAnnotation('  9. Project context file manifest - getProjectContextFilesPrompt()');
 
+const agentProfile = process.argv.includes('--coding') ? 'coding' as const : 'default' as const;
+if (agentProfile === 'coding') printAnnotation('Agent profile: coding (coding mode base prompt)');
+
 const systemPrompt = getSystemPrompt(
   undefined, // No pinned preferences (use current from disk)
   { enabled: false }, // Debug mode disabled for cleaner output
-  '/Users/example/.craft-agent/workspaces/abc123' // Example workspace path
+  '/Users/example/.craft-agent/workspaces/abc123', // Example workspace path
+  undefined, undefined, undefined, undefined, undefined,
+  agentProfile,
 );
 
 printSection('FULL STATIC SYSTEM PROMPT', systemPrompt, colors.green);
@@ -81,7 +87,9 @@ console.log(`\n${colors.bold}Static System Prompt Length: ${systemPrompt.length.
 const systemPromptWithDebug = getSystemPrompt(
   undefined,
   { enabled: true, logFilePath: '~/Library/Logs/@craft-agent/electron/main.log' },
-  '/Users/example/.craft-agent/workspaces/abc123'
+  '/Users/example/.craft-agent/workspaces/abc123',
+  undefined, undefined, undefined, undefined, undefined,
+  agentProfile,
 );
 console.log(`${colors.dim}With debug mode: ${systemPromptWithDebug.length.toLocaleString()} characters (+${(systemPromptWithDebug.length - systemPrompt.length).toLocaleString()})${colors.reset}`);
 

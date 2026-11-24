@@ -108,7 +108,8 @@ export function getGuardedModeCall(
     return { toolName, promptType: 'file_write', description: `${toolName}: ${target}`, command: target, workingDirectory, alwaysAsk: 'outside_workspace' };
   }
 
-  if (toolName === 'Bash') {
+  // Monitor runs its `command` in a shell as Bash does; without one it watches a WebSocket (a read)
+  if (toolName === 'Bash' || toolName === 'Monitor') {
     const command = typeof input.command === 'string' ? input.command : '';
     if (!command.trim()) return null;
     if (isReadOnlyBashCommandWithConfig(command, permissionsConfigCache.getMergedConfig(permissionsContext))) return null;
@@ -137,6 +138,7 @@ export function getGuardedModeCall(
 /** Tools the check can judge at all (cheap name check before anything else). */
 function isGuardableTool(toolName: string): boolean {
   return toolName === 'Bash'
+    || toolName === 'Monitor'
     || FILE_WRITE_TOOLS.has(toolName)
     || toolName.startsWith('mcp__')
     || toolName.startsWith('api_');

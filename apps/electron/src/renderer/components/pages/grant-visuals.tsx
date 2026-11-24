@@ -12,7 +12,7 @@ import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import type { PageActionDescriptor, PageActionGrant } from '@craft-agent/shared/pages/types'
 import { isPageGrantUsable } from '@craft-agent/shared/pages/types'
-import { relativeTime } from './page-visuals'
+import { formatShortAge } from '@/utils/session'
 
 type Translate = (key: string, opts?: Record<string, unknown>) => string
 
@@ -45,7 +45,7 @@ export function describeGrantStatus(
 ): { label: string; usable: boolean } {
   const now = Date.now()
   if (isPageGrantUsable(grant, contentDigest, now)) {
-    return { label: t('pages.grants.statusExpires', { when: relativeTime(grant.expiresAt) }), usable: true }
+    return { label: t('pages.grants.statusExpires', { when: formatShortAge(grant.expiresAt) }), usable: true }
   }
   if (grant.expiresAt <= now) {
     return { label: t('pages.grants.statusExpired'), usable: false }

@@ -146,6 +146,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       permissionMode: config?.defaults?.permissionMode,
       cyclablePermissionModes: config?.defaults?.cyclablePermissionModes,
       thinkingLevel: normalizeThinkingLevel(config?.defaults?.thinkingLevel),
+      codingMode: config?.defaults?.codingMode === true,
       workingDirectory: config?.defaults?.workingDirectory,
       localMcpEnabled: config?.localMcpServers?.enabled ?? true,
       defaultLlmConnection: config?.defaults?.defaultLlmConnection,
@@ -162,7 +163,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       : value
 
     // Validate key is a known workspace setting
-    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled', 'defaultLlmConnection', 'chatStarters']
+    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'codingMode', 'workingDirectory', 'localMcpEnabled', 'defaultLlmConnection', 'chatStarters']
     if (!validKeys.includes(key)) {
       throw new Error(`Invalid workspace setting key: ${key}. Valid keys: ${validKeys.join(', ')}`)
     }
@@ -195,6 +196,11 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       // Store in localMcpServers.enabled (top-level, not in defaults)
       config.localMcpServers = config.localMcpServers || { enabled: true }
       config.localMcpServers.enabled = Boolean(normalizedValue)
+    } else if (key === 'codingMode') {
+      // Stored only when on, so workspaces that never enable it keep an unchanged config
+      config.defaults = config.defaults || {}
+      if (normalizedValue === true) config.defaults.codingMode = true
+      else delete config.defaults.codingMode
     } else if (key === 'chatStarters') {
       // Top-level field, not in defaults
       config.chatStarters = (normalizedValue as Array<{ label: string; prompt: string }> | undefined) ?? []

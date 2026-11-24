@@ -12,7 +12,7 @@
  */
 
 import { ListTodo } from 'lucide-react'
-import { Markdown } from '../markdown'
+import { Markdown, type FileOpenHandler } from '../markdown'
 import type { AnnotationV1 } from '@craft-agent/core'
 import type { ExternalOpenAnnotationRequest } from '../annotations/use-annotation-interaction-controller'
 import { FullscreenOverlayBase } from './FullscreenOverlayBase'
@@ -31,7 +31,7 @@ export interface DocumentFormattedMarkdownOverlayProps {
   /** Callback for URL clicks */
   onOpenUrl?: (url: string) => void
   /** Callback for file path clicks */
-  onOpenFile?: (path: string) => void
+  onOpenFile?: FileOpenHandler
   /** Optional file path — shows badge with "Open" / "Reveal in {file manager}" menu */
   filePath?: string
   /** Optional type badge — tool/format indicator (e.g. "Write") shown in header */

@@ -149,6 +149,81 @@ export async function resolveSetupTestApiKey(
 }
 
 /**
+ * Store an OAuth access token sent with a connection setup.
+ *
+ * The Claude sign-in stores the token with its refresh token and expiry
+ * (`onboarding:exchangeClaudeCode`), then sends the same access token here.
+ * Replacing that entry with the bare token dropped the refresh token and the
+ * expiry, so the connection could not refresh once the token expired. A token
+ * the connection already holds is left as stored; returns whether it stored.
+ * Pure apart from the injected store.
+ */
+export async function storeSetupOAuthToken(
+  store: {
+    getLlmOAuth(slug: string): Promise<{ accessToken: string } | null>
+    setLlmOAuth(slug: string, credentials: { accessToken: string }): Promise<void>
+  },
+  slug: string,
+  accessToken: string,
+): Promise<boolean> {
+  if ((await store.getLlmOAuth(slug))?.accessToken === accessToken) return false
+  await store.setLlmOAuth(slug, { accessToken })
+  return true
+}
+
+/**
+ * Delete the credentials of a deleted connection. The legacy `claude_oauth` slot
+ * goes too when it was the default Claude sign-in: only the default connection
+ * reads the slot (`usesLegacyClaudeOAuthSlot`), so the connection that becomes
+ * the default would otherwise run on the deleted connection's account.
+ * Pure apart from the injected store.
+ */
+export async function deleteConnectionCredentials(
+  store: {
+    deleteLlmCredentials(slug: string): Promise<void>
+    delete(id: { type: 'claude_oauth' }): Promise<boolean>
+  },
+  connection: { slug: string; providerType: string; authType: string },
+  wasDefault: boolean,
+): Promise<void> {
+  await store.deleteLlmCredentials(connection.slug)
+  if (wasDefault && connection.providerType === 'anthropic' && connection.authType === 'oauth') {
+    await store.delete({ type: 'claude_oauth' })
+  }
+}
+
+/**
+ * The default moved away from a Claude sign-in connection: the legacy `claude_oauth`
+ * slot goes with it. Only the default connection reads the slot
+ * (`usesLegacyClaudeOAuthSlot`), so the new default would otherwise run on the
+ * previous one's account once no other connection has credentials of its own
+ * (e.g. after the previous default is deleted). A previous default that ran on the
+ * slot (`previousUsedSlot`, read before the switch) and has no entry of its own
+ * keeps those credentials in its own entry. Pure apart from the injected store.
+ */
+export async function releaseLegacyClaudeSlot(
+  store: {
+    getClaudeOAuthCredentials(): Promise<{ accessToken: string; refreshToken?: string; expiresAt?: number } | null>
+    getLlmOAuth(slug: string): Promise<{ accessToken: string } | null>
+    setLlmOAuth(slug: string, credentials: { accessToken: string; refreshToken?: string; expiresAt?: number }): Promise<void>
+    delete(id: { type: 'claude_oauth' }): Promise<boolean>
+  },
+  previousDefault: { slug: string; providerType: string; authType: string } | null,
+  previousUsedSlot: boolean,
+  newDefaultSlug: string,
+): Promise<void> {
+  if (!previousDefault || previousDefault.slug === newDefaultSlug) return
+  if (previousDefault.providerType !== 'anthropic' || previousDefault.authType !== 'oauth') return
+  const legacy = await store.getClaudeOAuthCredentials()
+  if (!legacy?.accessToken) return
+  if (previousUsedSlot && !(await store.getLlmOAuth(previousDefault.slug))?.accessToken) {
+    const { accessToken, refreshToken, expiresAt } = legacy
+    await store.setLlmOAuth(previousDefault.slug, { accessToken, refreshToken, expiresAt })
+  }
+  await store.delete({ type: 'claude_oauth' })
+}
+
+/**
  * Decide how a custom OpenAI/Anthropic-compatible endpoint should be persisted.
  *
  * - Loopback URL with no credential → keyless local model (Ollama, LM Studio).

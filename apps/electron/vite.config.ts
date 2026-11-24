@@ -45,6 +45,8 @@ export default defineConfig({
         playground: resolve(__dirname, 'src/renderer/playground.html'),
         'browser-toolbar': resolve(__dirname, 'src/renderer/browser-toolbar.html'),
         'browser-empty-state': resolve(__dirname, 'src/renderer/browser-empty-state.html'),
+        // Crafty (spike): the transparent companion/panel window
+        crafty: resolve(__dirname, 'src/renderer/crafty.html'),
       }
     }
   },

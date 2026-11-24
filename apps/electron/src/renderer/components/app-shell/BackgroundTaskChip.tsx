@@ -35,6 +35,7 @@ import { toast } from 'sonner'
 import { MemoizedMarkdown, Spinner } from '@craft-agent/ui'
 import { SPRING } from '@craft-agent/ui/motion'
 import type { BackgroundTaskOutput, BackgroundTaskStep } from '@craft-agent/shared/protocol'
+import { CardButton } from '@/components/ui/card-button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { BackgroundTask } from '@/atoms/sessions'
 import { cn } from '@/lib/utils'
@@ -190,24 +191,6 @@ function useTaskOutput(sessionId: string, task: BackgroundTask) {
   }, [sessionId, task.id, task.type, live, task.status, attempt])
 
   return { ...state, reload: () => setAttempt(n => n + 1) }
-}
-
-function CardButton({ icon: Icon, tone, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { icon: LucideIcon; tone?: 'destructive' }) {
-  return (
-    <button
-      type="button"
-      {...props}
-      className={cn(
-        'motion-press inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-label-sm font-medium -outline-offset-2',
-        'transition-[background-color,color] duration-micro ease-out-subtle hover:duration-instant',
-        'disabled:pointer-events-none disabled:text-disabled',
-        tone === 'destructive' ? 'text-destructive hover:bg-destructive-tint' : 'text-secondary hover:bg-fill-hover hover:text-foreground',
-      )}
-    >
-      <Icon className="size-3.5 shrink-0" />
-      {children}
-    </button>
-  )
 }
 
 function StepRow({ step }: { step: BackgroundTaskStep }) {

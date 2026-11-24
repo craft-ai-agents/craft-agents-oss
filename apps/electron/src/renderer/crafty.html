@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; connect-src 'self' http://localhost:* ws://localhost:* wss://localhost:* http://127.0.0.1:* ws://127.0.0.1:* wss://127.0.0.1:* wss:; font-src 'self' data: https://fonts.gstatic.com;">
+  <title>Crafty</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
+  <script>
+    // Match the OS appearance before first paint (the spike doesn't load the app's theme)
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.classList.replace('light', 'dark')
+    }
+  </script>
+  <style>
+    /* The window covers the whole display and is click-through outside the panel: nothing but the
+       companion and the panel may paint. index.css gives html the app canvas, so override it. */
+    html, body, #root { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent !important; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="./crafty.tsx"></script>
+</body>
+</html>

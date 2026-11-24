@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { createManagedSession } from './SessionManager.ts'
+import { SessionManager, createManagedSession } from './SessionManager.ts'
 
 describe('createManagedSession', () => {
   const workspace = {
@@ -25,5 +25,18 @@ describe('createManagedSession', () => {
     }, workspace as any)
 
     expect(managed.thinkingLevel).toBeUndefined()
+  })
+
+  it("exposes a branch's source session id, named by its session folder", () => {
+    const sm = new SessionManager()
+    const sessions = (sm as unknown as { sessions: Map<string, unknown> }).sessions
+    sessions.set('branch', createManagedSession({ id: 'branch' }, workspace as any, {
+      branchFromSessionPath: '/tmp/test-workspace/sessions/260101-source',
+    }))
+    sessions.set('plain', createManagedSession({ id: 'plain' }, workspace as any))
+
+    const byId = new Map(sm.getSessions('ws_test').map(s => [s.id, s]))
+    expect(byId.get('branch')?.branchFromSessionId).toBe('260101-source')
+    expect(byId.get('plain')?.branchFromSessionId).toBeUndefined()
   })
 })

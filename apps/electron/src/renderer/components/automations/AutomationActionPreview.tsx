@@ -11,7 +11,7 @@
 import { cn } from '@/lib/utils'
 import type { AutomationAction } from './types'
 import { ActionTypeIcon } from './ActionTypeIcon'
-import { DEFAULT_WEBHOOK_METHOD } from './constants'
+import { DEFAULT_SCRIPT_RUNTIME, DEFAULT_WEBHOOK_METHOD } from './constants'
 
 export interface AutomationActionPreviewProps {
   actions: AutomationAction[]
@@ -27,7 +27,9 @@ export function AutomationActionPreview({ actions, className }: AutomationAction
           <span className="line-clamp-2 break-words text-secondary">
             {action.type === 'webhook'
               ? `${action.method ?? DEFAULT_WEBHOOK_METHOD} ${action.url}`
-              : action.prompt}
+              : action.type === 'script'
+                ? `${action.runtime ?? DEFAULT_SCRIPT_RUNTIME} ${action.script}`
+                : action.prompt}
           </span>
         </div>
       ))}

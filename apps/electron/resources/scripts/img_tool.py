@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["Pillow>=12.1,<13", "click>=8.3,<9"]
+# dependencies = ["Pillow>=12.1,<13", "pillow-heif>=1.1,<2", "click>=8.3,<9"]
 # ///
 """Image processing tool.
 
@@ -15,7 +15,13 @@ import sys
 from pathlib import Path
 
 import click
+import pillow_heif
 from PIL import Image, ImageDraw, ImageFont, ExifTags
+
+# Teach Pillow to read HEIC/HEIF (iOS photos & screenshots), which it cannot
+# handle on its own. Registering the opener makes Image.open() detect HEIC by
+# content, so every command can take a .heic input (e.g. convert to JPEG/PNG).
+pillow_heif.register_heif_opener()
 
 
 def write_output(text: str, output_path: str | None) -> None:

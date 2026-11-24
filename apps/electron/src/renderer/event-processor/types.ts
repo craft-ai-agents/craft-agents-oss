@@ -10,6 +10,7 @@ import type { Session, SessionEvent, Message, PermissionRequest, CredentialReque
 /** Explicit SDK retry boundaries; keep their transport shape authoritative. */
 export type TextDiscardEvent = Extract<SessionEvent, { type: 'text_discard' }>
 export type RetryEvent = Extract<SessionEvent, { type: 'retry' }>
+export type MessagesRetractedEvent = Extract<SessionEvent, { type: 'messages_retracted' }>
 
 /**
  * Streaming state for a session - replaces streamingTextRef
@@ -136,12 +137,31 @@ export interface PermissionRequestEvent {
 }
 
 /**
+ * A permission prompt was answered (in any window, the WebUI or a chat binding)
+ */
+export interface PermissionResolvedEvent {
+  type: 'permission_resolved'
+  sessionId: string
+  requestId: string
+  allowed: boolean
+}
+
+/**
  * Sources changed event
  */
 export interface SourcesChangedEvent {
   type: 'sources_changed'
   sessionId: string
   enabledSourceSlugs: string[]
+}
+
+/**
+ * Coding mode changed event (only before the conversation starts; see SessionManager.setSessionCodingMode)
+ */
+export interface CodingModeChangedEvent {
+  type: 'coding_mode_changed'
+  sessionId: string
+  codingMode: boolean
 }
 
 /**
@@ -534,6 +554,7 @@ export interface UsageUpdateEvent {
  */
 export type AgentEvent =
   | TextDiscardEvent
+  | MessagesRetractedEvent
   | RetryEvent
   | TextDeltaEvent
   | TextCompleteEvent
@@ -543,8 +564,10 @@ export type AgentEvent =
   | ErrorEvent
   | TypedErrorEvent
   | PermissionRequestEvent
+  | PermissionResolvedEvent
   | CredentialRequestEvent
   | SourcesChangedEvent
+  | CodingModeChangedEvent
   | LabelsChangedEvent
   | ProjectIdChangedEvent
   | SessionStatusChangedEvent
@@ -586,9 +609,11 @@ export type AgentEvent =
  */
 export type Effect =
   | { type: 'permission_request'; request: PermissionRequest }
+  | { type: 'permission_resolved'; requestId: string }
   | { type: 'credential_request'; request: CredentialRequest }
   | { type: 'generate_title'; sessionId: string; userMessage: string }
   | { type: 'permission_mode_changed'; sessionId: string; permissionMode: PermissionMode; previousPermissionMode?: PermissionMode; transitionDisplay?: string; modeVersion?: number; changedAt?: string; changedBy?: 'user' | 'system' | 'restore' | 'automation' | 'unknown' }
+  | { type: 'coding_mode_changed'; sessionId: string; codingMode: boolean }
   | { type: 'restore_input'; text: string }
   | { type: 'toast_error'; message: string }
 

@@ -23,6 +23,8 @@ describe('sendMessage durability', () => {
   beforeEach(() => {
     tmpRoot = mkdtempSync(join(tmpdir(), 'sm-durability-'))
     sm = new SessionManager()
+    // Hermetic: with the developer's decision layer on, the queued branch would ask a model.
+    ;(sm as any).decisionFeatureActive = () => false
   })
 
   afterEach(() => {
@@ -55,10 +57,12 @@ describe('sendMessage durability', () => {
 
   it('user message is on disk before onAck fires (normal branch)', async () => {
     const sessionId = 'durability-normal'
-    buildSession(sessionId)
+    const managed = buildSession(sessionId)
 
     let ackedMessageId: string | null = null
     let onDiskAtAck = false
+    let ackOutcome = null as string | null
+    let processingAtAck = false
 
     // sendMessage continues past the ack into agent-init, which would throw
     // because we haven't called `setSessionPlatform()` in this minimal test
@@ -73,15 +77,20 @@ describe('sendMessage durability', () => {
         undefined,
         undefined,
         undefined,
-        (messageId) => {
+        (messageId, outcome) => {
           ackedMessageId = messageId
           onDiskAtAck = readPersistedMessageIds(sessionId).includes(messageId)
+          ackOutcome = outcome
+          processingAtAck = managed.isProcessing
         },
       )
       .catch(() => { /* expected post-ack agent-init failure */ })
 
     expect(ackedMessageId).not.toBeNull()
     expect(onDiskAtAck).toBe(true)
+    // The ack follows the turn's claim, so whoever it resolves never sees the session idle.
+    expect(ackOutcome).toBe('started')
+    expect(processingAtAck).toBe(true)
   })
 
   it('user message is on disk before onAck fires (mid-stream / queued branch)', async () => {
@@ -93,6 +102,7 @@ describe('sendMessage durability', () => {
 
     let ackedMessageId: string | null = null
     let onDiskAtAck = false
+    let ackOutcome = null as string | null
 
     await sm.sendMessage(
       sessionId,
@@ -102,13 +112,15 @@ describe('sendMessage durability', () => {
       undefined,
       undefined,
       undefined,
-      (messageId) => {
+      (messageId, outcome) => {
         ackedMessageId = messageId
         onDiskAtAck = readPersistedMessageIds(sessionId).includes(messageId)
+        ackOutcome = outcome
       },
     )
 
     expect(ackedMessageId).not.toBeNull()
     expect(onDiskAtAck).toBe(true)
+    expect(ackOutcome).toBe('queued')
   })
 })

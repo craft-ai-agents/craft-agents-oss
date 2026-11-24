@@ -70,16 +70,11 @@ export const LLM_QUERY_TIMEOUT_MS = 120000;
 
 // ============================================================================
 // UTILITY: TIMEOUT HELPER
-// Races a promise against a timeout, cleaning up the timer on completion
+// Re-exported from utils/async so the timeout helper has a single home shared
+// with the session storage layer. Kept exported here for existing importers.
 // ============================================================================
 
-export function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
-  const timeoutPromise = new Promise<T>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), ms);
-  });
-  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer!));
-}
+export { withTimeout } from '../utils/async.ts';
 
 // ============================================================================
 // CONSTANTS

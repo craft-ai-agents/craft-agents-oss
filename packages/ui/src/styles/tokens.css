@@ -63,6 +63,7 @@
   --destructive-solid: #db2c2b;
   --on-destructive: #ffffff;
   --diff-text: #1a1c1e;
+  --git-merged: #8250df;           /* GitHub's merged-PR purple: a fixed meaning, not a theme role */
   --surface-input: var(--surface-sunken); /* themes may override via their `input` key */
 
   /* 3 ── alpha roles */
@@ -199,6 +200,7 @@
   --destructive-solid: #d24342;
   --on-destructive: #ffffff;
   --diff-text: #ecedef;
+  --git-merged: #a371f7;
 
   /* 3 ── alpha roles */
   --fill-hover: color-mix(in srgb, var(--fg-base) 6%, transparent);
@@ -330,6 +332,7 @@
   --text-color-success: var(--success-text);
   --text-color-destructive: var(--destructive-text);
   --text-color-diff: var(--diff-text);
+  --text-color-merged: var(--git-merged);
   /* shadcn's text-primary (brand-colored links) gets the solved accent text, never the button fill */
   --text-color-primary: var(--accent-text);
   --color-on-accent: var(--on-accent);

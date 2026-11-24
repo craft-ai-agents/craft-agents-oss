@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useTheme } from '@/hooks/useTheme'
 import { useSetAtom, useStore, useAtomValue, useAtom } from 'jotai'
 import type { Session, Workspace, SessionEvent, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, SessionStatus, NewChatActionParams, ContentBadge, LlmConnectionWithStatus, PermissionModeState } from '../shared/types'
+import { withoutPermissionRequest } from './lib/pending-permissions'
 import type { SessionDraft, DraftAttachmentRef } from '@craft-agent/shared/config'
 import type { SessionOptions, SessionOptionUpdates } from './hooks/useSessionOptions'
 import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOptions'
@@ -75,11 +76,12 @@ import { useLinkInterceptor, type FilePreviewState } from '@/hooks/useLinkInterc
 import { useTransportConnectionState } from '@/hooks/useTransportConnectionState'
 import { useStaleSessionRecovery } from '@/hooks/useStaleSessionRecovery'
 import { TransportConnectionBanner, shouldShowTransportConnectionBanner } from '@/components/app-shell/TransportConnectionBanner'
+import { FileLinkActionMenu } from '@/components/app-shell/FileLinkActionMenu'
 import {
   markBackgroundTaskSignal,
   markLiveBackgroundTasksOrphaned,
 } from '@/components/app-shell/background-task-chip-state'
-import { getFileManagerName } from '@/lib/platform'
+import { getFileManagerName, isWebUI } from '@/lib/platform'
 import { rendererLog } from '@/lib/logger'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
@@ -506,12 +508,13 @@ export default function App() {
         ...current,
         permissionMode: session.permissionMode ?? defaultSessionOptions.permissionMode,
         thinkingLevel: session.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
+        codingMode: session.codingMode === true,
       }
 
       const hasNonDefaultMode = merged.permissionMode !== defaultSessionOptions.permissionMode
       const hasNonDefaultThinking = merged.thinkingLevel !== DEFAULT_THINKING_LEVEL
 
-      if (!hasNonDefaultMode && !hasNonDefaultThinking && merged.permissionModeVersion == null) {
+      if (!hasNonDefaultMode && !hasNonDefaultThinking && !merged.codingMode && merged.permissionModeVersion == null) {
         next.delete(session.id)
       } else {
         next.set(session.id, merged)
@@ -558,10 +561,11 @@ export default function App() {
       for (const s of loadedSessions) {
         const hasNonDefaultMode = s.permissionMode && s.permissionMode !== 'ask'
         const hasNonDefaultThinking = s.thinkingLevel && s.thinkingLevel !== DEFAULT_THINKING_LEVEL
-        if (hasNonDefaultMode || hasNonDefaultThinking) {
+        if (hasNonDefaultMode || hasNonDefaultThinking || s.codingMode) {
           optionsMap.set(s.id, {
             permissionMode: s.permissionMode ?? 'ask',
             thinkingLevel: s.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
+            codingMode: s.codingMode === true,
           })
         }
       }
@@ -873,6 +877,11 @@ export default function App() {
             }
             break
           }
+          case 'permission_resolved': {
+            // Answered in another window, the WebUI or a chat binding
+            setPendingPermissions(prevPerms => withoutPermissionRequest(prevPerms, sessionId, effect.requestId))
+            break
+          }
           case 'permission_mode_changed': {
             if (typeof effect.modeVersion === 'number' && effect.changedAt && effect.changedBy) {
               applyPermissionModeState(effect.sessionId, {
@@ -892,6 +901,15 @@ export default function App() {
               })
               void reconcilePermissionModeState(effect.sessionId)
             }
+            break
+          }
+          case 'coding_mode_changed': {
+            // Another window or client changed it (this one already applied it optimistically)
+            setSessionOptions(prevOpts => {
+              const next = new Map(prevOpts)
+              next.set(effect.sessionId, mergeSessionOptions(next.get(effect.sessionId), { codingMode: effect.codingMode }))
+              return next
+            })
             break
           }
           case 'credential_request': {
@@ -1348,12 +1366,15 @@ export default function App() {
             }
             // Include storedPath and markdownPath for all attachment types
             // Agent will use Read tool to access text/office files via these paths
-            // If image was resized, use the resized base64 for Claude API
+            // If image was resized/normalized, use the stored base64 + mimeType for Claude API
             return {
               ...att,
               storedPath: stored.storedPath,
               markdownPath: stored.markdownPath,
-              // Use resized base64 if available (for images that exceeded size limits)
+              // Reflect any server-side normalization (e.g. HEIC/HEIF → JPEG) so the
+              // model receives a supported media type instead of silently dropping the image.
+              mimeType: stored.mimeType,
+              // Use resized/normalized base64 when the store produced one
               base64: stored.resizedBase64 ?? att.base64,
             }
           })
@@ -1472,7 +1493,22 @@ export default function App() {
       // Sync thinking level change with backend (session-level, persisted)
       window.electronAPI.sessionCommand(sessionId, { type: 'setThinkingLevel', level: updates.thinkingLevel })
     }
-  }, [sessionOptions])
+    if (updates.codingMode !== undefined) {
+      const enabled = updates.codingMode
+      // The server refuses once the conversation has started (the composer then offers a new
+      // session instead); roll the optimistic value back if it does
+      window.electronAPI.sessionCommand(sessionId, { type: 'setCodingMode', enabled }).catch((error: unknown) => {
+        setSessionOptions(prev => {
+          const next = new Map(prev)
+          next.set(sessionId, mergeSessionOptions(next.get(sessionId), { codingMode: !enabled }))
+          return next
+        })
+        toast.error(t('chat.codingMode.toggleFailed'), {
+          description: error instanceof Error ? error.message : String(error),
+        })
+      })
+    }
+  }, [sessionOptions, t])
 
   // Handle input draft changes per session with debounced persistence
   const draftSaveTimeoutRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -1618,37 +1654,10 @@ export default function App() {
     alwaysAllow: boolean,
     options?: import('../shared/types').PermissionResponseOptions,
   ) => {
-    const success = await window.electronAPI.respondToPermission(sessionId, requestId, allowed, alwaysAllow, options)
-
-    if (success) {
-      // Remove only the first permission from the queue (the one we just responded to)
-      setPendingPermissions(prev => {
-        const next = new Map(prev)
-        const queue = next.get(sessionId) || []
-        const remainingQueue = queue.slice(1) // Remove first item
-        if (remainingQueue.length === 0) {
-          next.delete(sessionId)
-        } else {
-          next.set(sessionId, remainingQueue)
-        }
-        return next
-      })
-      // Note: No need to force session refresh - per-session atoms update automatically
-    } else {
-      // Response failed (agent/session gone) - clear the permission anyway
-      // to avoid UI being stuck with stale permission
-      setPendingPermissions(prev => {
-        const next = new Map(prev)
-        const queue = next.get(sessionId) || []
-        const remainingQueue = queue.slice(1)
-        if (remainingQueue.length === 0) {
-          next.delete(sessionId)
-        } else {
-          next.set(sessionId, remainingQueue)
-        }
-        return next
-      })
-    }
+    await window.electronAPI.respondToPermission(sessionId, requestId, allowed, alwaysAllow, options)
+    // Drop the prompt either way: when the response wasn't delivered it was already answered
+    // elsewhere or the agent is gone, and a stale prompt would leave the UI stuck.
+    setPendingPermissions(prev => withoutPermissionRequest(prev, sessionId, requestId))
   }, [])
 
   const handleRespondToCredential = useCallback(async (sessionId: string, requestId: string, response: CredentialResponse) => {
@@ -1731,6 +1740,8 @@ export default function App() {
     readFile: (path) => window.electronAPI.readFile(path),
     readFileDataUrl: (path) => window.electronAPI.readFileDataUrl(path),
     readFileBinary: (path) => window.electronAPI.readFileBinary(path),
+    // The Web UI can't open or reveal local files, so its file links keep the direct preview.
+    fileLinkMenu: !isWebUI,
   })
 
   const connectionState = useTransportConnectionState()
@@ -2134,6 +2145,15 @@ export default function App() {
               isDark={isDark}
             />
           )}
+
+          {/* File-link menu — opened by the link interceptor when a local file link is clicked */}
+          <FileLinkActionMenu
+            menu={linkInterceptor.fileLinkMenu}
+            onClose={linkInterceptor.closeFileLinkMenu}
+            onOpenExternal={linkInterceptor.openFileExternal}
+            onPreview={linkInterceptor.previewFile}
+            onReveal={linkInterceptor.showInFolder}
+          />
         </NavigationProvider>
         </TooltipProvider>
         </ModalProvider>

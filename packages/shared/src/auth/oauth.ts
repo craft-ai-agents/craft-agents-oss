@@ -8,6 +8,7 @@ import type { PreparedOAuthFlow, OAuthExchangeParams, OAuthExchangeResult } from
 
 export interface OAuthConfig {
   mcpUrl: string; // Full MCP URL including path (e.g., https://mcp.craft.do/my/mcp)
+  scopes?: string[]; // Sent as `scope` on authorize when non-empty
 }
 
 export interface OAuthTokens {
@@ -283,6 +284,9 @@ export class CraftOAuth {
     authUrl.searchParams.set('state', state);
     authUrl.searchParams.set('code_challenge', pkce.challenge);
     authUrl.searchParams.set('code_challenge_method', 'S256');
+    if (this.config.scopes?.length) {
+      authUrl.searchParams.set('scope', this.config.scopes.join(' '));
+    }
 
     // RFC 8707 resource indicator — required by resource-bound MCP servers so the
     // issued token is audience-scoped to this MCP endpoint (OSS #1054). Only send
@@ -567,7 +571,7 @@ async function exchangeMcpCodeForTokens(
  */
 export async function prepareMcpOAuth(
   mcpUrl: string,
-  options: { callbackPort?: number; callbackUrl?: string },
+  options: { callbackPort?: number; callbackUrl?: string; scopes?: string[] },
 ): Promise<PreparedOAuthFlow> {
   const metadata = await discoverOAuthMetadata(mcpUrl);
   if (!metadata) {
@@ -613,6 +617,9 @@ export async function prepareMcpOAuth(
   authUrl.searchParams.set('state', state);
   authUrl.searchParams.set('code_challenge', pkce.challenge);
   authUrl.searchParams.set('code_challenge_method', 'S256');
+  if (options.scopes?.length) {
+    authUrl.searchParams.set('scope', options.scopes.join(' '));
+  }
   if (resource) {
     authUrl.searchParams.set('resource', resource);
   }

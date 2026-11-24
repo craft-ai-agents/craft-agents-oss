@@ -270,6 +270,18 @@ export interface McpSourceConfig {
    */
   clientId?: string;
 
+  /**
+   * Route the OAuth redirect through Craft's hosted relay. Defaults to true.
+   * Set false for servers that only accept loopback redirect URIs.
+   */
+  oauthRelay?: boolean;
+
+  /**
+   * OAuth scopes to request on authorization. Unset sends no `scope` parameter,
+   * leaving the server to grant its default scopes.
+   */
+  scopes?: string[];
+
   // === Stdio transport fields ===
   /**
    * Command to spawn for stdio transport.

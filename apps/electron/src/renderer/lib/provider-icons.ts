@@ -72,6 +72,7 @@ export function getProviderDisplayName(providerType: string, baseUrl?: string | 
     if (url.includes('minimax.io') || url.includes('minimaxi.com')) return 'Minimax'
     if (url.includes('v0.dev') || url.includes('vercel')) return 'Vercel'
     if (url.includes('manifest.build')) return 'Manifest'
+    if (url.includes('opencode.ai')) return 'OpenCode Go'
   }
   return providerDisplayNames[providerType] || providerType
 }
@@ -176,6 +177,10 @@ export function getProviderIcon(
     // Manifest has no bundled SVG — fall back to Google Favicon V2 (same trick used for groq/xai elsewhere).
     if (baseUrl.toLowerCase().includes('manifest.build')) {
       return 'https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&size=128&url=https://app.manifest.build'
+    }
+    // OpenCode Go has no bundled SVG — same Favicon V2 fallback.
+    if (baseUrl.toLowerCase().includes('opencode.ai')) {
+      return 'https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&size=128&url=https://opencode.ai'
     }
   }
 

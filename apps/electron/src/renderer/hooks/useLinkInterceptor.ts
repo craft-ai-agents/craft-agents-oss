@@ -7,6 +7,8 @@
  *
  * Architecture:
  *   Markdown click → PlatformContext → App.tsx → useLinkInterceptor
+ *     ├── file-link click (menu on)? → fileLinkMenu (FileLinkActionMenu in App.tsx);
+ *     │                                with ⌥ held → electronAPI.openFile
  *     ├── canPreview? → set previewState (renders overlay in App.tsx)
  *     └── can't preview? → electronAPI.openFile (opens externally)
  *
@@ -15,8 +17,9 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { classifyFile, type FilePreviewType } from '@craft-agent/ui'
+import { classifyFile, type FileLinkClick, type FilePreviewType } from '@craft-agent/ui'
 import { getLanguageFromPath } from '@/lib/file-utils'
+import { routeFileOpen, type FileLinkMenuState } from '@/components/app-shell/file-link-menu'
 
 // ── Preview state types ────────────────────────────────────────────────────────
 // Each variant carries the data needed to render its specific overlay.
@@ -86,17 +89,30 @@ interface LinkInterceptorOptions {
   readFileDataUrl: (path: string) => Promise<string>
   /** Read file as binary (Uint8Array) for PDF previews via react-pdf */
   readFileBinary: (path: string) => Promise<Uint8Array>
+  /**
+   * Offer choices when a file link is clicked (FileLinkActionMenu); ⌥-click opens the file directly.
+   * Off in the Web UI, which can't open or reveal local files, so links keep the direct behavior.
+   */
+  fileLinkMenu: boolean
 }
 
 // ── Hook return type ───────────────────────────────────────────────────────────
 
 interface LinkInterceptorResult {
-  /** Replacement for App.tsx handleOpenFile — classifies and routes */
-  handleOpenFile: (path: string) => void
+  /** Replacement for App.tsx handleOpenFile — a file-link click opens the menu, anything else classifies and routes */
+  handleOpenFile: (path: string, click?: FileLinkClick) => void
   /** Replacement for App.tsx handleOpenUrl — always opens externally */
   handleOpenUrl: (url: string) => void
   /** Open file directly in external app, bypassing classification/preview */
   openFileExternal: (path: string) => void
+  /** Preview the file in-app when its type has a preview, else open it externally (no menu) */
+  previewFile: (path: string) => void
+  /** Reveal a file in the system file manager */
+  showInFolder: (path: string) => void
+  /** The open file-link menu, drives FileLinkActionMenu in App.tsx */
+  fileLinkMenu: FileLinkMenuState | null
+  /** Close the file-link menu */
+  closeFileLinkMenu: () => void
   /** Current preview state, drives which overlay renders in App.tsx */
   previewState: FilePreviewState | null
   /** Close the preview overlay */
@@ -115,6 +131,7 @@ interface LinkInterceptorResult {
 
 export function useLinkInterceptor(options: LinkInterceptorOptions): LinkInterceptorResult {
   const [previewState, setPreviewState] = useState<FilePreviewState | null>(null)
+  const [fileLinkMenu, setFileLinkMenu] = useState<FileLinkMenuState | null>(null)
 
   // Use refs for options so callbacks remain referentially stable.
   // Without this, every render creates a new options object → new callbacks → cascading
@@ -128,16 +145,15 @@ export function useLinkInterceptor(options: LinkInterceptorOptions): LinkInterce
   useEffect(() => { previewStateRef.current = previewState }, [previewState])
 
   /**
-   * Main entry point for file link clicks.
-   * Classifies the file by extension, then either opens a preview overlay
-   * or falls back to opening externally.
+   * Direct open, no menu: classifies the file by extension, then either opens
+   * a preview overlay or falls back to opening externally.
    *
    * For text-based files (code, markdown, json, text), reads the content BEFORE
    * showing the overlay — local filesystem reads are near-instant, so no loading
    * state is needed. This avoids null-content issues in overlay components
    * (e.g., @uiw/react-json-view crashes on null value).
    */
-  const handleOpenFile = useCallback(async (path: string) => {
+  const previewFile = useCallback(async (path: string) => {
     const classification = classifyFile(path)
 
     if (!classification.canPreview || !classification.type) {
@@ -167,10 +183,34 @@ export function useLinkInterceptor(options: LinkInterceptorOptions): LinkInterce
     }
   }, []) // Stable: uses optionsRef
 
+  /**
+   * Main entry point for file opens. A click on a file link (`click` set) opens the file-link
+   * menu next to the link, or with ⌥ held opens the file in its default app. Every other caller
+   * (session files, attachments, folders) and the Web UI get the direct open.
+   */
+  const handleOpenFile = useCallback((path: string, click?: FileLinkClick) => {
+    const route = routeFileOpen(click, optionsRef.current.fileLinkMenu)
+    if (route.kind === 'menu') {
+      setFileLinkMenu({ path, anchor: route.anchor })
+    } else if (route.kind === 'external') {
+      optionsRef.current.openFileExternal(path)
+    } else {
+      void previewFile(path)
+    }
+  }, [previewFile]) // Stable: previewFile is
+
+  const closeFileLinkMenu = useCallback(() => {
+    setFileLinkMenu(null)
+  }, [])
+
   /** Open file directly in external app, bypassing classification/preview.
    * Used by overlay header badges — when already viewing a file, "Open" should launch the editor. */
   const openFileExternal = useCallback((path: string) => {
     optionsRef.current.openFileExternal(path)
+  }, []) // Stable: uses optionsRef
+
+  const showInFolder = useCallback((path: string) => {
+    optionsRef.current.showInFolder(path)
   }, []) // Stable: uses optionsRef
 
   /** URLs always open externally — no in-app browser for security */
@@ -212,6 +252,10 @@ export function useLinkInterceptor(options: LinkInterceptorOptions): LinkInterce
     handleOpenFile,
     handleOpenUrl,
     openFileExternal,
+    previewFile,
+    showInFolder,
+    fileLinkMenu,
+    closeFileLinkMenu,
     previewState,
     closePreview,
     openCurrentExternal,

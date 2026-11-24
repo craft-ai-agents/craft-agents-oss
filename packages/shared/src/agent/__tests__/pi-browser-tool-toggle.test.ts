@@ -2,13 +2,14 @@
  * Pi `browser_tool` toggle test.
  *
  * Verifies that when `getBrowserToolEnabled()` returns false, the Pi backend
- * filters `mcp__session__browser_tool` out of its session tool registration —
- * matching Claude's existing gate.
+ * does not register `mcp__session__browser_tool` — matching Claude's gate.
  *
- * The filter lives in `PiAgent.registerSessionToolsWithSubprocess` (inline,
- * not exported). To avoid spinning up a full subprocess, we do a textual
- * contract check on the source file. If the filter line is removed or the
- * tool name renamed, the test fails so the regression is caught.
+ * Both backends filter through `getSessionToolDefs` (session-tools-core), whose
+ * `includeBrowser` option is covered by tool-defs-filtering.test.ts. Pi reaches it
+ * through `getSessionToolProxyDefs` (backend/pi/session-tool-defs.ts) during
+ * subprocess setup. To avoid spinning up a full subprocess, we do a textual
+ * contract check that the gate is still wired; if the setting is no longer passed
+ * or Pi stops using the shared helper, the test fails so the regression is caught.
  */
 
 import { describe, it, expect } from 'bun:test'
@@ -17,15 +18,14 @@ import { join } from 'node:path'
 
 describe('pi-agent browser_tool toggle (contract)', () => {
   const piAgentSource = readFileSync(join(__dirname, '..', 'pi-agent.ts'), 'utf-8')
+  const proxyDefsSource = readFileSync(join(__dirname, '..', 'backend', 'pi', 'session-tool-defs.ts'), 'utf-8')
 
-  it('imports getBrowserToolEnabled from config storage', () => {
-    expect(piAgentSource).toContain('getBrowserToolEnabled')
-    expect(piAgentSource).toMatch(/from ['"]\.\.\/config\/storage(\.ts)?['"]/)
+  it('registers session tools through the shared proxy-defs helper', () => {
+    expect(piAgentSource).toContain('getSessionToolProxyDefs(')
   })
 
-  it('filters mcp__session__browser_tool when toggle is off', () => {
-    // The filter must be applied after getSessionToolProxyDefs() is called.
-    expect(piAgentSource).toContain('!getBrowserToolEnabled()')
-    expect(piAgentSource).toContain("d.name !== 'mcp__session__browser_tool'")
+  it('passes the built-in browser setting to the shared tool filter', () => {
+    expect(proxyDefsSource).toMatch(/import \{ getBrowserToolEnabled \} from ['"]\.\.\/\.\.\/\.\.\/config\/storage(\.ts)?['"]/)
+    expect(proxyDefsSource).toContain('includeBrowser: getBrowserToolEnabled()')
   })
 })

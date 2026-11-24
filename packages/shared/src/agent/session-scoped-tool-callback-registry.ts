@@ -109,6 +109,11 @@ export interface SessionScopedToolCallbacks {
    * feature toggle, key) happens inside the callback at call time.
    */
   decide?: import('@craft-agent/session-tools-core').DecisionToolCallbacks;
+  /**
+   * PR watcher tools (pr_status / pr_bind / pr_unbind / pr_set_auto_merge) for Coding mode. Wired by
+   * SessionManager bound to the invoking session; the server-side watcher holds the credentials.
+   */
+  prWatch?: import('@craft-agent/session-tools-core').PrWatchToolCallbacks;
 }
 
 // Registry of callbacks keyed by sessionId

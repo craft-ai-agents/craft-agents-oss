@@ -10,6 +10,7 @@ import type { StructuredInputState, StructuredResponse, InputMode } from './stru
 import { getComposerMaxHeight } from './composer-height'
 import { useInputAvailableHeight } from '@/hooks/useInputAvailableHeight'
 import { BackgroundFinishedChip } from '../BackgroundFinishedChip'
+import { CraftyGlow, useCraftyGlow } from '@/components/crafty/CraftyGlow'
 import { decisionRingClass } from './structured/DecisionCard'
 import { getDecisionTone } from './structured/decision-tone'
 
@@ -69,6 +70,8 @@ export function InputContainer({
   const [structuredHeight, setStructuredHeight] = React.useState<number | null>(null)
   const [isFocused, setIsFocused] = React.useState(false)
   const hasInitializedRef = React.useRef(false)
+  // Shows while this session is Crafty's target ("Send Crafty Here"), moving as it becomes it
+  const craftyGlow = useCraftyGlow(freeFormProps.sessionId, freeFormProps.workspaceId)
 
   // Create a stable key for the current content
   const contentKey = mode === 'freeform' ? 'freeform' : `structured-${structuredInput?.type}`
@@ -275,6 +278,8 @@ export function InputContainer({
           maxHeight,
         }}
       >
+        {/* Over the card's fill, under the content */}
+        <CraftyGlow playKey={craftyGlow.playKey} active={craftyGlow.active} />
         {/* Crossfading content - freeform anchored to bottom (for auto-grow), others fill */}
         <AnimatePresence mode="sync" initial={false}>
           <motion.div

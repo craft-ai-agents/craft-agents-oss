@@ -1,6 +1,7 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
 import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
+import { usesLegacyClaudeOAuthSlot } from '@craft-agent/shared/auth'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
 import {
   resolveSetupTestConnectionHint,
@@ -8,7 +9,7 @@ import {
   validateStoredBackendConnection,
 } from '@craft-agent/shared/agent/backend'
 import { getModelRefreshService } from '@craft-agent/server-core/model-fetchers'
-import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName, validateSetupTestInput, setupTestRequiresApiKey, resolveCustomEndpointSetup, resolveSetupTestApiKey, maskApiKey, isMaskedApiKey } from '@craft-agent/server-core/domain'
+import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName, validateSetupTestInput, setupTestRequiresApiKey, resolveCustomEndpointSetup, resolveSetupTestApiKey, maskApiKey, isMaskedApiKey, storeSetupOAuthToken, deleteConnectionCredentials, releaseLegacyClaudeSlot } from '@craft-agent/server-core/domain'
 import { getWorkspaceOrThrow, buildBackendHostRuntimeContext } from '@craft-agent/server-core/handlers'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -271,8 +272,9 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       if (setup.credential && !isMasked) {
         const authType = pendingConnection.authType
         if (authType === 'oauth') {
-          await manager.setLlmOAuth(setup.slug, { accessToken: setup.credential })
-          deps.platform.logger?.info('Saved OAuth access token to LLM connection')
+          if (await storeSetupOAuthToken(manager, setup.slug, setup.credential)) {
+            deps.platform.logger?.info('Saved OAuth access token to LLM connection')
+          }
         } else {
           await manager.setLlmApiKey(setup.slug, setup.credential)
           deps.platform.logger?.info('Saved API key to LLM connection')
@@ -512,14 +514,14 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       if (!connection) {
         return { success: false, error: 'Connection not found' }
       }
+      const wasDefault = getDefaultLlmConnection() === slug
       // deleteLlmConnection handles the "at least one must remain" check
       const success = deleteLlmConnection(slug)
       if (success) {
         // Stop any periodic model refresh timer for this connection
         getModelRefreshService().stopConnection(slug)
         // Also delete associated credentials
-        const credentialManager = getCredentialManager()
-        await credentialManager.deleteLlmCredentials(slug)
+        await deleteConnectionCredentials(getCredentialManager(), connection, wasDefault)
         deps.platform.logger?.info(`LLM connection deleted: ${slug}`)
       }
       return { success }
@@ -560,8 +562,13 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // Set global default LLM connection
   server.handle(RPC_CHANNELS.llmConnections.SET_DEFAULT, async (_ctx, slug: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      const manager = getCredentialManager()
+      const previousSlug = getDefaultLlmConnection()
+      const previous = previousSlug ? getLlmConnection(previousSlug) : null
+      const previousUsedSlot = previous ? await usesLegacyClaudeOAuthSlot(manager, previous.slug) : false
       const success = setDefaultLlmConnection(slug)
       if (success) {
+        await releaseLegacyClaudeSlot(manager, previous, previousUsedSlot, slug)
         deps.platform.logger?.info(`Global default LLM connection set to: ${slug}`)
         // Reinitialize auth so env vars and summarization model override match the new default
         await sessionManager.reinitializeAuth()

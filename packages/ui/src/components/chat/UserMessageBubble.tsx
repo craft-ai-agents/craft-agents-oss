@@ -8,16 +8,20 @@
  * - Optional file attachments with thumbnails
  * - Content badges for @mentions (sources, skills)
  * - Pending/queued states (Electron only)
+ * - Copy button left of the bubble, revealed on hover/focus like the answer footer (not in compact mode)
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Clock } from 'lucide-react'
+import { Check, Clock, Copy } from 'lucide-react'
 import type { StoredAttachment, ContentBadge } from '@craft-agent/core'
 import { normalizePath } from '@craft-agent/core/utils'
 import { cn } from '../../lib/utils'
-import { Markdown } from '../markdown'
+import { useCopyToClipboard } from '../../lib/use-copy-to-clipboard'
+import { Markdown, type FileOpenHandler } from '../markdown'
 import { FileTypeIcon, getFileTypeLabel } from './attachment-helpers'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '../tooltip'
+import { TurnIconButton } from './turn/TurnIconButton'
+import { HOVER_REVEAL } from './turn/turn-classes'
 import { useTranslation } from 'react-i18next'
 
 // Fallback text icons for badges without iconDataUrl
@@ -170,7 +174,7 @@ function InlineFileBadge({
   onFileClick
 }: {
   badge: ContentBadge
-  onFileClick?: (path: string) => void
+  onFileClick?: FileOpenHandler
 }) {
   // Strip .craft-agent workspace/session path prefix for cleaner tooltip display
   // e.g. "/Users/.../workspaces/{id}/sessions/{id}/plans/foo.md" → "plans/foo.md"
@@ -224,7 +228,7 @@ function renderContentWithBadges(
   content: string,
   badges: ContentBadge[],
   onUrlClick?: (url: string) => void,
-  onFileClick?: (path: string) => void
+  onFileClick?: FileOpenHandler
 ): ReactNode {
   if (badges.length === 0) {
     return (
@@ -312,7 +316,7 @@ export interface UserMessageBubbleProps {
   /** Callback when a URL is clicked */
   onUrlClick?: (url: string) => void
   /** Callback when a file path is clicked */
-  onFileClick?: (path: string) => void
+  onFileClick?: FileOpenHandler
   /** Stored attachments (images, documents) */
   attachments?: StoredAttachment[]
   /** Content badges for inline display (sources, skills) */
@@ -342,6 +346,7 @@ export function UserMessageBubble({
   compactMode,
 }: UserMessageBubbleProps) {
   const { t } = useTranslation()
+  const { copied, copy } = useCopyToClipboard()
   const hasAttachments = attachments && attachments.length > 0
 
   // Show the queued chip while `isQueued` is true AND for at least
@@ -488,36 +493,51 @@ export function UserMessageBubble({
           inside the bubble (Clock icon + 'Queued' italic) instead of a
           separate pill below — keeps the chat to one bubble per message
           while the chip and pulsing icon make the waiting state obvious
-          (#616 follow-up). */}
-      <div
-        className={cn(
-          "min-w-0 select-text break-words rounded-xl bg-user-message-bubble px-3.5 py-2.25 text-copy text-foreground [&_p]:m-0",
-          maxWidth
-        )}
-      >
-        {showQueued && (
+          (#616 follow-up). The copy button sits left of the bubble, out of the
+          layout, so a hidden button never moves the transcript. */}
+      <div className={cn("group/user-message relative min-w-0", maxWidth)}>
+        {!compactMode && (
           <div
-            className="mb-1 flex items-center gap-1.5 text-tertiary"
-            role="status"
-            aria-live="polite"
+            data-touch-reveal="true"
+            className={cn(
+              HOVER_REVEAL,
+              "absolute right-full top-2.25 mr-1 group-hover/user-message:opacity-100 group-hover/user-message:duration-instant"
+            )}
           >
-            <Clock className="size-3 animate-pulse" aria-hidden="true" />
-            <span className="text-caption font-normal italic">{t('chat.queuedBadge')}</span>
+            <TurnIconButton
+              aria-label={copied ? t('common.copied') : t('common.copy')}
+              tooltip
+              icon={copied ? <Check className="size-3.5 text-success" /> : <Copy />}
+              onClick={() => copy(displayContent)}
+              className="select-none"
+            />
           </div>
         )}
-        {hasInlineBadges
-          ? renderContentWithBadges(displayContent, inlineBadges, onUrlClick, onFileClick)
-          : (
-            <Markdown
-              mode="minimal"
-              onUrlClick={onUrlClick}
-              onFileClick={onFileClick}
-              className={BUBBLE_MARKDOWN}
+        <div className="min-w-0 select-text break-words rounded-xl bg-user-message-bubble px-3.5 py-2.25 text-copy text-foreground [&_p]:m-0">
+          {showQueued && (
+            <div
+              className="mb-1 flex items-center gap-1.5 text-tertiary"
+              role="status"
+              aria-live="polite"
             >
-              {displayContent}
-            </Markdown>
-          )
-        }
+              <Clock className="size-3 animate-pulse" aria-hidden="true" />
+              <span className="text-caption font-normal italic">{t('chat.queuedBadge')}</span>
+            </div>
+          )}
+          {hasInlineBadges
+            ? renderContentWithBadges(displayContent, inlineBadges, onUrlClick, onFileClick)
+            : (
+              <Markdown
+                mode="minimal"
+                onUrlClick={onUrlClick}
+                onFileClick={onFileClick}
+                className={BUBBLE_MARKDOWN}
+              >
+                {displayContent}
+              </Markdown>
+            )
+          }
+        </div>
       </div>
     </div>
   )

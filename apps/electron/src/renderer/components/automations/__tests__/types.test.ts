@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test'
-import { parseAutomationsConfig } from '../types'
+import { AUTOMATIONS_LOAD_ISSUES_KEY } from '@craft-agent/shared/protocol'
+import { parseAutomationsConfig, getUnattachedLoadIssues, getEventDisplayName } from '../types'
 import { computeNextRuns } from '../utils'
 
 describe('parseAutomationsConfig', () => {
@@ -210,6 +211,70 @@ describe('parseAutomationsConfig', () => {
     expect(items[0].matcher).toBe('urgent')
     expect(items[0].permissionMode).toBe('ask')
     expect(items[0].labels).toEqual(['important'])
+  })
+})
+
+describe('parseAutomationsConfig: script actions and load issues', () => {
+  it('lists script automations (they run, so the screen must show them)', () => {
+    const items = parseAutomationsConfig({
+      automations: { SchedulerTick: [{ cron: '0 9 * * *', actions: [{ type: 'script', script: 'scripts/pull.ts', runtime: 'python3' }] }] },
+    })
+    expect(items).toHaveLength(1)
+    expect(items[0].actions).toEqual([{ type: 'script', script: 'scripts/pull.ts', runtime: 'python3' }])
+    expect(items[0].name).toBe('Script scripts/pull.ts')
+    expect(items[0].issues).toBeUndefined()
+  })
+
+  it('attaches the server\'s issues to the row and keeps a row that has no showable action', () => {
+    const items = parseAutomationsConfig({
+      automations: {
+        LabelAdd: [
+          { id: 'old', matcher: '^urgent$', actions: [{ type: 'command', command: 'echo hi' }] },
+          { id: 'ok', actions: [{ type: 'prompt', prompt: 'fine' }] },
+        ],
+      },
+      [AUTOMATIONS_LOAD_ISSUES_KEY]: [
+        { event: 'LabelAdd', index: 0, id: 'old', messages: ['Action 1 uses the removed "command" type; use a "script" action instead'] },
+      ],
+    })
+    expect(items.map(i => i.id)).toEqual(['old', 'ok'])
+    expect(items[0].actions).toEqual([])
+    // A first action of an unknown type must not crash naming (it used to read .prompt)
+    expect(items[0].name).toBe(getEventDisplayName('LabelAdd'))
+    expect(items[0].issues).toEqual(['Action 1 uses the removed "command" type; use a "script" action instead'])
+    expect(items[1].issues).toBeUndefined()
+  })
+
+  it('still skips a row with nothing to show when the server sends no issues (older servers)', () => {
+    const items = parseAutomationsConfig({
+      automations: { LabelAdd: [{ actions: [{ type: 'command', command: 'echo hi' }] }] },
+    })
+    expect(items).toEqual([])
+  })
+
+  it('skips non-object entries instead of crashing', () => {
+    const items = parseAutomationsConfig({
+      automations: { LabelAdd: [null, 'oops', { actions: [{ type: 'prompt', prompt: 'ok' }] }] },
+    })
+    expect(items.map(i => i.matcherIndex)).toEqual([2])
+  })
+
+  it('returns the issues no row shows, for the banner', () => {
+    const json = {
+      automations: {
+        LabelAdd: [null, { actions: [{ type: 'prompt', prompt: 'ok' }] }],
+      },
+      [AUTOMATIONS_LOAD_ISSUES_KEY]: [
+        { messages: ['automations.json is not valid JSON: Unexpected end'] },
+        { event: 'LabelAdd', index: 0, messages: ['actions: Required'] },
+        { event: 'LabelAdd', index: 1, name: 'Shown', messages: ['shown on its row'] },
+      ],
+    }
+    const items = parseAutomationsConfig(json)
+    expect(getUnattachedLoadIssues(json, items)).toEqual([
+      'automations.json is not valid JSON: Unexpected end',
+      'LabelAdd #1: actions: Required',
+    ])
   })
 })
 

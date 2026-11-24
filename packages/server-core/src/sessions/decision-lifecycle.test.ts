@@ -143,7 +143,8 @@ describe('decision points in the session lifecycle', () => {
         expect(managed.messageQueue[1]!.mergeWith).toBe(managed.messageQueue[0])
 
         const replays: string[] = []
-        ;(sm as any).sendMessage = async (_id: string, message: string) => { replays.push(message) }
+        ;(sm as any).sendAdmittedMessage = async (_endAdmission: unknown, _id: string, message: string) => { replays.push(message) }
+        managed.isProcessing = false  // the turn ended
         ;(sm as any).processNextQueuedMessage(managed.id)
         await tick()
         expect(replays).toEqual([`${FIRST}\n\n${SECOND}`])
@@ -240,7 +241,7 @@ describe('decision points in the session lifecycle', () => {
   it('merges queued continuations by reference, not by position', async () => {
     const managed = await session('merge')
     const replays: string[] = []
-    ;(sm as any).sendMessage = async (_id: string, message: string) => { replays.push(message) }
+    ;(sm as any).sendAdmittedMessage = async (_endAdmission: unknown, _id: string, message: string) => { replays.push(message) }
     const a = { message: 'A', messageId: 'a' }
     const steer = { message: 'S', messageId: 's' }
     const b = { message: 'B', messageId: 'b', mergeWith: a }

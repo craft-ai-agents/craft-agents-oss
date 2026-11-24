@@ -26,12 +26,15 @@ export interface SessionOptions {
   previousPermissionMode?: PermissionMode
   /** Session-level thinking level — sticky, persisted. See {@link ThinkingLevel}. */
   thinkingLevel: ThinkingLevel
+  /** Coding mode — lean coding prompt and session tools; fixed once the conversation starts */
+  codingMode: boolean
 }
 
 /** Default values for new sessions */
 export const defaultSessionOptions: SessionOptions = {
   permissionMode: 'ask', // Default to ask mode (prompt for permissions)
   thinkingLevel: DEFAULT_THINKING_LEVEL, // Default to 'medium' level
+  codingMode: false,
 }
 
 /** Type for partial updates to session options */

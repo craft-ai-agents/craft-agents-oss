@@ -14,7 +14,7 @@ Thank you for your interest in contributing to Craft Agents! This document provi
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/lukilabs/craft-agents-oss.git
+   git clone https://github.com/craft-ai-agents/craft-agents-oss.git
    cd craft-agents-oss
    ```
 
@@ -67,6 +67,12 @@ Before submitting a PR, ensure all type checks pass:
 bun run typecheck:all
 ```
 
+CI runs `validate:ci`, which adds the shared package tests, the document-tool smoke tests and the i18n checks:
+
+```bash
+bun run validate:ci
+```
+
 ## Pull Request Process
 
 1. **Title**: Use a clear, descriptive title
@@ -93,14 +99,22 @@ How you tested these changes
 ## Project Structure
 
 ```
-craft-agents/
+craft-agents-oss/
 ├── apps/
-│   ├── electron/    # Desktop GUI (primary interface)
-│   └── tui/         # Terminal CLI (deprecated)
+│   ├── electron/                   # Desktop GUI (primary interface)
+│   ├── webui/                      # Browser UI served by the headless server
+│   ├── cli/                        # Terminal client for the headless server
+│   └── viewer/                     # Web viewer for shared session transcripts
 └── packages/
-    ├── core/        # @craft-agent/core - Shared types
-    ├── shared/      # @craft-agent/shared - Business logic
-    └── ui/          # @craft-agent/ui - React components
+    ├── core/                       # @craft-agent/core - Shared types
+    ├── shared/                     # @craft-agent/shared - Business logic
+    ├── ui/                         # @craft-agent/ui - React components
+    ├── server-core/                # @craft-agent/server-core - RPC transport, handlers, session management
+    ├── server/                     # @craft-agent/server - Standalone headless server
+    ├── pi-agent-server/            # Pi agent subprocess (JSONL over stdio)
+    ├── session-tools-core/         # Session-scoped tool implementations
+    ├── messaging-gateway/          # Telegram, WhatsApp and Lark messaging gateway
+    └── messaging-whatsapp-worker/  # WhatsApp worker subprocess
 ```
 
 ## Key Areas
@@ -108,6 +122,8 @@ craft-agents/
 - **Agent Logic**: `packages/shared/src/agent/`
 - **Authentication**: `packages/shared/src/auth/`
 - **MCP Integration**: `packages/shared/src/mcp/`
+- **Sessions**: `packages/server-core/src/sessions/`
+- **RPC Handlers**: `packages/server-core/src/handlers/rpc/`
 - **UI Components**: `packages/ui/src/`
 - **Electron App**: `apps/electron/`
 

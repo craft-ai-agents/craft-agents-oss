@@ -29,6 +29,8 @@ export interface CliArgs {
   mode: string
   outputFormat: string
   noCleanup: boolean
+  /** Start the `run` session in coding mode (lean coding prompt + session tools) */
+  coding: boolean
   noSpinner: boolean
   verbose: boolean
   serverEntry?: string
@@ -55,6 +57,7 @@ export function parseArgs(argv: string[]): CliArgs {
   let mode = ''
   let outputFormat = 'text'
   let noCleanup = false
+  let coding = false
   let noSpinner = false
   let verbose = false
   let serverEntry: string | undefined
@@ -99,6 +102,9 @@ export function parseArgs(argv: string[]): CliArgs {
         break
       case '--no-cleanup':
         noCleanup = true
+        break
+      case '--coding':
+        coding = true
         break
       case '--disable-spinner':
       case '--no-spinner':
@@ -154,7 +160,7 @@ export function parseArgs(argv: string[]): CliArgs {
   if (!apiKey) apiKey = process.env.LLM_API_KEY ?? ''
   if (!baseUrl) baseUrl = process.env.LLM_BASE_URL ?? ''
 
-  return { url, token, workspace, timeout, json, tlsCa, sendTimeout, command, rest, sources, mode, outputFormat, noCleanup, noSpinner, verbose, serverEntry, workspaceDir, provider, model, apiKey, baseUrl }
+  return { url, token, workspace, timeout, json, tlsCa, sendTimeout, command, rest, sources, mode, outputFormat, noCleanup, coding, noSpinner, verbose, serverEntry, workspaceDir, provider, model, apiKey, baseUrl }
 }
 
 // ---------------------------------------------------------------------------
@@ -707,6 +713,8 @@ async function cmdRun(args: CliArgs): Promise<void> {
       enabledSourceSlugs: args.sources.length > 0 ? args.sources : undefined,
       // `craft run` cannot answer permission prompts (sendAndStream ignores them).
       unattended: true,
+      // Only when asked: omitting it lets the workspace default apply
+      ...(args.coding ? { codingMode: true } : {}),
     })) as { id: string }
     sessionId = session.id
 
@@ -1936,6 +1944,7 @@ Commands:
                          --mode <mode>       Permission mode (default: allow-all)
                          --output-format     text or stream-json (default: text)
                          --no-cleanup        Keep session after completion
+                         --coding            Coding mode: lean coding prompt and tools
                          --server-entry      Path to server/index.ts
   ping                   Verify connectivity (clientId + latency)
   health                 Check credential store health

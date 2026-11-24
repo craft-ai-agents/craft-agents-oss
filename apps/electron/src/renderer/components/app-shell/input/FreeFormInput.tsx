@@ -39,17 +39,12 @@ import { isMac } from '@/lib/platform'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
 import { ImageSupportWarningBanner } from './ImageSupportWarningBanner'
-import { ANTHROPIC_MODELS, getModelDisplayName, getModelContextWindow } from '@config/models'
-import {
-  resolveEffectiveConnectionSlug,
-  isCompatProvider,
-  modelSupportsImages,
-} from '@config/llm-connections'
+import { getModelContextWindow } from '@config/models'
+import { isCompatProvider, modelSupportsImages } from '@config/llm-connections'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { CompactWorkingDirectorySelector } from '@/components/ui/CompactWorkingDirectorySelector'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
-import { derivePickerMode } from './picker-mode'
 import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
 import { isPermissionMode, planExecutionMode, type PermissionMode } from '@craft-agent/shared/agent/modes'
 import { useAvailablePermissionModes } from '@/hooks/useAvailablePermissionModes'
@@ -67,12 +62,13 @@ import {
 import { WorkingDirectorySelector, formatPathForDisplay } from './WorkingDirectorySelector'
 import { CompactPermissionModeSelector } from './CompactPermissionModeSelector'
 import { CompactModelSelector } from './CompactModelSelector'
-import {
-  groupConnectionsByProvider,
-  stripPiPrefixForDisplay,
-} from './model-picker-helpers'
+import { useModelPickerState } from './useModelPickerState'
 import { useModelVisionToggle } from './useModelVisionToggle'
 import { ComposerSourcesChip } from './ComposerSourcesChip'
+import { ComposerCodingChip } from './ComposerCodingChip'
+import { CraftyComposerChip } from '@/components/crafty/CraftyComposerChip'
+import { useDirectoryPicker } from '@/hooks/useDirectoryPicker'
+import { ServerDirectoryBrowser } from '@/components/ServerDirectoryBrowser'
 import { ComposerModelMenu } from './ComposerModelMenu'
 import { ComposerModeChip } from './ComposerModeChip'
 import { ContextUsageChip } from './ContextUsageChip'
@@ -192,6 +188,13 @@ export interface FreeFormInputProps {
   disableSend?: boolean
   /** Whether the session is empty (no messages yet) - affects context badge prominence */
   isEmptySession?: boolean
+  // Coding mode (session-level, fixed once the conversation starts)
+  /** Coding mode is on: lean coding prompt and session tools */
+  codingMode?: boolean
+  /** Toggle coding mode (only before the first message) */
+  onCodingModeChange?: (enabled: boolean) => void
+  /** Continue a started session in a new one with coding mode set to `enabled` */
+  onContinueWithCodingMode?: (enabled: boolean) => void
   /** Context status for showing compaction indicator and token usage */
   contextStatus?: ContextStatus
   /** Follow-up annotations shown as context chips above the input */
@@ -281,6 +284,9 @@ export function FreeFormInput({
   currentSessionStatus,
   disableSend = false,
   isEmptySession = false,
+  codingMode = false,
+  onCodingModeChange,
+  onContinueWithCodingMode,
   contextStatus,
   followUpItems = [],
   onFollowUpClick,
@@ -315,93 +321,27 @@ export function FreeFormInput({
   const llmConnections = appShellCtx?.llmConnections ?? []
   const workspaceDefaultConnection = appShellCtx?.workspaceDefaultLlmConnection
 
-  // Derive connectionDefaultModel per-session from the effective connection.
-  // Only non-null for compat providers (custom endpoints with fixed models).
-  // Standard providers (anthropic, pi) → null → normal model picker.
-  const connectionDefaultModel = React.useMemo(() => {
-    const effectiveSlug = resolveEffectiveConnectionSlug(currentConnection, workspaceDefaultConnection, llmConnections)
-    const conn = llmConnections.find(c => c.slug === effectiveSlug)
-    if (!conn) return null
-    if (!isCompatProvider(conn.providerType)) return null
-    // Allow model switching when connection has multiple models
-    if (conn.models && conn.models.length > 1) return null
-    return conn.defaultModel ?? null
-  }, [currentConnection, workspaceDefaultConnection, llmConnections])
-
-  // Decide which of the four picker UIs to render. The `switcher` branch
-  // wins over `locked-single` so users with a single-model pi_compat default
-  // can still reach the connection list on a fresh session (#727).
-  const pickerMode = derivePickerMode({
-    connectionUnavailable,
+  // What the model picker shows (shared with the compact drawer and Crafty). The `switcher`
+  // wins over `locked-single`, so a single-model pi_compat default can still reach the connection
+  // list on a fresh session (#727).
+  const {
+    effectiveConnection,
+    effectiveConnectionDetails,
+    currentConnectionDetails,
     connectionDefaultModel,
+    pickerMode,
+    availableModels,
+    currentModelDisplayName,
+    thinkingDisabled,
+    connectionsByProvider,
+  } = useModelPickerState({
+    llmConnections,
+    workspaceDefaultConnection,
+    currentConnection,
+    currentModel,
     isEmptySession,
-    connectionCount: llmConnections.length,
+    connectionUnavailable,
   })
-
-  // Compute available models from the effective connection.
-  // All connections have models populated by backfillAllConnectionModels().
-  const availableModels = React.useMemo(() => {
-    // Connection removed — don't fall through to another connection's models
-    if (connectionUnavailable) return []
-
-    // Determine effective connection using the canonical fallback chain
-    const effectiveSlug = resolveEffectiveConnectionSlug(currentConnection, workspaceDefaultConnection, llmConnections)
-    const connection = llmConnections.find(c => c.slug === effectiveSlug)
-
-    if (!connection) {
-      return ANTHROPIC_MODELS // Safety net — shouldn't happen
-    }
-
-    return connection.models || ANTHROPIC_MODELS
-  }, [llmConnections, currentConnection, workspaceDefaultConnection, connectionUnavailable])
-
-  // Disable thinking selector when the current model explicitly doesn't support it
-  const thinkingDisabled = React.useMemo(() => {
-    const model = availableModels.find(m => typeof m !== 'string' && m.id === currentModel)
-    return typeof model !== 'string' && model?.supportsThinking === false
-  }, [availableModels, currentModel])
-
-  // Get display name for current model (full name, not short name)
-  const currentModelDisplayName = React.useMemo(() => {
-    const modelToDisplay = connectionDefaultModel ?? currentModel
-    const model = availableModels.find(m =>
-      typeof m === 'string' ? m === modelToDisplay : m.id === modelToDisplay
-    )
-    if (!model) {
-      // Fallback: use helper function to format unknown model IDs nicely
-      return stripPiPrefixForDisplay(getModelDisplayName(modelToDisplay))
-    }
-    if (typeof model === 'string') return stripPiPrefixForDisplay(model)
-    // Defensive: partial entries (custom-endpoint user-config or vision-toggle
-    // promotions) may lack `name`. Fall back to the id so the trigger button
-    // never goes blank.
-    return model.name ?? stripPiPrefixForDisplay(model.id)
-  }, [availableModels, currentModel, connectionDefaultModel])
-
-  // Group connections by provider type for hierarchical dropdown.
-  // Each provider (Anthropic, Pi) can have multiple connections (API Key, OAuth, etc.)
-  const connectionsByProvider = React.useMemo(
-    () => groupConnectionsByProvider(llmConnections),
-    [llmConnections],
-  )
-
-  // Find current connection details for display
-  const currentConnectionDetails = React.useMemo(() => {
-    if (!currentConnection) return null
-    return llmConnections.find(c => c.slug === currentConnection) ?? null
-  }, [llmConnections, currentConnection])
-
-  // Effective connection: canonical fallback chain (session → workspace default → global default → first)
-  const effectiveConnection = resolveEffectiveConnectionSlug(currentConnection, workspaceDefaultConnection, llmConnections)
-
-  // Effective connection details (with fallbacks) for model list
-  // Unlike currentConnectionDetails which is null when no explicit connection is set,
-  // this resolves to the actual connection being used (including workspace default)
-  const effectiveConnectionDetails = React.useMemo(() => {
-    if (!effectiveConnection) return null
-    return llmConnections.find(c => c.slug === effectiveConnection) ?? null
-  }, [llmConnections, effectiveConnection])
-
 
   // Access sessionStatuses and onSessionStatusChange from context for the # menu state picker
   const sessionStatuses = appShellCtx?.sessionStatuses ?? []
@@ -904,6 +844,24 @@ export function FreeFormInput({
 
   // Inline slash command hook (modes, features, and folders); Guarded only while it is offered
   const availableModes = useAvailablePermissionModes(permissionMode)
+
+  // Coding mode is about a folder's code: turning it on asks for one (the chip's popover offers a new
+  // worktree or an existing folder; "existing" opens this picker)
+  const codingFolderPicker = useDirectoryPicker(React.useCallback((path: string) => {
+    onWorkingDirectoryChange?.(path)
+  }, [onWorkingDirectoryChange]))
+  const { pickDirectory: pickCodingFolder } = codingFolderPicker
+  const hasWorkingFolder = !!workingDirectory && workingDirectory !== sessionFolderPath
+  const handleCodingModeToggle = React.useCallback((enabled: boolean) => {
+    onCodingModeChange?.(enabled)
+  }, [onCodingModeChange])
+  const codingWorkspaceSetup = React.useMemo(() => (onWorkingDirectoryChange ? {
+    workspaceId,
+    sessionId,
+    currentFolder: hasWorkingFolder ? workingDirectory : undefined,
+    onUseExistingFolder: pickCodingFolder,
+    onWorktreeCreated: onWorkingDirectoryChange,
+  } : undefined), [onWorkingDirectoryChange, workspaceId, sessionId, hasWorkingFolder, workingDirectory, pickCodingFolder])
   const inlineSlash = useInlineSlashCommand({
     inputRef: richInputRef,
     modes: availableModes,
@@ -1779,6 +1737,22 @@ export function FreeFormInput({
               workspaceId={workspaceId}
             />
           ))}
+
+          {/* Coding mode chip — next to the folder: the mode is about the folder's code */}
+          {onCodingModeChange && onContinueWithCodingMode && (
+            <ComposerCodingChip
+              enabled={codingMode}
+              locked={!isEmptySession}
+              compact={compactMode}
+              disabled={disabled}
+              onToggle={handleCodingModeToggle}
+              onContinueInNewSession={onContinueWithCodingMode}
+              workspaceSetup={codingWorkspaceSetup}
+            />
+          )}
+
+          {/* Crafty chip — only in the session Crafty sends to (macOS) */}
+          <CraftyComposerChip sessionId={sessionId} workspaceId={workspaceId} />
           </div>
 
           {/* Spacer — doubles as a tap / hover target while the input is
@@ -1881,6 +1855,13 @@ export function FreeFormInput({
           </div>
         </div>
       </div>
+      {/* Remote servers: folder browser for the coding-mode folder prompt (local uses the native dialog) */}
+      <ServerDirectoryBrowser
+        open={codingFolderPicker.showServerBrowser}
+        mode={codingFolderPicker.serverBrowserMode}
+        onSelect={codingFolderPicker.confirmServerBrowser}
+        onCancel={codingFolderPicker.cancelServerBrowser}
+      />
     </form>
   )
 }

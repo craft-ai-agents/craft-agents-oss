@@ -8,6 +8,8 @@ import { existsSync, rmSync, cpSync, readFileSync, statSync, mkdirSync } from "f
 import { join, basename } from "path";
 import * as esbuild from "esbuild";
 import { downloadUv, type Platform, type Arch } from "./build/common";
+import { compileCraftyInput } from "./build/crafty-input";
+import { buildPiAgentServer as bundlePiAgentServer } from "../packages/pi-agent-server/build.ts";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const ELECTRON_DIR = join(ROOT_DIR, "apps/electron");
@@ -23,11 +25,6 @@ const MAIN_PROCESS_ALIAS: Record<string, string> = {
   "node-fetch": join(ROOT_DIR, "apps/electron/src/main/shims/node-fetch.cjs"),
   "abort-controller": join(ROOT_DIR, "apps/electron/src/main/shims/abort-controller.cjs"),
 };
-
-// Subprocess server paths
-// Pi agent server path (subprocess for Pi SDK sessions)
-const PI_AGENT_SERVER_DIR = join(ROOT_DIR, "packages/pi-agent-server");
-const PI_AGENT_SERVER_OUTPUT = join(PI_AGENT_SERVER_DIR, "dist/index.js");
 
 // Platform-specific binary paths (bun creates .exe on Windows, no extension on Unix)
 const IS_WINDOWS = process.platform === "win32";
@@ -216,23 +213,13 @@ async function buildWaWorker(): Promise<void> {
 // Build the Pi agent server subprocess (one-time, no watch needed)
 async function buildSubprocessServers(): Promise<void> {
   console.log("🌉 Building Pi agent server...");
-
-  const piDistDir = join(PI_AGENT_SERVER_DIR, "dist");
-  if (!existsSync(piDistDir)) mkdirSync(piDistDir, { recursive: true });
-
-  // Build Pi agent server with bun (not esbuild) because its Pi SDK deps are ESM-only.
-  // esbuild with packages:external leaves them as require() calls which fail at runtime.
-  // Optional: skip if package directory is missing (e.g., not synced to OSS).
-  if (existsSync(join(PI_AGENT_SERVER_DIR, "src"))) {
-    const piResult = await buildPiAgentServer();
-    if (!piResult.success) {
-      console.error("❌ Pi agent server build failed:", piResult.error);
-      process.exit(1);
-    }
-    console.log("✅ Pi agent server built");
-  } else {
-    console.log("⏭️  Pi agent server skipped (package not found)");
+  try {
+    await bundlePiAgentServer();
+  } catch (err) {
+    console.error("❌ Pi agent server build failed:", err);
+    process.exit(1);
   }
+  console.log("✅ Pi agent server built");
 }
 
 // Get OAuth defines for esbuild API
@@ -258,10 +245,6 @@ function getOAuthDefines(): Record<string, string> {
 function getElectronEnv(): Record<string, string> {
   const vitePort = process.env.CRAFT_VITE_PORT || "5173";
 
-  // Codex binary path is resolved at runtime by the binary-resolver module.
-  // It checks: CODEX_PATH env var > bundled binary > local dev fork > system PATH.
-  // You can override with CODEX_PATH env var if needed for debugging.
-
   return {
     ...process.env as Record<string, string>,
     VITE_DEV_SERVER_URL: `http://localhost:${vitePort}`,
@@ -284,6 +267,18 @@ function getElectronEnv(): Record<string, string> {
 //   and `apps/electron/package.json` build:main.
 const MAIN_BUNDLE_EXTERNALS = ["electron", "@anthropic-ai/claude-agent-sdk"];
 
+// Crafty's native host (spike): a utility process that loads the selection-hook N-API module,
+// which stays external (resolved from the root node_modules). Mirror of `buildCraftyNative` in
+// `scripts/electron-build-main.ts`.
+const CRAFTY_NATIVE_BUILD: esbuild.BuildOptions = {
+  entryPoints: [join(ELECTRON_DIR, "src/crafty-native/host.ts")],
+  bundle: true,
+  platform: "node",
+  format: "cjs",
+  outfile: join(DIST_DIR, "crafty-native.cjs"),
+  external: ["electron", "selection-hook"],
+};
+
 // Run a one-shot esbuild using the JavaScript API
 async function runEsbuild(
   entryPoint: string,
@@ -304,29 +299,6 @@ async function runEsbuild(
       define: defines,
       logLevel: "warning",
     });
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: String(err) };
-  }
-}
-
-// Build Pi agent server using bun instead of esbuild.
-// The Pi SDK (@earendil-works/pi-coding-agent) is ESM-only, and esbuild with
-// packages:external leaves ESM imports as require() calls that fail at runtime.
-// Bun's bundler handles ESM→ESM bundling correctly.
-async function buildPiAgentServer(): Promise<{ success: boolean; error?: string }> {
-  try {
-    const proc = spawn({
-      cmd: ["bun", "build", "src/index.ts", "--outdir=dist", "--target=bun", "--format=esm"],
-      cwd: PI_AGENT_SERVER_DIR,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const stderr = await new Response(proc.stderr).text();
-    const exitCode = await proc.exited;
-    if (exitCode !== 0) {
-      return { success: false, error: stderr };
-    }
     return { success: true };
   } catch (err) {
     return { success: false, error: String(err) };
@@ -507,6 +479,21 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Only loaded while Crafty is on, so a failure here doesn't stop the app from starting
+  try {
+    await esbuild.build({ ...CRAFTY_NATIVE_BUILD, logLevel: "warning" });
+  } catch (err) {
+    console.warn("⚠️  Crafty native host build failed (Crafty can't read selections):", err);
+  }
+  // Compiled once per run, not watched: the host loads it at start, so a change needs a restart anyway
+  if (process.platform === "darwin") {
+    try {
+      await compileCraftyInput(ROOT_DIR);
+    } catch (err) {
+      console.warn("⚠️  Crafty native input addon build failed (no double-tap trigger; ⌃⌥Space still works):", err instanceof Error ? err.message : err);
+    }
+  }
+
   console.log("✅ Initial build complete and verified\n");
 
   // =========================================================
@@ -572,7 +559,13 @@ async function main(): Promise<void> {
   esbuildContexts.push(toolbarPreloadContext);
   console.log("👀 Watching browser toolbar preload...");
 
-  // 5. Start Electron (build already verified)
+  // 5. Crafty native host watcher (a change takes effect when the app restarts)
+  const craftyNativeContext = await esbuild.context({ ...CRAFTY_NATIVE_BUILD, logLevel: "info" });
+  await craftyNativeContext.watch();
+  esbuildContexts.push(craftyNativeContext);
+  console.log("👀 Watching Crafty native host...");
+
+  // 6. Start Electron (build already verified)
   console.log("🚀 Starting Electron...\n");
 
   const electronProc = spawn({

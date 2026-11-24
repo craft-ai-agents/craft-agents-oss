@@ -1202,6 +1202,26 @@ describe('prepareMcpOAuth', () => {
     expect(result.clientId).toBe('dynamic-client');
     expect(result.clientSecret).toBe('secret-123');
     expect(result.authUrl).toContain('client_id=dynamic-client');
+    expect(new URL(result.authUrl).searchParams.has('scope')).toBe(false);
+  });
+
+  it('sends requested scopes on the authorization URL', async () => {
+    mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (options?.method === 'HEAD') {
+        return Promise.resolve(new Response(null, { status: 200 }));
+      }
+      if (url === 'https://example.com/.well-known/oauth-authorization-server') {
+        return Promise.resolve(new Response(JSON.stringify({
+          authorization_endpoint: 'https://example.com/oauth/authorize',
+          token_endpoint: 'https://example.com/oauth/token',
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('Not Found', { status: 404 }));
+    });
+
+    const result = await prepareMcpOAuth('https://example.com/mcp', { callbackPort: 8914, scopes: ['app:read', 'app:write'] });
+
+    expect(new URL(result.authUrl).searchParams.get('scope')).toBe('app:read app:write');
   });
 
   it('throws on unexpected registration failures instead of silently falling back', async () => {

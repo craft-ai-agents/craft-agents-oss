@@ -61,14 +61,20 @@ interface AttachmentBubbleProps {
   disabled?: boolean
 }
 
+// Image MIME types Chromium can decode in an <img>. HEIC/HEIF/TIFF are absent —
+// an inline data URL for those renders as a broken image, so we fall back to the
+// PNG thumbnail the main process generates for them instead.
+const CHROMIUM_IMAGE_MIME = /^image\/(png|jpeg|gif|webp|svg\+xml|bmp|x-icon|avif)$/i
+
 function AttachmentBubble({ attachment, onRemove, disabled }: AttachmentBubbleProps) {
   const { t } = useTranslation()
   const isImage = attachment.type === 'image'
   const hasThumbnail = !!attachment.thumbnailBase64
-  const hasImageBase64 = isImage && attachment.base64
+  const canInlineImage = !!(isImage && attachment.base64 && CHROMIUM_IMAGE_MIME.test(attachment.mimeType))
 
-  // For images, use full base64; for docs, use Quick Look thumbnail
-  const imageSrc = hasImageBase64
+  // Inline the full base64 when Chromium can render it; otherwise prefer the PNG
+  // thumbnail (e.g. HEIC/HEIF), and fall back to the file-type icon when neither exists.
+  const imageSrc = canInlineImage
     ? `data:${attachment.mimeType};base64,${attachment.base64}`
     : hasThumbnail
       ? `data:image/png;base64,${attachment.thumbnailBase64}`

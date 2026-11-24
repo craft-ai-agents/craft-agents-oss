@@ -224,7 +224,7 @@ export function registerTasksHandlers(server: RpcServer, deps: HandlerDeps): voi
       if (!bound) {
         throw new Error(
           `Cannot attach task "${spec.id}" to session ${req.attachToExistingSession}: ` +
-            `session is missing or already bound to a different task.`,
+            `session is missing, is a sub-session, or is already bound to a different task.`,
         )
       }
       return finish(req.attachToExistingSession)

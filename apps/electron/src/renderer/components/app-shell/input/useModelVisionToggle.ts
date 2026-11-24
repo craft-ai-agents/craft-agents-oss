@@ -4,8 +4,11 @@ import { toast } from 'sonner'
 import {
   setModelSupportsImages,
   type LlmConnection,
+  type LlmConnectionWithStatus,
 } from '@config/llm-connections'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
+
+const NO_CONNECTIONS: LlmConnectionWithStatus[] = []
 
 export type ToggleModelVision = (
   connectionSlug: string,
@@ -20,12 +23,17 @@ export type ToggleModelVision = (
  * `FreeFormInput.tsx` — extracted so the desktop dropdown and the compact
  * (drawer) model picker share one source of truth and stay aligned with
  * `setModelSupportsImages` / `modelSupportsImages` in `@config/llm-connections`.
+ *
+ * The connections come from the app shell, or from `source` in a window without one (Crafty).
  */
-export function useModelVisionToggle(): ToggleModelVision {
+export function useModelVisionToggle(source?: {
+  llmConnections: LlmConnectionWithStatus[]
+  refresh: () => Promise<void>
+}): ToggleModelVision {
   const { t } = useTranslation()
   const appShellCtx = useOptionalAppShellContext()
-  const llmConnections = appShellCtx?.llmConnections ?? []
-  const refreshLlmConnections = appShellCtx?.refreshLlmConnections
+  const llmConnections = source?.llmConnections ?? appShellCtx?.llmConnections ?? NO_CONNECTIONS
+  const refreshLlmConnections = source?.refresh ?? appShellCtx?.refreshLlmConnections
 
   return React.useCallback(async (connectionSlug, modelId, enabled) => {
     if (!window.electronAPI) return

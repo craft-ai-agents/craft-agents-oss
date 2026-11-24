@@ -18,6 +18,8 @@ import {
   formatProjectContextForPrompt,
 } from '../system'
 import type { ProjectPromptContext } from '../../projects/types.ts'
+import { getBrowserToolEnabled } from '../../config/storage.ts'
+import { DOC_REFS } from '../../docs/index.ts'
 
 const GIT_CONVENTIONS_HEADING = '## Git Conventions'
 const CO_AUTHOR_TRAILER = 'Co-Authored-By: Craft Agent <agents-noreply@craft.do>'
@@ -317,5 +319,97 @@ describe('formatProjectContextForPrompt', () => {
     expect(block).toContain('&lt;/project_assets&gt;')
     expect(occurrences(block, '</project_context>')).toBe(1)
     expect(occurrences(block, '</project_assets>')).toBe(1)
+  })
+})
+
+describe('coding agent profile', () => {
+  const coding = (includeCoAuthoredBy?: boolean) =>
+    getSystemPrompt(undefined, undefined, '/tmp/workspace', '/tmp/workspace', undefined, undefined, includeCoAuthoredBy, undefined, 'coding')
+
+  beforeEach(() => {
+    mockIncludeCoAuthoredBy = true
+  })
+
+  it('leaves the default prompt unchanged when the profile is default', () => {
+    const plain = getSystemPrompt(undefined, undefined, '/tmp/workspace', '/tmp/workspace')
+    const explicitDefault = getSystemPrompt(undefined, undefined, '/tmp/workspace', '/tmp/workspace', undefined, undefined, undefined, undefined, 'default')
+    expect(explicitDefault).toBe(plain)
+  })
+
+  it('stays within the coding budget (preferences are stubbed out here)', () => {
+    // ~9.4k with every optional section on: subagents (Claude), browser, rtk note, developer feedback, co-author
+    expect(coding().length).toBeLessThan(10_500)
+  })
+
+  it('keeps the coding essentials', () => {
+    const prompt = coding()
+    expect(prompt).toContain('<craft_agent_environment')
+    expect(prompt).toContain('Coding mode')
+    expect(prompt).toContain('## Coding Workflow')
+    expect(prompt).toContain('<project_context_files>')
+    expect(prompt).toContain('SubmitPlan')
+    expect(prompt).toContain('[skill:slug]')
+    expect(prompt).toContain('unified diffs')
+    // All four modes stay listed: Claude snapshots the prompt, so a later switch must find its rule
+    for (const mode of ['Explore', 'Ask to Edit', 'Guarded', 'Execute']) expect(prompt).toContain(mode)
+  })
+
+  it('teaches the app features a coding session uses', () => {
+    const prompt = coding()
+    for (const text of [
+      '## Preview Blocks', 'html-preview', '## Structured Data', 'transform_data', '## Diagrams', 'mermaid_validate',
+      '## Sessions', 'spawn_session', 'get_session_info', 'list_sessions', '## LLM Tool', 'call_llm',
+      '## Pages', 'create_page', DOC_REFS.pages, '## Document Tools', 'markitdown', 'source_test',
+    ]) {
+      expect(prompt).toContain(text)
+    }
+    // The browser section follows the "Built-in browser" setting, like the tool itself
+    expect(prompt.includes('## Browser Tools')).toBe(getBrowserToolEnabled())
+    if (getBrowserToolEnabled()) expect(prompt).toContain('dev server')
+  })
+
+  it('gives the subagent guidance only to Claude, which has the Agent tool', () => {
+    expect(coding()).toContain('## Subagents (Agent tool)')
+    const pi = getSystemPrompt(undefined, undefined, '/tmp/workspace', '/tmp/workspace', undefined, 'Craft Agents Backend', undefined, undefined, 'coding')
+    expect(pi).not.toContain('## Subagents (Agent tool)')
+  })
+
+  it('shares those sections with the default prompt instead of copying them', () => {
+    const prompt = coding()
+    const plain = getSystemPrompt(undefined, undefined, '/tmp/workspace', '/tmp/workspace')
+    const section = (heading: string) => {
+      const start = prompt.indexOf(heading)
+      expect(start).toBeGreaterThanOrEqual(0)
+      const end = prompt.indexOf('\n## ', start)
+      return prompt.slice(start, end === -1 ? undefined : end)
+    }
+    for (const heading of ['## Preview Blocks', '## Structured Data', '## Diagrams', '## Subagents', '## LLM Tool', '## Pages', '## Document Tools']) {
+      expect(plain).toContain(section(heading))
+    }
+    if (getBrowserToolEnabled()) {
+      // The browser section opens with its own "when to use" line; the rest is shared
+      const browser = section('## Browser Tools')
+      expect(plain).toContain(browser.slice(browser.indexOf('**Before first use')))
+    }
+  })
+
+  it('drops the desktop-workflow sections whose tools the coding profile does not register', () => {
+    const prompt = coding()
+    for (const section of ['## Session Self-Management', '## Automations', '## Configuration Documentation', 'update_user_preferences', 'set_session_labels', 'send_agent_message', 'create_task']) {
+      expect(prompt).not.toContain(section)
+    }
+  })
+
+  it('honors the co-author preference like the default prompt', () => {
+    expect(coding(true)).toContain(CO_AUTHOR_TRAILER)
+    expect(coding(false)).not.toContain(GIT_CONVENTIONS_HEADING)
+  })
+
+  it('still appends the user preferences (only the base prompt is swapped)', () => {
+    const preferences = '\n<user_preferences>\n- Name: Test User\n</user_preferences>\n'
+    const prompt = getSystemPrompt(preferences, undefined, '/tmp/workspace', '/tmp/workspace', undefined, undefined, undefined, undefined, 'coding')
+    expect(prompt).toContain(preferences)
+    // The tool that edits preferences is not registered in coding mode, so the prompt must not offer it
+    expect(prompt).not.toContain('update_user_preferences')
   })
 })

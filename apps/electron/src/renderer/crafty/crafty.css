@@ -1,0 +1,226 @@
+/*
+ * Crafty (spike): companion and panel motion. Transform and opacity only, on the repo's tokens:
+ * the companion pops in on --spring-snap, the panel blooms out of it from the companion's point,
+ * and both leave on the exit tween.
+ */
+
+.crafty-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Positioned by transform (updated every frame while following). The state's opacity lives here,
+   not on the dot: the dot's pop animation fills forwards, and a filled animation outranks any
+   opacity rule on the same element. Opacities multiply, so the parent can still dim or hide it. */
+.crafty-companion {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  will-change: transform;
+  transition: opacity var(--dur-micro) var(--ease-out);
+}
+
+.crafty-companion[data-state='idle'] {
+  opacity: 0.55;
+}
+
+.crafty-companion[data-state='bloomed'] {
+  opacity: 0;
+}
+
+.crafty-companion-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  transform: translate(-50%, -50%);
+  animation: crafty-pop var(--spring-snap-dur) var(--spring-snap) both;
+}
+
+@keyframes crafty-pop {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* The anchor places the panel (a translate); the panel inside blooms from the companion's point. */
+.crafty-panel-anchor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+.crafty-panel {
+  pointer-events: auto;
+  transform-origin: var(--crafty-origin-x, 0px) var(--crafty-origin-y, 0px);
+  animation: crafty-bloom var(--spring-snap-dur) var(--spring-snap) both;
+}
+
+.crafty-panel[data-state='closing'] {
+  animation: crafty-wilt var(--dur-exit) var(--ease-exit) both;
+}
+
+@keyframes crafty-bloom {
+  from { opacity: 0; transform: scale(0.4); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes crafty-wilt {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.94); }
+}
+
+/*
+ * The pie. The anchor sits at the hub (a translate); everything inside is placed around 0,0, so
+ * the pie scales and turns about its hub. Before it draws, only the dot shows. A pick fades it
+ * fast (or flashes the slot at the hub when it never drew), a cancel shrinks it away.
+ */
+.crafty-pie-anchor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+.crafty-pie-anchor[data-state='cancel'] {
+  animation: crafty-fade-out var(--dur-exit) var(--ease-exit) both;
+}
+
+.crafty-pie {
+  position: absolute;
+  left: 0;
+  top: 0;
+  animation: crafty-pie-in var(--spring-base-dur) var(--spring-base) both;
+}
+
+.crafty-pie[data-state='pick'] {
+  animation: crafty-pie-pick 140ms var(--ease-exit) both;
+}
+
+.crafty-pie[data-state='cancel'] {
+  animation: crafty-pie-out var(--dur-exit) var(--ease-exit) both;
+}
+
+.crafty-pie-dot {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  transform: translate(-50%, -50%);
+  animation: crafty-pop var(--spring-snap-dur) var(--spring-snap) both;
+}
+
+.crafty-pie-flash {
+  position: absolute;
+  left: 0;
+  top: 0;
+  animation: crafty-pie-flash 160ms var(--ease-out) both;
+}
+
+/* Typing in the pie asks: a focused input at the hub (so an input method's window opens there). */
+.crafty-pie-input {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  resize: none;
+  pointer-events: none;
+}
+
+/* A one-line notice at the hub after the pie (Sent to …, Replaced · ⌘Z undoes it). */
+.crafty-notice {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+.crafty-notice > * {
+  transform: translate(-50%, -50%);
+  animation: crafty-notice-in var(--spring-snap-dur) var(--spring-snap) both;
+}
+
+.crafty-notice[data-state='closing'] > * {
+  animation: crafty-fade-out var(--dur-exit) var(--ease-exit) both;
+}
+
+@keyframes crafty-pie-in {
+  from { opacity: 0; transform: scale(0.6) rotate(-24deg); }
+  to { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+@keyframes crafty-pie-pick {
+  from { opacity: 1; }
+  to { opacity: 0; transform: scale(1.04); }
+}
+
+@keyframes crafty-pie-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.6); }
+}
+
+@keyframes crafty-pie-flash {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to { opacity: 0; transform: translate(-50%, -50%) scale(1.35); }
+}
+
+@keyframes crafty-notice-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes crafty-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes crafty-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Debug: where the app said the selection is (spike item 2: within ~10 px). */
+.crafty-bounds {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  border: 1.5px dashed var(--accent);
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crafty-companion-dot,
+  .crafty-panel,
+  .crafty-panel[data-state='closing'] {
+    animation-duration: 1ms;
+  }
+
+  /* The pie fades, without scaling or turning */
+  .crafty-pie,
+  .crafty-pie-dot,
+  .crafty-notice > * {
+    animation: crafty-fade-in var(--dur-fast) var(--ease-out) both;
+  }
+
+  .crafty-pie[data-state='pick'],
+  .crafty-pie[data-state='cancel'],
+  .crafty-pie-flash,
+  .crafty-notice[data-state='closing'] > * {
+    animation: crafty-fade-out var(--dur-exit) var(--ease-exit) both;
+  }
+
+  .crafty-pie-dot,
+  .crafty-notice > * {
+    transform: translate(-50%, -50%);
+  }
+
+  .crafty-pie-flash {
+    transform: translate(-50%, -50%);
+  }
+}

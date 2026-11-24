@@ -23,6 +23,16 @@ describe('Pi server context usage transport', () => {
     });
   });
 
+  it('reads the active model\'s reserve, as the SDK compaction checks do', () => {
+    const model = { provider: 'anthropic', id: 'claude-opus', contextWindow: 1_000_000 };
+    let received: unknown;
+    readContextUsage(session({
+      model,
+      settingsManager: { getCompactionSettings: (m: unknown) => { received = m; return { enabled: true, reserveTokens: 600_000 }; } },
+    }));
+    expect(received).toBe(model);
+  });
+
   it('guards deferred post-message reads against stale session replacement', async () => {
     const first = session();
     const second = session({ getContextUsage: () => ({ tokens: 1, contextWindow: 2 }) });

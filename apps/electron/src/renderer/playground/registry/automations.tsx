@@ -5,7 +5,7 @@
  * and playground variants for testing every visual state.
  */
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { ComponentEntry } from './types'
 import { AutomationsListPanel } from '@/components/automations/AutomationsListPanel'
 import { AutomationInfoPage } from '@/components/automations/AutomationInfoPage'
@@ -34,6 +34,9 @@ function AutomationsListPanelPlayground({
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null)
   const [automationList, setAutomationList] = useState(automations)
+  // A variant switch passes new props; reset the local copies (toggle/delete edit them in between)
+  useEffect(() => { setAutomationList(automations) }, [automations])
+  useEffect(() => { setSelectedId(initialSelectedId ?? null) }, [initialSelectedId])
 
   return (
     <AutomationsListPanel
@@ -65,6 +68,11 @@ function AutomationInfoPagePlayground({
 }) {
   const [currentAutomation, setCurrentAutomation] = useState(automation)
   const [testResult, setTestResult] = useState<TestResult>({ state: 'idle' })
+  // A variant switch passes a new automation; show it (and drop the previous test result)
+  useEffect(() => {
+    setCurrentAutomation(automation)
+    setTestResult({ state: 'idle' })
+  }, [automation])
 
   const handleTest = () => {
     setTestResult({ state: 'running' })
@@ -312,6 +320,43 @@ const mockAutomations: AutomationListItem[] = [
   },
 ]
 
+/** Rows the server reports as not running, and a script automation (all three were missing from the list before) */
+const mockProblemAutomations: AutomationListItem[] = [
+  {
+    id: 'automation-legacy',
+    event: 'LabelAdd',
+    matcherIndex: 3,
+    name: 'Label Added',
+    summary: 'Matches: ^urgent$',
+    enabled: true,
+    matcher: '^urgent$',
+    actions: [],
+    issues: ['Action 1 uses the removed "command" type; use a "script" action instead'],
+  },
+  {
+    id: 'automation-script',
+    event: 'SchedulerTick',
+    matcherIndex: 3,
+    name: 'Refresh build dashboard',
+    summary: 'Every 15 minutes',
+    enabled: true,
+    cron: '*/15 * * * *',
+    actions: [{ type: 'script', script: 'scripts/refresh-build-health.ts', runtime: 'bun', args: ['--quiet'] }],
+    lastExecutedAt: now - 300_000,
+  },
+  {
+    id: 'automation-hook',
+    event: 'PreToolUse',
+    matcherIndex: 0,
+    name: 'Log Bash calls',
+    summary: 'Matches: ^Bash$',
+    enabled: true,
+    matcher: '^Bash$',
+    actions: [{ type: 'script', script: 'scripts/log-bash.ts' }],
+    issues: ['Automations on the agent event "PreToolUse" never run: agent hook events don\'t trigger actions. Use an app event such as LabelAdd, SessionStatusChange or SchedulerTick.'],
+  },
+]
+
 const mockExecutions: ExecutionEntry[] = [
   { id: 'ex-1', automationId: 'automation-1', event: 'SchedulerTick', status: 'success', duration: 42, timestamp: now - 120_000, actionSummary: 'prompt → @weather forecast' },
   { id: 'ex-2', automationId: 'automation-4', event: 'LabelAdd', status: 'success', duration: 8, timestamp: now - 300_000, actionSummary: 'echo "[...] Added: urgent"' },
@@ -406,6 +451,14 @@ export const automationComponents: ComponentEntry[] = [
           selectedAutomationId: null,
         },
       },
+      {
+        name: 'Not Running + Script',
+        description: 'Banner, Not running chips (removed command action, agent event), and a script automation',
+        props: {
+          automations: [...mockProblemAutomations, ...mockAutomations.slice(0, 3)],
+          selectedAutomationId: 'automation-legacy',
+        },
+      },
     ],
     mockData: () => ({
       automations: mockAutomations,
@@ -428,6 +481,16 @@ export const automationComponents: ComponentEntry[] = [
         name: 'Scheduled',
         description: 'Recurring schedule with timezone and upcoming runs',
         props: { automation: mockAutomations[0], executions: mockExecutions.filter(e => e.automationId === 'automation-1') },
+      },
+      {
+        name: 'Not Running (removed command)',
+        description: 'Skipped at load: the alert says why',
+        props: { automation: mockProblemAutomations[0], executions: [] },
+      },
+      {
+        name: 'Script Action',
+        description: 'Runs a workspace script (runtime, path, args)',
+        props: { automation: mockProblemAutomations[1], executions: [] },
       },
       {
         name: 'Label Event',

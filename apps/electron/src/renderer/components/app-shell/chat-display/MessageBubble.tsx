@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useTranslation } from "react-i18next"
 import { CheckCircle2, CircleAlert, ExternalLink, Info, TriangleAlert } from "lucide-react"
-import { Spinner, UserMessageBubble } from "@craft-agent/ui"
+import { Spinner, UserMessageBubble, type FileOpenHandler } from "@craft-agent/ui"
 import { cn } from "@/lib/utils"
 import { IconButton } from "@/components/ui/button"
 import { Markdown, CollapsibleMarkdownProvider, StreamingMarkdown, type RenderMode } from "@/components/markdown"
@@ -23,7 +23,7 @@ import { ErrorMessage } from "./ErrorMessage"
  */
 export interface MessageBubbleProps {
   message: Message
-  onOpenFile: (path: string) => void
+  onOpenFile: FileOpenHandler
   onOpenUrl: (url: string) => void
   sessionId?: string
   /**

@@ -394,6 +394,18 @@ export interface SessionToolContext {
   decide?: DecisionToolCallbacks;
 
   // ============================================================
+  // PR watcher (pr_status / pr_bind / pr_unbind / pr_set_auto_merge)
+  // ============================================================
+
+  /**
+   * PR watcher tool callbacks for Coding mode — read a session's PRs and pin/unpin PRs to the
+   * current session. Grouped like pages; injected by the backend (SessionManager) bound to the
+   * invoking session. Undefined in backends that don't run alongside it — handlers degrade
+   * gracefully. Tokens never reach the agent; these go through the server-side watcher.
+   */
+  prWatch?: PrWatchToolCallbacks;
+
+  // ============================================================
   // Inter-Session Messaging
   // ============================================================
 
@@ -412,12 +424,12 @@ export interface SessionToolContext {
    * Only available in backends that run alongside SessionManager (Claude in-process, Pi subprocess).
    * Codex and other backends leave this undefined — callers should degrade gracefully (restart required).
    *
-   * `availability` is always `'next-turn'` when activation succeeds: both Claude SDK
-   * (frozen `mcpServers` at `query()` start) and Pi (subprocess reloads proxy tools
-   * on the next `handlePrompt`) require the current turn to end before new tools
-   * are callable. The backend handles this via the existing source_activated + auto_retry
-   * machinery — the current turn is aborted and the renderer resends the user's
-   * original message with a `[{slug} activated]` suffix.
+   * `availability` is always `'next-turn'` when activation succeeds: both Claude (sets
+   * each turn's MCP servers at turn start) and Pi (subprocess reloads proxy tools on the
+   * next `handlePrompt`) need a new turn before new tools are callable. The backend
+   * handles this via the existing source_activated + auto_retry machinery — the current
+   * turn ends and the server resends the user's original message with a
+   * `[{slug} activated]` suffix.
    */
   activateSourceInSession?(sourceSlug: string): Promise<{
     ok: boolean;
@@ -836,9 +848,123 @@ export interface SessionInfo {
   createdAt: number;
   updatedAt?: number;
   workingDirectory?: string;
+  projectId?: string;
+  /** The session this one is a sub-session of (a spawned session, a task's subtask) */
+  parentSessionId?: string;
   llmConnection?: string;
   model?: string;
   isActive: boolean;
+  /** The task the session belongs to (its own session, or a subtask's) */
+  task?: SessionTaskInfo;
+}
+
+/** A task as get_session_info reports it; the content fields are absent when task.yaml can't be read. */
+export interface SessionTaskInfo {
+  slug: string;
+  /** task.yaml, the task's full spec */
+  specPath: string;
+  /** The subtask (DAG node) this session runs, for a subtask's session */
+  nodeId?: string;
+  title?: string;
+  goal?: string;
+  acceptanceCriteria?: string;
+  /** Empty when the task is a single step (its goal) */
+  subtasks?: Array<{ id: string; title: string; prompt?: string; dependsOn?: string[] }>;
+}
+
+// ============================================================
+// PR Watcher Tool Types (mirror @craft-agent/shared/protocol pr-watch — this
+// package stays dependency-free, same rule as pages)
+// ============================================================
+
+export type PrToolMergeMethod = 'merge' | 'squash' | 'rebase';
+
+/** One PR in a session's status (pr_status). */
+export interface PrToolStatus {
+  /** Stable id: host/owner/repo#number */
+  id: string;
+  origin: 'branch' | 'bound';
+  number: number;
+  title: string;
+  url: string;
+  /** open | draft | merged | closed */
+  state: string;
+  /** pending | success | failure | none */
+  checks: string;
+  /** approved | changes_requested | review_required | none */
+  reviewDecision: string;
+  /** clean | behind | blocked | conflicting | unstable | draft | unknown */
+  mergeState: string;
+  unresolvedThreads: number;
+  localAhead: number;
+  localDirty: boolean;
+  autoMerge?: { enabled: boolean; method?: PrToolMergeMethod };
+  /**
+   * Set while auto-merge is off and GitHub won't turn it on: repo-disabled (the repository has it
+   * off), draft, mergeable (nothing pending, so it can be merged now) or unavailable (e.g. no access)
+   */
+  autoMergeBlocked?: 'repo-disabled' | 'draft' | 'mergeable' | 'unavailable';
+  /** Auto-fix (the card's Fix toggle) is on: new review feedback gets fixed automatically */
+  autoFix?: boolean;
+  /** Which credential answered ("gh" or a source name) */
+  via: string;
+}
+
+export interface PrToolStatusResult {
+  /** 'ready' with prs, else why the session has none */
+  kind: 'ready' | 'none' | 'unavailable' | 'loading';
+  /** Why there are no PRs (not-git / not-github / no-token / error), when kind !== 'ready' */
+  reason?: string;
+  /** The session the status is for (defaults to the current session) */
+  sessionId: string;
+  prs: PrToolStatus[];
+  /** True when state came from persisted bindings without a live fetch (cross-session, R3). */
+  cached?: boolean;
+}
+
+export interface PrBindToolResult {
+  ok: boolean;
+  error?: string;
+  /** The bound PR's status when ok */
+  pr?: PrToolStatus;
+  /** Total PRs bound to the session after the change */
+  boundCount?: number;
+  /** Not pinned (with `skipBranchPr`): it is the folder's own branch PR */
+  skipped?: 'branch-pr';
+}
+
+export interface PrUnbindToolResult {
+  ok: boolean;
+  error?: string;
+  /** False when the ref wasn't actually bound */
+  removed?: boolean;
+  boundCount?: number;
+}
+
+export interface PrAutoMergeToolResult {
+  ok: boolean;
+  error?: string;
+  enabled?: boolean;
+  method?: PrToolMergeMethod;
+}
+
+/**
+ * PR watcher callbacks, injected by the backend (SessionManager) bound to the invoking session.
+ * Credential resolution and GitHub calls live behind these — the agent never sees a token.
+ */
+export interface PrWatchToolCallbacks {
+  /** Status of the current session's PRs, or another session's persisted PRs (cross-session, no fetch). */
+  status(input: { sessionId?: string }): Promise<PrToolStatusResult>;
+  /**
+   * Pin a PR to the current session by URL or number (verifies before persisting). `skipBranchPr`
+   * (the post-tool hook after `gh pr create`) leaves out the folder's own branch PR, which the
+   * carousel shows anyway.
+   */
+  bind(input: { ref: string; skipBranchPr?: boolean }): Promise<PrBindToolResult>;
+  /** Remove a pinned PR from the current session. */
+  unbind(input: { ref: string }): Promise<PrUnbindToolResult>;
+  /** Enable/disable GitHub auto-merge on one of the current session's PRs. */
+  setAutoMerge(input: { ref: string; enabled: boolean; method?: PrToolMergeMethod }): Promise<PrAutoMergeToolResult>;
 }
 
 /** Compact session summary (returned by list_sessions). */
@@ -848,6 +974,11 @@ export interface SessionListItem {
   labels: string[];
   status: string;
   createdAt: number;
+  projectId?: string;
+  /** Set for a sub-session */
+  parentSessionId?: string;
+  /** Set for a task's sessions: get_session_info returns the task's content */
+  taskSlug?: string;
 }
 
 /** Options for list_sessions filtering and pagination. */
@@ -873,13 +1004,13 @@ export interface ListSessionsResult {
  */
 export interface SendAgentMessageResult {
   /**
-   * - `delivered`: the target was idle, so it will start processing the message now.
-   * - `queued`: the target was mid-turn; the message is enqueued and will be
-   *   processed after the current turn finishes.
+   * How the target took the message (reported as soon as it is on disk, never after the
+   * target's turn):
+   * - `started`: the target was idle and started a turn for the message.
+   * - `steered`: the target was mid-turn and took the message into that turn.
+   * - `queued`: the target was mid-turn; the message runs after the current turn finishes.
    */
-  delivery: 'delivered' | 'queued';
-  /** Whether the target session was processing a turn when the message arrived. */
-  targetBusy: boolean;
+  delivery: 'started' | 'steered' | 'queued';
 }
 
 /**

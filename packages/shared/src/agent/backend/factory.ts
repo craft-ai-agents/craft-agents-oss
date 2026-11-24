@@ -758,7 +758,9 @@ export async function testBackendConnection(args: {
         session: { id: `test-${now}`, workspaceRootPath: cwd, createdAt: 0, lastUsedAt: 0 },
         isHeadless: true,
         miniModel: testModel,
-        envOverrides: args.provider === 'anthropic'
+        // Only the key under test: an endpoint or token another session left in process.env
+        // would decide the result otherwise.
+        connectionEnv: args.provider === 'anthropic'
           ? {
             ANTHROPIC_API_KEY: trimmedKey,
             ...(args.baseUrl?.trim() ? { ANTHROPIC_BASE_URL: args.baseUrl.trim() } : {}),

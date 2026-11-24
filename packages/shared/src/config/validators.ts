@@ -81,6 +81,7 @@ const LlmAuthTypeSchema = z.enum([
 const CustomEndpointSchema = z.object({
   api: z.enum(['openai-completions', 'anthropic-messages']),
   supportsImages: z.boolean().optional(),
+  maxTokens: z.number().int().positive().optional(),
 });
 
 const LlmConnectionSchema = z.object({
@@ -124,6 +125,14 @@ export const UserPreferencesSchema = z.object({
   // Internal: mirrors Appearance → Language. Not user-editable.
   // Validated against the registry-derived supported set.
   uiLanguage: z.enum([...SUPPORTED_LANGUAGE_CODES] as [LanguageCode, ...LanguageCode[]]).optional(),
+  // Internal: Appearance → Default zoom, in percent. Not user-editable.
+  defaultZoomLevel: z.number().positive().optional(),
+  // Internal: Settings → App → Crafty (per device). Not user-editable.
+  craftyEnabled: z.boolean().optional(),
+  craftyTarget: z.object({ workspaceId: z.string(), sessionId: z.string() }).optional(),
+  craftyDoubleTap: z.enum(['command', 'option', 'control', 'off']).optional(),
+  craftyOpenWith: z.enum(['pie', 'panel']).optional(),
+  craftyRecentLanguages: z.array(z.string()).optional(),
   updatedAt: z.number().int().min(0).optional(),
 }).passthrough();
 
@@ -386,6 +395,8 @@ const McpSourceConfigSchema = z.object({
   url: z.string().url().optional(),
   authType: z.enum(['oauth', 'bearer', 'none']).optional(),
   clientId: z.string().optional(),
+  oauthRelay: z.boolean().optional(),
+  scopes: z.array(z.string()).optional(),
   // Stdio fields
   command: z.string().optional(),
   args: z.array(z.string()).optional(),

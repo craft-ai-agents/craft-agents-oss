@@ -1,5 +1,6 @@
 import * as React from "react"
 import i18next from "i18next"
+import { formatDistanceToNowStrict, type Locale } from "date-fns"
 import type { Session, Message } from "../../shared/types"
 import type { SessionMeta } from "../atoms/sessions"
 import type { SessionStatusId } from "../config/session-status-config"
@@ -208,6 +209,11 @@ export const shortTimeLocale = {
     const key = tokenToKey[token]
     return key ? i18next.t(key, { count }) : `${count}`
   },
+}
+
+/** Compact age of a timestamp ("7m", "2h", "3d"), localized through {@link shortTimeLocale}. */
+export function formatShortAge(epochMs: number): string {
+  return formatDistanceToNowStrict(new Date(epochMs), { locale: shortTimeLocale as Locale, roundingMethod: 'floor' })
 }
 
 /** Highlight matching text in a string with yellow background spans. */

@@ -89,15 +89,18 @@ mac:
     # and prompt for permission. Without it the app is silently denied LAN access
     # and never appears in the privacy pane (craft-agents-oss#938).
     NSLocalNetworkUsageDescription: "Craft Agents uses your local network to reach LAN addresses and devices you ask an agent to access, such as local servers or APIs."
+    # Crafty (spike) asks a browser for the address of the page you called it from. Under the
+    # hardened runtime this also needs the apple-events entitlement (build/entitlements.mac.plist).
+    NSAppleEventsUsageDescription: "Crafty reads the address of the page you're on when you call it from a browser."
+  # Apple Silicon only: release.yml dropped Intel builds. build-dmg.sh passes `--${ARCH}`, which
+  # overrides this list, so `dist:mac:x64` still builds an Intel app by hand.
   target:
     - target: dmg
       arch:
         - arm64
-        - x64
     - target: zip
       arch:
         - arm64
-        - x64
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
@@ -118,6 +121,20 @@ mac:
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs
+    # Crafty (spike): selection-hook, loaded by dist/crafty-native.cjs, plus node-gyp-build, which
+    # finds its prebuilt N-API binary. Declared in the root package.json, like ripgrep: as an app
+    # dependency, @electron/rebuild compiles it from source (it doesn't recognise the prebuild's
+    # file name). The build (scripts/electron-build-main.ts buildCraftyNative) fails if the root
+    # node_modules lacks either. macOS only, and only the target arch's prebuild.
+    - from: ../../node_modules/selection-hook
+      to: app/node_modules/selection-hook
+      filter:
+        - package.json
+        - index.js
+        - LICENSE
+        - prebuilds/darwin-${arch}/**
+    - from: ../../node_modules/node-gyp-build
+      to: app/node_modules/node-gyp-build
   # Exclude binaries for other platforms
   files:
     - "!**/resources/bin/win32-*/**"

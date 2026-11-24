@@ -5,7 +5,7 @@
  */
 import { getAuthState, getSetupNeeds } from '@craft-agent/shared/auth'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
-import { isSetupDeferred, setSetupDeferred } from '@craft-agent/shared/config'
+import { getDefaultLlmConnection, isSetupDeferred, setSetupDeferred } from '@craft-agent/shared/config'
 import { prepareClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState, prepareMcpOAuth } from '@craft-agent/shared/auth'
 import { validateMcpConnection } from '@craft-agent/shared/mcp'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
@@ -134,13 +134,17 @@ export function registerOnboardingHandlers(server: RpcServer, deps: HandlerDeps)
         expiresAt: tokens.expiresAt,
       })
 
-      // Also save to legacy key for validation compatibility
-      await manager.setClaudeOAuthCredentials({
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        expiresAt: tokens.expiresAt,
-        source: 'native',
-      })
+      // The legacy global slot is the default connection's fallback
+      // (auth/state.ts readClaudeOAuthCredentials), so keep it in sync for that
+      // connection only: another account there would reach the default connection.
+      if (getDefaultLlmConnection() === connectionSlug) {
+        await manager.setClaudeOAuthCredentials({
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresAt: tokens.expiresAt,
+          source: 'native',
+        })
+      }
 
       const expiresAtDate = tokens.expiresAt ? new Date(tokens.expiresAt).toISOString() : 'never'
       log.info(`[Onboarding] Claude OAuth saved to LLM connection (expires: ${expiresAtDate})`)

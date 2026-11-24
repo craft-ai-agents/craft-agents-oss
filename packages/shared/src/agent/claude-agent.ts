@@ -1,4 +1,4 @@
-import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessage, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
+import { query, tool, AbortError, type Query, type SDKMessage, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions, getTextCompletionOptions, resetClaudeConfigCheck } from './options.ts';
 // Local type for SDK user message content blocks (text, image, document)
 // Replaces import from @anthropic-ai/sdk/resources — keeps SDK as agent-only dependency
@@ -23,7 +23,7 @@ import {
 } from '../config/llm-connections.ts';
 import type { McpClientPool } from '../mcp/mcp-pool.ts';
 import { proxyToolName } from '../mcp/proxy-tool-name.ts';
-import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
+import { loadPlanFromPath } from '../sessions/storage.ts';
 import { loadProjectById, getProjectAssetsPath, listProjectAssets, getProjectMemoryPath, loadProjectMemory } from '../projects/storage.ts';
 import { DEFAULT_MODEL, isClaudeModel, isAdaptiveThinkingAlwaysOnModel, getDefaultSummarizationModel, getModelContextWindow } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
@@ -34,9 +34,11 @@ import { consumeLlmQueryMessages } from './claude-llm-query.ts';
 import { debug } from '../utils/debug.ts';
 import { estimateTokensDensityAware, guardLargeResult, tokenLimitFor } from '../utils/large-response.ts';
 import { PendingSteers } from './backend/claude/pending-steers.ts';
+import { authFailureError, type ClaudeAuthFailure } from './backend/claude/auth-failure.ts';
 import type { RedirectMetadata, PendingSteer } from './backend/types.ts';
 import { SourceActivationDrainController } from './source-activation-drain.ts';
 import { resolveKeepBackgroundTasksAlive, createPushableInputStream, type PushableInputStream } from './backend/claude/persistent-input.ts';
+import { createToolServer, liveMcpServers, mcpServerChanges, mcpServerSignature, waitForIdleMcpServers, waitForMcpServers, type LiveMcpServers, type ToolServer } from './backend/claude/live-mcp-servers.ts';
 import { classifyClaudeTaskNotification, classifyClaudeTaskProgress } from './backend/claude/task-notification.ts';
 import {
   getSessionPlansDir,
@@ -48,7 +50,7 @@ import {
   cleanupSessionScopedTools,
   type AuthRequest,
 } from './session-scoped-tools.ts';
-import { type AutomationSystem, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from '../automations/index.ts';
+import { type SdkAutomationCallbackMatcher, type SdkAutomationInput } from '../automations/index.ts';
 import {
   getPermissionMode,
   getPermissionModeDiagnostics,
@@ -210,67 +212,21 @@ export function claudeThinkingKey(thinking: Partial<Options>): string {
   });
 }
 
-/** Bound for applying thinking to a live query before a turn: the turn never waits longer. */
+/** Bound for applying the model or thinking to a live query before a turn: the turn never waits longer. */
 const LIVE_THINKING_UPDATE_TIMEOUT_MS = 2_000;
 
-export interface ClaudeAgentConfig {
-  workspace: Workspace;
-  session?: Session;           // Current session (primary isolation boundary)
-  mcpToken?: string;           // Override token (for testing)
-  model?: string;
-  thinkingLevel?: ThinkingLevel; // Initial thinking level (defaults to 'medium')
-  onSdkSessionIdUpdate?: (sdkSessionId: string) => void;  // Callback when SDK session ID is captured
-  onSdkSessionIdCleared?: () => void;  // Callback when SDK session ID is cleared (e.g., after failed resume)
-  /**
-   * Callback when branch-fork metadata is invalidated (parent cwd missing on this machine,
-   * or SDK fork spawn failed). Clears branchFromSdk* + sdkSessionId atomically.
-   * See BackendConfig.onBranchForkInvalidated for details.
-   */
-  onBranchForkInvalidated?: () => void;
-  /**
-   * Callback to get recent messages for recovery context.
-   * Called when SDK resume fails and we need to inject previous conversation context into retry.
-   * Returns last N user/assistant message pairs for context injection.
-   */
-  getRecoveryMessages?: () => RecoveryMessage[];
-  /** All parent messages for branch fork fallback (summarized via mini on fork failure). */
-  getBranchFallbackMessages?: () => RecoveryMessage[];
-  /** Branch seed messages for seeded-fresh-session context strategy. */
-  getBranchSeedMessages?: () => RecoveryMessage[];
-  /** Mark branch seed as applied (called after first injection). */
-  markBranchSeedApplied?: () => void;
-  /** Get transferred session summary for cross-server session context. */
-  getTransferredSessionSummary?: () => string | null;
-  /** Mark transferred session summary as applied. */
-  markTransferredSessionSummaryApplied?: () => void;
-  isHeadless?: boolean;        // Running in headless mode (disables interactive tools)
-  /** Skip agent-level config file watching (server already owns a workspace-level watcher) */
-  skipConfigWatcher?: boolean;
-  debugMode?: {                // Debug mode configuration (when running in dev)
-    enabled: boolean;          // Whether debug mode is active
-    logFilePath?: string;      // Path to the log file for querying
-  };
-  /** System prompt preset for mini agents ('default' | 'mini' or custom string) */
-  systemPromptPreset?: 'default' | 'mini' | string;
-  /** Workspace-level AutomationSystem instance (shared across all agents in the workspace) */
-  automationSystem?: AutomationSystem;
-  /**
-   * Per-session environment variable overrides for the SDK subprocess.
-   * Used to pass connection-specific config like ANTHROPIC_BASE_URL that
-   * must not be clobbered by concurrent sessions.
-   */
-  envOverrides?: Record<string, string>;
-  /** Mini/utility model for summarization, title generation, and mini completions. */
-  miniModel?: string;
-  /** Centralized MCP client pool for source tool execution. */
-  mcpPool?: McpClientPool;
-  /** LLM connection slug for credential lookup in postInit(). */
-  connectionSlug?: string;
-  /** Enable 1M context window for current Opus models. Default: true. Set false to use 200K and conserve usage limits. */
-  enable1MContext?: boolean;
-  /** Auto-compact window in tokens (config.json `autoCompactWindow`). Unset: the SDK default (the model's full window). */
-  autoCompactWindow?: number;
-}
+/** Bound for setting a turn's MCP servers on a live query and their connecting (in-process: milliseconds). */
+const LIVE_MCP_UPDATE_TIMEOUT_MS = 5_000;
+
+/** How long a turn waits for a server it would remove to finish its calls in flight before leaving it for later. */
+const LIVE_MCP_IDLE_WAIT_MS = 1_000;
+
+/**
+ * ClaudeAgent's config is the backend config (the provider is implied). The constructor passes it to
+ * BaseAgent whole, so every BackendConfig field reaches `this.config`: a hand-copied field list here
+ * once dropped each field added later (agentProfile, enable1MContext, autoCompactWindow, onImageResize).
+ */
+export type ClaudeAgentConfig = Omit<BackendConfig, 'provider'>;
 
 // Permission request tracking
 interface PendingPermission {
@@ -523,8 +479,8 @@ const SOURCE_TOOL_INTENT = z.string().describe('REQUIRED: What you are trying to
  * as the server key and original tool names to get the correct final names
  * (e.g., `mcp__linear__createIssue`).
  */
-function createSourceProxyServers(pool: McpClientPool): Record<string, ReturnType<typeof createSdkMcpServer>> {
-  const servers: Record<string, ReturnType<typeof createSdkMcpServer>> = {};
+function createSourceProxyServers(pool: McpClientPool): Record<string, ToolServer> {
+  const servers: Record<string, ToolServer> = {};
 
   for (const slug of pool.getConnectedSlugs()) {
     const mcpTools = pool.getTools(slug);
@@ -554,7 +510,7 @@ function createSourceProxyServers(pool: McpClientPool): Record<string, ReturnTyp
       );
     });
 
-    servers[slug] = createSdkMcpServer({
+    servers[slug] = createToolServer({
       name: `source-proxy-${slug}`,
       version: '1.0.0',
       tools: proxyTools,
@@ -569,7 +525,7 @@ const buildWindowsSkillsDirError = buildWindowsSkillsDirErrorFn;
 
 export class ClaudeAgent extends BaseAgent {
   protected backendName = 'Claude';
-  // Note: ClaudeAgentConfig is compatible with BackendConfig, so we use the inherited this.config
+  // The constructor's whole config is the inherited this.config (see ClaudeAgentConfig)
   private currentQuery: Query | null = null;
   private currentQueryAbortController: AbortController | null = null;
   private lastAbortReason: AbortReason | null = null;
@@ -602,6 +558,10 @@ export class ClaudeAgent extends BaseAgent {
   private lastStderrOutput: string[] = [];
   /** Accepted text steers, owned by the foreground turn. */
   private pendingSteers = new PendingSteers();
+  /** Why the last postInit() could not resolve this connection's credentials; null once it could. */
+  private authFailure: ClaudeAuthFailure | null = null;
+  /** This connection's credentials and endpoint for its CLI processes: the last successful postInit()'s, else config.connectionEnv. */
+  private connectionEnv: Record<string, string> | null = null;
 
   private requestHostPermission(request: SdkPermissionRequest): Promise<boolean> {
     const command = request.command ?? request.blockedPath ?? '';
@@ -651,6 +611,16 @@ export class ClaudeAgent extends BaseAgent {
    * or it is unknown (an update failed or timed out and may still land), so the next turn applies.
    */
   private persistentThinkingKey: string | null = null;
+  /**
+   * Model the live persistent query runs, as passed (with a `[1m]` suffix; '' for the CLI's default);
+   * null when there is no query or it is unknown (an update failed or timed out), so the next turn sets it.
+   */
+  private persistentModel: string | null = null;
+  /**
+   * MCP servers the live persistent query serves (liveMcpServers); null when there is no query or it
+   * is unknown (an update failed or timed out and may still land), so the next turn sets them all.
+   */
+  private persistentMcpServers: LiveMcpServers | null = null;
   /** True while the single always-on consumer loop is running. */
   /** The iterator the running consumer drains; a consumer only ever serves its own query. */
   private persistentConsumerIterator: AsyncIterator<SDKMessage> | null = null;
@@ -690,6 +660,8 @@ export class ClaudeAgent extends BaseAgent {
     this.persistentIterator = null;
     this.persistentAbortController = null;
     this.persistentThinkingKey = null;
+    this.persistentModel = null;
+    this.persistentMcpServers = null;
     this.activeTurnChannel = null;
     this.activeTurnState = null;
     if (this.stoppedTurn) clearTimeout(this.stoppedTurn.fallback);
@@ -707,8 +679,9 @@ export class ClaudeAgent extends BaseAgent {
    * query (the subprocess, and its background sub-agents, stay alive).
    *
    * The query reads its options only when it is created, so a later turn's
-   * thinking (the session level, or a per-turn override) is applied to the live
-   * query before its message is pushed.
+   * model (picked mid-session), thinking (the session level, or a per-turn
+   * override) and MCP servers (a source turned on or off since) are applied
+   * to the live query before its message is pushed.
    */
   private async beginPersistentTurn(prompt: SDKUserMessage, options: Options, thinking: Partial<Options>): Promise<AsyncIterable<SDKMessage>> {
     if (!this.persistentInput || !this.currentQuery) {
@@ -717,6 +690,8 @@ export class ClaudeAgent extends BaseAgent {
       this.persistentAbortController = this.currentQueryAbortController;
       this.currentQuery = query({ prompt: this.persistentInput.stream, options });
       this.persistentThinkingKey = claudeThinkingKey(thinking);
+      this.persistentModel = options.model ?? '';
+      this.persistentMcpServers = liveMcpServers(options.mcpServers ?? {});
       this.persistentIterator = this.currentQuery[Symbol.asyncIterator]();
       this.startPersistentConsumer();
     } else {
@@ -725,7 +700,11 @@ export class ClaudeAgent extends BaseAgent {
       if (this.persistentAbortController) {
         this.currentQueryAbortController = this.persistentAbortController;
       }
-      await this.syncPersistentThinking(thinking);
+      // The model first: the effort to apply can depend on it
+      await Promise.all([
+        this.syncPersistentModel(options.model).then(() => this.syncPersistentThinking(thinking)),
+        this.syncPersistentMcpServers(options.mcpServers),
+      ]);
       // Stopped meanwhile (forceAbort drops currentQuery at once; the SDK rejects the pending
       // settings call before the query itself finishes): do not start the turn on a dying query.
       if (!this.persistentInput || !this.currentQuery) throw new AbortError('Persistent query closed while preparing the turn');
@@ -735,6 +714,34 @@ export class ClaudeAgent extends BaseAgent {
     this.activeTurnState = { aborted: false };
     this.persistentInput.push(prompt);
     return channel.stream;
+  }
+
+  /**
+   * Apply this turn's model to the live persistent query: a model picked mid-session used to reach a
+   * running Claude session only when its query restarted. Best effort and bounded like the thinking
+   * update. When the CLI moves the session to a fallback model by itself (refusal fallback), that
+   * model becomes the session's model in Craft too (SessionManager, `model_refusal`), so the next
+   * turn sets it again as Craft passes it (with its 1M suffix).
+   */
+  private async syncPersistentModel(model: string | undefined): Promise<void> {
+    const live = this.currentQuery;
+    const key = model ?? '';
+    if (!live || key === this.persistentModel) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const applied = await Promise.race([
+        live.setModel(model).then(() => true),
+        new Promise<false>((resolve) => { timer = setTimeout(() => resolve(false), LIVE_THINKING_UPDATE_TIMEOUT_MS); }),
+      ]);
+      // A timed-out update may still land: the model is unknown until the next turn sets it again.
+      this.persistentModel = applied ? key : null;
+      debug(applied ? `[chat] Set the live query's model to ${model ?? 'the default'}` : '[chat] Setting the live query\'s model timed out; retrying next turn');
+    } catch (error) {
+      this.persistentModel = null;
+      debug(`[chat] Could not set the live query's model: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**
@@ -769,6 +776,67 @@ export class ClaudeAgent extends BaseAgent {
     } catch (error) {
       this.persistentThinkingKey = null;
       debug(`[chat] Could not apply thinking to the live query: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Set this turn's MCP servers on the live persistent query, so a source turned on or off since the
+   * query started (and a session tool set that changed with it) reaches the session at this turn, not
+   * only after a restart. Best effort and bounded like the thinking update: on failure or timeout the
+   * turn runs with the query's current servers and the next turn sets them all again.
+   *
+   * A server to remove or replace that is still answering a call (a background agent's: the session's
+   * own turn has not started) stays as it is, so the call is not failed; a later turn retries.
+   */
+  private async syncPersistentMcpServers(servers: Options['mcpServers']): Promise<void> {
+    const live = this.currentQuery;
+    if (!live || !servers) return;
+    const current = this.persistentMcpServers;
+    const changes = mcpServerChanges(current, servers);
+    if (!changes) return;
+    const deadline = Date.now() + LIVE_MCP_UPDATE_TIMEOUT_MS;
+    const apply = async () => {
+      const busy = current
+        ? await waitForIdleMcpServers(current, [...changes.replaced, ...changes.dropped], Math.min(deadline, Date.now() + LIVE_MCP_IDLE_WAIT_MS))
+        : [];
+      const target = { ...servers, ...Object.fromEntries(busy.map(name => [name, current!.get(name)!.config])) };
+      const kept = [...changes.unchanged, ...busy];
+      // The SDK keeps the instance it has under a name, so a server whose tools changed is removed first
+      const removed = changes.replaced.some(name => !busy.includes(name))
+        ? (await live.setMcpServers(Object.fromEntries(kept.map(name => [name, target[name]!])))).removed
+        : [];
+      const result = await live.setMcpServers(target);
+      const unconnected = await waitForMcpServers(live, result.added, deadline);
+      return { ...result, removed: [...removed, ...result.removed], unconnected, busy, target };
+    };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const result = await Promise.race([
+        apply(),
+        new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), LIVE_MCP_UPDATE_TIMEOUT_MS); }),
+      ]);
+      if (!result) {
+        this.persistentMcpServers = null;
+        debug('[chat] Setting MCP servers on the live query timed out; retrying next turn');
+        return;
+      }
+      // The SDK uses a server it added; one it kept stays the instance it had (a busy server, with
+      // what it served, so the next turn tries again). One that did not connect is unknown.
+      const unconnected = new Set([...Object.keys(result.errors), ...result.unconnected]);
+      const next: LiveMcpServers = new Map();
+      for (const [name, config] of Object.entries(result.target)) {
+        const kept = !result.added.includes(name) ? current?.get(name) : undefined;
+        next.set(name, unconnected.has(name) ? { config, signature: null } : kept ?? { config, signature: mcpServerSignature(config) });
+      }
+      this.persistentMcpServers = next;
+      debug(`[chat] Set MCP servers on the live query: added [${result.added.join(', ')}], removed [${result.removed.join(', ')}]`);
+      if (result.busy.length > 0) debug(`[chat] MCP servers still answering calls, left for a later turn: [${result.busy.join(', ')}]`);
+      for (const name of unconnected) debug(`[chat] MCP server "${name}" did not connect to the live query${result.errors[name] ? `: ${result.errors[name]}` : ''}`);
+    } catch (error) {
+      this.persistentMcpServers = null;
+      debug(`[chat] Could not set MCP servers on the live query: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       clearTimeout(timer);
     }
@@ -994,42 +1062,16 @@ export class ClaudeAgent extends BaseAgent {
     // Resolve model: prioritize session model > config model > current Anthropic default.
     const model = config.session?.model ?? config.model ?? DEFAULT_MODEL;
 
-    // Build BackendConfig for BaseAgent
     // Context window from registry (1M for Opus/Sonnet 4.6, 200K for others)
     const CLAUDE_CONTEXT_WINDOW = getModelContextWindow(model) ?? 200_000;
-    const backendConfig: BackendConfig = {
-      provider: 'anthropic',
-      workspace: config.workspace,
-      session: config.session,
-      model,
-      thinkingLevel: config.thinkingLevel,
-      mcpToken: config.mcpToken,
-      isHeadless: config.isHeadless,
-      skipConfigWatcher: config.skipConfigWatcher,
-      debugMode: config.debugMode,
-      systemPromptPreset: config.systemPromptPreset,
-      onSdkSessionIdUpdate: config.onSdkSessionIdUpdate,
-      onSdkSessionIdCleared: config.onSdkSessionIdCleared,
-      onBranchForkInvalidated: config.onBranchForkInvalidated,
-      getRecoveryMessages: config.getRecoveryMessages,
-      getBranchFallbackMessages: config.getBranchFallbackMessages,
-      getBranchSeedMessages: config.getBranchSeedMessages,
-      markBranchSeedApplied: config.markBranchSeedApplied,
-      getTransferredSessionSummary: config.getTransferredSessionSummary,
-      markTransferredSessionSummaryApplied: config.markTransferredSessionSummaryApplied,
-      envOverrides: config.envOverrides,
-      miniModel: config.miniModel,
-      mcpPool: config.mcpPool,
-      connectionSlug: config.connectionSlug,
-      automationSystem: config.automationSystem,
-    };
 
-    // Call BaseAgent constructor - initializes model, thinkingLevel, permissionManager, sourceManager, etc.
-    // The inherited this.config is set by super() and compatible with ClaudeAgentConfig
-    super(backendConfig, DEFAULT_MODEL, CLAUDE_CONTEXT_WINDOW);
+    // BaseAgent gets the whole config as this.config (and initializes model, thinkingLevel, profile,
+    // permissionManager, sourceManager, etc.). Never rebuild it from a field list: see ClaudeAgentConfig.
+    super({ ...config, provider: 'anthropic', model }, DEFAULT_MODEL, CLAUDE_CONTEXT_WINDOW);
 
     this.isHeadless = config.isHeadless ?? false;
     this.automationSystem = config.automationSystem;
+    this.connectionEnv = config.connectionEnv ?? null;
 
     // Initialize event adapter for SDK message → AgentEvent conversion
     this.eventAdapter = new ClaudeEventAdapter({
@@ -1093,16 +1135,32 @@ export class ClaudeAgent extends BaseAgent {
    * Post-construction auth setup.
    * Fetches credentials and sets process.env before the SDK subprocess spawns.
    * The subprocess spawns lazily on first chat(), so postInit() is early enough.
+   * A failure is recorded, and turns and completions then fail closed (recheckAuthFailure).
    */
   override async postInit(): Promise<PostInitResult> {
+    try {
+      return await this.injectConnectionAuth();
+    } catch (error) {
+      // The credential store could not be read or written: fail closed like any other failure,
+      // or the next turn would start the CLI with whatever process.env holds. The credentials
+      // may be fine, so it is a retryable error, not an expired sign-in.
+      const message = error instanceof Error ? error.message : String(error);
+      return this.recordAuthFailure({
+        kind: 'unavailable',
+        warning: `Could not resolve credentials for ${this.config.connectionSlug}: ${message}`,
+      });
+    }
+  }
+
+  private async injectConnectionAuth(): Promise<PostInitResult> {
     const slug = this.config.connectionSlug;
     if (!slug) {
-      return { authInjected: false, authWarning: 'No connection slug available', authWarningLevel: 'error' };
+      return this.recordAuthFailure({ kind: 'connection', warning: 'No connection slug available' });
     }
 
     const connection = getLlmConnection(slug);
     if (!connection) {
-      return { authInjected: false, authWarning: `Connection not found: ${slug}`, authWarningLevel: 'error' };
+      return this.recordAuthFailure({ kind: 'connection', warning: `Connection not found: ${slug}` });
     }
 
     // Clear all auth env vars first for clean state.
@@ -1115,13 +1173,26 @@ export class ClaudeAgent extends BaseAgent {
 
     // Resolve auth env vars via shared utility
     const manager = getCredentialManager();
-    const result = await resolveAuthEnvVars(connection, slug, manager, getValidClaudeOAuthToken);
+    let transientRefreshError: string | undefined;
+    const result = await resolveAuthEnvVars(connection, slug, manager, async (connectionSlug) => {
+      const token = await getValidClaudeOAuthToken(connectionSlug);
+      transientRefreshError = token.transientRefreshError;
+      return token;
+    });
 
     if (!result.success) {
-      return { authInjected: false, authWarning: result.warning, authWarningLevel: 'error' };
+      return this.recordAuthFailure({
+        kind: connection.authType === 'oauth' ? 'oauth' : 'api_key',
+        warning: result.warning ?? `No credentials for: ${slug}`,
+        transientRefreshError,
+      });
     }
+    this.authFailure = null;
 
-    // Apply env vars to process.env (for SDK subprocess) and envOverrides (per-session isolation)
+    // This agent's CLI processes start with these (buildClaudeSubprocessEnv). process.env gets
+    // them too, for code that still reads the ambient credentials, but the next session's
+    // postInit overwrites them there: a CLI started from it ran on that session's account.
+    this.connectionEnv = result.envVars;
     for (const [key, value] of Object.entries(result.envVars)) {
       process.env[key] = value;
     }
@@ -1135,6 +1206,24 @@ export class ClaudeAgent extends BaseAgent {
     }
 
     return { authInjected: true };
+  }
+
+  private recordAuthFailure(failure: ClaudeAuthFailure): PostInitResult {
+    this.authFailure = failure;
+    this.connectionEnv = null;
+    return { authInjected: false, authWarning: failure.warning, authWarningLevel: 'error' };
+  }
+
+  /**
+   * Fail closed: without its connection's credentials the CLI would sign in with
+   * whatever it finds (another session's token left in process.env, or the
+   * user's own Claude Code login). A recorded failure gets one more postInit(),
+   * since it may have passed (network back, signed in again); returns what
+   * still fails, or null.
+   */
+  private async recheckAuthFailure(): Promise<ClaudeAuthFailure | null> {
+    if (this.authFailure) await this.postInit();
+    return this.authFailure;
   }
 
   // Config watcher methods (startConfigWatcher, stopConfigWatcher) are now inherited from BaseAgent
@@ -1202,6 +1291,14 @@ export class ClaudeAgent extends BaseAgent {
     this.toolHandoff = null;
 
     try {
+      // Never start the CLI without this connection's credentials (see recheckAuthFailure).
+      const authFailure = await this.recheckAuthFailure();
+      if (authFailure) {
+        yield { type: 'typed_error', error: authFailureError(authFailure) };
+        yield { type: 'complete' };
+        return;
+      }
+
       const sessionId = this.config.session?.id || `temp-${Date.now()}`;
 
       // Pin system prompt components on first chat() call for consistency after compaction
@@ -1280,7 +1377,11 @@ export class ClaudeAgent extends BaseAgent {
       // Build full MCP servers set first, then filter for mini agents
       const fullMcpServers: Options['mcpServers'] = {
         // Session-scoped tools (SubmitPlan, source_test, update_user_preferences, transform_data, etc.)
-        session: getSessionScopedTools(sessionId, this.workspaceRootPath),
+        session: getSessionScopedTools(sessionId, this.workspaceRootPath, undefined, {
+          profile: this._agentProfile,
+          hasEnabledSources: this.sourceManager.getIntendedSlugs().size > 0,
+          hasProject: !!this.config.session?.projectId,
+        }),
         // Per-source proxy servers from centralized MCP pool (MCP + API sources)
         // Each source gets its own SDK server keyed by slug (e.g., 'linear', 'github', 'gmail')
         // so the SDK produces correct tool names: mcp__{slug}__{toolName}
@@ -1357,7 +1458,7 @@ export class ClaudeAgent extends BaseAgent {
       const resolvedCwd = this.resolveSpawnCwd({ isRetry: _isRetry, sessionId });
 
       const options: Options = {
-        ...getDefaultOptions(this.config.envOverrides),
+        ...getDefaultOptions(this.config.envOverrides, this.connectionEnv ?? undefined),
         model: effectiveModel,
         // Compact earlier than the SDK default (the model's full window, 1M on first-party Opus even
         // without the [1m] suffix): every call re-reads the whole context. Subagents inherit it.
@@ -1428,6 +1529,7 @@ export class ClaudeAgent extends BaseAgent {
                 undefined, // backendName
                 this.pinnedIncludeCoAuthoredBy ?? undefined,
                 this.pinnedProjectContext ?? undefined,
+                this._agentProfile,
               ),
             },
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
@@ -1462,9 +1564,9 @@ export class ClaudeAgent extends BaseAgent {
               && shouldDeferSdkPermissionToLocalHook(toolName);
           },
         ),
-        // User hooks from automations.json are merged with internal hooks
+        // Internal hooks, merged with automation hooks from buildSdkHooks() — always
+        // empty today: agent events don't run automation actions (#1117)
         hooks: (() => {
-          // Build user-defined hooks from automations.json using the workspace-level AutomationSystem
           const userHooks: Partial<Record<string, SdkAutomationCallbackMatcher[]>> = this.automationSystem?.buildSdkHooks() ?? {};
           if (Object.keys(userHooks).length > 0) {
             debug('[CraftAgent] User SDK hooks loaded:', Object.keys(userHooks).join(', '));
@@ -1624,47 +1726,8 @@ export class ClaudeAgent extends BaseAgent {
                   return blockWithReason(checkResult.reason);
                 }
 
-                case 'source_activation_needed': {
-                  const { sourceSlug, sourceExists } = checkResult;
-                  if (sourceExists && this.onSourceActivationRequest) {
-                    this.onDebug?.(`Source "${sourceSlug}" not active, attempting auto-enable...`);
-                    try {
-                      const activated = await this.onSourceActivationRequest(sourceSlug);
-                      if (activated) {
-                        this.onDebug?.(`Source "${sourceSlug}" auto-enabled successfully, tools available next turn`);
-                        return {
-                          continue: false,
-                          decision: 'block' as const,
-                          reason: `STOP. Source "${sourceSlug}" has been activated successfully. The tools will be available on the next turn. Do NOT try other tool names or approaches. Respond to the user now: tell them the source is now active and ask them to send their request again.`,
-                        };
-                      } else {
-                        return {
-                          continue: false,
-                          decision: 'block' as const,
-                          reason: `Source "${sourceSlug}" could not be activated. It may require authentication. Please check the source status and authenticate if needed.`,
-                        };
-                      }
-                    } catch (error) {
-                      return {
-                        continue: false,
-                        decision: 'block' as const,
-                        reason: `Failed to activate source "${sourceSlug}": ${error instanceof Error ? error.message : 'Unknown error'}`,
-                      };
-                    }
-                  } else if (sourceExists) {
-                    return {
-                      continue: false,
-                      decision: 'block' as const,
-                      reason: `Source "${sourceSlug}" is available but not enabled for this session. Please enable it in the sources panel.`,
-                    };
-                  } else {
-                    return {
-                      continue: false,
-                      decision: 'block' as const,
-                      reason: `Source "${sourceSlug}" could not be connected. It may need re-authentication, or the server may be unreachable. Check the source in the sidebar for details.`,
-                    };
-                  }
-                }
+                case 'source_activation_needed':
+                  return this.answerInactiveSourceCall(checkResult.sourceSlug, checkResult.sourceExists);
 
                 case 'call_llm_intercept':
                 case 'spawn_session_intercept':
@@ -1746,8 +1809,13 @@ export class ClaudeAgent extends BaseAgent {
           // mid-turn. Craft never sees a detached call's late result (it reaches the model as a
           // queued task notification), so keep every tool attached. The event adapter still
           // renders a detached placeholder sensibly (`isDetachedToolCallResult`).
+          // Coding mode: a Bash `gh pr create` pins the PR it opened (pinCreatedPrHook). Hooks
+          // run in parallel on the original output; the two act on different tools.
           PostToolUse: [{
-            hooks: [async (input) => this.guardLargeMcpToolOutput(input)],
+            hooks: [
+              async (input) => this.guardLargeMcpToolOutput(input),
+              async (input) => this.pinCreatedPrHook(input),
+            ],
           }],
 
           // ═══════════════════════════════════════════════════════════════════════════
@@ -1985,7 +2053,7 @@ This is a branched conversation. All prior messages in this conversation are par
             // agent. The drain controller captures the descriptor on the first
             // triggering tool_result and short-circuits per-event handling for any
             // sibling tool_results / synthetic background events in the same
-            // adapted batch. The fire (yield source_activated + forceAbort) happens
+            // adapted batch. The fire (yield source_activated + end the turn) happens
             // at end-of-batch below, NOT here — see #790 for the symptoms when
             // siblings were dropped.
             if (sourceActivationDrain.observe(event, () => this.consumePendingSourceActivationRestart())) {
@@ -2015,9 +2083,8 @@ This is a branched conversation. All prior messages in this conversation are par
                     originalMessage: this.getCurrentTurnUserMessage() ?? userMessage,
                   };
 
-                  // Interrupt the turn - no point letting the model continue without the tools
-                  // The abort will cause the loop to exit and emit 'complete'
-                  this.forceAbort(AbortReason.SourceActivated);
+                  // End the turn - no point letting the model continue without the tools
+                  this.endTurnForSourceActivation();
                   return; // Exit the generator
                 } else {
                   this.onDebug?.(`Source "${sourceSlug}" activation failed (may need auth)`);
@@ -2127,12 +2194,12 @@ This is a branched conversation. All prior messages in this conversation are par
           // End-of-batch fire (#790): if the drain controller captured a
           // pending source-activation restart while iterating this adapted
           // SDK message, all sibling tool_results / interleaved synthetic
-          // events have now been yielded. Emit `source_activated` and abort.
+          // events have now been yielded. Emit `source_activated` and end the turn.
           const sourceActivationFire = sourceActivationDrain.shouldFireAtBoundary();
           if (sourceActivationFire) {
             this.onDebug?.(`source_test activated "${sourceActivationFire.sourceSlug}", drained sibling tool_results, restarting turn`);
             yield sourceActivationFire;
-            this.forceAbort(AbortReason.SourceActivated);
+            this.endTurnForSourceActivation();
             return;
           }
         }
@@ -2153,7 +2220,7 @@ This is a branched conversation. All prior messages in this conversation are par
         if (sourceActivationFireAtEnd) {
           this.onDebug?.(`source_test activated "${sourceActivationFireAtEnd.sourceSlug}", stream ended mid-batch, restarting turn`);
           yield sourceActivationFireAtEnd;
-          this.forceAbort(AbortReason.SourceActivated);
+          this.endTurnForSourceActivation();
           return;
         }
 
@@ -2691,7 +2758,7 @@ This is a branched conversation. All prior messages in this conversation are par
     )
     const contextParts = this.promptBuilder.buildContextParts(
       { plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId) },
-      this.sourceManager.formatSourceState()
+      this.sourceManager.formatSourceState({ activeOnly: this._agentProfile === 'coding' })
     );
 
     parts.push(...contextParts);
@@ -2737,7 +2804,7 @@ This is a branched conversation. All prior messages in this conversation are par
     )
     const contextParts = this.promptBuilder.buildContextParts(
       { plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId) },
-      this.sourceManager.formatSourceState()
+      this.sourceManager.formatSourceState({ activeOnly: this._agentProfile === 'coding' })
     );
 
     for (const part of contextParts) {
@@ -3049,6 +3116,26 @@ This is a branched conversation. All prior messages in this conversation are par
   }
 
   /**
+   * PostToolUse, Coding mode: pin the PR a Bash `gh pr create` printed (`BaseAgent.pinCreatedPr`)
+   * and tell the model through `additionalContext`, so it doesn't pin it again with pr_bind.
+   */
+  private async pinCreatedPrHook(input: SdkAutomationInput): Promise<{
+    continue: boolean;
+    hookSpecificOutput?: { hookEventName: 'PostToolUse'; additionalContext: string };
+  }> {
+    if (input.hook_event_name !== 'PostToolUse' || input.tool_name !== 'Bash') return { continue: true };
+    // Typed as a string for automations; for Bash the SDK passes { stdout, stderr, interrupted }.
+    const response: unknown = input.tool_response;
+    const output = typeof response === 'string'
+      ? response
+      : [(response as { stdout?: unknown } | null)?.stdout, (response as { stderr?: unknown } | null)?.stderr]
+          .filter((part): part is string => typeof part === 'string')
+          .join('\n');
+    const note = await this.pinCreatedPr(input.tool_input?.command, output);
+    return note ? { continue: true, hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: note } } : { continue: true };
+  }
+
+  /**
    * PostToolUse: replace a large MCP tool output with the saved-file form (summary or preview)
    * via `updatedToolOutput` (SDK 0.3.280+). The replacement keeps the SDK's shape, an array of
    * content blocks (an object makes the SDK fail the call), with non-text blocks kept as they are.
@@ -3147,10 +3234,10 @@ This is a branched conversation. All prior messages in this conversation are par
    * fails, the query is hard-stopped after all. Returns false without a live keep-alive turn: the
    * caller then uses forceAbort.
    */
-  stopTurn(): boolean {
+  stopTurn(reason: AbortReason = AbortReason.UserStop): boolean {
     const query = this.currentQuery;
     if (!query || !this.persistentInput || !this.activeTurnChannel) return false;
-    this.lastAbortReason = AbortReason.UserStop;
+    this.lastAbortReason = reason;
     if (this.activeTurnState) this.activeTurnState.aborted = true;
     this.activeTurnChannel.end();
     this.activeTurnChannel = null;
@@ -3174,6 +3261,52 @@ This is a branched conversation. All prior messages in this conversation are par
       this.teardownPersistentQuery('stop-interrupt-failed');
     });
     return true;
+  }
+
+  /**
+   * PreToolUse answer for a call to a source the session has not enabled. The call is refused with
+   * `continue: true`, so the turn goes on: `continue: false` ended the whole turn, with no reply and
+   * nothing re-sent (craft-agents-oss#1102). After a successful activation the turn restarts with the
+   * source's tools, as for source_test: the drain fires `source_activated` once the refused call's
+   * result is in, and the host re-sends the request.
+   */
+  private async answerInactiveSourceCall(sourceSlug: string, sourceExists: boolean) {
+    if (!sourceExists) {
+      return blockWithReason(`Source "${sourceSlug}" could not be connected. It may need re-authentication, or the server may be unreachable. Check the source in the sidebar for details.`);
+    }
+    if (!this.onSourceActivationRequest) {
+      return blockWithReason(`Source "${sourceSlug}" is available but not enabled for this session. Please enable it in the sources panel.`);
+    }
+    this.onDebug?.(`Source "${sourceSlug}" not active, attempting auto-enable...`);
+    try {
+      if (!await this.onSourceActivationRequest(sourceSlug)) {
+        return blockWithReason(`Source "${sourceSlug}" could not be activated. It may require authentication. Please check the source status and authenticate if needed.`);
+      }
+    } catch (error) {
+      return blockWithReason(`Failed to activate source "${sourceSlug}": ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+    const userMessage = this.getCurrentTurnUserMessage();
+    if (!userMessage) {
+      this.onDebug?.(`Source "${sourceSlug}" auto-enabled; no request to re-send, its tools arrive next turn`);
+      return blockWithReason(`Source "${sourceSlug}" has been activated. Its tools are available from the next turn.`);
+    }
+    this.onDebug?.(`Source "${sourceSlug}" auto-enabled, restarting the turn with its tools`);
+    this.setPendingSourceActivationRestart({ sourceSlug, userMessage });
+    return blockWithReason(`Source "${sourceSlug}" has been activated. This request restarts with its tools in a moment; do not try other tool names meanwhile.`);
+  }
+
+  /**
+   * End the turn after a source activation; the host re-sends the request as a new turn, which gets
+   * the source's tools. With keep-alive the turn is stopped like a user Stop (nothing to do when it
+   * already ended), so the query and its background agents live on and that turn sets the new servers
+   * on it (syncPersistentMcpServers); a per-turn query is aborted and the next one starts with them.
+   */
+  private endTurnForSourceActivation(): void {
+    if (this.keepBackgroundTasksAlive && this.persistentInput) {
+      this.stopTurn(AbortReason.SourceActivated);
+      return;
+    }
+    this.forceAbort(AbortReason.SourceActivated);
   }
 
   /**
@@ -3411,10 +3544,12 @@ This is a branched conversation. All prior messages in this conversation are par
     if (!this.config.miniModel) {
       throw new Error('ClaudeAgent.runMiniCompletion: config.miniModel is required');
     }
+    const authFailure = await this.recheckAuthFailure();
+    if (authFailure) throw new Error(authFailure.warning);
     const model = this.config.miniModel;
 
     const options = {
-      ...getTextCompletionOptions(this.config.envOverrides),
+      ...getTextCompletionOptions(this.config.envOverrides, this.connectionEnv ?? undefined),
       model,
       maxTurns: 1,
       systemPrompt: 'Reply with ONLY the requested text. No explanation.', // Minimal - no Claude Code preset
@@ -3544,10 +3679,12 @@ This is a branched conversation. All prior messages in this conversation are par
   // ============================================================
 
   async queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
+    const authFailure = await this.recheckAuthFailure();
+    if (authFailure) throw new Error(authFailure.warning);
     const model = request.model ?? this.config.miniModel ?? getDefaultSummarizationModel();
 
     const options = {
-      ...getTextCompletionOptions(this.config.envOverrides),
+      ...getTextCompletionOptions(this.config.envOverrides, this.connectionEnv ?? undefined),
       model,
       // Reasoning-model outputs (Opus extended thinking) can span multiple SDK-counted
       // turns even with no tools exposed. Tool surface here is empty (only the SDK's own

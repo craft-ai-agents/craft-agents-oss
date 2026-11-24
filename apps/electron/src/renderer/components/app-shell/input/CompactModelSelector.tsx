@@ -23,14 +23,12 @@ import { navigate, routes } from '@/lib/navigate'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import {
   ANTHROPIC_MODELS,
-  getModelDisplayName,
   getModelShortName,
   getModelContextWindow,
 } from '@config/models'
 import {
   isCompatProvider,
   modelSupportsImages,
-  resolveEffectiveConnectionSlug,
   type LlmConnectionWithStatus,
 } from '@config/llm-connections'
 import {
@@ -38,11 +36,8 @@ import {
   type ThinkingLevel,
 } from '@craft-agent/shared/agent/thinking-levels'
 import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
-import { derivePickerMode } from './picker-mode'
-import {
-  groupConnectionsByProvider,
-  stripPiPrefixForDisplay,
-} from './model-picker-helpers'
+import { stripPiPrefixForDisplay } from './model-picker-helpers'
+import { useModelPickerState } from './useModelPickerState'
 import { getContextDisplay, getContextDisplayLabels, type ContextStatus } from './context-display'
 import { useModelVisionToggle } from './useModelVisionToggle'
 import { COMPOSER_CHIP } from './composer-styles'
@@ -86,59 +81,23 @@ export function CompactModelSelector({
 
   const toggleVision = useModelVisionToggle()
 
-  const effectiveConnection = resolveEffectiveConnectionSlug(
-    currentConnection,
-    workspaceDefaultConnection,
-    llmConnections,
-  )
-
-  const effectiveConnectionDetails = React.useMemo(() => {
-    if (!effectiveConnection) return null
-    return llmConnections.find(c => c.slug === effectiveConnection) ?? null
-  }, [llmConnections, effectiveConnection])
-
-  const connectionDefaultModel = React.useMemo(() => {
-    const conn = effectiveConnectionDetails
-    if (!conn) return null
-    if (!isCompatProvider(conn.providerType)) return null
-    if (conn.models && conn.models.length > 1) return null
-    return conn.defaultModel ?? null
-  }, [effectiveConnectionDetails])
-
-  const pickerMode = derivePickerMode({
-    connectionUnavailable,
+  const {
+    effectiveConnection,
+    effectiveConnectionDetails,
     connectionDefaultModel,
+    pickerMode,
+    availableModels,
+    currentModelDisplayName,
+    thinkingDisabled,
+    connectionsByProvider,
+  } = useModelPickerState({
+    llmConnections,
+    workspaceDefaultConnection,
+    currentConnection,
+    currentModel,
     isEmptySession,
-    connectionCount: llmConnections.length,
+    connectionUnavailable,
   })
-
-  const availableModels = React.useMemo(() => {
-    if (connectionUnavailable) return []
-    if (!effectiveConnectionDetails) return ANTHROPIC_MODELS
-    return effectiveConnectionDetails.models || ANTHROPIC_MODELS
-  }, [effectiveConnectionDetails, connectionUnavailable])
-
-  const currentModelDisplayName = React.useMemo(() => {
-    const modelToDisplay = connectionDefaultModel ?? currentModel
-    const model = availableModels.find(m =>
-      typeof m === 'string' ? m === modelToDisplay : m.id === modelToDisplay,
-    )
-    if (!model) return stripPiPrefixForDisplay(getModelDisplayName(modelToDisplay))
-    if (typeof model === 'string') return stripPiPrefixForDisplay(model)
-    return model.name ?? stripPiPrefixForDisplay(model.id)
-  }, [availableModels, currentModel, connectionDefaultModel])
-
-  const thinkingDisabled = React.useMemo(() => {
-    const model = availableModels.find(
-      m => typeof m !== 'string' && m.id === currentModel,
-    )
-    return typeof model !== 'string' && model?.supportsThinking === false
-  }, [availableModels, currentModel])
-
-  const connectionsByProvider = React.useMemo(
-    () => groupConnectionsByProvider(llmConnections),
-    [llmConnections],
-  )
 
   const showConnectionIcon =
     !!effectiveConnectionDetails &&

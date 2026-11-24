@@ -13,13 +13,14 @@ import { useState, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
-import { automationsAtom } from '@/atoms/automations'
-import { parseAutomationsConfig, type AutomationListItem, type TestResult, type ExecutionEntry } from '@/components/automations/types'
+import { automationsAtom, automationLoadIssuesAtom } from '@/atoms/automations'
+import { parseAutomationsConfig, getUnattachedLoadIssues, type AutomationListItem, type TestResult, type ExecutionEntry } from '@/components/automations/types'
 
-async function loadAutomationsFromServer(workspaceId: string): Promise<AutomationListItem[]> {
+async function loadAutomationsFromServer(workspaceId: string): Promise<{ items: AutomationListItem[]; fileIssues: string[] }> {
   const json = await window.electronAPI.getAutomations(workspaceId)
-  if (!json) return [] // No automations configured yet
-  return parseAutomationsConfig(json)
+  if (!json) return { items: [], fileIssues: [] } // No automations configured yet
+  const items = parseAutomationsConfig(json)
+  return { items, fileIssues: getUnattachedLoadIssues(json, items) }
 }
 
 export interface UseAutomationsResult {
@@ -54,10 +55,11 @@ export function useAutomations(
   // Load automations from server and hydrate lastExecutedAt from history in one step.
   // This avoids the race where a config reload wipes timestamps before the
   // history effect can re-merge them.
+  const setLoadIssues = useSetAtom(automationLoadIssuesAtom)
   const loadAndHydrate = useCallback(async () => {
     if (!activeWorkspaceId) return
     try {
-      const items = await loadAutomationsFromServer(activeWorkspaceId)
+      const { items, fileIssues } = await loadAutomationsFromServer(activeWorkspaceId)
       try {
         const map = await window.electronAPI.getAutomationLastExecuted(activeWorkspaceId)
         for (const item of items) {
@@ -65,10 +67,12 @@ export function useAutomations(
         }
       } catch { /* history unavailable — timestamps stay undefined */ }
       setAutomations(items)
+      setLoadIssues(fileIssues)
     } catch {
       setAutomations([])
+      setLoadIssues([])
     }
-  }, [activeWorkspaceId])
+  }, [activeWorkspaceId, setLoadIssues])
 
   // Initial load
   useEffect(() => {
@@ -167,16 +171,19 @@ export function useAutomations(
         id: `${e.id}-${e.ts}`,
         automationId: e.id,
         event: automation?.event ?? 'LabelAdd',
-        status: e.skipped ? 'skipped' as const : e.ok ? 'success' as const : 'error' as const,
-        duration: e.webhook?.durationMs ?? 0,
+        // A script run skipped because the previous one was still going is a skip, not a failure
+        status: e.skipped || e.script?.skipped ? 'skipped' as const : e.ok ? 'success' as const : 'error' as const,
+        duration: e.webhook?.durationMs ?? e.script?.durationMs ?? 0,
         timestamp: e.ts,
         sessionId: e.sessionId,
         actionSummary: e.skipped
           ? t('automations.skippedSummary', { reason: e.skipped })
           : e.webhook
           ? `Webhook ${e.webhook.method} ${e.webhook.url}${e.webhook.attempts && e.webhook.attempts > 1 ? ` (${e.webhook.attempts} attempts)` : ''}`
+          : e.script
+          ? `Script ${e.script.script}${e.script.exitCode !== null && e.script.exitCode !== 0 ? ` (exit ${e.script.exitCode})` : ''}`
           : e.prompt,
-        error: e.webhook?.error ?? e.error,
+        error: e.webhook?.error ?? e.script?.error ?? e.error,
         webhookDetails: e.webhook ? {
           method: e.webhook.method,
           url: e.webhook.url,

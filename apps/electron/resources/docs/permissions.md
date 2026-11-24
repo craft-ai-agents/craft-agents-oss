@@ -190,15 +190,19 @@ Fields:
 ## Default Behavior in Explore Mode
 
 **Blocked by default:**
-- Bash commands (except read-only commands listed below)
+- Bash commands (except read-only commands listed below), and Monitor running such a command
 - Write, Edit, MultiEdit tools
 - MCP tools with write semantics (create, update, delete)
 - API POST/PUT/DELETE requests
+- Subagents with `isolation` (a git worktree or a cloud environment)
+- Every tool not allowed below, including ones Claude Code adds in new releases (e.g. `EnterWorktree`, `CronCreate`), `SendMessage` (it can reach other Claude sessions on the machine) and `Workflow`
 
 **Allowed by default:**
-- Read, Glob, Grep
+- Read, Glob, Grep, LSP (and Pi's Find, Ls)
 - WebFetch, WebSearch
-- TodoWrite
+- Subagents (`Agent`/`Task`); their own tool calls get the same checks
+- ToolSearch and MCP resource reads
+- Task tracking: TodoWrite, TaskCreate/TaskGet/TaskList/TaskUpdate, ListAgents, TaskStop
 - Browser tools (`browser_*` and `mcp__session__browser_*`)
 - MCP tools with read semantics (list, get, search)
 - Plans folder writes (session plans only)

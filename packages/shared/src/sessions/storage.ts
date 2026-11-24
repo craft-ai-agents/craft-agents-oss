@@ -22,6 +22,7 @@ import {
   statSync,
   unlinkSync,
 } from 'fs';
+import { readdir, unlink } from 'fs/promises';
 import { join, basename } from 'path';
 import { getWorkspaceSessionsPath } from '../workspaces/storage.ts';
 import { generateUniqueSessionId } from './slug-generator.ts';
@@ -40,7 +41,8 @@ import type { Plan } from '../agent/plan-types.ts';
 import { validateSessionStatus } from '../statuses/validation.ts';
 import { debug } from '../utils/debug.ts';
 import { getStatusCategory } from '../statuses/storage.ts';
-import { readSessionHeader, readSessionJsonl } from './jsonl.ts';
+import { readSessionHeader, readSessionHeaderAsync, readSessionJsonl } from './jsonl.ts';
+import { mapWithConcurrency } from '../utils/async.ts';
 import { sessionPersistenceQueue } from './persistence-queue.ts';
 
 // Re-export types for convenience
@@ -388,6 +390,63 @@ export function listSessions(workspaceRootPath: string): SessionMetadata[] {
   }
   span.mark('parsed');
   span.setMetadata('count', sessions.length);
+
+  // Sort by lastUsedAt descending (most recent first)
+  const sorted = sessions.sort((a, b) => b.lastUsedAt - a.lastUsedAt);
+  span.end();
+  return sorted;
+}
+
+/**
+ * Async, resilient version of listSessions for startup discovery (#1113).
+ *
+ * Reads each session header on the libuv threadpool (off the main thread) with
+ * bounded concurrency. Headers that come back `null` — missing, corrupt,
+ * cloud-evicted, or slower than `perFileTimeoutMs` — are skipped and counted,
+ * never thrown, so one unreadable session can't drop the whole list or block
+ * startup. Parity with listSessions for healthy sessions.
+ */
+export async function listSessionsAsync(
+  workspaceRootPath: string,
+  opts?: { perFileTimeoutMs?: number; concurrency?: number },
+): Promise<SessionMetadata[]> {
+  const span = perf.span('session.listSessionsAsync');
+  const sessionsDir = getWorkspaceSessionsPath(workspaceRootPath);
+  if (!existsSync(sessionsDir)) {
+    span.end();
+    return [];
+  }
+
+  const concurrency = opts?.concurrency ?? 16;
+  const timeoutOpts = opts?.perFileTimeoutMs != null ? { timeoutMs: opts.perFileTimeoutMs } : undefined;
+
+  const entries = await readdir(sessionsDir, { withFileTypes: true });
+  span.mark('readdir');
+  const sessionIds = entries.filter(e => e.isDirectory()).map(e => e.name);
+
+  let skipped = 0;
+  const metadata = await mapWithConcurrency(sessionIds, concurrency, async (sessionId): Promise<SessionMetadata | null> => {
+    const sessionDir = join(sessionsDir, sessionId);
+    const jsonlFile = join(sessionDir, 'session.jsonl');
+
+    // Clean up orphaned .tmp files from crashed atomic writes (best-effort).
+    await unlink(jsonlFile + '.tmp').catch(() => { /* usually absent */ });
+
+    // existsSync is metadata-only (no hydration); a dir without a jsonl is an
+    // empty session folder, not a skip. The read itself handles eviction/errors.
+    if (!existsSync(jsonlFile)) return null;
+
+    const header = await readSessionHeaderAsync(jsonlFile, timeoutOpts);
+    if (!header) { skipped++; return null; }
+    return headerToMetadata(header, workspaceRootPath);
+  });
+  span.mark('parsed');
+
+  const sessions = metadata.filter((m): m is SessionMetadata => m != null);
+  span.setMetadata('count', sessions.length);
+  if (skipped > 0) {
+    debug(`[sessions] listSessionsAsync skipped ${skipped} unreadable/evicted session(s) in ${workspaceRootPath}`);
+  }
 
   // Sort by lastUsedAt descending (most recent first)
   const sorted = sessions.sort((a, b) => b.lastUsedAt - a.lastUsedAt);

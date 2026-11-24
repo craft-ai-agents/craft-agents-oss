@@ -40,6 +40,27 @@ describe('PromptBuilder developer context split', () => {
   });
 });
 
+describe('PromptBuilder agent profile', () => {
+  const workspace = { id: 'workspace', name: 'Workspace', rootPath: '/tmp/craft-prompt-builder-ws' } as any;
+  const session = { id: 'session-1' } as any;
+
+  it('includes workspace capabilities by default', () => {
+    const builder = new PromptBuilder({ workspace, session });
+    expect(builder.buildStableContextParts().join('\n')).toContain('<workspace_capabilities>');
+  });
+
+  it('drops workspace capabilities in coding mode, set at construction or later', () => {
+    expect(new PromptBuilder({ workspace, session, agentProfile: 'coding' }).buildStableContextParts().join('\n'))
+      .not.toContain('<workspace_capabilities>');
+
+    const builder = new PromptBuilder({ workspace, session });
+    builder.setAgentProfile('coding');
+    const stable = builder.buildStableContextParts().join('\n');
+    expect(stable).not.toContain('<workspace_capabilities>');
+    expect(stable).toContain('<working_directory>');
+  });
+});
+
 function createGitFixture(): { root: string; packageDir: string } {
   const root = mkdtempSync(join(tmpdir(), 'craft-prompt-builder-git-'));
   tempDirs.push(root);

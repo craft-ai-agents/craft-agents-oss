@@ -60,6 +60,7 @@ Sentry.init({
 import { setupI18n, i18n, SUPPORTED_LANGUAGE_CODES, type LanguageCode } from '@craft-agent/shared/i18n'
 import { getPersistedUiLanguage, setPersistedUiLanguage } from '@craft-agent/shared/config'
 import { CONFIG_DIR } from '@craft-agent/shared/config/paths'
+import { registerDefaultZoomIpc } from './zoom'
 setupI18n()
 const persistedUiLanguage = getPersistedUiLanguage()
 if (persistedUiLanguage) {
@@ -78,7 +79,7 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
 import { PageThumbnailer } from './page-thumbnailer'
 import { registerAllRpcHandlers } from './handlers/index'
-import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
+import { registerCoreRpcHandlers, cleanupRpcClientResources } from '@craft-agent/server-core/handlers/rpc'
 import type { PlatformServices } from '../runtime/platform'
 import { createElectronPlatform } from './platform'
 import type { HandlerDeps } from './handlers/handler-deps'
@@ -100,6 +101,7 @@ import { setBundledAssetsRoot } from '@craft-agent/shared/utils'
 import { initializeBackendHostRuntime } from '@craft-agent/shared/agent/backend'
 import { setPowerShellValidatorRoot } from '@craft-agent/shared/agent'
 import { handleDeepLink } from './deep-link'
+import { initCrafty, type CraftyController } from './crafty'
 import { BrowserPaneManager } from './browser-pane-manager'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
 import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-protocol'
@@ -205,6 +207,7 @@ let browserPaneManager: BrowserPaneManager | null = null
 let oauthFlowStore: OAuthFlowStore | null = null
 let moduleSink: EventSink | null = null
 let moduleClientResolver: ((webContentsId: number) => string | undefined) | null = null
+let craftyController: CraftyController | null = null
 
 // Messaging gateway: the bootstrap handle is created once sessionManager is
 // available (inside createHandlerDeps) and populated with the WS publisher
@@ -447,6 +450,8 @@ app.whenReady().then(async () => {
   try {
     // Initialize window manager
     windowManager = new WindowManager()
+    const windows = windowManager
+    registerDefaultZoomIpc(() => windows.getAllWindows().map(managed => managed.window))
 
     // Create the application menu (needs windowManager for New Window action)
     createApplicationMenu(windowManager)
@@ -487,7 +492,10 @@ app.whenReady().then(async () => {
       e.returnValue = e.sender.id
     })
     ipcMain.on('__get-workspace-id', (e) => {
-      e.returnValue = windowManager?.getWorkspaceForWindow(e.sender.id) ?? ''
+      // The Crafty window isn't a managed window; its controller names its target workspace.
+      e.returnValue = windowManager?.getWorkspaceForWindow(e.sender.id)
+        ?? craftyController?.workspaceForWebContents(e.sender.id)
+        ?? ''
     })
 
     // Transport diagnostics bridge — preload reports remote WS connection state changes
@@ -725,7 +733,7 @@ app.whenReady().then(async () => {
           for (const [wcId, cId] of clientMap) {
             if (cId === clientId) { clientMap.delete(wcId); break }
           }
-          cleanupSessionFileWatchForClient(clientId)
+          cleanupRpcClientResources(clientId)
         },
       })
 
@@ -1060,6 +1068,33 @@ app.whenReady().then(async () => {
       await createInitialWindows()
     }
 
+    // Crafty (spike): the system-wide helper, macOS desktop only. Registers its IPC either way so
+    // Settings can show why it's unavailable; starts only when its setting is on.
+    if (!isHeadless && process.platform === 'darwin') {
+      craftyController = initCrafty({
+        windowManager: windows,
+        sessionManager,
+        openSession: async (workspaceId, sessionId) => {
+          // A click in Crafty, whose window never activates Craft: bring Craft in front of the app you were in
+          app.focus({ steal: true })
+          const url = `${DEEPLINK_SCHEME}://workspace/${workspaceId}/allSessions/session/${sessionId}`
+          const result = await handleDeepLink(url, windows, moduleSink ?? undefined, moduleClientResolver ?? undefined)
+          if (!result.success) mainLog.warn('[crafty] could not open the session', { sessionId, error: result.error })
+        },
+        openCraft: async (workspaceId) => {
+          const window = workspaceId ? windows.focusOrCreateWindow(workspaceId) : windows.getLastActiveWindow()
+          if (!window || window.isDestroyed()) {
+            mainLog.warn('[crafty] no Craft window to open', { workspaceId })
+            return
+          }
+          if (window.isMinimized()) window.restore()
+          app.focus({ steal: true })
+          window.show()
+          window.focus()
+        },
+      })
+    }
+
     // Run credential health check at startup to detect issues early
     // (corruption, machine migration, missing credentials for default connection)
     // Skip in thin-client mode — credentials are managed by the remote server.
@@ -1234,6 +1269,9 @@ async function performQuitCleanup(): Promise<void> {
     // Clean up SessionManager resources (file watchers, timers, etc.)
     sessionManager.cleanup()
   }
+
+  // Release Crafty's global shortcut, window and native host
+  craftyController?.dispose()
 
   // Clean up browser pane instances
   if (browserPaneManager) {

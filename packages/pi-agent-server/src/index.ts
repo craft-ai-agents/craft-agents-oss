@@ -83,6 +83,7 @@ import {
   normalizeCustomEndpointModelEntry,
   stripPiPrefix,
   type CustomEndpointApi,
+  type CustomEndpointConfig,
   type CustomEndpointModelEntry,
   type CustomEndpointModelOverrides,
 } from './custom-endpoint-models.ts';
@@ -137,8 +138,10 @@ interface InitMessage {
   branchFromSdkSessionId?: string;
   branchFromSessionPath?: string;
   branchFromSdkTurnId?: string;
-  customEndpoint?: { api: CustomEndpointApi; supportsImages?: boolean };
+  customEndpoint?: CustomEndpointConfig;
   customModels?: Array<string | { id: string; contextWindow?: number; supportsImages?: boolean }>;
+  /** Compact once context reaches this many tokens (config.json `autoCompactWindow`). */
+  autoCompactWindow?: number;
   piAuth?: { provider: string; credential: PiCredential };
 }
 
@@ -149,7 +152,7 @@ interface RuntimeConfigUpdateMessage {
   providerType?: string;
   authType?: string;
   baseUrl?: string;
-  customEndpoint?: { api: CustomEndpointApi; supportsImages?: boolean };
+  customEndpoint?: CustomEndpointConfig;
   customModels?: Array<string | { id: string; contextWindow?: number; supportsImages?: boolean }>;
 }
 
@@ -157,6 +160,7 @@ interface RuntimeConfigUpdateMessage {
 type InboundMessage =
   | InitMessage
   | { type: 'prompt'; id: string; message: string; systemPrompt: string; images?: Array<{ type: 'image'; data: string; mimeType: string }> }
+  /** The whole proxy tool set: it replaces the previous one. */
   | { type: 'register_tools'; tools: ProxyToolDef[] }
   | { type: 'tool_execute_response'; requestId: string; result: { content: string; isError: boolean } }
   | { type: 'pre_tool_use_response'; requestId: string; action: 'allow' | 'block' | 'modify'; input?: Record<string, unknown>; reason?: string }
@@ -511,7 +515,10 @@ function registerCustomEndpointModels(
     authHeader: true,
     models: allIds.map(id => buildCustomEndpointModelDef(
       id,
-      { supportsImages: initConfig?.customEndpoint?.supportsImages === true },
+      {
+        supportsImages: initConfig?.customEndpoint?.supportsImages === true,
+        maxTokens: initConfig?.customEndpoint?.maxTokens,
+      },
       customModelOverrides.get(id),
       api,
     )),
@@ -668,7 +675,7 @@ async function ensureSession(): Promise<AgentSession> {
   // settingsManager: explicit in-memory settings (retry policy, compaction)
   // instead of the SDK default that merges `<cwd>/.pi/settings.json` from the
   // user's working directory and writes to `<agentDir>/settings.json`.
-  const settingsManager = createCraftSettingsManager('main');
+  const settingsManager = createCraftSettingsManager('main', { autoCompactWindow: initConfig.autoCompactWindow });
   // Resource isolation: never resolve extensions/skills from ~/.pi/agent.
   const agentDir = resolveCraftAgentDir(initConfig);
   const sessionOptions: CreateAgentSessionOptions = {
@@ -688,7 +695,9 @@ async function ensureSession(): Promise<AgentSession> {
     const sessionDir = join(initConfig.sessionPath, '.pi-sessions');
     mkdirSync(sessionDir, { recursive: true });
 
-    if (initConfig.branchFromSessionPath) {
+    // A branch forks from its parent once. Later (the session rebuilt for new tools, the app
+    // restarted) it continues its own file: forking again replaced its history with the parent's.
+    if (initConfig.branchFromSessionPath && !findMostRecentSessionFile(sessionDir)) {
       // Branching: fork from the parent session's Pi session file.
       // Branches must not silently degrade to fresh sessions.
       const parentPiSessionDir = join(initConfig.branchFromSessionPath, '.pi-sessions');
@@ -709,6 +718,10 @@ async function ensureSession(): Promise<AgentSession> {
           throw new Error(`Pi branch preflight failed: branch anchor not found: ${anchorId}`);
         }
         forkedSessionManager.branch(anchorId);
+        // branch() moves the leaf in memory only: the file reopened before the branch's first
+        // message would take its last entry, the parent's latest, as the leaf. An entry under the
+        // anchor (not part of the model's context) keeps the cutoff in the file.
+        forkedSessionManager.appendCustomEntry('craft-branch-point', { anchorId });
         debugLog(`Applied Pi branch cutoff at entry: ${anchorId}`);
       }
 
@@ -1419,14 +1432,21 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
     // If proxy tools changed since last session creation, dispose and recreate.
     // This avoids calling _buildRuntime() for dynamic tool updates — instead
     // we create a fresh session via continueRecent() with all tools known upfront.
+    // Not while the session still runs something (a compaction or retry after the last run):
+    // disposing it would abort that, so the new tools wait for a later prompt.
     if (toolsChanged && piSession) {
-      debugLog('Recreating session due to tool changes');
-      if (unsubscribeEvents) {
-        unsubscribeEvents();
-        unsubscribeEvents = null;
+      await waitForCompaction(piSession, { timeoutMs: PROMPT_COMPACT_WAIT_MS, log: debugLog });
+      if (piSession.isStreaming || piSession.isCompacting) {
+        debugLog('Tools changed while the session is busy: recreating it at a later prompt');
+      } else {
+        debugLog('Recreating session due to tool changes');
+        if (unsubscribeEvents) {
+          unsubscribeEvents();
+          unsubscribeEvents = null;
+        }
+        piSession.dispose();
+        piSession = null;
       }
-      piSession.dispose();
-      piSession = null;
     }
 
     const session = await ensureSession();
@@ -1476,17 +1496,14 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
 }
 
 function handleRegisterTools(msg: Extract<InboundMessage, { type: 'register_tools' }>): void {
-  // Merge: replace existing tools by name, add new ones
-  const incoming = new Map(msg.tools.map(t => [t.name, t]));
-  proxyToolDefs = [
-    ...proxyToolDefs.filter(t => !incoming.has(t.name)),
-    ...msg.tools,
-  ];
-  debugLog(`Registered ${msg.tools.length} proxy tools (total: ${proxyToolDefs.length}): ${msg.tools.map(t => t.name).join(', ')}`);
+  // The main process sends the whole set: a tool it leaves out (a source turned off) is dropped
+  const changed = JSON.stringify(msg.tools) !== JSON.stringify(proxyToolDefs);
+  proxyToolDefs = msg.tools;
+  debugLog(`Registered ${msg.tools.length} proxy tools${changed ? '' : ' (unchanged)'}: ${msg.tools.map(t => t.name).join(', ')}`);
 
   // If session exists, mark for recreation on next prompt.
   // Don't dispose mid-generation — the flag is checked in handlePrompt().
-  if (piSession) {
+  if (piSession && changed) {
     toolsChanged = true;
     debugLog('Proxy tools changed — session will be recreated on next prompt');
   }

@@ -7,8 +7,18 @@
     <true/>
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
-    <!-- https://github.com/electron-userland/electron-builder/issues/3940 -->
+    <!-- Lets a process load libraries signed by another team. Still needed (checked 2026-11-21):
+         the bundled `claude` binary is a Bun single-file executable that unpacks and loads its
+         own native modules at runtime (audio-capture.node, computer-use-input.node). Those aren't
+         signed by us, and electron-builder re-signs `claude` with this file (entitlementsInherit).
+         The app, its helpers (Crafty's native host among them) and bun load only libraries from
+         the bundle, which electron-builder signs with our identity. To drop it for them, sign
+         `claude` in afterPack with its own entitlements and skip it with `mac.signIgnore`. -->
     <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <!-- Crafty (spike): asks browsers for the current page's address over Apple Events
+         (osascript). Without it the hardened runtime refuses them without a prompt. -->
+    <key>com.apple.security.automation.apple-events</key>
     <true/>
   </dict>
 </plist>

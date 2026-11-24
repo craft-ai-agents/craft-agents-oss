@@ -11,6 +11,7 @@
  */
 
 import { createContext, useContext, type ReactNode } from 'react'
+import type { FileOpenHandler } from '../components/markdown/link-target'
 
 /**
  * Platform-specific actions that components may need
@@ -18,10 +19,11 @@ import { createContext, useContext, type ReactNode } from 'react'
  */
 export interface PlatformActions {
   /**
-   * Open a file in the default application (Electron: shell.openPath)
+   * Open a file (Electron: in-app preview, or the default app for types it can't preview).
+   * A click on a file link also passes the click, so the host can offer choices next to the link.
    * Web: Could show file contents inline or provide download
    */
-  onOpenFile?: (path: string) => void
+  onOpenFile?: FileOpenHandler
 
   /**
    * Open a file directly in the system editor, bypassing the link interceptor.

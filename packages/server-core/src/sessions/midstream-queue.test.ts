@@ -85,6 +85,13 @@ describe('mid-stream queue runtime invariants', () => {
     expect(claude.isCompactionInFlight()).toBe(false)
   })
 
+  it('queues instead of steering while the agent is not streaming the turn', () => {
+    // During the turn's setup or end a redirect would only abort the agent and mark the replay
+    // as interrupted.
+    expect(shouldAttemptMidStreamSteer('steer', true, { canSteerNow: () => false })).toBe(false)
+    expect(shouldAttemptMidStreamSteer('steer', true, { canSteerNow: () => true })).toBe(true)
+  })
+
   it('recovers distinct identical-text steers by identity without interrupting or duplicating', async () => {
     const managed = buildSession('recover')
     const payloads = ['a', 'b', 'c'].map(messageId => ({ message: 'same', messageId, optimisticMessageId: `optimistic-${messageId}` }))
@@ -127,12 +134,13 @@ describe('mid-stream queue runtime invariants', () => {
     expect(managed.messageQueue[0]).toMatchObject({ attachments, storedAttachments, options, messageId: managed.messages[0]!.id })
     expect(managed.messages[0]!.isQueued).toBe(true)
     expect(events.find(e => e.type === 'user_message').status).toBe('queued')
-    // Also prove the existing supported replay path receives the same objects.
+    // Also prove the existing supported replay path receives the same objects, once the turn ended.
     const replay = mock(async (..._args: unknown[]) => {})
-    ;(sm as any).sendMessage = replay
+    ;(sm as any).sendAdmittedMessage = replay
+    managed.isProcessing = false
     ;(sm as any).processNextQueuedMessage(managed.id)
     await new Promise<void>(resolve => setImmediate(resolve))
-    expect(replay.mock.calls[0]).toEqual([managed.id, 'inspect image', attachments, storedAttachments, options, managed.messages[0]!.id])
+    expect(replay.mock.calls[0]!.slice(1)).toEqual([managed.id, 'inspect image', attachments, storedAttachments, options, managed.messages[0]!.id])
   })
 
   it('marks Accept & Compact ready only after a manual compaction success and preserves the fresh snapshot', async () => {
@@ -350,8 +358,8 @@ describe('mid-stream queue runtime invariants', () => {
     sm.setEventSink((_channel, _target, event) => events.push(event))
     ;(sm as unknown as { lastTimestamp: number }).lastTimestamp = priorFinalTimestamp
     ;(sm as unknown as { persistSession: () => void }).persistSession = () => {}
-    const sendMessage = mock(async () => {})
-    ;(sm as unknown as { sendMessage: typeof sendMessage }).sendMessage = sendMessage
+    const sendAdmittedMessage = mock(async () => {})
+    ;(sm as unknown as { sendAdmittedMessage: typeof sendAdmittedMessage }).sendAdmittedMessage = sendAdmittedMessage
 
     ;(sm as unknown as { processNextQueuedMessage: (id: string) => void })
       .processNextQueuedMessage(sessionId)
@@ -365,6 +373,6 @@ describe('mid-stream queue runtime invariants', () => {
     expect(processingEvent?.status).toBe('processing')
     expect(processingEvent?.message.timestamp).toBe(replayed?.timestamp)
     expect(processingEvent?.optimisticMessageId).toBe('optimistic-user')
-    expect(sendMessage).toHaveBeenCalledTimes(1)
+    expect(sendAdmittedMessage).toHaveBeenCalledTimes(1)
   })
 })

@@ -32,6 +32,14 @@ describe('parseArgs', () => {
     expect(args.command).toBe('workspaces')
   })
 
+  it('parses --coding (off by default)', () => {
+    expect(parseArgs(['bun', 'index.ts', 'run', 'hello']).coding).toBe(false)
+    const args = parseArgs(['bun', 'index.ts', 'run', '--coding', 'fix the build'])
+    expect(args.coding).toBe(true)
+    expect(args.command).toBe('run')
+    expect(args.rest).toEqual(['fix the build'])
+  })
+
   it('parses --tls-ca', () => {
     const args = parseArgs([
       'bun', 'index.ts',

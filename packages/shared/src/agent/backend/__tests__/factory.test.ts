@@ -364,3 +364,27 @@ describe('ClaudeAgent model switching', () => {
     expect(agent.getModel()).toBe('claude-sonnet-4-6');
   });
 });
+
+describe('createBackend hands the whole config to the agent', () => {
+  // Regression: ClaudeAgent rebuilt its config from a hand-copied field list, which dropped every
+  // field added to BackendConfig later. Coding mode (agentProfile), the 1M-context toggle, the
+  // compaction window and oversized-image resizing never reached Claude sessions.
+  const onImageResize = async () => null;
+  const fields: Partial<BackendConfig> = {
+    agentProfile: 'coding',
+    enable1MContext: false,
+    autoCompactWindow: 200_000,
+    onImageResize,
+  };
+
+  for (const provider of ['anthropic', 'pi'] as const) {
+    it(`${provider}: every field reaches the agent`, () => {
+      const agent = createBackend(createTestConfig({ provider, ...fields }));
+      expect(agent.getAgentProfile()).toBe('coding');
+      const { config } = agent as unknown as { config: BackendConfig };
+      for (const [key, value] of Object.entries(fields)) {
+        expect(config[key as keyof BackendConfig]).toBe(value);
+      }
+    });
+  }
+});

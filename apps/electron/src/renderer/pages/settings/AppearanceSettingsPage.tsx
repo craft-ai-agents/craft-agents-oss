@@ -18,6 +18,7 @@ import { routes } from '@/lib/navigate'
 import { Monitor, Sun, Moon } from 'lucide-react'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { ToolIconMapping } from '../../../shared/types'
+import { DEFAULT_ZOOM_LEVELS } from '../../../shared/zoom'
 
 import {
   SettingsPage,
@@ -224,6 +225,15 @@ export default function AppearanceSettingsPage() {
   // "Background session finished" chip toggle (renderer-only appearance pref,
   // persisted in localStorage via atomWithStorage — read by App.tsx + ChatPage).
   const [showBackgroundFinishedChip, setShowBackgroundFinishedChip] = useAtom(showBackgroundFinishedChipAtom)
+  // Default zoom: Electron only (the main process keeps and applies it); hidden in the Web UI
+  const [defaultZoom, setDefaultZoom] = useState<number | null>(null)
+  useEffect(() => {
+    window.electronAPI.getDefaultZoomLevel?.().then(setDefaultZoom).catch(() => {})
+  }, [])
+  const handleDefaultZoomChange = useCallback((value: string) => {
+    setDefaultZoom(Number(value))
+    window.electronAPI.setDefaultZoomLevel?.(Number(value)).then(setDefaultZoom).catch(() => {})
+  }, [])
 
   // Load preset themes on mount
   useEffect(() => {
@@ -461,6 +471,18 @@ export default function AppearanceSettingsPage() {
               }))}
             />
           </SettingsRow>
+          {defaultZoom !== null && (
+            <SettingsRow
+              label={t("settings.appearance.defaultZoom")}
+              description={t("settings.appearance.defaultZoomDesc", { resetZoom: t("menu.resetZoom") })}
+            >
+              <SettingsMenuSelect
+                value={String(defaultZoom)}
+                onValueChange={handleDefaultZoomChange}
+                options={DEFAULT_ZOOM_LEVELS.map(level => ({ value: String(level), label: `${level}%` }))}
+              />
+            </SettingsRow>
+          )}
           <SettingsToggle
             label={t("settings.appearance.connectionIcons")}
             description={t("settings.appearance.connectionIconsDesc")}

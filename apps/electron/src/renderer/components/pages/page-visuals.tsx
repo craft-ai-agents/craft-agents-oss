@@ -5,10 +5,9 @@
 
 import * as React from 'react'
 import { Activity, FileText, MousePointerClick, type LucideIcon } from 'lucide-react'
-import { formatDistanceToNowStrict, type Locale } from 'date-fns'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { shortTimeLocale } from '@/utils/session'
+import { formatShortAge } from '@/utils/session'
 import type { PageConfig, PageKind } from '@craft-agent/shared/pages/types'
 
 export const PAGE_KIND_ICONS: Record<PageKind, LucideIcon> = {
@@ -25,13 +24,6 @@ const PAGE_KIND_TONE: Record<PageKind, string> = {
   static: 'var(--fill-hover)',
   interactive: 'var(--accent-tint)',
   live: 'var(--success-tint)',
-}
-
-export function relativeTime(epochMs: number): string {
-  return formatDistanceToNowStrict(new Date(epochMs), {
-    locale: shortTimeLocale as Locale,
-    roundingMethod: 'floor',
-  })
 }
 
 /** Neutral kind chip (the label is always shown, so kind is never color-only). Live gets a success dot. */
@@ -89,9 +81,9 @@ export function PageFreshness({ config, className }: { config: PageConfig; class
     text = t('pages.refreshFailed')
   } else if (last) {
     dotTone = 'text-success'
-    text = relativeTime(last.at)
+    text = formatShortAge(last.at)
   } else {
-    text = relativeTime(config.updatedAt)
+    text = formatShortAge(config.updatedAt)
   }
 
   return (

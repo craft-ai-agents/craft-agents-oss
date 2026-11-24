@@ -81,6 +81,7 @@ export function buildBackendRuntimeSignature(input: BackendRuntimeSignatureInput
                     supportsImages: typeof connection.customEndpoint.supportsImages === 'boolean'
                       ? connection.customEndpoint.supportsImages
                       : undefined,
+                    maxTokens: connection.customEndpoint.maxTokens,
                   })
                 : undefined,
               models: normalizeCustomModels(connection),

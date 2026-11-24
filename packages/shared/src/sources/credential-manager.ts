@@ -388,7 +388,10 @@ export class SourceCredentialManager {
     options: { callbackPort?: number; callbackUrl?: string },
   ): Promise<PreparedOAuthFlow> {
     const { callbackPort } = options;
-    const relayReturnTo = options.callbackUrl;
+    // MCP servers that only accept loopback redirect URIs can opt out of the
+    // relay (`mcp.oauthRelay: false`); the callback URL is then used directly.
+    const directCallbackUrl = source.config.mcp?.oauthRelay === false ? options.callbackUrl : undefined;
+    const relayReturnTo = directCallbackUrl ? undefined : options.callbackUrl;
     // When callbackUrl is provided (WebUI), keep the provider-facing redirect_uri
     // stable so providers like Google only need a single registered callback.
     // The relay unwraps the real server callback target from the outer state.
@@ -503,7 +506,7 @@ export class SourceCredentialManager {
         if (!source.config.mcp?.url) {
           throw new Error('MCP URL not configured');
         }
-        prepared = await prepareMcpOAuth(source.config.mcp.url, { callbackPort, callbackUrl: providerCallbackUrl });
+        prepared = await prepareMcpOAuth(source.config.mcp.url, { callbackPort, callbackUrl: providerCallbackUrl ?? directCallbackUrl, scopes: source.config.mcp.scopes });
         break;
       }
     }
@@ -631,7 +634,7 @@ export class SourceCredentialManager {
 
     try {
       const oauth = new CraftOAuth(
-        { mcpUrl: source.config.mcp.url },
+        { mcpUrl: source.config.mcp.url, scopes: source.config.mcp.scopes },
         callbacks,
         sessionContext
       );

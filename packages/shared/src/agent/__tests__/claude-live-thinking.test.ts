@@ -57,3 +57,38 @@ describe('ClaudeAgent live thinking (keep-alive)', () => {
     expect(agent.persistentThinkingKey).toBe(claudeThinkingKey({ thinking: { type: 'adaptive' }, effort: 'high' }))
   })
 })
+
+// A model picked mid-session reached a running Claude session only when its query restarted.
+describe('ClaudeAgent live model (keep-alive)', () => {
+  function agentRunning(model: string, opts: { fail?: () => boolean } = {}) {
+    const calls: Array<string | undefined> = []
+    const agent = Object.create(ClaudeAgent.prototype) as any
+    agent.currentQuery = {
+      setModel: async (next?: string) => {
+        if (opts.fail?.()) throw new Error('query closed')
+        calls.push(next)
+      },
+    }
+    agent.persistentModel = model
+    return { agent, calls, sync: (next: string | undefined) => agent.syncPersistentModel(next) as Promise<void> }
+  }
+
+  it('sets a different model once, and nothing while it stays', async () => {
+    const { calls, sync } = agentRunning('claude-opus-5-5[1m]')
+    await sync('claude-opus-5-5[1m]')
+    await sync('claude-sonnet-5-5')
+    await sync('claude-sonnet-5-5')
+    expect(calls).toEqual(['claude-sonnet-5-5'])
+  })
+
+  it('sets the model again on the next turn after a failed update', async () => {
+    let failing = true
+    const { agent, calls, sync } = agentRunning('claude-opus-5-5', { fail: () => failing })
+    await sync('claude-sonnet-5-5')
+    expect(agent.persistentModel).toBeNull()
+    failing = false
+    await sync('claude-opus-5-5')
+    expect(calls).toEqual(['claude-opus-5-5'])
+    expect(agent.persistentModel).toBe('claude-opus-5-5')
+  })
+})

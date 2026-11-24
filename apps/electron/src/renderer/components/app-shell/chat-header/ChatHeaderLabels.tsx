@@ -1,6 +1,6 @@
 /**
  * The chat header's label chips (design spec §7.3): neutral chips with the label's color dot, at
- * most three whole chips that fit, then "+N". "+N" lists the labels that didn't fit (picking one
+ * most three whole chips that fit (one in Coding mode, which keeps the row for the PR chip), then "+N". "+N" lists the labels that didn't fit (picking one
  * opens its value editor on a pinned chip) above the Labels toggles. A valued label just applied
  * from the composer's `#` menu opens its editor here too.
  *
@@ -29,6 +29,7 @@ import type { SessionMeta } from '@/atoms/sessions'
 import { cn } from '@/lib/utils'
 import { LabelMenuItems } from '../SessionMenuParts'
 import { CHAT_HEADER_MAX_LABELS, headerLabelFitCount, labelStripBudget, visibleLabelIndexes } from './label-strip-layout'
+import { PR_CHIP_RESERVE_PAD } from './pr-watch/ChatHeaderPrChip'
 
 const NO_LABELS: string[] = []
 const HIDDEN: React.CSSProperties = { position: 'absolute', visibility: 'hidden', pointerEvents: 'none' }
@@ -41,9 +42,13 @@ interface ChatHeaderLabelsProps {
   onLabelsChange: (labels: string[]) => void
   /** The title row the strip sits in: its width sets the strip's budget (null until it mounts) */
   rowEl: HTMLElement | null
+  /** At most this many chips before "+N" (default {@link CHAT_HEADER_MAX_LABELS}) */
+  maxLabels?: number
+  /** The Coding-mode PR chip: its width is kept free of labels */
+  reserveEl?: HTMLElement | null
 }
 
-export function ChatHeaderLabels({ item, labels, onLabelsChange, rowEl }: ChatHeaderLabelsProps) {
+export function ChatHeaderLabels({ item, labels, onLabelsChange, rowEl, maxLabels = CHAT_HEADER_MAX_LABELS, reserveEl }: ChatHeaderLabelsProps) {
   const { panelId } = useAppShellContext()
   const sessionLabels = item.labels ?? NO_LABELS
   const flatLabels = React.useMemo(() => flattenLabels(labels), [labels])
@@ -52,7 +57,7 @@ export function ChatHeaderLabels({ item, labels, onLabelsChange, rowEl }: ChatHe
 
   const stripRef = React.useRef<HTMLDivElement>(null)
   const counterProbeRef = React.useRef<HTMLSpanElement>(null)
-  const [fitCount, setFitCount] = React.useState(CHAT_HEADER_MAX_LABELS)
+  const [fitCount, setFitCount] = React.useState(maxLabels)
   // The chip whose value editor is open stays visible even when the strip runs out of room. Scoped to the
   // session: the chat page (and this header) outlives session switches, and chip keys repeat across sessions.
   const [openChip, setOpenChip] = React.useState<{ sessionId: string; key: string } | null>(null)
@@ -73,7 +78,10 @@ export function ChatHeaderLabels({ item, labels, onLabelsChange, rowEl }: ChatHe
     const chips = Array.from(strip.querySelectorAll<HTMLElement>('[data-label-chip]'))
     const measure = () => {
       const widths = chips.map(chip => chip.getBoundingClientRect().width)
-      const next = headerLabelFitCount(widths, labelStripBudget(row.clientWidth), probe.getBoundingClientRect().width)
+      // The PR chip never shrinks, so reserving it can't feed back into the strip either.
+      const reserved = reserveEl ? reserveEl.getBoundingClientRect().width + PR_CHIP_RESERVE_PAD : 0
+      const budget = labelStripBudget(row.clientWidth, reserved)
+      const next = headerLabelFitCount(widths, budget, probe.getBoundingClientRect().width, undefined, maxLabels)
       setFitCount(previous => (previous === next ? previous : next))
     }
     measure()
@@ -82,8 +90,9 @@ export function ChatHeaderLabels({ item, labels, onLabelsChange, rowEl }: ChatHe
     observer.observe(row)
     chips.forEach(chip => observer.observe(chip))
     observer.observe(probe)
+    if (reserveEl) observer.observe(reserveEl)
     return () => observer.disconnect()
-  }, [resolved, rowEl])
+  }, [resolved, rowEl, reserveEl, maxLabels])
 
   // A valued label applied from the composer's # menu: open its editor once the label has arrived. Only the
   // header in the asking composer's panel answers: the same session can be open in two panels.
@@ -123,7 +132,7 @@ export function ChatHeaderLabels({ item, labels, onLabelsChange, rowEl }: ChatHe
             key={chip.key}
             data-label-chip
             aria-hidden={visible ? undefined : true}
-            className="inline-flex min-w-0 max-w-[140px] shrink-0 [&>*]:max-w-full"
+            className={cn('inline-flex min-w-0 shrink-0 [&>*]:max-w-full', maxLabels < CHAT_HEADER_MAX_LABELS ? 'max-w-[96px]' : 'max-w-[140px]')}
             style={visible ? undefined : HIDDEN}
           >
             <EntityListLabelBadge

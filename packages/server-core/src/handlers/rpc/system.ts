@@ -9,6 +9,7 @@ import { isUsableGitBashPath, validateGitBashPath } from '@craft-agent/server-co
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import { runGit } from '../../services/git'
 import {
   requestClientOpenExternal,
   requestClientOpenPath,
@@ -179,19 +180,10 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
     return getLatestReleaseVersion()
   })
 
-  // Get git branch for a directory (returns null if not a git repo or git unavailable)
+  // Current branch of a directory: null outside a repo, on a detached HEAD, or without git.
+  // Async: a slow git (large repo, cold disk) must not block the server.
   server.handle(RPC_CHANNELS.git.GET_BRANCH, async (_ctx, dirPath: string) => {
-    try {
-      const branch = execSync('git rev-parse --abbrev-ref HEAD', {
-        cwd: dirPath,
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: 5000,
-      }).trim()
-      return branch || null
-    } catch {
-      return null
-    }
+    return runGit(dirPath, ['symbolic-ref', '--quiet', '--short', 'HEAD'])
   })
 
   // Git Bash detection and configuration (Windows only)

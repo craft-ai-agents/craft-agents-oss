@@ -122,6 +122,7 @@ const ANTHROPIC_PRESETS: Preset[] = [
   // The gateway URL carries the account and gateway ids the Pi SDK needs (cloudflare-gateway.ts).
   { key: CLOUDFLARE_AI_GATEWAY_PROVIDER, label: 'Cloudflare AI Gateway', url: '', placeholder: 'Cloudflare API token', urlPlaceholder: CLOUDFLARE_AI_GATEWAY_URL_EXAMPLE, piOnly: true },
   { key: 'manifest', label: 'Manifest', url: 'https://app.manifest.build/v1', placeholder: 'mnfst_...' },
+  { key: 'opencode-go', label: 'OpenCode Go', url: 'https://opencode.ai/zen/go/v1', placeholder: 'Paste your key here...' },
   { key: 'custom', label: 'Custom', url: '', placeholder: 'Paste your key here...' },
 ]
 
@@ -130,7 +131,7 @@ const ANTHROPIC_PRESETS: Preset[] = [
  * OpenAI-compatible protocol. They behave like 'custom' on submit (customEndpoint
  * gets pinned to openai-completions) but stay branded in the dropdown.
  */
-const OPENAI_COMPAT_CUSTOM_URL_PRESETS: ReadonlySet<string> = new Set(['manifest'])
+const OPENAI_COMPAT_CUSTOM_URL_PRESETS: ReadonlySet<string> = new Set(['manifest', 'opencode-go'])
 
 // OpenAI provider presets - for Codex backend
 // Only direct OpenAI is supported; 3PP providers (OpenRouter, Vercel, Ollama) should be
@@ -331,7 +332,7 @@ export function ApiKeyInput({
         setConnectionDefaultModel(COMPAT_MINIMAX_DEFAULTS)
       } else if (presetKey === 'kimi-coding') {
         setConnectionDefaultModel(COMPAT_KIMI_DEFAULTS)
-      } else if (presetKey === 'openrouter' || presetKey === 'vercel-ai-gateway' || presetKey === 'custom') {
+      } else if (presetKey === 'openrouter' || presetKey === 'vercel-ai-gateway' || presetKey === 'custom' || OPENAI_COMPAT_CUSTOM_URL_PRESETS.has(presetKey)) {
         setConnectionDefaultModel(providerType === 'openai' ? COMPAT_OPENAI_DEFAULTS : COMPAT_ANTHROPIC_DEFAULTS)
       }
     }

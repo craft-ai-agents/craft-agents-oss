@@ -1,12 +1,12 @@
 import * as React from 'react'
-import { Markdown, type RenderMode } from '@craft-agent/ui'
+import { Markdown, type FileOpenHandler, type RenderMode } from '@craft-agent/ui'
 
 interface StreamingMarkdownProps {
   content: string
   isStreaming: boolean
   mode?: RenderMode
   onUrlClick?: (url: string) => void
-  onFileClick?: (path: string) => void
+  onFileClick?: FileOpenHandler
 }
 
 interface Block {
@@ -107,7 +107,7 @@ const MemoizedBlock = React.memo(function Block({
   content: string
   mode: RenderMode
   onUrlClick?: (url: string) => void
-  onFileClick?: (path: string) => void
+  onFileClick?: FileOpenHandler
 }) {
   return (
     <Markdown mode={mode} onUrlClick={onUrlClick} onFileClick={onFileClick}>
