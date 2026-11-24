@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { forwardRef, type ComponentPropsWithoutRef } from 'react'
 import { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
 import { ProjectMenuItems } from './ProjectMenuItems'
@@ -13,11 +14,11 @@ describe('the shared project picker', () => {
     await i18n.init({ lng: 'en', keySeparator: false, resources: { en: { translation: { 'sessionMenu.noProject': 'No project' } } } })
     const actions: (() => void)[] = []
     const chosen: (string | null)[] = []
-    const MenuItem: MenuComponents['MenuItem'] = ({ onClick, children }) => {
-      if (onClick) actions.push(() => onClick({} as Parameters<NonNullable<typeof onClick>>[0]))
-      return <div>{children}</div>
-    }
-    const Separator: MenuComponents['Separator'] = () => <hr />
+    const MenuItem = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<MenuComponents['MenuItem']>>(({ onClick, children }, ref) => {
+      if (onClick) actions.push(() => onClick({} as Parameters<typeof onClick>[0]))
+      return <div ref={ref}>{children}</div>
+    })
+    const Separator = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<MenuComponents['Separator']>>((_, ref) => <div ref={ref} role='separator' />)
     const html = renderToStaticMarkup(
       <I18nextProvider i18n={i18n}>
         <ProjectMenuItems projects={projects} activeProjectId={undefined} onSelect={id => chosen.push(id)} menu={{ MenuItem, Separator }} />
