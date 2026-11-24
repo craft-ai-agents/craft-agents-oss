@@ -54,7 +54,7 @@ import { hasOpenOverlay } from '@/lib/overlay-detection'
 import { ToolbarStatusSlot } from './ToolbarStatusSlot'
 import { buildPlanApprovalMessage } from '../plan-approval-message'
 import { shouldHandleScopedInputEvent, shouldRecallPromptOnArrowUp } from './input-event-guards'
-import { clearPendingFocusForSession, consumePendingFocusForSession } from './focus-input-events'
+import { clearPendingFocusForSession, consumePendingFocusForSession, type FocusInputEventDetail } from './focus-input-events'
 import {
   getRecentWorkingDirs,
   addRecentWorkingDir,
@@ -713,13 +713,15 @@ export function FreeFormInput({
   // Listen for craft:focus-input events (restore focus after popover/dropdown closes)
   React.useEffect(() => {
     const handleFocusInput = (e: Event) => {
-      const detail = (e as CustomEvent<{ sessionId?: string }>).detail
+      const detail = (e as CustomEvent<FocusInputEventDetail>).detail
       const targetSessionId = detail?.sessionId
       if (!shouldHandleScopedInputEvent({ sessionId, isFocusedPanel, targetSessionId })) return
+      if (detail?.shouldFocus && (!isFocusedPanel || !richInputRef.current)) return
 
       if (targetSessionId) {
         clearPendingFocusForSession(targetSessionId)
       }
+      if (detail?.shouldFocus && !detail.shouldFocus()) return
 
       richInputRef.current?.focus()
       // Restore caret position if saved, then clear it (one-shot)
@@ -738,12 +740,15 @@ export function FreeFormInput({
 
   // Recover queued focus requests after session switch/mount races.
   React.useEffect(() => {
-    if (!consumePendingFocusForSession(sessionId)) return
-
-    setTimeout(() => {
-      richInputRef.current?.focus()
-    }, 0)
-  }, [sessionId, richInputRef])
+    if (!isFocusedPanel || !richInputRef.current) return
+    const request = consumePendingFocusForSession(sessionId)
+    if (!request) return
+    if (request.shouldFocus) {
+      if (request.shouldFocus()) richInputRef.current.focus()
+    } else {
+      setTimeout(() => richInputRef.current?.focus(), 0)
+    }
+  }, [sessionId, isFocusedPanel, richInputRef, isCollapsedInCompact])
 
   // Get the next available number for a pasted file prefix (e.g., pasted-image-1, pasted-image-2)
   const getNextPastedNumber = (

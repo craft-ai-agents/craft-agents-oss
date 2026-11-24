@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'bun:test'
 import {
   shouldHandleScopedInputEvent,
+  shouldAutoFocusSessionComposer,
+
   shouldRecallPromptOnArrowUp,
   type RecallPromptArrowUpState,
 } from '../input-event-guards'
@@ -82,5 +84,30 @@ describe('shouldRecallPromptOnArrowUp', () => {
     expect(canRecall({ altKey: true })).toBe(false)
     expect(canRecall({ disabled: true })).toBe(false)
     expect(canRecall({ disableSend: true })).toBe(false)
+  })
+})
+
+describe('shouldAutoFocusSessionComposer', () => {
+  const desktop = { compactMode: false, touchOnly: false, overlayOpen: false, activeElement: null }
+  const element = (tagName: string, isContentEditable = false, composer = false) => ({
+    tagName, isContentEditable, matches: () => composer,
+  })
+
+  it('allows focus from a chat row or the previous composer', () => {
+    expect(shouldAutoFocusSessionComposer(desktop)).toBe(true)
+    expect(shouldAutoFocusSessionComposer({ ...desktop, activeElement: element('BUTTON') })).toBe(true)
+    expect(shouldAutoFocusSessionComposer({ ...desktop, activeElement: element('DIV', true, true) })).toBe(true)
+  })
+
+  it('preserves a focused search field, rename field, or other editor', () => {
+    for (const activeElement of [element('INPUT'), element('TEXTAREA'), element('DIV', true)]) {
+      expect(shouldAutoFocusSessionComposer({ ...desktop, activeElement })).toBe(false)
+    }
+  })
+
+  it('skips compact layouts, touch-only devices, and open overlays', () => {
+    for (const blocked of [{ compactMode: true }, { touchOnly: true }, { overlayOpen: true }]) {
+      expect(shouldAutoFocusSessionComposer({ ...desktop, ...blocked })).toBe(false)
+    }
   })
 })

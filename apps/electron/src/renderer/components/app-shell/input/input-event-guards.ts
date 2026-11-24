@@ -1,3 +1,32 @@
+import { hasOpenOverlay } from '../../../lib/overlay-detection'
+
+export function shouldAutoFocusSessionComposer({
+  compactMode,
+  touchOnly,
+  overlayOpen,
+  activeElement,
+}: {
+  compactMode: boolean
+  touchOnly: boolean
+  overlayOpen: boolean
+  activeElement: Pick<HTMLElement, 'tagName' | 'isContentEditable' | 'matches'> | null
+}): boolean {
+  if (compactMode || touchOnly || overlayOpen) return false
+  if (!activeElement || activeElement.matches('[data-tutorial="chat-input"]')) return true
+  return activeElement.tagName !== 'INPUT'
+    && activeElement.tagName !== 'TEXTAREA'
+    && !activeElement.isContentEditable
+}
+
+export function canAutoFocusSessionComposer(compactMode: boolean): boolean {
+  return shouldAutoFocusSessionComposer({
+    compactMode,
+    touchOnly: window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(any-pointer: fine)').matches,
+    overlayOpen: hasOpenOverlay(),
+    activeElement: document.activeElement as HTMLElement | null,
+  })
+}
+
 export interface ScopedInputEventTarget {
   sessionId?: string | null
   isFocusedPanel: boolean
