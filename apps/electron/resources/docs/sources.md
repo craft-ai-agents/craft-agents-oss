@@ -10,9 +10,13 @@ This guide explains how to configure sources (MCP servers, APIs, local filesyste
 
 When a user wants to add a new source, follow this conversational setup process to create a tailored, well-documented integration.
 
-### 0. Check for a Specialized Source Guide (REQUIRED FIRST STEP)
+### 0. Check for a Matching Workspace Skill
 
-**Before doing anything else**, check the product documentation at https://thecraftagents.com/docs for a service-specific setup guide (fetch pages with your web tools, e.g. search for "{service} source setup").
+Before researching or configuring a source, check the current workspace for a skill whose description matches the setup request. If one matches, read its `SKILL.md` and follow its instructions alongside the source validation and authorization steps below. If none matches, continue with this guide.
+
+### 0.1. Check for a Specialized Source Guide (REQUIRED)
+
+Next, check the product documentation at https://thecraftagents.com/docs for a service-specific setup guide (fetch pages with your web tools, e.g. search for "{service} source setup").
 
 **Available guides:** GitHub, Linear, Slack, Gmail, Google Calendar, Google Drive, Google Docs, Google Sheets, Outlook, Microsoft Calendar, Teams, SharePoint, Craft, Filesystem, Brave Search, Memory
 
