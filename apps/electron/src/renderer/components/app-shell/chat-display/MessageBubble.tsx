@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import { IconButton } from "@/components/ui/button"
 import { Markdown, CollapsibleMarkdownProvider, StreamingMarkdown, type RenderMode } from "@/components/markdown"
 import type { Message } from "../../../../shared/types"
-import { ErrorMessage } from "./ErrorMessage"
+import { ErrorMessage, type AccountRecovery } from "./ErrorMessage"
 
 /**
  * MessageBubble - Renders a single message based on its role
@@ -39,6 +39,7 @@ export interface MessageBubbleProps {
   compactMode?: boolean
   /** Callback to resend the user message that preceded an error */
   onRetry?: () => void
+  accountRecovery?: AccountRecovery
 }
 
 /** Info-level notices: icon shape + role color per level (status never by color alone). */
@@ -58,6 +59,7 @@ export function MessageBubble({
   onPopOut,
   compactMode,
   onRetry,
+  accountRecovery,
 }: MessageBubbleProps) {
   const { t } = useTranslation()
 
@@ -121,7 +123,7 @@ export function MessageBubble({
 
   // === ERROR MESSAGE: inline error marker with collapsible technical details ===
   if (message.role === 'error') {
-    return <ErrorMessage message={message} onOpenUrl={onOpenUrl} sessionId={sessionId} onRetry={onRetry} />
+    return <ErrorMessage message={message} onOpenUrl={onOpenUrl} sessionId={sessionId} onRetry={onRetry} accountRecovery={accountRecovery} />
   }
 
   // === STATUS MESSAGE: matches the live line (ProcessingIndicator) ===
@@ -199,6 +201,7 @@ export const MemoizedMessageBubble = React.memo(MessageBubble, (prev, next) => {
     prev.message.content === next.message.content &&
     prev.message.role === next.message.role &&
     prev.sessionId === next.sessionId &&
-    prev.compactMode === next.compactMode
+    prev.compactMode === next.compactMode &&
+    prev.accountRecovery === next.accountRecovery
   )
 })

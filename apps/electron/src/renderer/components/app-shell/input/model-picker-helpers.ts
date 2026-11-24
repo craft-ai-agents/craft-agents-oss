@@ -1,6 +1,8 @@
 import {
+  canSwitchClaudeAccount,
   isLocalConnection,
   type LlmConnection,
+  type LlmConnectionWithStatus,
 } from '@config/llm-connections'
 
 /**
@@ -52,4 +54,14 @@ export function groupConnectionsByProvider<T extends LlmConnection>(
     }
   }
   return Object.entries(groups).filter(([, conns]) => conns.length > 0)
+}
+
+/** Both model pickers and the rate-limit card offer the same signed-in alternatives. */
+export function getClaudeAccountSwitchTargets(
+  connections: readonly LlmConnectionWithStatus[],
+  currentConnection: string | undefined,
+  currentModel: string,
+): LlmConnectionWithStatus[] {
+  const current = connections.find(connection => connection.slug === currentConnection)
+  return connections.filter(connection => connection.isAuthenticated && canSwitchClaudeAccount(current, connection, currentModel))
 }

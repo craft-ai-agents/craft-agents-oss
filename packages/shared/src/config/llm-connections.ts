@@ -2,7 +2,7 @@
  * LLM Connections
  *
  * Named provider configurations that users can add, configure, and switch between.
- * Each session locks to a specific connection after the first message.
+ * Sessions lock after the first message, but can explicitly switch compatible Claude OAuth accounts.
  * Workspaces can set a default connection.
  */
 
@@ -277,6 +277,18 @@ export function getMiniModel(
  */
 export function isClaudeAccountConnection(connection: Pick<LlmConnection, 'providerType' | 'authType'>): boolean {
   return connection.providerType === 'anthropic' && connection.authType === 'oauth';
+}
+
+/** Started chats may only change the credentials, not the backend, endpoint, billing mode, or model. */
+export function canSwitchClaudeAccount(
+  current: LlmConnection | null | undefined,
+  target: LlmConnection,
+  model: string,
+): boolean {
+  return !!current && !!model && current.slug !== target.slug
+    && isClaudeAccountConnection(current) && isClaudeAccountConnection(target)
+    && !current.baseUrl && !target.baseUrl
+    && (target.models ?? ANTHROPIC_MODELS).some(entry => (typeof entry === 'string' ? entry : entry.id) === model);
 }
 
 /**
