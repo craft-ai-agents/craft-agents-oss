@@ -126,6 +126,7 @@ import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntr
 import { buildBackendRuntimeSignature, buildRestartRequiredSignature, filterAttachmentsForModelInput } from './runtime-config'
 import { validateArchiveTarget } from './archive-guards'
 import { spawnedSessionOptions, spawnRequestError } from './spawn-options'
+import { readRequiredSessionStartMode } from './required-session-start-mode'
 import { runGit } from '../services/git'
 import { addTurnUsage, branchStartTotals, type BranchParent } from './turn-usage'
 
@@ -3351,6 +3352,21 @@ export class SessionManager implements ISessionManager {
     return getSessionStoragePath(managed.workspace.rootPath, sessionId)
   }
 
+  private async createSpawnedSession(
+    parent: ManagedSession,
+    request: Parameters<NonNullable<AgentBackend['onSpawnSession']>>[0],
+  ): Promise<Session> {
+    const invalid = await spawnRequestError(request, (dir) => runGit(dir, ['rev-parse', '--show-toplevel']))
+    if (invalid) throw new Error(invalid)
+
+    return this.createSession(parent.workspace.id, {
+      ...spawnedSessionOptions(request, parent),
+      permissionMode: request.permissionMode,
+      // Nobody watches a session an automation, task or CLI run spawns either.
+      unattended: !isAttendedSession(parent) || undefined,
+    }, { spawningSessionId: parent.id })
+  }
+
   async createSession(
     workspaceId: string,
     options?: import('@craft-agent/shared/protocol').CreateSessionOptions,
@@ -3358,7 +3374,8 @@ export class SessionManager implements ISessionManager {
     // announced to the renderer (see notifySessionCreated). Callers that register the session
     // themselves — the `sessions:create` RPC adds it from the return value — pass
     // `{ emitCreatedEvent: false }` to avoid a redundant hydrate.
-    internal?: { emitCreatedEvent?: boolean },
+    // spawningSessionId is trusted server context from the spawn_session handler.
+    internal?: { emitCreatedEvent?: boolean; spawningSessionId?: string },
   ): Promise<Session> {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) {
@@ -3366,7 +3383,7 @@ export class SessionManager implements ISessionManager {
     }
 
     // Get new session defaults from workspace config (with global fallback)
-    // Options.permissionMode overrides the workspace default (used by EditPopover for auto-execute)
+    // A required mode overrides ordinary caller options and defaults.
     const workspaceRootPath = workspace.rootPath
     const wsConfig = loadWorkspaceConfig(workspaceRootPath)
     const globalDefaults = loadConfigDefaults()
@@ -3374,13 +3391,11 @@ export class SessionManager implements ISessionManager {
     // Read permission mode from workspace config, fallback to global defaults
     // Callers may pass canonical names (`craft run --mode execute`); an unknown mode would
     // otherwise fall through to Explore's checks, so it is rejected.
-    const requestedPermissionMode = options?.permissionMode ? parsePermissionMode(options.permissionMode) : undefined
+    const requestedPermissionMode = options?.permissionMode ? parsePermissionMode(options.permissionMode) ?? undefined : undefined
     if (options?.permissionMode && !requestedPermissionMode) {
       throw new Error(`Invalid permission mode: ${String(options.permissionMode)}. Valid values: explore, ask, guarded, execute`)
     }
-    const defaultPermissionMode = requestedPermissionMode
-      ?? wsConfig?.defaults?.permissionMode
-      ?? globalDefaults.workspaceDefaults.permissionMode
+    const requiredPermissionMode = readRequiredSessionStartMode(wsConfig)
 
     const userDefaultWorkingDir = wsConfig?.defaults?.workingDirectory || undefined
     // Resolve thinking level with caller-first precedence, matching permissionMode above:
@@ -3661,6 +3676,17 @@ export class SessionManager implements ISessionManager {
         copiedMessageCount: validatedBranch.branchIdx + 1,
       })
     }
+
+    // Only agent-initiated spawns have a parent permission ceiling. A required mode
+    // must not let a restricted parent obtain more permissions by spawning a child.
+    const parentMode = internal?.spawningSessionId ? getPermissionMode(internal.spawningSessionId) : undefined
+    if (requiredPermissionMode && parentMode && clampPermissionMode(requiredPermissionMode, parentMode) !== requiredPermissionMode) {
+      throw new Error('Cannot spawn session: the workspace requires a startup permission mode looser than the parent session’s current mode.')
+    }
+    const defaultPermissionMode = requiredPermissionMode
+      ?? (parentMode ? clampPermissionMode(requestedPermissionMode, parentMode) : requestedPermissionMode)
+      ?? wsConfig?.defaults?.permissionMode
+      ?? globalDefaults.workspaceDefaults.permissionMode
 
     // Use storage layer to create and persist the session
     const storedSession = await createStoredSession(workspaceRootPath, {
@@ -5064,24 +5090,7 @@ export class SessionManager implements ISessionManager {
       managed.agent.onSpawnSession = async (request) => {
         sessionLog.info(`Spawn session request from session ${managed.id}:`, request.name || '(unnamed)')
 
-        // The model picks the child's mode; it may be as strict as it likes but never looser
-        // than this session's effective mode, or an Ask session could spawn an Execute child
-        // without a prompt.
-        const parentMode = getPermissionMode(managed.id)
-        const permissionMode = clampPermissionMode(request.permissionMode, parentMode)
-        if (request.permissionMode && permissionMode !== request.permissionMode) {
-          sessionLog.warn(`Spawn session: lowered requested mode ${request.permissionMode} to ${permissionMode} (parent ${managed.id} runs in ${parentMode})`)
-        }
-
-        const invalid = await spawnRequestError(request, (dir) => runGit(dir, ['rev-parse', '--show-toplevel']))
-        if (invalid) throw new Error(invalid)
-
-        const session = await this.createSession(managed.workspace.id, {
-          ...spawnedSessionOptions(request, managed),
-          permissionMode,
-          // Nobody watches a session an automation, task or CLI run spawns either.
-          unattended: !isAttendedSession(managed) || undefined,
-        })
+        const session = await this.createSpawnedSession(managed, request)
 
         // Build FileAttachment[] from paths (if any)
         let fileAttachments: FileAttachment[] | undefined
@@ -10542,6 +10551,8 @@ export class SessionManager implements ISessionManager {
     const warnings: string[] = []
     const workspaceRootPath = workspace.rootPath
 
+    const requiredPermissionMode = readRequiredSessionStartMode(loadWorkspaceConfig(workspaceRootPath))
+
     // Determine session ID
     const sessionId = mode === 'move'
       ? bundle.session.header.id
@@ -10570,8 +10581,8 @@ export class SessionManager implements ISessionManager {
       lastUsedAt: Date.now(),
       lastMessageAt: header.lastMessageAt,
       isFlagged: header.isFlagged,
-      permissionMode: header.permissionMode,
-      previousPermissionMode: header.previousPermissionMode,
+      permissionMode: requiredPermissionMode ?? header.permissionMode,
+      previousPermissionMode: requiredPermissionMode ? undefined : header.previousPermissionMode,
       sessionStatus: header.sessionStatus,
       labels: this.canonicalLabels(workspaceRootPath, header.labels),
       enabledSourceSlugs: header.enabledSourceSlugs,

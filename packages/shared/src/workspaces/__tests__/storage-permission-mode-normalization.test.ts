@@ -41,7 +41,7 @@ describe('workspace storage: config normalization', () => {
     expect(loaded?.defaults?.cyclablePermissionModes).toEqual(['safe', 'ask', 'allow-all']);
   });
 
-  it('falls back to full cycle if persisted cyclablePermissionModes are invalid', () => {
+  it.each(['unknown', 'allow-all'])('falls back to the full cycle for a one-entry cycle (%s)', (mode) => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'ws-mode-invalid-'));
     tempDirs.push(workspaceRoot);
 
@@ -51,7 +51,7 @@ describe('workspace storage: config normalization', () => {
       slug: 'broken-modes',
       defaults: {
         permissionMode: 'execute',
-        cyclablePermissionModes: ['unknown'],
+        cyclablePermissionModes: [mode],
       },
       createdAt: Date.now(),
       updatedAt: Date.now(),

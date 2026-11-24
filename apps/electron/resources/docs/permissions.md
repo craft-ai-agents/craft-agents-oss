@@ -276,6 +276,22 @@ Nothing is remembered for dangerous commands (`rm`, `sudo`, `git push`, `git res
 
 Sessions created with `spawn_session` can be stricter than the session that spawned them, never looser: a requested mode above the parent's is lowered to it.
 
+## Require a Permission Mode at Session Start
+
+Set `defaults.requiredPermissionMode` in the workspace's `config.json` to require a mode when a session is created:
+
+```json
+{
+  "defaults": {
+    "requiredPermissionMode": "execute"
+  }
+}
+```
+
+This is a workspace setting, not a rule in `permissions.json`. Add the field to your existing `defaults` object rather than replacing the file. The setting overrides the regular workspace default and any requested mode for new chats, spawned sessions, prompt automations, and sessions imported into the workspace. If the required mode would give a spawned session more permissions than its parent currently has, the spawn is refused instead.
+
+The setting is optional and only affects startup. It leaves existing sessions and later manual mode changes alone. Remove the field to restore the usual mode selection. Only set `execute` in a workspace where you want new sessions to run tools without Ask to Edit prompts, even when a caller requests a more restrictive mode.
+
 ## Cascading Rules
 
 Rules cascade from workspace → source → agent:
