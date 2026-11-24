@@ -65,6 +65,7 @@ import { getModelsForProviderType, resolveMidStreamBehavior, type CustomEndpoint
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { loadAiSettings } from './ai-settings-loader'
+import { getDuplicateOAuthConnectionSlugs } from './duplicate-oauth-connections'
 
 /** Checks with an outcome after which a feature that changed nothing is pointed out. */
 const DECISION_NO_CHANGE_MIN_CHECKS = 30
@@ -1206,16 +1207,10 @@ export default function AiSettingsPage() {
     return llmConnections.find(c => c.isDefault)
   }, [llmConnections])
 
-  // Anthropic account UUIDs that resolve from 2+ connections (issue #838).
-  // Surfaces a warning when several Claude connections share one account/quota.
-  const duplicateAccountUuids = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const conn of llmConnections) {
-      const uuid = conn.oauthAccountUuid
-      if (uuid) counts.set(uuid, (counts.get(uuid) ?? 0) + 1)
-    }
-    return new Set([...counts].filter(([, n]) => n > 1).map(([uuid]) => uuid))
-  }, [llmConnections])
+  const duplicateOAuthConnectionSlugs = useMemo(
+    () => getDuplicateOAuthConnectionSlugs(llmConnections),
+    [llmConnections],
+  )
 
   const defaultModel = defaultConnection?.defaultModel ?? ''
 
@@ -1676,7 +1671,7 @@ export default function AiSettingsPage() {
                 onSetMidStreamBehavior={(behavior) => handleSetMidStreamBehavior(conn, behavior)}
                 validationState={validationStates[conn.slug]?.state || 'idle'}
                 validationError={validationStates[conn.slug]?.error}
-                isDuplicateAccount={!!conn.oauthAccountUuid && duplicateAccountUuids.has(conn.oauthAccountUuid)}
+                isDuplicateAccount={duplicateOAuthConnectionSlugs.has(conn.slug)}
               />
             ))
           )}
