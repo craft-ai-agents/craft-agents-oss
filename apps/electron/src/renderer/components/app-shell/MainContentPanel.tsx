@@ -78,6 +78,8 @@ export function MainContentPanel({
     onSessionStatusChange,
     onArchiveSession,
     onSessionLabelsChange,
+    projectMenuOptions,
+    onSetSessionProjects,
     sessionStatuses,
     labels,
     onTestAutomation,
@@ -195,6 +197,14 @@ export function MainContentPanel({
       onSessionStatusChange(sessionId, status)
     })
   }, [selectedIds, onSessionStatusChange])
+
+  const firstProjectId = selectedMetas[0]?.projectId ?? null
+  const activeProjectId = selectedMetas.length === selectedIds.size &&
+    selectedMetas.every(meta => (meta.projectId ?? null) === firstProjectId) ? firstProjectId : undefined
+
+  const handleBatchSetProject = useCallback((projectId: string | null) => {
+    onSetSessionProjects?.([...selectedIds], projectId)
+  }, [selectedIds, onSetSessionProjects])
 
   const handleBatchArchive = useCallback(() => {
     selectedIds.forEach(sessionId => {
@@ -410,6 +420,9 @@ export function MainContentPanel({
             labels={labels}
             appliedLabelIds={appliedLabelIds}
             onToggleLabel={handleBatchToggleLabel}
+            projects={projectMenuOptions}
+            activeProjectId={activeProjectId}
+            onSetProject={onSetSessionProjects ? handleBatchSetProject : undefined}
             onArchive={handleBatchArchive}
             onClearSelection={clearMultiSelect}
           />

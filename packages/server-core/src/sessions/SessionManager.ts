@@ -795,6 +795,7 @@ interface ManagedSession {
   labels?: string[]
   // Workspace-scoped project binding (undefined = unbound)
   projectId?: string
+  projectOverride?: true
   // Parent session id — when set, this session is a subtask of the parent (undefined = top-level task)
   parentSessionId?: string
   // Kanban board column id ('todo' | 'in-progress' | 'done'); independent of sessionStatus
@@ -2218,6 +2219,11 @@ export class SessionManager implements ISessionManager {
     // Project binding (no dedicated event today — handled via metaChanged broadcast)
     if (managed.projectId !== header.projectId) {
       managed.projectId = header.projectId
+      changed = true
+    }
+
+    if (managed.projectOverride !== header.projectOverride) {
+      managed.projectOverride = header.projectOverride
       changed = true
     }
 
@@ -3673,6 +3679,8 @@ export class SessionManager implements ISessionManager {
       labels: this.canonicalLabels(workspaceRootPath, options?.labels),
       isFlagged: options?.isFlagged,
       projectId: resolvedProjectId,
+      projectOverride: options?.parentSessionId && options.projectId && resolvedProjectId !== inheritedProjectId
+        ? true : undefined,
       parentSessionId: options?.parentSessionId,
       taskSlug: options?.taskSlug,
       taskRunId: options?.taskRunId,
@@ -8535,27 +8543,63 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
-   * Bind or unbind a session to/from a workspace project.
-   * Pass `null` to unbind. The session's working directory is NOT changed retroactively —
-   * the project binding is only used as a default for newly created sessions.
+   * Update the selected chats and any descendants that follow them. `null` unbinds them.
+   * Project moves do not change existing sessions' working directories.
    */
-  async setSessionProjectId(sessionId: string, projectId: string | null): Promise<void> {
-    const managed = this.sessions.get(sessionId)
-    if (managed) {
-      managed.projectId = projectId ?? undefined
-      this.setMetadataWriteGuard(managed)
+  async setSessionProjectId(sessionId: string, projectId: string | null, additionalSessionIds: string[] = []): Promise<void> {
+    const root = this.sessions.get(sessionId)
+    if (!root) return
 
-      this.sendEvent({
-        type: 'project_id_changed',
-        sessionId: managed.id,
-        projectId: managed.projectId ?? null,
-      }, managed.workspace.id)
-
-      this.persistSession(managed)
-      await this.flushSession(managed.id)
-      const watcher = this.configWatchers.get(managed.workspace.rootPath)
-      watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
+    const { workspace } = root
+    const destination = projectId ?? undefined
+    const children = new Map<string, ManagedSession[]>()
+    for (const session of this.sessions.values()) {
+      if (session.workspace.id !== workspace.id || !session.parentSessionId) continue
+      const siblings = children.get(session.parentSessionId)
+      if (siblings) siblings.push(session)
+      else children.set(session.parentSessionId, [session])
     }
+
+    const selected = new Set([sessionId, ...additionalSessionIds])
+    const affected = new Map<string, ManagedSession>()
+    for (const id of selected) {
+      const session = this.sessions.get(id)
+      if (!session || session.workspace.id !== workspace.id) continue
+      const pending = [session]
+      while (pending.length > 0) {
+        const parent = pending.pop()!
+        if (affected.has(parent.id)) continue
+        affected.set(parent.id, parent)
+        for (const child of children.get(parent.id) ?? []) {
+          // Selected descendants start their own cascade, regardless of the ancestor's old project.
+          if (selected.has(child.id) || child.projectOverride) continue
+          // Older headers did not record intent. Treat a different existing project
+          // as an override, but let unassigned legacy children join the family.
+          if (child.projectId && child.projectId !== parent.projectId && child.projectId !== session.projectId) continue
+          pending.push(child)
+        }
+      }
+    }
+
+    const changed: ManagedSession[] = []
+    for (const session of affected.values()) {
+      const parent = session.parentSessionId ? this.sessions.get(session.parentSessionId) : undefined
+      const projectOverride = parent?.workspace.id === workspace.id &&
+        !affected.has(parent.id) && parent.projectId !== destination ? true : undefined
+      if (!selected.has(session.id) && session.projectId === destination) continue
+      session.projectId = destination
+      session.projectOverride = projectOverride
+      this.setMetadataWriteGuard(session)
+      this.persistSession(session)
+      changed.push(session)
+      this.sendEvent({ type: 'project_id_changed', sessionId: session.id, projectId }, workspace.id)
+    }
+
+    const watcher = this.configWatchers.get(workspace.rootPath)
+    await Promise.all(changed.map(async session => {
+      await this.flushSession(session.id)
+      watcher?.notifyFileChange(`sessions/${session.id}/session.jsonl`)
+    }))
   }
 
   /**
