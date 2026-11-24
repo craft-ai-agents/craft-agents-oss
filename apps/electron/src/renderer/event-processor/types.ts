@@ -137,6 +137,16 @@ export interface PermissionRequestEvent {
 }
 
 /**
+ * A permission prompt was answered (in any window, the WebUI or a chat binding)
+ */
+export interface PermissionResolvedEvent {
+  type: 'permission_resolved'
+  sessionId: string
+  requestId: string
+  allowed: boolean
+}
+
+/**
  * Sources changed event
  */
 export interface SourcesChangedEvent {
@@ -554,6 +564,7 @@ export type AgentEvent =
   | ErrorEvent
   | TypedErrorEvent
   | PermissionRequestEvent
+  | PermissionResolvedEvent
   | CredentialRequestEvent
   | SourcesChangedEvent
   | CodingModeChangedEvent
@@ -598,6 +609,7 @@ export type AgentEvent =
  */
 export type Effect =
   | { type: 'permission_request'; request: PermissionRequest }
+  | { type: 'permission_resolved'; requestId: string }
   | { type: 'credential_request'; request: CredentialRequest }
   | { type: 'generate_title'; sessionId: string; userMessage: string }
   | { type: 'permission_mode_changed'; sessionId: string; permissionMode: PermissionMode; previousPermissionMode?: PermissionMode; transitionDisplay?: string; modeVersion?: number; changedAt?: string; changedBy?: 'user' | 'system' | 'restore' | 'automation' | 'unknown' }

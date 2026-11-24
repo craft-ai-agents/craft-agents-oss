@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { BUNDLE_FILES } from '../build.ts';
 
 /**
  * Smoke test against the BUILT single-file bundle, not the source tree.
@@ -20,11 +21,18 @@ import { dirname, join } from 'node:path';
  * derivation all the way to request building. The fake token is deliberately
  * not a JWT: failing at accountId extraction is the deterministic, offline
  * proof that the whole auth pipeline upstream of the HTTP request works.
+ *
+ * Image handling (#1146) only broke on users' machines: build-machine paths
+ * inlined into the bundle still exist here. That test runs a copy whose
+ * repo paths are rewritten to a missing root, as a user's machine sees it.
  */
 
 const packageDir = dirname(import.meta.dir);
 const bundlePath = join(packageDir, 'dist', 'index.js');
 const blockNetworkPreloadPath = join(import.meta.dir, 'test-fixtures', 'block-network.ts');
+const repoRoot = realpathSync(resolve(packageDir, '..', '..'));
+const ONE_PIXEL_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 const RUN_TIMEOUT_MS = 30_000;
 
 let scratchDir: string;
@@ -65,10 +73,32 @@ function createOfflineEnvironment(): NodeJS.ProcessEnv {
   return env;
 }
 
+/** Copy the bundle with every build-machine path pointing at a root that doesn't exist. */
+function copyBundleAsOnUserMachine(): string {
+  const dir = join(scratchDir, 'user-machine-bundle');
+  mkdirSync(dir, { recursive: true });
+  const inlinedRoot = JSON.stringify(repoRoot).slice(1, -1);
+  const missingRoot = JSON.stringify(join(scratchDir, 'build-machine-only')).slice(1, -1);
+  for (const file of BUNDLE_FILES) {
+    const source = join(packageDir, 'dist', file);
+    const target = join(dir, file);
+    if (file.endsWith('.js')) {
+      writeFileSync(target, readFileSync(source, 'utf8').split(inlinedRoot).join(missingRoot));
+    } else {
+      writeFileSync(target, readFileSync(source));
+    }
+  }
+  return join(dir, 'index.js');
+}
+
 /** Spawn the bundle, send JSONL messages, and collect output until `done` matches or timeout. */
-function driveBundle(messages: object[], done: (output: string) => boolean): Promise<string> {
+function driveBundle(
+  messages: object[],
+  done: (output: string) => boolean,
+  entry: string = bundlePath,
+): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['--preload', blockNetworkPreloadPath, bundlePath], {
+    const child = spawn(process.execPath, ['--preload', blockNetworkPreloadPath, entry], {
       cwd: scratchDir,
       env: createOfflineEnvironment(),
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -134,5 +164,49 @@ describe('pi-agent-server bundle', () => {
     expect(output).not.toContain('Cannot find module');
     expect(output).not.toContain('OFFLINE_FETCH_BLOCKED');
     expect(output).toContain('Failed to extract accountId from token');
+  }, RUN_TIMEOUT_MS + 130_000);
+
+  it('sends prompt images from a bundle on a user machine without running workers from the cwd', async () => {
+    const entry = copyBundleAsOnUserMachine();
+    // The SDK used to spawn this cwd-relative worker under Bun, i.e. from the user's project.
+    const plantedWorker = join(scratchDir, 'src', 'utils', 'image-resize-worker.ts');
+    const plantedMarker = join(scratchDir, 'planted-worker-ran');
+    mkdirSync(dirname(plantedWorker), { recursive: true });
+    writeFileSync(plantedWorker, `require('node:fs').writeFileSync(${JSON.stringify(plantedMarker)}, '1');\n`);
+
+    const output = await driveBundle(
+      [
+        {
+          type: 'init',
+          apiKey: 'fake-key',
+          model: 'smoke-vision',
+          cwd: scratchDir,
+          thinkingLevel: 'off',
+          workspaceRootPath: scratchDir,
+          sessionId: 'bundle-smoke-image',
+          sessionPath: scratchDir,
+          workingDirectory: scratchDir,
+          plansFolderPath: join(scratchDir, 'plans'),
+          providerType: 'pi',
+          authType: 'api_key',
+          baseUrl: 'https://smoke.invalid/v1',
+          customEndpoint: { api: 'openai-completions', supportsImages: true },
+        },
+        {
+          type: 'prompt',
+          id: 'p1',
+          message: 'Describe the image.',
+          systemPrompt: 'You are a smoke test.',
+          images: [{ type: 'image', data: ONE_PIXEL_PNG_BASE64, mimeType: 'image/png' }],
+        },
+      ],
+      (out) => out.includes('REQUEST_IMAGE='),
+      entry,
+    );
+
+    expect(output).not.toContain('Cannot find module');
+    expect(output).toContain('REQUEST_IMAGE=present');
+    expect(output).not.toContain('REQUEST_IMAGE=omitted');
+    expect(existsSync(plantedMarker)).toBe(false);
   }, RUN_TIMEOUT_MS + 130_000);
 });

@@ -83,7 +83,7 @@ interface Harness {
   router: Router
   store: BindingStore
   pendingStore: PendingSendersStore
-  sessionManager: { sendMessage: ReturnType<typeof mock> }
+  sessionManager: { admitMessage: ReturnType<typeof mock> }
   commands: { handle: ReturnType<typeof mock> }
 }
 
@@ -101,7 +101,7 @@ function makeHarness(args: {
     args.bindingConfig,
   )
   const pendingStore = new PendingSendersStore(pendingDir)
-  const sessionManager = { sendMessage: mock(async () => {}) }
+  const sessionManager = { admitMessage: mock(async () => ({ messageId: 'msg-1', outcome: 'started' as const })) }
   const commands = { handle: mock(async () => {}) }
   const router = new Router(
     sessionManager as unknown as Parameters<Router['route']>[0] extends PlatformAdapter
@@ -131,7 +131,7 @@ describe('Router access control', () => {
     })
     const adapter = makeFakeAdapter()
     await harness.router.route(adapter, baseMsg({ senderId: 'anyone' }))
-    expect(harness.sessionManager.sendMessage).toHaveBeenCalledTimes(1)
+    expect(harness.sessionManager.admitMessage).toHaveBeenCalledTimes(1)
     expect(adapter.sent.length).toBe(0)
   })
 
@@ -151,7 +151,7 @@ describe('Router access control', () => {
     })
     const adapter = makeFakeAdapter()
     await harness.router.route(adapter, baseMsg({ senderId: 'stranger' }))
-    expect(harness.sessionManager.sendMessage).not.toHaveBeenCalled()
+    expect(harness.sessionManager.admitMessage).not.toHaveBeenCalled()
     expect(adapter.sent.some((s) => s.includes('private'))).toBe(true)
     // Recorded in pending store.
     const pending = harness.pendingStore.list('telegram')
@@ -169,7 +169,7 @@ describe('Router access control', () => {
     })
     const adapter = makeFakeAdapter()
     await harness.router.route(adapter, baseMsg({ senderId: 'stranger' }))
-    expect(harness.sessionManager.sendMessage).not.toHaveBeenCalled()
+    expect(harness.sessionManager.admitMessage).not.toHaveBeenCalled()
     expect(adapter.sent.some((s) => s.includes('allow-list'))).toBe(true)
     const pending = harness.pendingStore.list('telegram')
     expect(pending.length).toBe(1)
@@ -185,7 +185,7 @@ describe('Router access control', () => {
     })
     const adapter = makeFakeAdapter()
     await harness.router.route(adapter, baseMsg({ senderId: 'allowed-1' }))
-    expect(harness.sessionManager.sendMessage).toHaveBeenCalledTimes(1)
+    expect(harness.sessionManager.admitMessage).toHaveBeenCalledTimes(1)
     expect(adapter.sent.length).toBe(0)
   })
 
@@ -202,7 +202,7 @@ describe('Router access control', () => {
       adapter,
       baseMsg({ senderId: 'bot-id', senderIsBot: true }),
     )
-    expect(harness.sessionManager.sendMessage).not.toHaveBeenCalled()
+    expect(harness.sessionManager.admitMessage).not.toHaveBeenCalled()
     expect(adapter.sent.length).toBe(0)
     expect(harness.pendingStore.list('telegram').length).toBe(0)
   })

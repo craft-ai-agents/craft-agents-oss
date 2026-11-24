@@ -1004,13 +1004,13 @@ export interface ListSessionsResult {
  */
 export interface SendAgentMessageResult {
   /**
-   * - `delivered`: the target was idle, so it will start processing the message now.
-   * - `queued`: the target was mid-turn; the message is enqueued and will be
-   *   processed after the current turn finishes.
+   * How the target took the message (reported as soon as it is on disk, never after the
+   * target's turn):
+   * - `started`: the target was idle and started a turn for the message.
+   * - `steered`: the target was mid-turn and took the message into that turn.
+   * - `queued`: the target was mid-turn; the message runs after the current turn finishes.
    */
-  delivery: 'delivered' | 'queued';
-  /** Whether the target session was processing a turn when the message arrived. */
-  targetBusy: boolean;
+  delivery: 'started' | 'steered' | 'queued';
 }
 
 /**

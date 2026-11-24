@@ -3,6 +3,7 @@
  * Extracted from the SessionManager callback so the inheritance rules are unit-testable.
  */
 
+import { resolve } from 'node:path'
 import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import type { CreateSessionOptions } from '@craft-agent/shared/protocol'
 
@@ -16,6 +17,9 @@ export interface SpawnOverrides {
   labels?: string[]
   workingDirectory?: string
   projectId?: string
+  codingMode?: boolean
+  /** An existing git worktree: the child works there, in Coding mode */
+  worktreePath?: string
 }
 
 /** The spawning session's fields a child inherits. */
@@ -47,11 +51,35 @@ export function spawnedSessionOptions(request: SpawnOverrides, parent: SpawnPare
     labels: request.labels ?? parent.labels,
     // The parent's folder (a Coding child works in the same checkout), unless the child moves to
     // another project: createSession then uses that project's folder.
-    workingDirectory: request.workingDirectory ?? (projectId === parent.projectId ? parent.workingDirectory : undefined),
+    workingDirectory: request.worktreePath
+      ?? request.workingDirectory
+      ?? (projectId === parent.projectId ? parent.workingDirectory : undefined),
     projectId,
-    // The parent's mode both ways, never the workspace default (branches do the same).
-    codingMode: parent.codingMode === true,
+    // Requested, else the parent's mode both ways, never the workspace default (branches do the same).
+    codingMode: request.worktreePath ? true : request.codingMode ?? parent.codingMode === true,
     // Spawned sessions become subtasks of the spawning session.
     parentSessionId: parent.id,
   }
+}
+
+/**
+ * Why `request` can't be spawned as asked, or undefined. `gitTopLevel` returns null when a folder
+ * is missing or not inside a git work tree.
+ */
+export async function spawnRequestError(
+  request: SpawnOverrides,
+  gitTopLevel: (dir: string) => Promise<string | null>,
+): Promise<string | undefined> {
+  const { worktreePath, workingDirectory, codingMode } = request
+  if (!worktreePath) return undefined
+  if (codingMode === false) {
+    return 'worktreePath starts the session in Coding mode: omit codingMode, or pass the folder as workingDirectory for a default-mode session.'
+  }
+  if (workingDirectory && resolve(workingDirectory) !== resolve(worktreePath)) {
+    return 'Pass the folder once: worktreePath or workingDirectory, not both.'
+  }
+  if (!(await gitTopLevel(worktreePath))) {
+    return `worktreePath ${worktreePath} is not inside a git work tree. Create the worktree first (e.g. git worktree add <path> -b <branch>), then pass its path.`
+  }
+  return undefined
 }

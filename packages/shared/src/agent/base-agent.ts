@@ -106,6 +106,10 @@ export interface SpawnSessionRequest {
   workingDirectory?: string;
   /** Workspace project id to bind the spawned session to */
   projectId?: string;
+  /** Overrides the inherited Coding mode */
+  codingMode?: boolean;
+  /** Existing git worktree to work in; implies Coding mode */
+  worktreePath?: string;
   attachments?: Array<{ path: string; name?: string }>;
 }
 
@@ -115,6 +119,8 @@ export interface SpawnSessionResult {
   status: 'started';
   connection?: string;
   model?: string;
+  workingDirectory?: string;
+  codingMode?: boolean;
 }
 
 export interface SpawnSessionHelpResult {
@@ -1186,6 +1192,10 @@ ${formattedMessages}
         ? expandPath(input.workingDirectory)
         : undefined,
       projectId: input.projectId as string | undefined,
+      codingMode: typeof input.codingMode === 'boolean' ? input.codingMode : undefined,
+      worktreePath: typeof input.worktreePath === 'string' && input.worktreePath
+        ? expandPath(input.worktreePath)
+        : undefined,
       attachments: input.attachments as SpawnSessionRequest['attachments'],
     };
 

@@ -30,6 +30,17 @@ import type {
 import type { SessionBundle, DispatchMode } from '@craft-agent/shared/sessions'
 import type { EventSink } from '../transport'
 
+/**
+ * How a session took a message: it `started` a turn (the session was idle), was `queued`
+ * behind the running turn, or was `steered` into it.
+ */
+export type MessageAdmission = 'started' | 'queued' | 'steered'
+
+export interface AdmittedMessage {
+  messageId: string
+  outcome: MessageAdmission
+}
+
 export interface ISessionManager {
   // ---------------------------------------------------------------------------
   // Lifecycle
@@ -146,9 +157,22 @@ export interface ISessionManager {
     options?: SendMessageOptions,
     existingMessageId?: string,
     _isAuthRetry?: boolean,
-    onAck?: (messageId: string) => void,
+    onAck?: (messageId: string, outcome: MessageAdmission) => void,
     rpcContext?: { callerClientId?: string },
   ): Promise<void>
+  /**
+   * Hand a message to a session without waiting for its turn. Resolves once the message is on
+   * disk and admitted (started a turn, or was queued or steered); rejects if it wasn't. For
+   * callers that must not block on a turn: agent-to-agent messages, messaging bindings, plan
+   * acceptance. A failure after admission is reported on the session and ends that turn.
+   */
+  admitMessage(
+    sessionId: string,
+    message: string,
+    attachments?: FileAttachment[],
+    storedAttachments?: StoredAttachment[],
+    options?: SendMessageOptions,
+  ): Promise<AdmittedMessage>
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
   /** What a background task of the session has written so far, digested; null when there is nothing to read. */
   getBackgroundTaskOutput(sessionId: string, taskId: string, kind?: 'agent' | 'shell' | 'workflow'): Promise<BackgroundTaskOutput | null>
@@ -179,6 +203,10 @@ export interface ISessionManager {
   // Permissions & credentials
   // ---------------------------------------------------------------------------
 
+  /**
+   * Answer a pending permission prompt. False when it isn't pending (already answered elsewhere)
+   * or the agent is gone. A delivered answer is announced to every client as `permission_resolved`.
+   */
   respondToPermission(
     sessionId: string,
     requestId: string,
@@ -206,7 +234,8 @@ export interface ISessionManager {
    * so the plan can actually run without per-tool prompts.
    *
    * Used by the messaging gateway so Telegram/WhatsApp accept buttons produce
-   * the same server-side effect as the desktop accept button.
+   * the same server-side effect as the desktop accept button. Resolves once the
+   * message is admitted (see admitMessage), not after the plan has run.
    */
   acceptPlan(sessionId: string, planPath?: string): Promise<void>
 

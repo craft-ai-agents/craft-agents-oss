@@ -34,8 +34,6 @@ We built Craft Agents because we wanted a better, more opinionated (and preferab
 **How do I connect to Linear, Gmail, Slack...?**
 Tell the agent "add Linear as a source." It finds public APIs and MCP servers, reads their docs, sets up credentials, and configures everything. No config files, no setup wizards.
 
-[Check out how I just connected to Slack →](https://thecraftagents.com/s/DRNQEiy8w2e1v5LPgKl8b)
-
 **I already have my MCP config JSON.**
 Paste it. The agent handles the rest.
 
@@ -50,8 +48,6 @@ Craft Agents connects to anything. We have it hooked up to a direct Postgres DB 
 
 **How do I import my Claude Code skills and MCPs?**
 Tell the agent you want to import your skills from Claude Code. It handles the migration.
-
-[Here I imported all my skills in one go →](https://thecraftagents.com/s/gWCFqwhObFWaNJIEJmd6j)
 
 **How do I create a new skill?**
 Describe what the skill should do, give it context. The agent takes care of the rest.

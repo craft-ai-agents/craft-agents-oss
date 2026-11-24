@@ -293,6 +293,8 @@ export interface ElectronAPI {
   getDefaultZoomLevel?(): Promise<number>
   /** Saves and applies the default zoom; resolves to the stored (snapped) level. */
   setDefaultZoomLevel?(level: number): Promise<number>
+  /** Crafty, the system-wide helper (Electron on macOS only; see `shared/crafty.ts`). */
+  crafty?: import('./crafty').CraftyApi
   invokeOnServer(url: string, token: string, channel: string, ...args: any[]): Promise<any>
 
   // Remote session transfer (main-process orchestrated, supports chunked upload)

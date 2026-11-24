@@ -241,6 +241,9 @@ export const SpawnSessionSchema = z.object({
     .describe('Reasoning level for the new session. Silently ignored on non-reasoning models (e.g. gpt-4o, gemini-2.5-flash). Omit to inherit the workspace default.'),
   labels: z.array(z.string()).optional().describe('Labels for the new session'),
   workingDirectory: z.string().optional().describe('Working directory for the new session'),
+  projectId: z.string().optional().describe('Workspace project id to bind the new session to. Inherits the project working directory unless overridden.'),
+  codingMode: z.boolean().optional().describe('Start the new session in Coding mode (true) or the default mode (false). Omit to inherit the spawning session\'s mode.'),
+  worktreePath: z.string().optional().describe('Absolute path of an existing git worktree or checkout for the new session to work in. Starts it in Coding mode there; fails if the path is not inside a git work tree. Use instead of workingDirectory.'),
   attachments: z.array(z.object({
     path: z.string().describe('Absolute file path on disk'),
     name: z.string().optional().describe('Display name (defaults to file basename)'),
@@ -631,7 +634,9 @@ Use this to delegate tasks to parallel sessions — research, analysis, drafts, 
 Call with help=true first to discover available connections, models, and sources.
 When spawning, the 'prompt' parameter is required.
 
-Optional overrides: \`model\`, \`llmConnection\`, \`permissionMode\`, \`thinkingLevel\`, \`enabledSourceSlugs\`, \`labels\`, \`workingDirectory\`. Omitted fields inherit from the spawning session or the workspace default.
+Optional overrides: \`model\`, \`llmConnection\`, \`permissionMode\`, \`thinkingLevel\`, \`enabledSourceSlugs\`, \`labels\`, \`workingDirectory\`, \`projectId\`, \`codingMode\`. Omitted fields inherit from the spawning session or the workspace default.
+
+For coding work in parallel, give the child its own worktree: create it first (e.g. \`git worktree add ../<repo>-<branch> -b <branch>\` from the repository), then pass its path as \`worktreePath\`. The child starts in Coding mode in that checkout, so its edits never collide with yours.
 
 \`thinkingLevel\` is silently ignored on non-reasoning models (e.g. gpt-4o, gemini-2.5-flash) — the SDK drops the reasoning param rather than erroring. Use it when you want to force deeper reasoning on a supported model, or set it to \`off\` when spawning a session that doesn't need to think.
 

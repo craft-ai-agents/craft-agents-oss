@@ -23,6 +23,7 @@ import type {
   SessionUnarchivedEvent,
   NameChangedEvent,
   PermissionRequestEvent,
+  PermissionResolvedEvent,
   CredentialRequestEvent,
   PlanSubmittedEvent,
   StatusEvent,
@@ -873,6 +874,22 @@ export function handlePermissionRequest(
     effects: [{
       type: 'permission_request',
       request: event.request,
+    }]
+  }
+}
+
+/**
+ * Handle permission_resolved - the prompt was answered elsewhere (or here): drop it
+ */
+export function handlePermissionResolved(
+  state: SessionState,
+  event: PermissionResolvedEvent
+): ProcessResult {
+  return {
+    state,
+    effects: [{
+      type: 'permission_resolved',
+      requestId: event.requestId,
     }]
   }
 }

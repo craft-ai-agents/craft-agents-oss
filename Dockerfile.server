@@ -77,8 +77,7 @@ RUN bun install --frozen-lockfile
 COPY . .
 
 # Build the Pi agent server subprocess (required by runtime-resolver.ts)
-RUN bun build packages/pi-agent-server/src/index.ts \
-      --outfile packages/pi-agent-server/dist/index.js --target node --format cjs
+RUN cd packages/pi-agent-server && bun run build
 
 # Build the WhatsApp worker bundle (CJS, Node target — Bun cannot run it).
 RUN bun run scripts/build-wa-worker.ts

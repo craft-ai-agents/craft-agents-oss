@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useTheme } from '@/hooks/useTheme'
 import { useSetAtom, useStore, useAtomValue, useAtom } from 'jotai'
 import type { Session, Workspace, SessionEvent, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, SessionStatus, NewChatActionParams, ContentBadge, LlmConnectionWithStatus, PermissionModeState } from '../shared/types'
+import { withoutPermissionRequest } from './lib/pending-permissions'
 import type { SessionDraft, DraftAttachmentRef } from '@craft-agent/shared/config'
 import type { SessionOptions, SessionOptionUpdates } from './hooks/useSessionOptions'
 import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOptions'
@@ -876,6 +877,11 @@ export default function App() {
             }
             break
           }
+          case 'permission_resolved': {
+            // Answered in another window, the WebUI or a chat binding
+            setPendingPermissions(prevPerms => withoutPermissionRequest(prevPerms, sessionId, effect.requestId))
+            break
+          }
           case 'permission_mode_changed': {
             if (typeof effect.modeVersion === 'number' && effect.changedAt && effect.changedBy) {
               applyPermissionModeState(effect.sessionId, {
@@ -1648,37 +1654,10 @@ export default function App() {
     alwaysAllow: boolean,
     options?: import('../shared/types').PermissionResponseOptions,
   ) => {
-    const success = await window.electronAPI.respondToPermission(sessionId, requestId, allowed, alwaysAllow, options)
-
-    if (success) {
-      // Remove only the first permission from the queue (the one we just responded to)
-      setPendingPermissions(prev => {
-        const next = new Map(prev)
-        const queue = next.get(sessionId) || []
-        const remainingQueue = queue.slice(1) // Remove first item
-        if (remainingQueue.length === 0) {
-          next.delete(sessionId)
-        } else {
-          next.set(sessionId, remainingQueue)
-        }
-        return next
-      })
-      // Note: No need to force session refresh - per-session atoms update automatically
-    } else {
-      // Response failed (agent/session gone) - clear the permission anyway
-      // to avoid UI being stuck with stale permission
-      setPendingPermissions(prev => {
-        const next = new Map(prev)
-        const queue = next.get(sessionId) || []
-        const remainingQueue = queue.slice(1)
-        if (remainingQueue.length === 0) {
-          next.delete(sessionId)
-        } else {
-          next.set(sessionId, remainingQueue)
-        }
-        return next
-      })
-    }
+    await window.electronAPI.respondToPermission(sessionId, requestId, allowed, alwaysAllow, options)
+    // Drop the prompt either way: when the response wasn't delivered it was already answered
+    // elsewhere or the agent is gone, and a stale prompt would leave the UI stuck.
+    setPendingPermissions(prev => withoutPermissionRequest(prev, sessionId, requestId))
   }, [])
 
   const handleRespondToCredential = useCallback(async (sessionId: string, requestId: string, response: CredentialResponse) => {

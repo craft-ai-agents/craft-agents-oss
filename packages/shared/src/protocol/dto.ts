@@ -455,6 +455,8 @@ export type SessionEvent =
   | { type: 'async_operation'; sessionId: string; isOngoing: boolean }
   | { type: 'working_directory_changed'; sessionId: string; workingDirectory: string }
   | { type: 'permission_request'; sessionId: string; request: PermissionRequest }
+  // A permission prompt was answered (from any window, the WebUI or a chat binding): drop it everywhere.
+  | { type: 'permission_resolved'; sessionId: string; requestId: string; allowed: boolean }
   | { type: 'credential_request'; sessionId: string; request: CredentialRequest }
   | { type: 'permission_mode_changed'; sessionId: string; permissionMode: PermissionMode; previousPermissionMode?: PermissionMode; transitionDisplay?: string; modeVersion?: number; changedAt?: string; changedBy?: PermissionModeState['changedBy'] }
   | { type: 'plan_submitted'; sessionId: string; message: Message }

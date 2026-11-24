@@ -134,7 +134,8 @@ describe('handoff summary agent', () => {
     ] as never
     const calls: string[] = []
     let authInjected = false
-    ;(sm as any).createHandoffSummaryAgent = () => ({
+    // The one-shot agent handoff summaries share with Crafty's Rewrite/Translate
+    ;(sm as any).createUtilityAgent = () => ({
       postInit: async () => {
         calls.push('postInit')
         return { authInjected, authWarning: 'Failed to get OAuth token for: claude-max' }

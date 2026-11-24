@@ -97,10 +97,10 @@ interface PlanMessageRecord {
  *  1. Idempotency claim — `handleButtonPress` removes the entry before doing
  *     anything visible, so a second tap on the same prompt finds nothing and
  *     silently no-ops. Stops the duplicate "✅ Allowed / ❌ Denied" flood.
- *  2. Stale-prompt cleanup — when the agent moves past the permission
- *     (resolved from any channel — desktop, MCP, etc.), `onSessionEvent`
- *     sweeps the entry and clears the inline keyboard so the user can't
- *     even produce a callback by tapping a stale button.
+ *  2. Settled-prompt cleanup — when the prompt can no longer be answered
+ *     (answered from any channel, or its turn ended), `onSessionEvent` drops
+ *     the entry and clears the inline keyboard so the user can't even produce
+ *     a callback by tapping a stale button. See `settledPermissionPrompts`.
  */
 interface PermissionMessageRecord {
   bindingId: string
@@ -125,6 +125,34 @@ interface PendingCompactAccept {
 }
 
 const COMPACT_ACCEPT_TTL_MS = 10 * 60 * 1000
+
+/**
+ * Which of a session's permission prompts an event settles: the one answered
+ * (from any channel), the one whose tool has produced its result, or all of
+ * them when the turn ends or the session is deleted. Null for any other
+ * event: a turn can hold several prompts at once (parallel tool calls,
+ * background agents), so progress, status and other tools' events leave
+ * them live.
+ */
+function settledPermissionPrompts(event: SessionEvent): { requestId: string } | 'all' | null {
+  switch (event.type) {
+    case 'permission_resolved': {
+      const requestId = (event as { requestId?: string }).requestId
+      return requestId ? { requestId } : null
+    }
+    case 'tool_result': {
+      // Claude names a tool call's prompt after it (`perm-<toolUseId>`).
+      const toolUseId = (event as { toolUseId?: string }).toolUseId
+      return toolUseId ? { requestId: `perm-${toolUseId}` } : null
+    }
+    case 'complete':
+    case 'interrupted':
+    case 'session_deleted':
+      return 'all'
+    default:
+      return null
+  }
+}
 
 export class MessagingGateway {
   private readonly sessionManager: ISessionManager
@@ -355,13 +383,12 @@ export class MessagingGateway {
       void this.finishPendingCompactAccept(event.sessionId)
     }
 
-    // Drop stale permission prompts for this session. The agent halts while
-    // a permission is pending, so any non-permission_request event implies
-    // the prior prompt was resolved (from the desktop, an MCP allow-list,
-    // remember-window auto-approval, etc.). Without this sweep the inline
-    // keyboard stays live in Telegram and users keep tapping stale buttons,
-    // which is the visible side of #726.
-    this.sweepStalePermissions(event)
+    // Drop permission prompts that can no longer be answered, so their inline
+    // keyboards don't stay live in the chat (the visible side of #726). Only
+    // those: other events (status, progress, another tool, a second prompt)
+    // say nothing about a prompt, and clearing on them dropped prompts that
+    // were still waiting for a tap (craft-agents-oss#1130).
+    this.clearSettledPermissions(event)
 
     const bindings = this.bindingStore.findBySession(event.sessionId)
     if (bindings.length === 0) return
@@ -391,33 +418,25 @@ export class MessagingGateway {
   }
 
   /**
-   * Drop entries from `permissionMessages` whose requestId differs from the
-   * event's current permission request (or all of them, for non-permission
-   * events). For each dropped entry we also fire-and-forget a `clearButtons`
-   * so Telegram won't deliver any further callbacks for the stale prompt.
-   *
-   * Same-requestId `permission_request` events are preserved so a re-render
-   * (rare but possible when the renderer retries) doesn't blow away the
-   * record we'd then need to re-create.
+   * Drop the `permissionMessages` entries an event settles (see
+   * `settledPermissionPrompts`), clearing each one's inline keyboard
+   * (fire-and-forget) so the platform won't deliver further callbacks for it.
    */
-  private sweepStalePermissions(event: SessionEvent): void {
+  private clearSettledPermissions(event: SessionEvent): void {
     if (this.permissionMessages.size === 0) return
-
-    const eventRequestId =
-      event.type === 'permission_request'
-        ? ((event.request as { requestId?: string } | undefined)?.requestId ?? null)
-        : null
+    const settled = settledPermissionPrompts(event)
+    if (!settled) return
 
     for (const [requestId, record] of this.permissionMessages) {
       if (record.sessionId !== event.sessionId) continue
-      if (requestId === eventRequestId) continue
+      if (settled !== 'all' && settled.requestId !== requestId) continue
       this.permissionMessages.delete(requestId)
 
       const adapter = this.adapters.get(record.platform)
       if (adapter?.clearButtons && adapter.isConnected()) {
         adapter.clearButtons(record.channelId, record.messageId).catch(() => {})
       }
-      this.log.info('cleared stale permission prompt after agent moved on', {
+      this.log.info('cleared permission prompt that can no longer be answered', {
         event: 'perm_prompt_cleared_stale',
         requestId,
         sessionId: record.sessionId,
@@ -638,7 +657,9 @@ export class MessagingGateway {
 
     try {
       await this.sessionManager.setPendingPlanExecution(entry.sessionId, entry.planPath)
-      await this.sessionManager.sendMessage(entry.sessionId, '/compact')
+      // Admission only: awaiting the compaction turn would hold up the chat's
+      // other updates (taps included) until it finished.
+      await this.sessionManager.admitMessage(entry.sessionId, '/compact')
       await adapter.sendText(
         press.channelId,
         '♻️ Compacting conversation, then executing the plan…',

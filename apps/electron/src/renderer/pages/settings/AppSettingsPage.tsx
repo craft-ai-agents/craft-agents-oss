@@ -31,6 +31,7 @@ import {
   SettingsInput,
 } from '@/components/settings'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
+import { CraftySettingsSection } from './CraftySettingsSection'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -226,6 +227,9 @@ export default function AppSettingsPage() {
           onCheckedChange={handleBrowserToolEnabledChange}
         />
       </SettingsCard>
+
+      {/* Crafty (spike): macOS desktop only, renders nothing elsewhere */}
+      <CraftySettingsSection />
 
       {/* Network */}
       <SettingsSection title={t("settings.network.title")}>

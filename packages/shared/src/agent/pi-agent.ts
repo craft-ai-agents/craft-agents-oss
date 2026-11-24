@@ -190,6 +190,13 @@ export class PiAgent extends BaseAgent {
 
   // State
   private _isProcessing: boolean = false;
+  /**
+   * The subprocess reported this turn's agent run (`agent_start`) and not its end yet. A steer
+   * reaches the turn only then: pi-agent-server handles its stdin concurrently and creates its
+   * Pi session while handling the prompt, so a steer sent earlier is dropped ("Steer ignored —
+   * no active session") although redirect() reported it delivered.
+   */
+  private agentRunActive = false;
   private abortReason?: AbortReason;
   /** Aborted when the current turn stops; tool checks started in the turn watch it. */
   private turnAbort = new AbortController();
@@ -1164,6 +1171,9 @@ export class PiAgent extends BaseAgent {
 
     // Detect session MCP tool completions (same pattern as in-process version)
     const eventType = event.type as string;
+    // A retried or recovered run starts again with its own agent_start.
+    if (eventType === 'agent_start') this.agentRunActive = this._isProcessing;
+    else if (eventType === 'agent_end') this.agentRunActive = false;
     // Manual /compact uses an RPC-owned generator rather than the event queue.
     // Its SDK end arrives before compact_result; only the correlated response
     // may report success (including after a timeout/stop discarded the request).
@@ -2060,6 +2070,7 @@ export class PiAgent extends BaseAgent {
     const compactEpoch = this.compactionEpoch;
     // Reset state for new turn
     this._isProcessing = true;
+    this.agentRunActive = false;
     this.abortReason = undefined;
     this.turnAbort = new AbortController();
     this.eventQueue.reset();
@@ -2313,6 +2324,7 @@ export class PiAgent extends BaseAgent {
       yield { type: 'complete' };
     } finally {
       this._isProcessing = false;
+      this.agentRunActive = false;
       if (turnThinkingOverride) {
         try {
           this.send({ type: 'set_thinking_level', level: this._thinkingLevel });
@@ -2454,6 +2466,7 @@ export class PiAgent extends BaseAgent {
 
     this.abortReason = reason;
     this._isProcessing = false;
+    this.agentRunActive = false;
 
     // Reject all pending permissions
     for (const [, pending] of this.pendingPermissions) {
@@ -2489,16 +2502,17 @@ export class PiAgent extends BaseAgent {
     this.send({ type: 'abort' });
   }
 
+  /** Only while the turn's agent run is active (see agentRunActive); otherwise the session layer queues. */
+  override canSteerNow(): boolean {
+    return this._isProcessing && this.agentRunActive && !!this.subprocess && !this.isCompactionInFlight();
+  }
+
   /**
    * Redirect mid-stream via Pi SDK's steer().
    * Delivers the message after the current tool finishes, skips remaining
    * queued tools, and continues with full context intact.
    * Events flow through the existing generator — no abort needed.
    */
-  override canSteerNow(): boolean {
-    return this._isProcessing && !!this.subprocess && !this.isCompactionInFlight();
-  }
-
   override redirect(message: string): boolean {
     if (this.isCompactionInFlight()) {
       // A manual /compact owns this turn: no agent loop is running to consume a

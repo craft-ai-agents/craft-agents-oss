@@ -294,6 +294,7 @@ export {
   SourceListPromptsSchema,
   SourceGetPromptSchema,
   CallLlmSchema,
+  SpawnSessionSchema,
   DecideSchema,
   UpdatePreferencesSchema,
   TransformDataSchema,

@@ -48,6 +48,7 @@ import type { ConfirmDialogSpec, FileDialogSpec, BrowserCapabilityRequest } from
 import type { RpcClient } from '@craft-agent/server-core/transport'
 import type { RemoteServerConfig } from '@craft-agent/core/types'
 import type { ElectronAPI } from '../shared/types'
+import type { CraftyApi, CraftyTargetState } from '../shared/crafty'
 
 // ---------------------------------------------------------------------------
 // Client interface — common surface for both RoutedClient and WsRpcClient
@@ -446,6 +447,40 @@ async function runSourceOAuth(args: SourceOAuthArgs, signal: AbortSignal): Promi
 ;(api as ElectronAPI).removeWorkspace = (workspaceId: string) => ipcRenderer.invoke('workspace:remove', workspaceId)
 ;(api as ElectronAPI).getDefaultZoomLevel = () => ipcRenderer.invoke('zoom:getDefault')
 ;(api as ElectronAPI).setDefaultZoomLevel = (level: number) => ipcRenderer.invoke('zoom:setDefault', level)
+// Crafty (macOS): direct IPC to the main-process controller, never to a remote server.
+// The window-only calls are refused by main for any window but the Crafty window.
+const crafty: CraftyApi = {
+  getStatus: () => ipcRenderer.invoke('crafty:getStatus'),
+  setEnabled: (enabled) => ipcRenderer.invoke('crafty:setEnabled', enabled),
+  openPermissionSettings: (kind) => ipcRenderer.invoke('crafty:openPermissionSettings', kind),
+  requestAccessibility: () => ipcRenderer.invoke('crafty:requestAccessibility'),
+  nextEvent: () => ipcRenderer.invoke('crafty:nextEvent'),
+  cursor: () => ipcRenderer.invoke('crafty:cursor'),
+  setInteractive: (interactive) => ipcRenderer.invoke('crafty:setInteractive', interactive),
+  focusPanel: (invocationId) => ipcRenderer.invoke('crafty:focusPanel', invocationId),
+  hide: (reason) => ipcRenderer.invoke('crafty:hide', reason),
+  setFollow: (strategy) => ipcRenderer.invoke('crafty:setFollow', strategy),
+  setTarget: (target) => ipcRenderer.invoke('crafty:setTarget', target),
+  onTargetChanged: (callback) => {
+    const handler = (_event: unknown, state: CraftyTargetState) => callback(state)
+    ipcRenderer.on('crafty:targetChanged', handler)
+    return () => { ipcRenderer.removeListener('crafty:targetChanged', handler) }
+  },
+  createSession: (invocationId, model) => ipcRenderer.invoke('crafty:createSession', invocationId, model),
+  listSessions: (invocationId) => ipcRenderer.invoke('crafty:listSessions', invocationId),
+  insert: (request) => ipcRenderer.invoke('crafty:insert', request),
+  captureRegion: (invocationId) => ipcRenderer.invoke('crafty:captureRegion', invocationId),
+  useRecentScreenshot: (invocationId) => ipcRenderer.invoke('crafty:useRecentScreenshot', invocationId),
+  openInCraft: (workspaceId, sessionId) => ipcRenderer.invoke('crafty:openInCraft', workspaceId, sessionId),
+  openCraft: (invocationId) => ipcRenderer.invoke('crafty:openCraft', invocationId),
+  metric: (metric) => ipcRenderer.invoke('crafty:metric', metric),
+  setDoubleTap: (value) => ipcRenderer.invoke('crafty:setDoubleTap', value),
+  setOpenWith: (value) => ipcRenderer.invoke('crafty:setOpenWith', value),
+  warp: (invocationId, point) => ipcRenderer.invoke('crafty:warp', invocationId, point),
+  resignKey: (invocationId) => ipcRenderer.invoke('crafty:resignKey', invocationId),
+  transform: (request) => ipcRenderer.invoke('crafty:transform', request),
+}
+;(api as ElectronAPI).crafty = crafty
 ;(api as ElectronAPI).invokeOnServer = (url: string, token: string, channel: string, ...args: any[]) =>
   ipcRenderer.invoke('server:invokeOnServer', url, token, channel, ...args)
 ;(api as ElectronAPI).transferSessionToWorkspace = (sessionId: string, targetWorkspaceId: string, sessionIndex?: number, sessionCount?: number) =>

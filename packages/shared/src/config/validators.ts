@@ -127,6 +127,12 @@ export const UserPreferencesSchema = z.object({
   uiLanguage: z.enum([...SUPPORTED_LANGUAGE_CODES] as [LanguageCode, ...LanguageCode[]]).optional(),
   // Internal: Appearance → Default zoom, in percent. Not user-editable.
   defaultZoomLevel: z.number().positive().optional(),
+  // Internal: Settings → App → Crafty (per device). Not user-editable.
+  craftyEnabled: z.boolean().optional(),
+  craftyTarget: z.object({ workspaceId: z.string(), sessionId: z.string() }).optional(),
+  craftyDoubleTap: z.enum(['command', 'option', 'control', 'off']).optional(),
+  craftyOpenWith: z.enum(['pie', 'panel']).optional(),
+  craftyRecentLanguages: z.array(z.string()).optional(),
   updatedAt: z.number().int().min(0).optional(),
 }).passthrough();
 

@@ -33,6 +33,7 @@ import { taskEditorComponents } from './task-editor'
 import { primitivesComponents } from './primitives'
 import { chatStartersComponents } from './chat-starters'
 import { fileLinkOpenMenuComponents } from './file-link-open-menu'
+import { craftyComponents } from './crafty'
 
 export * from './types'
 
@@ -51,6 +52,7 @@ export const componentRegistry: ComponentEntry[] = [
   ...fullscreenOverlayComponents,
   ...messagesComponents,
   ...inputComponents,
+  ...craftyComponents,
   ...toastsComponents,
   ...slashCommandComponents,
   ...markdownComponents,
@@ -75,7 +77,7 @@ export const componentRegistry: ComponentEntry[] = [
 ]
 
 export function getCategories(): CategoryGroup[] {
-  const categoryOrder: Category[] = ['Primitives', 'Mobile WebUI', 'Automations', 'Onboarding', 'Agent Setup', 'Settings', 'Chat', 'Island', 'Browser', 'Planner', 'Custom Shadows', 'Session List', 'Sub Sessions', 'Kanban', 'Entity Lists', 'Edit Popover', 'Turn Cards', 'TurnCard Modes', 'Fullscreen', 'Chat Messages', 'Chat Inputs', 'Toast Messages', 'Markdown', 'Icons', 'OAuth', 'Messaging']
+  const categoryOrder: Category[] = ['Primitives', 'Mobile WebUI', 'Automations', 'Onboarding', 'Agent Setup', 'Settings', 'Chat', 'Island', 'Browser', 'Planner', 'Custom Shadows', 'Session List', 'Sub Sessions', 'Kanban', 'Entity Lists', 'Edit Popover', 'Turn Cards', 'TurnCard Modes', 'Fullscreen', 'Chat Messages', 'Chat Inputs', 'Crafty', 'Toast Messages', 'Markdown', 'Icons', 'OAuth', 'Messaging']
   const categoryMap = new Map<Category, ComponentEntry[]>()
 
   for (const entry of componentRegistry) {
@@ -83,8 +85,9 @@ export function getCategories(): CategoryGroup[] {
     categoryMap.set(entry.category, [...existing, entry])
   }
 
-  return categoryOrder
-    .filter(name => categoryMap.has(name))
+  // A category missing from the order still shows, after the listed ones (it used to vanish)
+  const unlisted = [...categoryMap.keys()].filter(name => !categoryOrder.includes(name))
+  return [...categoryOrder.filter(name => categoryMap.has(name)), ...unlisted]
     .map(name => ({
       name,
       components: categoryMap.get(name)!,

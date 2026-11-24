@@ -46,6 +46,30 @@ export interface UserPreferences {
    * display setting, so it lives here and never on a remote server. Not exposed to the agent.
    */
   defaultZoomLevel?: number;
+  /**
+   * Internal: Crafty, the system-wide helper (Settings → App → Crafty; macOS, desktop only).
+   * A per-device switch maintained by the Electron main process (`crafty:setEnabled` IPC), so it
+   * lives here and never on a remote server. Not exposed to the agent. Default off.
+   */
+  craftyEnabled?: boolean;
+  /**
+   * Internal: the session Crafty sends to ("Send Crafty here"), per device like `craftyEnabled`.
+   * Unset means a new session for each question. Maintained by the Electron main process.
+   */
+  craftyTarget?: { workspaceId: string; sessionId: string };
+  /**
+   * Internal: how Crafty opens, per device like `craftyEnabled` (Settings → App → Crafty).
+   * `craftyDoubleTap` is the left modifier whose double-tap opens it, or 'off' to leave only
+   * ⌃⌥Space (default 'command'). `craftyOpenWith` is what opens: the pie or the panel (default
+   * 'pie'). Maintained by the Electron main process.
+   */
+  craftyDoubleTap?: CraftyDoubleTap;
+  craftyOpenWith?: CraftyOpenWith;
+  /**
+   * Internal: the pie's recent Translate languages (BCP 47, most recent first), so the sub-pie
+   * leads with them. Maintained by the Electron main process.
+   */
+  craftyRecentLanguages?: string[];
   // When the preferences were last updated
   updatedAt?: number;
 }
@@ -131,6 +155,79 @@ export function setPersistedDefaultZoomLevel(level: number): void {
   const current = loadPreferences();
   if (current.defaultZoomLevel === level) return;
   savePreferences({ ...current, defaultZoomLevel: level });
+}
+
+/** Whether Crafty is switched on for this device (default off). */
+export function getPersistedCraftyEnabled(): boolean {
+  return loadPreferences().craftyEnabled === true;
+}
+
+export function setPersistedCraftyEnabled(enabled: boolean): void {
+  const current = loadPreferences();
+  if ((current.craftyEnabled === true) === enabled) return;
+  savePreferences({ ...current, craftyEnabled: enabled });
+}
+
+export type CraftyDoubleTap = 'command' | 'option' | 'control' | 'off';
+export type CraftyOpenWith = 'pie' | 'panel';
+export const CRAFTY_DOUBLE_TAP_VALUES: readonly CraftyDoubleTap[] = ['command', 'option', 'control', 'off'];
+export const CRAFTY_OPEN_WITH_VALUES: readonly CraftyOpenWith[] = ['pie', 'panel'];
+
+/** The left modifier whose double-tap opens Crafty, or 'off' (default the left ⌘). */
+export function getPersistedCraftyDoubleTap(): CraftyDoubleTap {
+  const value = loadPreferences().craftyDoubleTap;
+  return value && CRAFTY_DOUBLE_TAP_VALUES.includes(value) ? value : 'command';
+}
+
+export function setPersistedCraftyDoubleTap(value: CraftyDoubleTap): void {
+  const current = loadPreferences();
+  if (current.craftyDoubleTap === value) return;
+  savePreferences({ ...current, craftyDoubleTap: value });
+}
+
+/** What Crafty's triggers open (default the pie). */
+export function getPersistedCraftyOpenWith(): CraftyOpenWith {
+  return loadPreferences().craftyOpenWith === 'panel' ? 'panel' : 'pie';
+}
+
+export function setPersistedCraftyOpenWith(value: CraftyOpenWith): void {
+  const current = loadPreferences();
+  if (current.craftyOpenWith === value) return;
+  savePreferences({ ...current, craftyOpenWith: value });
+}
+
+/** How many recent Translate languages the pie keeps. */
+const CRAFTY_RECENT_LANGUAGES_MAX = 5;
+
+/** The pie's recent Translate languages, most recent first. */
+export function getPersistedCraftyRecentLanguages(): string[] {
+  const value = loadPreferences().craftyRecentLanguages;
+  return Array.isArray(value) ? value.filter(code => typeof code === 'string').slice(0, CRAFTY_RECENT_LANGUAGES_MAX) : [];
+}
+
+/** Put a language first in the pie's recent Translate languages. */
+export function rememberCraftyLanguage(code: string): void {
+  const current = loadPreferences();
+  const recent = getPersistedCraftyRecentLanguages();
+  if (recent[0] === code) return;
+  const next = [code, ...recent.filter(c => c !== code)].slice(0, CRAFTY_RECENT_LANGUAGES_MAX);
+  savePreferences({ ...current, craftyRecentLanguages: next });
+}
+
+/** The session Crafty sends to, or null for a new session each time. */
+export function getPersistedCraftyTarget(): { workspaceId: string; sessionId: string } | null {
+  const target = loadPreferences().craftyTarget;
+  return target && typeof target.workspaceId === 'string' && typeof target.sessionId === 'string'
+    ? { workspaceId: target.workspaceId, sessionId: target.sessionId }
+    : null;
+}
+
+export function setPersistedCraftyTarget(target: { workspaceId: string; sessionId: string } | null): void {
+  const current = loadPreferences();
+  const stored = current.craftyTarget;
+  if (stored?.workspaceId === target?.workspaceId && stored?.sessionId === target?.sessionId) return;
+  const { craftyTarget: _previous, ...rest } = current;
+  savePreferences(target ? { ...rest, craftyTarget: target } : rest);
 }
 
 /**

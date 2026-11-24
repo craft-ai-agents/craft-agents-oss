@@ -43,10 +43,10 @@ export async function handleSendAgentMessage(
 
     const result = await ctx.sendAgentMessage(args.sessionId, wrappedMessage, args.attachments);
 
-    // Report the real delivery status instead of an unconditional "sent". A busy
-    // target queues the message behind its current turn; an idle target starts
-    // now. This is what lets the sender avoid guessing (e.g. never invent "the
-    // app restarted") — for actual task status, call list_background_tasks.
+    // Report the real delivery status instead of an unconditional "sent". This is what lets
+    // the sender avoid guessing (e.g. never invent "the app restarted") — for actual task
+    // status, call list_background_tasks. The call returns once the target has the message,
+    // not after its turn (craft-agents-oss#1132), so the result is never the target's answer.
     if (result.delivery === 'queued') {
       return successResponse(
         `Message queued for session ${args.sessionId} — it is currently processing another turn. ` +
@@ -55,8 +55,14 @@ export async function handleSendAgentMessage(
       );
     }
 
+    const notAReply = 'This is not a reply: any answer arrives later as a message from that session.';
+    if (result.delivery === 'steered') {
+      return successResponse(
+        `Message delivered to session ${args.sessionId} into the turn it is running. ${notAReply}`
+      );
+    }
     return successResponse(
-      `Message delivered to session ${args.sessionId}; it will start processing independently now.`
+      `Message delivered to session ${args.sessionId}; it has started a turn to handle it. ${notAReply}`
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

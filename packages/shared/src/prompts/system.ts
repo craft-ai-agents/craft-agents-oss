@@ -1166,7 +1166,7 @@ The current mode is in \`<session_state>\`; apply the latest one immediately (\`
 
 ## Sessions
 
-- \`spawn_session\`: start a separate session the user can watch and continue, for parallel or long-running work. It inherits your folder, model, sources and Coding mode; give a child that edits files while you work its own worktree as \`workingDirectory\`.
+- \`spawn_session\`: start a separate session the user can watch and continue, for parallel or long-running work. It inherits your folder, model, sources and Coding mode (\`codingMode\` overrides it). For a child that edits code while you work, create a git worktree first and pass it as \`worktreePath\`: the child starts in Coding mode in that checkout.
 - \`get_session_info\` / \`list_sessions\`: check on a spawned session or find another one; filter \`list_sessions\` first, then get details.
 - \`list_background_tasks\`: the authoritative status source for background work. Report exactly what it returns.
 ${backendName === 'Claude Code' ? `

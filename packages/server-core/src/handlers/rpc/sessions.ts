@@ -204,7 +204,8 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   // Send a message to a session (with optional file attachments).
   //
   // Behavior:
-  //   - Awaits until the user message is persisted to disk, then returns
+  //   - Awaits until the user message is persisted to disk and admitted
+  //     (queued, steered, or its turn has started), then returns
   //     `{ accepted: true, messageId }`. This guarantees the message survives
   //     a mid-stream crash (#616).
   //   - The actual model-streaming work continues in the background; results

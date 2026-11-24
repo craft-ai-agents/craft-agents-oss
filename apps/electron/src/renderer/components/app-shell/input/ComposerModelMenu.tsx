@@ -30,7 +30,7 @@ const MENU_GROUP_LABEL = 'px-2 pt-2 pb-1 text-label-sm font-medium text-tertiary
 const ITEM_NAME = 'text-label font-medium'
 const ITEM_DESCRIPTION = 'text-label-sm text-tertiary'
 
-interface ComposerModelMenuProps {
+export interface ComposerModelMenuProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   connectionUnavailable: boolean
@@ -51,9 +51,18 @@ interface ComposerModelMenuProps {
   thinkingLevel: ThinkingLevel
   thinkingDisabled: boolean
   onThinkingLevelChange?: (level: ThinkingLevel) => void
-  contextDisplay: ReturnType<typeof getContextDisplay>
-  contextLabels: ReturnType<typeof getContextDisplayLabels>
+  /** The context-usage footer; left out when not given (Crafty's short sessions). */
+  contextDisplay?: ReturnType<typeof getContextDisplay>
+  contextLabels?: ReturnType<typeof getContextDisplayLabels>
   isCompacting?: boolean
+  /**
+   * Radix's modal menu blocks pointer events outside it. Crafty's click-through window passes
+   * false: there, a blocked panel reads as the pointer leaving it, and the next click falls through
+   * to the app underneath.
+   */
+  modal?: boolean
+  /** Restyles the trigger chip (Crafty's quieter, smaller one). */
+  triggerClassName?: string
 }
 
 /** Per-model image-input toggle (pi_compat connections only). */
@@ -118,12 +127,14 @@ export function ComposerModelMenu({
   contextDisplay,
   contextLabels,
   isCompacting,
+  modal,
+  triggerClassName,
 }: ComposerModelMenuProps) {
   const { t } = useTranslation()
   const availableThinkingLevels = THINKING_LEVELS
 
   return (
-    <DropdownMenu open={open} onOpenChange={onOpenChange}>
+    <DropdownMenu open={open} onOpenChange={onOpenChange} modal={modal}>
       <Tooltip>
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
@@ -133,6 +144,7 @@ export function ComposerModelMenu({
                 COMPOSER_CHIP,
                 // Truncates first when the toolbar runs out of room (FreeFormInput right group)
                 'shrink gap-1 pl-2.5 pr-2',
+                triggerClassName,
                 // Tooltip and menu triggers share this node, so its data-state is the tooltip's
                 open && 'bg-fill-hover text-foreground',
                 connectionUnavailable && 'text-destructive hover:text-destructive',
@@ -369,7 +381,7 @@ export function ComposerModelMenu({
         )}
 
         {/* Context usage footer - snapshot-aware occupancy, not cumulative billing. */}
-        {contextDisplay.visible && (
+        {contextDisplay?.visible && contextLabels && (
           <>
             <StyledDropdownMenuSeparator className="my-1" />
             <div className="px-2 py-1.5 select-none">
