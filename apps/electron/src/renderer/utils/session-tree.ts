@@ -54,10 +54,10 @@ export function flatRow(item: SessionMeta): SessionListRow {
 /**
  * Groups `items` into families. A session nests only when its list parent is in `items` too;
  * otherwise it's a root, as if it had no parent. A loop of parents (possible in a hand-edited
- * session header) is broken where the walk up from its newest member meets it again. Families come
- * in the order of their first member in `items`, which the list hands over newest first.
+ * session header) is broken where the walk up meets it again. Families come in the order of their
+ * first member in `items`. Manual mode uses IDs for tie-breaking, independent of incoming activity.
  */
-export function buildSessionFamilies(items: readonly SessionMeta[]): SessionFamily[] {
+export function buildSessionFamilies(items: readonly SessionMeta[], stableTies = false): SessionFamily[] {
   const byId = new Map(items.map(item => [item.id, item]))
   const parentOf = new Map<string, string>()
   for (const item of items) {
@@ -65,8 +65,9 @@ export function buildSessionFamilies(items: readonly SessionMeta[]): SessionFami
     if (parentId && parentId !== item.id && byId.has(parentId)) parentOf.set(item.id, parentId)
   }
 
+  const compareIds = (a: SessionMeta, b: SessionMeta) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0
   // Break loops: the session whose parent was already passed on the walk up becomes a root
-  for (const item of items) {
+  for (const item of stableTies ? [...items].sort(compareIds) : items) {
     const passed = new Set([item.id])
     for (let id = item.id, parentId = parentOf.get(id); parentId; parentId = parentOf.get(id)) {
       if (passed.has(parentId)) {
@@ -87,7 +88,7 @@ export function buildSessionFamilies(items: readonly SessionMeta[]): SessionFami
     else childrenOf.set(parentId, [item])
   }
   for (const siblings of childrenOf.values()) {
-    siblings.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
+    siblings.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0) || (stableTies ? compareIds(a, b) : 0))
   }
 
   const rootIds = new Set<string>()

@@ -17,6 +17,7 @@ import {
   FolderKanban,
   Inbox,
   Layers,
+  GripVertical,
   ListFilter,
   MailOpen,
   Search,
@@ -871,21 +872,20 @@ export function SessionFilterMenu({
                 </DropdownMenuSub>
               )}
 
-              {/* Group by submenu - hidden in state sub-views (always date there) */}
-              {!isStateSubView && (
-                <>
-                  <StyledDropdownMenuSeparator />
-                  <DropdownMenuSub>
-                    <StyledDropdownMenuSubTrigger>
-                      <Layers className="h-3.5 w-3.5" />
-                      <span className="flex-1">{t("sidebar.group")}</span>
-                    </StyledDropdownMenuSubTrigger>
-                    <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
-                      <StyledDropdownMenuItem onClick={() => setChatGroupingMode('date')}>
-                        <Calendar className="h-3.5 w-3.5" />
-                        <span className="flex-1">{t("sidebar.groupByDate")}</span>
-                        {chatGroupingMode === 'date' && <Check className="h-3 w-3 text-tertiary" />}
-                      </StyledDropdownMenuItem>
+              <StyledDropdownMenuSeparator />
+              <DropdownMenuSub>
+                <StyledDropdownMenuSubTrigger>
+                  <Layers className="h-3.5 w-3.5" />
+                  <span className="flex-1">{t("sidebar.group")}</span>
+                </StyledDropdownMenuSubTrigger>
+                <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
+                  <StyledDropdownMenuItem onClick={() => setChatGroupingMode('date')}>
+                    <Calendar className="h-3.5 w-3.5" />
+                    <span className="flex-1">{t("sidebar.groupByDate")}</span>
+                    {chatGroupingMode === 'date' && <Check className="h-3 w-3 text-tertiary" />}
+                  </StyledDropdownMenuItem>
+                  {!isStateSubView && (
+                    <>
                       <StyledDropdownMenuItem onClick={() => setChatGroupingMode('status')}>
                         <Inbox className="h-3.5 w-3.5" />
                         <span className="flex-1">{t("sidebar.groupByStatus")}</span>
@@ -903,10 +903,15 @@ export function SessionFilterMenu({
                           {chatGroupingMode === 'project' && <Check className="h-3 w-3 text-tertiary" />}
                         </StyledDropdownMenuItem>
                       )}
-                    </StyledDropdownMenuSubContent>
-                  </DropdownMenuSub>
-                </>
-              )}
+                    </>
+                  )}
+                  <StyledDropdownMenuItem onClick={() => setChatGroupingMode('manual')}>
+                    <GripVertical className="h-3.5 w-3.5" />
+                    <span className="flex-1">{t("sidebar.groupByManual")}</span>
+                    {chatGroupingMode === 'manual' && <Check className="h-3 w-3 text-tertiary" />}
+                  </StyledDropdownMenuItem>
+                </StyledDropdownMenuSubContent>
+              </DropdownMenuSub>
 
               <StyledDropdownMenuSeparator />
               <StyledDropdownMenuItem

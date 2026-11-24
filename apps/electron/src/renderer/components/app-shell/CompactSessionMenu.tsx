@@ -28,6 +28,8 @@ import { useTranslation } from 'react-i18next'
 import {
   Archive,
   ArchiveRestore,
+  ArrowDown,
+  ArrowUp,
   AppWindow,
   Check,
   ChevronLeft,
@@ -92,6 +94,8 @@ export interface CompactSessionMenuProps {
 
   // Callbacks — same as SessionMenu
   onLabelsChange?: (labels: string[]) => void
+  onMoveUp?: () => void
+  onMoveDown?: () => void
   onRename: () => void
   onFlag: () => void
   onUnflag: () => void
@@ -131,6 +135,8 @@ export function CompactSessionMenu({
   labels = [],
   hasTransferTargets,
   onLabelsChange,
+  onMoveUp,
+  onMoveDown,
   onRename,
   onFlag,
   onUnflag,
@@ -270,6 +276,8 @@ export function CompactSessionMenu({
               onArchive={closeAfter(onArchive)}
               onUnarchive={closeAfter(onUnarchive)}
               onMarkUnread={closeAfter(onMarkUnread)}
+              onMoveUp={onMoveUp ? closeAfter(onMoveUp) : undefined}
+              onMoveDown={onMoveDown ? closeAfter(onMoveDown) : undefined}
               onRename={closeAfter(onRename)}
               onRefreshTitle={closeAfter(actions.refreshTitle)}
               onOpenInNewPanel={closeAfter(actions.openInNewPanel)}
@@ -344,6 +352,8 @@ interface RootPaneProps {
   onArchive?: () => void
   onUnarchive?: () => void
   onMarkUnread?: () => void
+  onMoveUp?: () => void
+  onMoveDown?: () => void
   onRename?: () => void
   onRefreshTitle?: () => void
   onOpenInNewPanel?: () => void
@@ -376,6 +386,8 @@ function RootPane({
   onArchive,
   onUnarchive,
   onMarkUnread,
+  onMoveUp,
+  onMoveDown,
   onRename,
   onRefreshTitle,
   onOpenInNewPanel,
@@ -458,6 +470,8 @@ function RootPane({
 
       <Separator />
 
+      {onMoveUp && <Row icon={<ArrowUp className="size-4" />} label={t('sessionMenu.moveUp')} onTap={onMoveUp} />}
+      {onMoveDown && <Row icon={<ArrowDown className="size-4" />} label={t('sessionMenu.moveDown')} onTap={onMoveDown} />}
       <Row icon={<Pencil className="h-4 w-4" />} label={t('common.rename')} onTap={onRename} />
       <Row icon={<RefreshCw className="h-4 w-4" />} label={t('sessionMenu.regenerateTitle')} onTap={onRefreshTitle} />
 

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { AlertCircle, ChevronRight, CodeXml, Flag, Hand } from "lucide-react"
+import { AlertCircle, ChevronRight, CodeXml, Flag, GripVertical, Hand } from "lucide-react"
 import { useActionLabel } from "@/actions"
 import { cn } from "@/lib/utils"
 import { rendererPerf } from "@/lib/perf"
@@ -50,6 +50,10 @@ export interface SessionItemProps {
   onRangeSelect?: () => void
   /** Nesting level under the session's list parent (0 = top level) */
   depth?: number
+  onMoveUp?: () => void
+  onMoveDown?: () => void
+  onReorderDragStart?: React.DragEventHandler<HTMLSpanElement>
+  onReorderDragEnd?: React.DragEventHandler<HTMLSpanElement>
   /** Tree lines of the levels above the row (see `EntityRow`) */
   guides?: readonly TreeGuide[]
   /** Label entries the row's parent shows too (a task's family shares its label), left out here */
@@ -77,6 +81,10 @@ export function SessionItem({
   onToggleSelect,
   onRangeSelect,
   depth = 0,
+  onMoveUp,
+  onMoveDown,
+  onReorderDragStart,
+  onReorderDragEnd,
   guides,
   inheritedLabels,
   subSessions,
@@ -251,6 +259,8 @@ export function SessionItem({
           sessionStatuses={ctx.sessionStatuses}
           labels={ctx.labels}
           onLabelsChange={ctx.onLabelsChange ? (ls) => ctx.onLabelsChange!(item.id, ls) : undefined}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
           onRename={() => ctx.onRenameClick(item.id, title)}
           onFlag={() => ctx.onFlag?.(item.id)}
           onUnflag={() => ctx.onUnflag?.(item.id)}
@@ -279,6 +289,8 @@ export function SessionItem({
           labels={ctx.labels}
           hasTransferTargets={canSendToWorkspace}
           onLabelsChange={ctx.onLabelsChange ? (ls) => ctx.onLabelsChange!(item.id, ls) : undefined}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
           onRename={() => ctx.onRenameClick(item.id, title)}
           onFlag={() => ctx.onFlag?.(item.id)}
           onUnflag={() => ctx.onUnflag?.(item.id)}
@@ -298,8 +310,20 @@ export function SessionItem({
       subtitleLeading={subSessionToggle}
       subtitleTrailing={hasLabels && !needsAttention ? <SessionBadges item={item} hiddenLabels={inheritedLabels} /> : undefined}
       titleSuffix={
-        (projectName || hasMessagingBinding || item.codingMode) ? (
+        (projectName || hasMessagingBinding || item.codingMode || (onReorderDragStart && !isCompactMode)) ? (
           <div className="flex items-center gap-1">
+            {onReorderDragStart && !isCompactMode && (
+              <span
+                draggable
+                aria-hidden="true"
+                className="inline-flex size-6 -my-1 items-center justify-center text-tertiary cursor-grab active:cursor-grabbing"
+                onMouseDown={event => event.stopPropagation()}
+                onDragStart={onReorderDragStart}
+                onDragEnd={onReorderDragEnd}
+              >
+                <GripVertical className="size-3.5 pointer-events-none" />
+              </span>
+            )}
             {item.codingMode && (
               <CodeXml className="size-3.5 shrink-0 text-tertiary" aria-label={t("chat.codingMode.label")} />
             )}
