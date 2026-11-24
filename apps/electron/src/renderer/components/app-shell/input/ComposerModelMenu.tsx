@@ -38,6 +38,8 @@ export interface ComposerModelMenuProps {
   effectiveConnection: string | undefined
   effectiveConnectionDetails: LlmConnectionWithStatus | null
   currentConnectionDetails: LlmConnectionWithStatus | null
+  accountSwitchTargets?: LlmConnectionWithStatus[]
+  disableAccountSwitch?: boolean
   connectionsByProvider: Array<[string, LlmConnectionWithStatus[]]>
   connectionDefaultModel: string | null
   pickerMode: PickerMode
@@ -46,7 +48,7 @@ export interface ComposerModelMenuProps {
   availableModels: Array<ModelDefinition | string>
   isEmptySession: boolean
   onModelChange: (model: string, connection?: string) => void
-  onConnectionChange?: (connectionSlug: string) => void
+  onConnectionChange?: (connectionSlug: string, switchAccount?: boolean) => void
   onToggleVision: ToggleModelVision
   thinkingLevel: ThinkingLevel
   thinkingDisabled: boolean
@@ -111,6 +113,8 @@ export function ComposerModelMenu({
   effectiveConnection,
   effectiveConnectionDetails,
   currentConnectionDetails,
+  accountSwitchTargets = [],
+  disableAccountSwitch,
   connectionsByProvider,
   connectionDefaultModel,
   pickerMode,
@@ -299,6 +303,25 @@ export function ComposerModelMenu({
                 <div className={MENU_GROUP_LABEL}>
                   <span>{t('chat.usingConnection', { name: currentConnectionDetails.name })}</span>
                 </div>
+                {onConnectionChange && accountSwitchTargets.length > 0 && (
+                  <DropdownMenuSub>
+                    <StyledDropdownMenuSubTrigger disabled={disableAccountSwitch} className="min-h-6">
+                      {t('chat.modelPicker.switchAccount')}
+                    </StyledDropdownMenuSubTrigger>
+                    <StyledDropdownMenuSubContent className="min-w-[220px]">
+                      {accountSwitchTargets.map(conn => (
+                        <StyledDropdownMenuItem
+                          key={conn.slug}
+                          className="min-h-6 gap-2"
+                          onSelect={() => onConnectionChange(conn.slug, true)}
+                        >
+                          <ConnectionIcon connection={conn} size={14} />
+                          <span className="truncate">{conn.name}</span>
+                        </StyledDropdownMenuItem>
+                      ))}
+                    </StyledDropdownMenuSubContent>
+                  </DropdownMenuSub>
+                )}
                 <StyledDropdownMenuSeparator className="my-1" />
               </>
             )}

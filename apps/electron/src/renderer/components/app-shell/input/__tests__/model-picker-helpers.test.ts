@@ -6,9 +6,10 @@
  */
 
 import { describe, test, expect } from 'bun:test'
-import type { LlmConnection } from '@craft-agent/shared/config/llm-connections'
+import type { LlmConnection, LlmConnectionWithStatus } from '@craft-agent/shared/config/llm-connections'
 import {
   formatTokenCount,
+  getClaudeAccountSwitchTargets,
   groupConnectionsByProvider,
   stripPiPrefixForDisplay,
 } from '../model-picker-helpers'
@@ -151,5 +152,30 @@ describe('groupConnectionsByProvider', () => {
       ['Local', ['ollama']],
       ['Craft Agents Backend', ['or', 'p']],
     ])
+  })
+})
+
+describe('available Claude account switches', () => {
+  const model = 'claude-sonnet-4-6'
+  const account: LlmConnectionWithStatus = {
+    slug: 'current', name: 'Current', providerType: 'anthropic', authType: 'oauth',
+    models: [model], createdAt: 1, isAuthenticated: true,
+  }
+  const alternative = { ...account, slug: 'alternative', name: 'Alternative' }
+
+  test('only offers other signed-in direct Claude accounts with the current model', () => {
+    const connections: LlmConnectionWithStatus[] = [
+      account,
+      alternative,
+      { ...account, slug: 'signed-out', isAuthenticated: false },
+      { ...account, slug: 'api-billing', authType: 'api_key' },
+      { ...account, slug: 'custom-endpoint', baseUrl: 'https://example.test' },
+      { ...account, slug: 'different-model', models: ['claude-haiku-4-5'] },
+    ]
+    expect(getClaudeAccountSwitchTargets(connections, account.slug, model)).toEqual([alternative])
+  })
+
+  test('does not fall back to another account when the chat connection is missing', () => {
+    expect(getClaudeAccountSwitchTargets([alternative], 'missing', model)).toEqual([])
   })
 })

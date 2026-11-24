@@ -20,7 +20,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior, getPersistedUiLanguage, resolveTitleLanguageName } from '@craft-agent/shared/config'
+import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, canSwitchClaudeAccount, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior, getPersistedUiLanguage, resolveTitleLanguageName } from '@craft-agent/shared/config'
 import type { MidStreamBehavior } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
@@ -5616,45 +5616,54 @@ export class SessionManager implements ISessionManager {
     }
   }
 
-  /**
-   * Set the LLM connection for a session.
-   * Can only be changed before the first message is sent (connection is locked after).
-   * This determines which LLM provider/backend will be used for this session.
-   */
-  async setSessionConnection(sessionId: string, connectionSlug: string): Promise<void> {
-    const managed = this.sessions.get(sessionId)
-    if (!managed) {
-      sessionLog.warn(`setSessionConnection: session ${sessionId} not found`)
-      throw new Error(`Session ${sessionId} not found`)
-    }
+  /** Change the connection before the first turn, or explicitly switch Claude OAuth accounts. */
+  async setSessionConnection(sessionId: string, connectionSlug: string, switchAccount = false): Promise<void> {
+    // Serialize with sends so a turn cannot start on the old account during selection.
+    await this.sendInSlot(this.reserveAdmission(sessionId), async () => {
+      const managed = this.sessions.get(sessionId)
+      if (!managed) throw new Error(`Session ${sessionId} not found`)
+      await this.ensureMessagesLoaded(managed)
 
-    // Only allow changing connection before first message (session hasn't started)
-    if (managed.messages && managed.messages.length > 0) {
-      sessionLog.warn(`setSessionConnection: cannot change connection after session has started (${sessionId})`)
-      throw new Error('Cannot change connection after session has started')
-    }
+      const connection = getLlmConnection(connectionSlug)
+      if (!connection) throw new Error(`LLM connection "${connectionSlug}" not found`)
 
-    // Validate connection exists
-    const { getLlmConnection } = await import('@craft-agent/shared/config/storage')
-    const connection = getLlmConnection(connectionSlug)
-    if (!connection) {
-      sessionLog.warn(`setSessionConnection: connection "${connectionSlug}" not found`)
-      throw new Error(`LLM connection "${connectionSlug}" not found`)
-    }
+      const previousModel = managed.model
+      if (switchAccount) {
+        if (managed.llmConnection === connectionSlug) return
+        const currentConnection = managed.llmConnection ? getLlmConnection(managed.llmConnection) : null
+        const currentModel = managed.model ?? currentConnection?.defaultModel ?? ''
+        if (!canSwitchClaudeAccount(currentConnection, connection, currentModel)) {
+          throw new Error('This account cannot use the current chat model')
+        }
+        // Require a credential belonging to the selected slug; never use the legacy shared slot.
+        const credential = await getCredentialManager().getLlmOAuth(connectionSlug)
+        if (!credential?.accessToken) throw new Error('The selected account is not signed in')
+        if (managed.isProcessing || managed.agent?.isProcessing() || managed.isAsyncOperationOngoing
+          || managed.messageQueue.length || managed.pendingQueueReplays
+          || managed.autoRetryTimer || managed.pendingActivationResend || managed.pendingHandoffSummary
+          || (this.keepBackgroundTasksAlive && [...managed.backgroundTaskRegistry.values()].some(task => task.status === 'running'))) {
+          throw new Error('Wait for the current chat work to finish before switching accounts')
+        }
+        // The next getOrCreateAgent notices the changed slug in the restart signature and
+        // rebuilds with the selected credential. Keep the SDK session ID and stored messages.
+        managed.model = currentModel
+      } else if (managed.messages.length > 0 || hasConversationStarted(managed) || managed.connectionLocked || managed.isProcessing) {
+        throw new Error('Cannot change connection after session has started')
+      }
 
-    managed.llmConnection = connectionSlug
-    // Persist in-memory state directly to avoid race with pending queue writes
-    this.persistSession(managed)
-    await this.flushSession(managed.id)
-    sessionLog.info(`Set LLM connection for session ${sessionId} to ${connectionSlug}`)
-
-    // Notify UI that connection changed (triggers capabilities refresh)
-    this.sendEvent({
-      type: 'connection_changed',
-      sessionId,
-      connectionSlug,
-      supportsBranching: resolveSupportsBranching(managed),
-    }, managed.workspace.id)
+      managed.llmConnection = connectionSlug
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+      if (managed.model !== previousModel) {
+        this.sendEvent({ type: 'session_model_changed', sessionId, model: managed.model ?? null }, managed.workspace.id)
+      }
+      this.sendEvent({
+        type: 'connection_changed',
+        sessionId,
+        connectionSlug,
+        supportsBranching: resolveSupportsBranching(managed),
+      }, managed.workspace.id)
+    })
   }
 
   // ============================================

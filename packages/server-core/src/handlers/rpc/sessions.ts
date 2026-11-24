@@ -370,10 +370,10 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
       case 'refreshTitle':
         log.info(`IPC: refreshTitle received for session ${sessionId}`)
         return sessionManager.refreshTitle(sessionId)
-      // Connection selection (locked after first message)
+      // Connection selection, including an explicit compatible account switch
       case 'setConnection':
         log.info(`IPC: setConnection received for session ${sessionId}, connection: ${command.connectionSlug}`)
-        return sessionManager.setSessionConnection(sessionId, command.connectionSlug)
+        return sessionManager.setSessionConnection(sessionId, command.connectionSlug, command.switchAccount)
       // Pending plan execution (Accept & Compact flow)
       case 'setPendingPlanExecution':
         return sessionManager.setPendingPlanExecution(sessionId, command.planPath, command.draftInputSnapshot)

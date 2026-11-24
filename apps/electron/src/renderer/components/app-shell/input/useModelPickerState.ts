@@ -6,7 +6,7 @@ import {
   type LlmConnectionWithStatus,
 } from '@config/llm-connections'
 import { derivePickerMode, type PickerMode } from './picker-mode'
-import { groupConnectionsByProvider, stripPiPrefixForDisplay } from './model-picker-helpers'
+import { getClaudeAccountSwitchTargets, groupConnectionsByProvider, stripPiPrefixForDisplay } from './model-picker-helpers'
 
 export interface ModelPickerStateInput {
   llmConnections: LlmConnectionWithStatus[]
@@ -26,6 +26,7 @@ export interface ModelPickerState {
   effectiveConnectionDetails: LlmConnectionWithStatus | null
   /** The session's own connection (null while it has none). */
   currentConnectionDetails: LlmConnectionWithStatus | null
+  accountSwitchTargets: LlmConnectionWithStatus[]
   /** Non-null only for a `pi_compat` connection with at most one model (a custom endpoint's fixed model). */
   connectionDefaultModel: string | null
   pickerMode: PickerMode
@@ -102,8 +103,13 @@ export function useModelPickerState({
 
   const connectionsByProvider = React.useMemo(() => groupConnectionsByProvider(llmConnections), [llmConnections])
 
+  const accountSwitchTargets = React.useMemo(() => !isEmptySession && pickerMode === 'flat'
+    ? getClaudeAccountSwitchTargets(llmConnections, currentConnection, currentModel)
+    : [], [isEmptySession, pickerMode, llmConnections, currentConnection, currentModel])
+
   return {
     effectiveConnection,
+    accountSwitchTargets,
     effectiveConnectionDetails,
     currentConnectionDetails,
     connectionDefaultModel,

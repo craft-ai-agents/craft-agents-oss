@@ -67,6 +67,8 @@ import { CHAT_LAYOUT } from "@/config/layout"
 import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } from "@/lib/file-changes"
 import { resolveBranchNewPanelOption } from "./branching"
 import { MemoizedMessageBubble } from "./chat-display/MessageBubble"
+import { getRateLimitRecoveryMessageId } from "./chat-display/rate-limit-recovery"
+import { getClaudeAccountSwitchTargets } from "./input/model-picker-helpers"
 import { ProcessingIndicator } from "./chat-display/ProcessingIndicator"
 import { ScrollOnMount } from "./chat-display/ScrollOnMount"
 import { TurnFrame } from "./chat-display/TurnFrame"
@@ -151,9 +153,8 @@ interface ChatDisplayProps {
   // Model selection
   currentModel: string
   onModelChange: (model: string, connection?: string) => void
-  // Connection selection (locked after first message)
-  /** Callback when LLM connection changes (only works when session is empty) */
-  onConnectionChange?: (connectionSlug: string) => void
+  /** Select a connection before the first message, or explicitly switch a compatible account. */
+  onConnectionChange?: (connectionSlug: string, switchAccount?: boolean) => void
   /** Ref for the input, used for external focus control */
   textareaRef?: React.RefObject<RichTextInputHandle>
   /** When true, disables input (e.g., when agent needs activation) */
@@ -1306,6 +1307,21 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     return groupMessagesByTurn(session.messages, { isSessionProcessing: session.isProcessing })
   }, [session?.messages, session?.isProcessing])
 
+  const rateLimitRecoveryMessageId = React.useMemo(
+    () => getRateLimitRecoveryMessageId(session?.messages, session?.isProcessing),
+    [session?.messages, session?.isProcessing],
+  )
+  const llmConnections = appShellContext?.llmConnections
+  const recoveryAccountTargets = React.useMemo(() => (
+    llmConnections && rateLimitRecoveryMessageId && !connectionUnavailable
+      ? getClaudeAccountSwitchTargets(llmConnections, session?.llmConnection, currentModel)
+      : []
+  ), [llmConnections, rateLimitRecoveryMessageId, connectionUnavailable, session?.llmConnection, currentModel])
+  const accountRecovery = React.useMemo(() => onConnectionChange && recoveryAccountTargets.length > 0 ? {
+    targets: recoveryAccountTargets,
+    onSelect: (slug: string) => onConnectionChange(slug, true),
+  } : undefined, [onConnectionChange, recoveryAccountTargets])
+
   // Keep ref in sync for scroll handler
   totalTurnCountRef.current = allTurns.length
 
@@ -1532,6 +1548,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                             onOpenFile={onOpenFile}
                             onOpenUrl={onOpenUrl}
                             sessionId={session?.id}
+                            accountRecovery={turn.message.id === rateLimitRecoveryMessageId ? accountRecovery : undefined}
                             onRetry={turn.message.role === 'error' ? () => {
                               const msgs = session?.messages
                               if (!msgs) return

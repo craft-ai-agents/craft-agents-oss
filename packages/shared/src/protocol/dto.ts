@@ -541,7 +541,7 @@ export type SessionCommand =
   | { type: 'updateShare' }
   | { type: 'revokeShare' }
   | { type: 'refreshTitle' }
-  | { type: 'setConnection'; connectionSlug: string }
+  | { type: 'setConnection'; connectionSlug: string; switchAccount?: boolean }
   | { type: 'setPendingPlanExecution'; planPath: string; draftInputSnapshot?: string }
   | { type: 'markCompactionComplete' }
   | { type: 'markPendingPlanExecutionDispatched' }

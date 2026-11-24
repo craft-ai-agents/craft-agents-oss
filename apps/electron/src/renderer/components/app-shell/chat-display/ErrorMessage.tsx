@@ -4,16 +4,26 @@ import { motion } from "motion/react"
 import { ChevronRight, CircleAlert } from "lucide-react"
 import { SPRING } from "@craft-agent/ui/motion"
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { StyledDropdownMenuContent, StyledDropdownMenuItem } from "@/components/ui/styled-dropdown"
+import { ConnectionIcon } from "@/components/icons/ConnectionIcon"
+import type { LlmConnectionWithStatus } from "@config/llm-connections"
 import { AnimatedCollapsibleContent } from "@/components/ui/collapsible"
 import type { Message } from "../../../../shared/types"
 import { handleErrorMessageAction } from "../error-message-actions"
 import { stripRepeatedTitle } from "./strip-repeated-title"
+
+export interface AccountRecovery {
+  targets: LlmConnectionWithStatus[]
+  onSelect: (slug: string) => void
+}
 
 interface ErrorMessageProps {
   message: Message
   onOpenUrl?: (url: string) => void
   sessionId?: string
   onRetry?: () => void
+  accountRecovery?: AccountRecovery
 }
 
 /**
@@ -22,7 +32,7 @@ interface ErrorMessageProps {
  * into the corners like a bracket. Icon + title in the destructive role (600), body in the foreground
  * role, the recovery actions as buttons (the first one primary), raw details under a disclosure.
  */
-export function ErrorMessage({ message, onOpenUrl, sessionId, onRetry }: ErrorMessageProps) {
+export function ErrorMessage({ message, onOpenUrl, sessionId, onRetry, accountRecovery }: ErrorMessageProps) {
   const { t } = useTranslation()
   const hasDetails = (message.errorDetails && message.errorDetails.length > 0) || message.errorOriginal
   const [detailsOpen, setDetailsOpen] = React.useState(false)
@@ -30,6 +40,8 @@ export function ErrorMessage({ message, onOpenUrl, sessionId, onRetry }: ErrorMe
     if (a.action === 'open_url') return !!a.url && !!onOpenUrl
     return true
   })
+  // Older saved errors have retryability but no serialized button actions.
+  const showFallbackRetry = accountRecovery && onRetry && message.errorCanRetry && !actions?.some(action => action.action === 'retry')
   const title = message.errorTitle || t('common.error')
   const body = stripRepeatedTitle(title, message.content)
 
@@ -41,9 +53,9 @@ export function ErrorMessage({ message, onOpenUrl, sessionId, onRetry }: ErrorMe
         {body && <p className="mt-0.5 text-label leading-5 text-foreground">{body}</p>}
 
         {/* Action buttons: one primary, the rest quiet */}
-        {actions && actions.length > 0 && (
+        {(!!actions?.length || accountRecovery) && (
           <div className="mt-2 flex flex-wrap gap-2">
-            {actions.map((action, index) => (
+            {actions?.map((action, index) => (
               <Button
                 key={action.key}
                 variant={index === 0 ? 'primary' : 'ghost'}
@@ -59,6 +71,29 @@ export function ErrorMessage({ message, onOpenUrl, sessionId, onRetry }: ErrorMe
                 {action.label}{action.action === 'open_url' ? ' ↗' : ''}
               </Button>
             ))}
+            {showFallbackRetry && (
+              <Button variant={actions?.length ? 'ghost' : 'primary'} size="md" onClick={onRetry}>
+                {t('common.retry')}
+              </Button>
+            )}
+            {accountRecovery && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="md">
+                    {t('chat.modelPicker.switchAccount')}
+                    <ChevronRight aria-hidden className="size-3.5 rotate-90" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <StyledDropdownMenuContent align="start" className="min-w-[220px]">
+                  {accountRecovery.targets.map(connection => (
+                    <StyledDropdownMenuItem key={connection.slug} onSelect={() => accountRecovery.onSelect(connection.slug)}>
+                      <ConnectionIcon connection={connection} size={14} />
+                      <span className="truncate">{connection.name}</span>
+                    </StyledDropdownMenuItem>
+                  ))}
+                </StyledDropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         )}
 
