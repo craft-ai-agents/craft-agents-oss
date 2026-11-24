@@ -1,4 +1,5 @@
 import * as React from "react"
+import { canAutoFocusSessionComposer } from './input/input-event-guards'
 import { useTranslation } from "react-i18next"
 import { useEffect, useState, useMemo, useCallback } from "react"
 import { Bot, Info } from "lucide-react"
@@ -462,10 +463,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // focus stealing when search is open but query is empty
   // In multi-panel layouts, only the focused panel should auto-focus its textarea
   useEffect(() => {
-    if (session && !isSearchModeActive && isFocused && isFocusedPanel) {
+    if (session && !isSearchModeActive && isFocused && isFocusedPanel && canAutoFocusSessionComposer(compactMode)) {
       textareaRef.current?.focus()
     }
-  }, [session?.id, isFocused, isSearchModeActive, isFocusedPanel])
+  }, [session?.id, isFocused, isSearchModeActive, isFocusedPanel, compactMode])
 
   useEffect(() => {
     let isMounted = true

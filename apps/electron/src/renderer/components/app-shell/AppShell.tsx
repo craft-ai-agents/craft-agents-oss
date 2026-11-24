@@ -150,7 +150,8 @@ import {
 } from "./panel-constants"
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
-import { dispatchFocusInputEvent } from "./input/focus-input-events"
+import { clearPendingSelectionFocus, dispatchFocusInputEvent } from "./input/focus-input-events"
+import { canAutoFocusSessionComposer } from "./input/input-event-guards"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -900,6 +901,19 @@ function AppShellContent({
     if (!targetSessionId) return
     dispatchFocusInputEvent({ sessionId: targetSessionId })
   }, [])
+
+  useEffect(() => () => clearPendingSelectionFocus(focusedSessionId), [focusedSessionId])
+
+  const focusSelectedSessionComposer = useCallback((targetSessionId: string) => {
+    if (!canAutoFocusSessionComposer(isAutoCompact)) return
+    const shouldFocus = () => store.get(focusedSessionIdAtom) === targetSessionId
+      && canAutoFocusSessionComposer(isAutoCompact)
+    // Row selection runs on mouse-down. Wait for the browser's own focus change
+    // and the destination panel before asking its composer to take focus.
+    requestAnimationFrame(() => {
+      if (shouldFocus()) dispatchFocusInputEvent({ sessionId: targetSessionId, shouldFocus })
+    })
+  }, [store, isAutoCompact])
 
   useAction('chat.cyclePermissionMode', () => {
     if (effectiveSessionId) {
@@ -2615,6 +2629,7 @@ function AppShellContent({
                   onMarkUnread={onMarkSessionUnread}
                   onSessionStatusChange={onSessionStatusChange}
                   onRename={onRenameSession}
+                  onFocusSelectedSession={focusSelectedSessionComposer}
                   onFocusChatInput={(targetSessionId) => {
                     focusChatInputForSession(targetSessionId ?? focusedSessionId ?? session.selected)
                   }}

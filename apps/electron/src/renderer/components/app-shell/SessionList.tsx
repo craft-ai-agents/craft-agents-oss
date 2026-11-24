@@ -53,6 +53,8 @@ interface SessionListProps {
   onRename: (sessionId: string, name: string) => void
   /** Called when Enter is pressed to focus chat input for a specific session */
   onFocusChatInput?: (sessionId?: string) => void
+  /** Request composer focus after explicitly opening a row, not while browsing with arrows. */
+  onFocusSelectedSession?: (sessionId: string) => void
   /** Called when a session is selected */
   onSessionSelect?: (session: SessionMeta) => void
   /** Called when user wants to open a session in a new window */
@@ -137,6 +139,7 @@ export function SessionList({
   onSessionStatusChange,
   onRename,
   onFocusChatInput,
+  onFocusSelectedSession,
   onOpenInNewWindow,
   sessionOptions,
   searchActive,
@@ -599,12 +602,10 @@ export function SessionList({
         navigateToSession(row.item.id)
       }, [navigateToSession]),
       onActivate: useCallback((row: SessionListRow) => {
-        // Only navigate when not in multi-select (matches original behavior)
-        if (!MultiSelect.isMultiSelectActive(selectionStore.state)) {
-          navigateToSession(row.item.id)
-        }
-        onFocusChatInput?.(row.item.id)
-      }, [selectionStore.state, navigateToSession, onFocusChatInput]),
+        if (MultiSelect.isMultiSelectActive(selectionStore.state)) return
+        navigateToSession(row.item.id)
+        onFocusSelectedSession?.(row.item.id)
+      }, [selectionStore.state, navigateToSession, onFocusSelectedSession]),
       enabled: isKeyboardEligible,
       virtualFocus: searchActive ?? false,
     },
@@ -700,7 +701,8 @@ export function SessionList({
   const handleSelectSession = useCallback((row: SessionListRow, index: number) => {
     selectSession(row.item.id, index)
     navigateToSession(row.item.id)
-  }, [selectSession, navigateToSession])
+    onFocusSelectedSession?.(row.item.id)
+  }, [selectSession, navigateToSession, onFocusSelectedSession])
 
   const handleSelectSessionById = useCallback((sessionId: string) => {
     const index = rowIndexMap.get(sessionId) ?? -1
