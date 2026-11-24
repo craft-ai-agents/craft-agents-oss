@@ -55,6 +55,9 @@ describe('cold-session metadata persistence', () => {
       name?: string
       sessionStatus?: string
       labels?: string[]
+      parentSessionId?: string
+      projectId?: string
+      workingDirectory?: string
       messages?: StoredMessage[]
     } = {},
   ) {
@@ -66,6 +69,9 @@ describe('cold-session metadata persistence', () => {
       name: opts.name ?? 'cold session',
       sessionStatus: opts.sessionStatus ?? 'todo',
       labels: opts.labels ?? [],
+      parentSessionId: opts.parentSessionId,
+      projectId: opts.projectId,
+      workingDirectory: opts.workingDirectory,
       createdAt: Date.now(),
       lastUsedAt: Date.now(),
       messages: opts.messages ?? [],
@@ -78,6 +84,9 @@ describe('cold-session metadata persistence', () => {
         name: stored.name,
         sessionStatus: stored.sessionStatus,
         labels: stored.labels,
+        parentSessionId: stored.parentSessionId,
+        projectId: stored.projectId,
+        workingDirectory: stored.workingDirectory,
         createdAt: stored.createdAt,
       },
       buildWorkspace(),
@@ -129,6 +138,68 @@ describe('cold-session metadata persistence', () => {
 
     const reloaded = loadSession(tmpRoot, sessionId)
     expect(reloaded?.labels).toEqual(['urgent', 'bug'])
+  })
+
+  it('reapplying a project fills in existing children and grandchildren without changing their work', async () => {
+    seedColdSession('parent', { projectId: 'app' })
+    seedColdSession('child', { parentSessionId: 'parent' })
+    seedColdSession('grandchild', {
+      parentSessionId: 'child',
+      workingDirectory: '/existing-checkout',
+      messages: [makeUserMessage('m1', 'keep this')],
+    })
+    seedColdSession('unrelated', { projectId: 'app' })
+
+    await sm.setSessionProjectId('parent', 'app')
+    expect(loadSession(tmpRoot, 'child')?.projectId).toBe('app')
+    expect(loadSession(tmpRoot, 'grandchild')?.projectId).toBe('app')
+    expect(loadSession(tmpRoot, 'grandchild')?.workingDirectory).toBe('/existing-checkout')
+    expect(readDiskMessageIds('grandchild')).toEqual(['m1'])
+
+    await sm.setSessionProjectId('parent', 'next')
+    expect(loadSession(tmpRoot, 'grandchild')?.projectId).toBe('next')
+    expect(loadSession(tmpRoot, 'unrelated')?.projectId).toBe('app')
+
+    await sm.setSessionProjectId('parent', null)
+    expect(loadSession(tmpRoot, 'grandchild')?.projectId).toBeUndefined()
+    expect(loadSession(tmpRoot, 'unrelated')?.projectId).toBe('app')
+  })
+
+  it('preserves separately assigned branches including an explicit No project', async () => {
+    seedColdSession('parent', { projectId: 'app' })
+    seedColdSession('override', { parentSessionId: 'parent', projectId: 'docs' })
+    seedColdSession('under-override', { parentSessionId: 'override', projectId: 'docs' })
+    seedColdSession('clear', { parentSessionId: 'parent', projectId: 'app' })
+    seedColdSession('inherited', { parentSessionId: 'parent', projectId: 'app' })
+
+    await sm.setSessionProjectId('clear', null)
+    await sm.setSessionProjectId('parent', 'next')
+
+    expect(loadSession(tmpRoot, 'override')?.projectId).toBe('docs')
+    expect(loadSession(tmpRoot, 'under-override')?.projectId).toBe('docs')
+    expect(loadSession(tmpRoot, 'clear')?.projectId).toBeUndefined()
+    expect(loadSession(tmpRoot, 'clear')?.projectOverride).toBe(true)
+    expect(loadSession(tmpRoot, 'inherited')?.projectId).toBe('next')
+  })
+
+  it('moves multiple selected chats and their families, even when a selected child was an override', async () => {
+    seedColdSession('parent', { projectId: 'app' })
+    seedColdSession('override', { parentSessionId: 'parent', projectId: 'docs' })
+    seedColdSession('under-override', { parentSessionId: 'override', projectId: 'docs' })
+    seedColdSession('inherited', { parentSessionId: 'parent', projectId: 'app' })
+    seedColdSession('other-parent')
+    seedColdSession('other-child', { parentSessionId: 'other-parent' })
+
+    await sm.setSessionProjectId('override', 'next', ['parent', 'other-parent', 'inherited'])
+    for (const id of ['parent', 'override', 'under-override', 'inherited', 'other-parent', 'other-child']) {
+      expect(loadSession(tmpRoot, id)?.projectId).toBe('next')
+    }
+
+    await sm.setSessionProjectId('parent', 'later')
+    for (const id of ['override', 'under-override', 'inherited']) {
+      expect(loadSession(tmpRoot, id)?.projectId).toBe('later')
+    }
+    expect(loadSession(tmpRoot, 'other-child')?.projectId).toBe('next')
   })
 
   it('renameSession on a cold session persists (with explicit flushSession)', async () => {

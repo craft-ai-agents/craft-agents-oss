@@ -28,7 +28,7 @@ describe('spawnedSessionOptions', () => {
       thinkingLevel: 'high',
       labels: ['bug'],
       workingDirectory: '/repos/app-feature',
-      projectId: 'app',
+      projectId: undefined,
       codingMode: true,
       parentSessionId: 'parent',
     })
@@ -36,7 +36,7 @@ describe('spawnedSessionOptions', () => {
 
   it('lets the request override what it names', () => {
     const options = spawnedSessionOptions({ model: 'claude-haiku-5-5', enabledSourceSlugs: [], workingDirectory: '/repos/app-other' }, parent)
-    expect(options).toMatchObject({ model: 'claude-haiku-5-5', enabledSourceSlugs: [], workingDirectory: '/repos/app-other', projectId: 'app' })
+    expect(options).toMatchObject({ model: 'claude-haiku-5-5', enabledSourceSlugs: [], workingDirectory: '/repos/app-other', projectId: undefined })
   })
 
   it("leaves the folder to another project's own setting when the child moves there", () => {
@@ -60,7 +60,7 @@ describe('spawnedSessionOptions Coding mode and worktree', () => {
 
   it('runs a worktree child in Coding mode in that worktree, whatever the parent does', () => {
     const options = spawnedSessionOptions({ worktreePath: '/repos/app-child' }, { ...parent, codingMode: undefined })
-    expect(options).toMatchObject({ workingDirectory: '/repos/app-child', codingMode: true, projectId: 'app' })
+    expect(options).toMatchObject({ workingDirectory: '/repos/app-child', codingMode: true, parentSessionId: 'parent' })
   })
 })
 

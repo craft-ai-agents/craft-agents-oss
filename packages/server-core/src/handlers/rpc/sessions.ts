@@ -346,7 +346,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
       case 'setLabels':
         return sessionManager.setSessionLabels(sessionId, command.labels)
       case 'setProjectId':
-        return sessionManager.setSessionProjectId(sessionId, command.projectId)
+        return sessionManager.setSessionProjectId(sessionId, command.projectId, command.additionalSessionIds)
       case 'setKanbanColumn':
         return sessionManager.setKanbanColumn(sessionId, command.column)
       case 'showInFinder': {

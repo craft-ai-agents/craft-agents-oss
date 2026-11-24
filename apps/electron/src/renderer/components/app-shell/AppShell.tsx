@@ -638,14 +638,22 @@ function AppShellContent({
     () => projects.map(p => ({ id: p.config.id, slug: p.config.slug, name: p.config.name, color: p.config.color })),
     [projects],
   )
-  const handleSessionProjectChange = useCallback(async (sessionId: string, projectId: string | null) => {
+  const handleSetSessionProjects = useCallback(async ([sessionId, ...additionalSessionIds]: string[], projectId: string | null) => {
+    if (!sessionId) return
     try {
-      await window.electronAPI.sessionCommand(sessionId, { type: 'setProjectId', projectId })
+      await window.electronAPI.sessionCommand(sessionId, {
+        type: 'setProjectId', projectId,
+        ...(additionalSessionIds.length > 0 ? { additionalSessionIds } : {}),
+      })
     } catch (err) {
       console.error('[AppShell] Failed to update session project:', err)
       toast.error(t('toast.failedToUpdateProject'))
     }
   }, [t])
+
+  const handleSessionProjectChange = useCallback((sessionId: string, projectId: string | null) => {
+    return handleSetSessionProjects([sessionId], projectId)
+  }, [handleSetSessionProjects])
 
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
@@ -1432,6 +1440,8 @@ function AppShellContent({
     activeSessionWorkingDirectory,
     labels: displayLabelConfigs,
     onSessionLabelsChange: handleSessionLabelsChange,
+    projectMenuOptions,
+    onSetSessionProjects: handleSetSessionProjects,
     enabledModes,
     sessionStatuses: effectiveSessionStatuses,
     onSessionSourcesChange: handleSessionSourcesChange,
@@ -1450,7 +1460,7 @@ function AppShellContent({
     automationTestResults,
     getAutomationHistory,
     onReplayAutomation: handleReplayAutomation,
-  }), [contextValue, handleDeleteSession, sources, skills, chatStarters, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, handleJumpToTaskSessions, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation])
+  }), [contextValue, handleDeleteSession, sources, skills, chatStarters, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, projectMenuOptions, handleSetSessionProjects, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, handleJumpToTaskSessions, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation])
 
   // Persist expanded folders to localStorage (workspace-scoped)
   React.useEffect(() => {

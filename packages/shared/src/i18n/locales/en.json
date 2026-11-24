@@ -796,6 +796,7 @@
   "multiSelect.changeStatus": "Change Status",
   "multiSelect.clearSelection": "Press <kbd>Esc</kbd> to clear selection",
   "multiSelect.click": "Click",
+  "multiSelect.moveToProject": "Move to Project",
   "multiSelect.selected.automation_few": "{{count}} automations selected",
   "multiSelect.selected.automation_many": "{{count}} automations selected",
   "multiSelect.selected.automation_one": "{{count}} automation selected",

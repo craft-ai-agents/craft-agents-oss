@@ -796,6 +796,7 @@
   "multiSelect.changeStatus": "更改状态",
   "multiSelect.clearSelection": "按 <kbd>Esc</kbd> 清除选择",
   "multiSelect.click": "点击",
+  "multiSelect.moveToProject": "移至项目",
   "multiSelect.selected.automation_few": "已选择 {{count}} 个自动化",
   "multiSelect.selected.automation_many": "已选择 {{count}} 个自动化",
   "multiSelect.selected.automation_one": "已选择 {{count}} 个自动化",

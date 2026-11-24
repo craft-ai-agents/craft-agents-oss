@@ -54,7 +54,9 @@ export function spawnedSessionOptions(request: SpawnOverrides, parent: SpawnPare
     workingDirectory: request.worktreePath
       ?? request.workingDirectory
       ?? (projectId === parent.projectId ? parent.workingDirectory : undefined),
-    projectId,
+    // createSession resolves inheritance; passing the inherited id as explicit would
+    // also make a deleted parent project fail creation instead of falling back.
+    projectId: request.projectId,
     // Requested, else the parent's mode both ways, never the workspace default (branches do the same).
     codingMode: request.worktreePath ? true : request.codingMode ?? parent.codingMode === true,
     // Spawned sessions become subtasks of the spawning session.

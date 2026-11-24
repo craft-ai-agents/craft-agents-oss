@@ -796,6 +796,7 @@
   "multiSelect.changeStatus": "ステータスを変更",
   "multiSelect.clearSelection": "<kbd>Esc</kbd>を押して選択解除",
   "multiSelect.click": "クリック",
+  "multiSelect.moveToProject": "プロジェクトに移動",
   "multiSelect.selected.automation_few": "{{count}}件の自動化を選択中",
   "multiSelect.selected.automation_many": "{{count}}件の自動化を選択中",
   "multiSelect.selected.automation_one": "{{count}}件の自動化を選択中",

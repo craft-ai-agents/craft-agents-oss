@@ -796,6 +796,7 @@
   "multiSelect.changeStatus": "Állapot módosítása",
   "multiSelect.clearSelection": "Nyomd meg az <kbd>Esc</kbd> gombot a kijelölés törléséhez",
   "multiSelect.click": "Kattintás",
+  "multiSelect.moveToProject": "Áthelyezés projektbe",
   "multiSelect.selected.automation_few": "{{count}} automatizálás kijelölve",
   "multiSelect.selected.automation_many": "{{count}} automatizálás kijelölve",
   "multiSelect.selected.automation_one": "{{count}} automatizálás kijelölve",

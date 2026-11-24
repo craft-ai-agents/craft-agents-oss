@@ -129,7 +129,7 @@ export interface ISessionManager {
     sessionId: string,
     opts?: { parentSessionId?: string },
   ): Promise<{ labelId: string } | undefined>
-  setSessionProjectId(sessionId: string, projectId: string | null): Promise<void>
+  setSessionProjectId(sessionId: string, projectId: string | null, additionalSessionIds?: string[]): Promise<void>
   setKanbanColumn(sessionId: string, column: string | null): Promise<void>
   setTaskNodeCount(sessionId: string, count: number): Promise<void>
   adoptGeneratedTaskOrchestrator(
