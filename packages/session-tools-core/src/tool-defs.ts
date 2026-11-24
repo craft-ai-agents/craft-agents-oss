@@ -236,7 +236,7 @@ export const SpawnSessionSchema = z.object({
   llmConnection: z.string().optional().describe('Connection slug (e.g., "anthropic-api", "codex")'),
   model: z.string().optional().describe('Model ID override'),
   enabledSourceSlugs: z.array(z.string()).optional().describe('Source slugs to enable in the new session'),
-  permissionMode: z.enum(['safe', 'ask', 'guarded', 'allow-all']).optional().describe('Permission mode for the new session. Never looser than the spawning session\'s current mode (safe < ask < guarded < allow-all); a looser value is lowered to it.'),
+  permissionMode: z.enum(['safe', 'ask', 'guarded', 'allow-all']).optional().describe('Permission mode for the new session. Never looser than the spawning session\'s current mode (safe < ask < guarded < allow-all); a looser request is lowered to it. A workspace may require a startup mode instead; if that mode is looser than the parent’s, the spawn is refused.'),
   thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional()
     .describe('Reasoning level for the new session. Silently ignored on non-reasoning models (e.g. gpt-4o, gemini-2.5-flash). Omit to inherit the workspace default.'),
   labels: z.array(z.string()).optional().describe('Labels for the new session'),

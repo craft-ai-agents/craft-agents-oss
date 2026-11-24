@@ -11,7 +11,7 @@
  *   └── sessions/        - Conversation sessions
  */
 
-import type { PermissionMode } from '../agent/mode-manager.ts';
+import type { PermissionMode, PermissionModeCanonical } from '../agent/mode-types.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 
 /**
@@ -53,6 +53,8 @@ export interface WorkspaceConfig {
     defaultLlmConnection?: string;
     enabledSourceSlugs?: string[]; // Sources to enable by default
     permissionMode?: PermissionMode; // Default permission mode ('safe', 'ask', 'guarded', 'allow-all')
+    /** Overrides all caller-provided modes at session creation. Unset by default. */
+    requiredPermissionMode?: PermissionMode | PermissionModeCanonical;
     cyclablePermissionModes?: PermissionMode[]; // Which modes can be cycled with SHIFT+TAB (min 2, default: Explore, Ask, Execute)
     workingDirectory?: string;
     thinkingLevel?: ThinkingLevel; // Default thinking level for new sessions (default: 'medium')
