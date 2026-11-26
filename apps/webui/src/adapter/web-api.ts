@@ -20,7 +20,8 @@ import {
   DEFAULT_OAUTH_FLOW_TTL_MS,
   type OAuthStartResult,
 } from '../../../electron/src/transport/source-oauth'
-import type { ElectronAPI, TransportConnectionState } from '../../../electron/src/shared/types'
+import type { DeepLinkNavigation, ElectronAPI, TransportConnectionState } from '../../../electron/src/shared/types'
+import { parseWebDeepLink } from './deep-link'
 
 // ---------------------------------------------------------------------------
 // Web file picker (replaces native Electron dialog)
@@ -89,6 +90,8 @@ export function createWebApi(options: WebApiOptions): {
     (ch) => client.isChannelAvailable(ch),
   )
 
+  const deepLinkListeners = new Set<(nav: DeepLinkNavigation) => void>()
+
   // Override LOCAL_ONLY methods with web-compatible implementations
   const webOverrides: Partial<ElectronAPI> = {
     // Shell operations — use browser APIs
@@ -98,7 +101,14 @@ export function createWebApi(options: WebApiOptions): {
         if (result.reason === 'dangerous') {
           toast.error(`Blocked unsafe URL (${result.detail})`)
         } else if (result.reason === 'internal-deeplink') {
-          console.warn('[openUrl] craftagents:// deep links require the desktop app')
+          const navigation = parseWebDeepLink(url)
+          if (navigation && deepLinkListeners.size > 0) {
+            for (const listener of deepLinkListeners) listener(navigation)
+          } else {
+            toast.error(i18n.t('toast.invalidLink'), {
+              description: i18n.t('toast.invalidLinkDesc'),
+            })
+          }
         } else {
           console.warn('[openUrl] Malformed URL:', url)
         }
@@ -178,7 +188,10 @@ export function createWebApi(options: WebApiOptions): {
     onMenuKeyboardShortcuts: () => () => {},
     onMenuToggleFocusMode: () => () => {},
     onMenuToggleSidebar: () => () => {},
-    onDeepLinkNavigate: () => () => {},
+    onDeepLinkNavigate: (callback) => {
+      deepLinkListeners.add(callback)
+      return () => { deepLinkListeners.delete(callback) }
+    },
 
     // Menu actions — no-ops (web has no native menu)
     menuQuit: () => Promise.resolve(),
