@@ -37,6 +37,7 @@ import {
 import type {
   AgentSession,
   AgentSessionEvent,
+  JsonAgentSessionEvent,
   AgentToolResult,
   CreateAgentSessionOptions,
   ToolDefinition,
@@ -119,6 +120,7 @@ import type { PiCredential } from './adapt-credential.ts';
 import { resolveCraftAgentDir } from './agent-dir.ts';
 import { regionalProviderBaseUrl, toPiProviderId } from '../../shared/src/config/pi-provider-ids.ts';
 import { providerEndpointEnv } from './provider-endpoint-env.ts';
+import { createStdoutBackpressure } from './stdout-backpressure.ts';
 
 // ============================================================
 // Types — JSONL Protocol
@@ -209,7 +211,7 @@ type EnrichedToolExecutionStartEvent = Extract<AgentSessionEvent, { type: 'tool_
   toolMetadata?: ToolExecutionMetadata;
 };
 
-type OutboundAgentEvent = (AgentSessionEvent | EnrichedToolExecutionStartEvent | { type: 'context_usage' }) & PiContextUsagePayload;
+type OutboundAgentEvent = (JsonAgentSessionEvent | EnrichedToolExecutionStartEvent | { type: 'context_usage' }) & PiContextUsagePayload;
 
 /** Messages to main process (stdout) */
 interface OutboundReady { type: 'ready'; sessionId: string | null; callbackPort: number }
@@ -344,9 +346,11 @@ let callbackPort = 0;
 // JSONL I/O
 // ============================================================
 
+const stdoutBackpressure = createStdoutBackpressure(process.stdout);
+
 function send(msg: OutboundMessage): void {
   const line = JSON.stringify(msg);
-  process.stdout.write(line + '\n');
+  stdoutBackpressure.write(line + '\n');
 }
 
 function debugLog(message: string): void {
@@ -1276,6 +1280,33 @@ function extractToolExecutionMetadata(args: Record<string, unknown> | undefined)
 }
 
 function handleSessionEvent(event: AgentSessionEvent): void {
+  if (event.type === 'message_update') {
+    // SDK events carry the growing message twice. Only send the public JSON
+    // event shape across the pipe; leave SDK state and journal objects intact.
+    if (event.message.role !== 'assistant') {
+      throw new Error('message_update message is not an assistant message');
+    }
+    const update = event.assistantMessageEvent;
+    let assistantMessageEvent: Extract<JsonAgentSessionEvent, { type: 'message_update' }>['assistantMessageEvent'];
+    if (update.type === 'toolcall_start') {
+      const toolCall = update.partial.content[update.contentIndex];
+      if (toolCall?.type !== 'toolCall') {
+        throw new Error('toolcall_start content is not a tool call');
+      }
+      const { partial: _partial, ...delta } = update;
+      assistantMessageEvent = { ...delta, id: toolCall.id, toolName: toolCall.name };
+    } else if ('partial' in update) {
+      const { partial: _partial, ...delta } = update;
+      assistantMessageEvent = delta;
+    } else {
+      assistantMessageEvent = update;
+    }
+    send({ type: 'event', event: {
+      type: 'message_update', usage: event.message.usage, assistantMessageEvent,
+    } });
+    return;
+  }
+
   let forwardedEvent: OutboundAgentEvent = event;
 
   // Log API errors for debugging and attach provider-native turn anchor for branch cutoffs.
@@ -1520,7 +1551,14 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
     if (unsubscribeEvents) {
       unsubscribeEvents();
     }
-    unsubscribeEvents = session.subscribe(handleSessionEvent);
+    const unsubscribeSessionEvents = session.subscribe(handleSessionEvent);
+    // AgentSession listeners are synchronous. The underlying Agent awaits this
+    // listener after forwarding/persisting the event, as in the SDK's JSON mode.
+    const unsubscribeBackpressure = session.agent.subscribe((_event, signal) => stdoutBackpressure.wait(signal));
+    unsubscribeEvents = () => {
+      unsubscribeSessionEvents();
+      unsubscribeBackpressure();
+    };
 
     // Wait for any in-flight auto-compaction to avoid race (craft-agents-oss#464)
     const compactionWait = await waitForCompaction(session, { timeoutMs: PROMPT_COMPACT_WAIT_MS, log: debugLog });
