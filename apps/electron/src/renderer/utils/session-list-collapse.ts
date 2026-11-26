@@ -3,7 +3,7 @@ import type { SessionFilter } from '../../shared/types'
 export interface CollapsedGroupScopeOptions {
   workspaceId?: string
   currentFilter?: SessionFilter
-  groupingMode: 'date' | 'status' | 'unread' | 'project'
+  groupingMode: 'date' | 'status' | 'unread' | 'project' | 'manual'
 }
 
 export function serializeSessionFilterForScope(filter?: SessionFilter): string {

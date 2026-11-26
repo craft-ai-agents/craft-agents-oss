@@ -17,6 +17,8 @@ import { useTranslation } from "react-i18next"
 import {
   Archive,
   ArchiveRestore,
+  ArrowDown,
+  ArrowUp,
   Trash2,
   Pencil,
   Flag,
@@ -63,6 +65,8 @@ export interface SessionMenuProps {
   /** Callback for binding/unbinding the session to a project. `null` = unbind. */
   onSetProjectId?: (projectId: string | null) => void
   /** Callbacks */
+  onMoveUp?: () => void
+  onMoveDown?: () => void
   onRename: () => void
   onFlag: () => void
   onUnflag: () => void
@@ -84,6 +88,8 @@ export function SessionMenu({
   sessionStatuses,
   labels = [],
   onLabelsChange,
+  onMoveUp,
+  onMoveDown,
   onRename,
   onFlag,
   onUnflag,
@@ -115,6 +121,19 @@ export function SessionMenu({
 
   return (
     <>
+      {(onMoveUp || onMoveDown) && (
+        <>
+          <MenuItem onClick={onMoveUp} disabled={!onMoveUp}>
+            <ArrowUp className="size-3.5" />
+            <span className="flex-1">{t('sessionMenu.moveUp')}</span>
+          </MenuItem>
+          <MenuItem onClick={onMoveDown} disabled={!onMoveDown}>
+            <ArrowDown className="size-3.5" />
+            <span className="flex-1">{t('sessionMenu.moveDown')}</span>
+          </MenuItem>
+          <Separator />
+        </>
+      )}
       {/* Share/Shared based on shared state */}
       {!sharedUrl ? (
         <MenuItem onClick={actions.share}>

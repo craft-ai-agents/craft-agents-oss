@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react"
+import { useState, useCallback, useEffect, useMemo, useRef, type DragEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 import { useSetAtom } from "jotai"
@@ -21,7 +21,7 @@ import { SessionSearchHeader } from "./SessionSearchHeader"
 import { SessionItem } from "./SessionItem"
 import { SessionListProvider, type SessionListContextValue } from "@/context/SessionListContext"
 import { useSessionSelection, useSessionSelectionStore } from "@/hooks/useSession"
-import { useSessionSearch, type FilterMode } from "@/hooks/useSessionSearch"
+import { useSessionSearch, type FilterMode, type SessionGroupingMode } from "@/hooks/useSessionSearch"
 import { useSessionActions } from "@/hooks/useSessionActions"
 import { useEntityListInteractions } from "@/hooks/useEntityListInteractions"
 import { useFocusZone } from "@/hooks/keyboard"
@@ -35,11 +35,14 @@ import { buildCollapsedGroupsScopeSuffix } from "@/utils/session-list-collapse"
 import { ancestorIds, flatRow, type SessionListRow } from "@/utils/session-tree"
 import { FlipOnChange, SPRING } from "@craft-agent/ui/motion"
 import { useListReorderFlip } from "@/hooks/useListReorderFlip"
+import { loadManualSessionOrder, moveSessionFamily, saveManualSessionOrder, type SessionPlacement } from "@/utils/session-manual-order"
 
 export type { SessionListRow }
 
 /** Grouping mode for chat list */
-export type ChatGroupingMode = 'date' | 'status' | 'unread' | 'project'
+export type ChatGroupingMode = SessionGroupingMode
+
+const MANUAL_DRAG_TYPE = "application/x-craft-session-order"
 
 interface SessionListProps {
   items: SessionMeta[]
@@ -81,7 +84,7 @@ interface SessionListProps {
   projects?: Array<{ id: string; slug: string; name: string; color?: string }>
   /** Callback to bind/unbind a session to a project (null = unbind) */
   onSetProjectId?: (sessionId: string, projectId: string | null) => void
-  /** How to group sessions: 'date' (default) or 'status' */
+  /** How to group sessions, or Manual order without activity-based groups. */
   groupingMode?: ChatGroupingMode
   /** Workspace ID for content search (optional - if not provided, content search is disabled) */
   workspaceId?: string
@@ -262,6 +265,15 @@ export function SessionList({
     storage.set(KEYS.collapsedSessionFamilies, saved, familyState.scope)
   }, [familyState])
 
+  // Manual order is a local view preference, independent of the session metadata.
+  const [manualState, setManualState] = useState(() => ({
+    scope: collapseScopeSuffix,
+    ids: groupingMode === 'manual' ? loadManualSessionOrder(collapseScopeSuffix) : [],
+  }))
+  if (manualState.scope !== collapseScopeSuffix) {
+    setManualState({ scope: collapseScopeSuffix, ids: groupingMode === 'manual' ? loadManualSessionOrder(collapseScopeSuffix) : [] })
+  }
+
   // --- Data pipeline (search, filtering, pagination, grouping) ---
   const scrollViewportRef = useRef<HTMLDivElement>(null)
 
@@ -292,6 +304,7 @@ export function SessionList({
     collapsedGroups,
     collapsedFamilies,
     groupingMode,
+    manualOrder: manualState.ids,
     scrollViewportRef,
   })
 
@@ -320,6 +333,13 @@ export function SessionList({
     // Every row is grouped and sorted by its family's view (`groupItem`), which
     // all rows of a family share, so the stable sorts keep a family together.
     const rows = visibleRows
+
+    if (groupingMode === 'manual') {
+      return {
+        rows,
+        groups: rows.length ? [{ key: 'manual', label: t('sidebar.groupByManual'), items: rows }] : [],
+      }
+    }
 
     if (groupingMode === 'unread') {
       // Two fixed buckets: unread on top, read below. Within each, items keep
@@ -540,6 +560,33 @@ export function SessionList({
   }, [isSearchMode, matchingFilterItems, otherResultItems, visibleRows, groupingMode, sessionStatuses, projects, collapsedGroupsMeta, families, t, i18n.resolvedLanguage])
 
   const flatRows = rowData.rows
+  const canReorder = groupingMode === 'manual' && !isSearchMode
+  const rootIds = useMemo(() => canReorder ? families.map(family => family.view.id) : [], [canReorder, families])
+  const rootIndices = useMemo(() => new Map(rootIds.map((id, index) => [id, index])), [rootIds])
+  const moveRoot = (source: string, target: string, placement: SessionPlacement) => {
+    const next = moveSessionFamily(manualState.ids, rootIds, source, target, placement)
+    if (!next) return
+    saveManualSessionOrder(manualState.scope, next)
+    setManualState({ scope: manualState.scope, ids: next })
+  }
+
+  const draggedRoot = useRef<{ id: string; scope: string } | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ id: string; placement: SessionPlacement; rowId: string } | null>(null)
+  const clearDrag = () => {
+    draggedRoot.current = null
+    setDropTarget(null)
+  }
+  const getDropTarget = (event: DragEvent<HTMLDivElement>, row: SessionListRow, index: number) => {
+    if (draggedRoot.current?.scope !== manualState.scope || draggedRoot.current.id === row.groupItem.id) return
+    if (!event.dataTransfer.types.includes(MANUAL_DRAG_TYPE)) return
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const placement: SessionPlacement = row.depth > 0 || event.clientY >= (bounds.top + bounds.bottom) / 2 ? 'after' : 'before'
+    let edge = index
+    if (placement === 'after') {
+      while (flatRows[edge + 1]?.groupItem.id === row.groupItem.id) edge++
+    }
+    return { id: row.groupItem.id, placement, rowId: flatRows[edge].item.id }
+  }
 
   const collapseAllGroups = useCallback(() => {
     if (groupingMode === 'status') {
@@ -874,7 +921,10 @@ export function SessionList({
         renderItem={(row, _indexInGroup, isFirstInGroup) => {
           const flatIndex = rowIndexMap.get(row.item.id) ?? 0
           const rowProps = interactions.getRowProps(row, flatIndex)
-          return (
+          const rootIndex = row.depth === 0 ? rootIndices.get(row.item.id) : undefined
+          const previous = rootIndex !== undefined ? rootIds[rootIndex - 1] : undefined
+          const next = rootIndex !== undefined ? rootIds[rootIndex + 1] : undefined
+          const item = (
             <SessionItem
               item={row.item}
               index={flatIndex}
@@ -888,10 +938,49 @@ export function SessionList({
               depth={row.depth}
               guides={row.guides}
               inheritedLabels={row.parent?.labels}
+              onMoveUp={previous ? () => moveRoot(row.item.id, previous, 'before') : undefined}
+              onMoveDown={next && rowIndexMap.has(next) ? () => moveRoot(row.item.id, next, 'after') : undefined}
+              onReorderDragStart={rootIndex !== undefined && rootIds.length > 1 ? event => {
+                draggedRoot.current = { id: row.item.id, scope: manualState.scope }
+                event.dataTransfer.setData(MANUAL_DRAG_TYPE, row.item.id)
+                event.dataTransfer.effectAllowed = 'move'
+              } : undefined}
+              onReorderDragEnd={clearDrag}
               subSessions={row.descendantCount > 0
                 ? { count: row.descendantCount, collapsed: row.collapsed, onToggle: () => toggleFamily(row) }
                 : undefined}
             />
+          )
+          if (!canReorder) return item
+          const indicator = draggedRoot.current?.scope === manualState.scope && dropTarget?.rowId === row.item.id
+            ? dropTarget.placement : undefined
+          return (
+            <div
+              className="relative"
+              onDragOver={event => {
+                const target = getDropTarget(event, row, flatIndex)
+                if (!target) return
+                event.preventDefault()
+                event.dataTransfer.dropEffect = 'move'
+                setDropTarget(current => current?.id === target.id && current.placement === target.placement && current.rowId === target.rowId
+                  ? current : target)
+              }}
+              onDragLeave={event => {
+                if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
+                setDropTarget(current => current?.id === row.groupItem.id ? null : current)
+              }}
+              onDrop={event => {
+                const target = getDropTarget(event, row, flatIndex)
+                const source = event.dataTransfer.getData(MANUAL_DRAG_TYPE)
+                if (!target || !source || source !== draggedRoot.current?.id) return
+                event.preventDefault()
+                moveRoot(source, target.id, target.placement)
+                clearDrag()
+              }}
+            >
+              {item}
+              {indicator && <div aria-hidden="true" className={`pointer-events-none absolute inset-x-0 z-10 h-0.5 bg-accent-solid ${indicator === 'before' ? 'top-0' : 'bottom-0'}`} />}
+            </div>
           )
         }}
         header={

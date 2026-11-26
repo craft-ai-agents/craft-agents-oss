@@ -21,6 +21,7 @@ export const KEYS = {
   expandedFolders: 'expanded-folders',
   collapsedSidebarItems: 'collapsed-sidebar-items',
   chatGroupingMode: 'chat-grouping-mode', // How to group chats: 'date' | 'status'
+  manualSessionOrder: 'manual-session-order', // Root IDs ordered per workspace and view
   collapsedSessionGroups: 'collapsed-session-groups', // Collapsed group keys in session list
   collapsedSessionFamilies: 'collapsed-session-families', // Sessions whose sub-sessions are hidden (workspace-scoped via suffix)
 

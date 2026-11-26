@@ -7,6 +7,7 @@ import type { LabelConfig } from "@craft-agent/shared/labels"
 import { fuzzyScore } from "@craft-agent/shared/search"
 import { getSessionTitle, getSessionStatus } from "@/utils/session"
 import { buildSessionFamilies, flatRow, flattenFamilies, type SessionFamily, type SessionListRow } from "@/utils/session-tree"
+import { orderSessionFamilies } from "@/utils/session-manual-order"
 import type { SessionMeta } from "@/atoms/sessions"
 import type { ViewConfig } from "@craft-agent/shared/views"
 import type { SessionFilter } from "@/contexts/NavigationContext"
@@ -38,7 +39,7 @@ export interface CollapsedGroupMeta {
   count: number
 }
 
-export type SessionGroupingMode = 'date' | 'status' | 'unread' | 'project'
+export type SessionGroupingMode = 'date' | 'status' | 'unread' | 'project' | 'manual'
 
 export interface UseSessionSearchOptions {
   items: SessionMeta[]
@@ -57,6 +58,7 @@ export interface UseSessionSearchOptions {
   collapsedFamilies?: ReadonlySet<string>
   /** Grouping mode — needed to compute group keys for collapse-aware pagination */
   groupingMode?: SessionGroupingMode
+  manualOrder?: readonly string[]
   /** Ref to the ScrollArea viewport element — used for scroll-based pagination */
   scrollViewportRef?: React.RefObject<HTMLDivElement>
 }
@@ -96,6 +98,7 @@ export interface UseSessionSearchResult {
 // ---------------------------------------------------------------------------
 
 function getCollapseGroupKey(item: SessionMeta, groupingMode?: SessionGroupingMode): string {
+  if (groupingMode === 'manual') return 'manual'
   if (groupingMode === 'status') return `status-${getSessionStatus(item)}`
   if (groupingMode === 'unread') return item.hasUnread ? 'unread-yes' : 'unread-no'
   if (groupingMode === 'project') return `project-${(item as { projectId?: string }).projectId ?? '__none__'}`
@@ -195,6 +198,17 @@ export function computeCollapsedPagination(
 
   const { visible, hasMore } = windowItems(expandedItems, displayLimit, groupingMode, weightOf)
   return { paginatedItems: visible, hasMore, collapsedGroupsMeta: meta }
+}
+
+/** Keep activity-based ordering in the automatic modes; Manual sorts root families by ID rank. */
+export function buildSessionListFamilies(
+  items: SessionMeta[],
+  groupingMode?: SessionGroupingMode,
+  manualOrder: readonly string[] = [],
+): SessionFamily[] {
+  const manual = groupingMode === 'manual'
+  const families = buildSessionFamilies(items, manual)
+  return manual ? orderSessionFamilies(families, manualOrder) : families
 }
 
 export interface FamilyPage {
@@ -326,6 +340,7 @@ export function useSessionSearch({
   collapsedGroups,
   collapsedFamilies,
   groupingMode,
+  manualOrder,
   scrollViewportRef,
 }: UseSessionSearchOptions): UseSessionSearchResult {
 
@@ -419,11 +434,11 @@ export function useSessionSearch({
   // Filter out hidden sessions before any processing
   const visibleItems = useMemo(() => items.filter(item => !item.hidden), [items])
 
-  // Sort by most recent activity first
-  const sortedItems = useMemo(() =>
-    [...visibleItems].sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0)),
-    [visibleItems]
-  )
+  // Search and automatic grouping use activity. Never use it to build a Manual list.
+  const sortedItems = useMemo(() => {
+    if (!isSearchMode && groupingMode === 'manual') return visibleItems
+    return [...visibleItems].sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0))
+  }, [visibleItems, isSearchMode, groupingMode])
 
   // Filter items by search query or current filter
   const searchFilteredItems = useMemo(() => {
@@ -510,8 +525,8 @@ export function useSessionSearch({
   // Outside search a sub-session sits under its parent, and the family is placed, grouped and
   // paginated as a whole by its view. Search results stay flat.
   const families = useMemo(
-    () => isSearchMode ? [] : buildSessionFamilies(searchFilteredItems),
-    [isSearchMode, searchFilteredItems]
+    () => isSearchMode ? [] : buildSessionListFamilies(searchFilteredItems, groupingMode, manualOrder),
+    [isSearchMode, searchFilteredItems, groupingMode, manualOrder],
   )
 
   // Collapse-aware pagination: collapsed items are excluded entirely from

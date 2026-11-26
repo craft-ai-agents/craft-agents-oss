@@ -363,8 +363,11 @@ function AppShellContent({
     }
   }, [sessionFilter])
 
+  const [viewFiltersWorkspaceId, setViewFiltersWorkspaceId] = React.useState(activeWorkspaceId)
   const [viewFiltersMap, setViewFiltersMap] = React.useState<ViewFiltersMap>(() => {
-    const saved = storage.get<ViewFiltersMap>(storage.KEYS.viewFilters, {})
+    const saved = activeWorkspaceId
+      ? storage.get<ViewFiltersMap>(storage.KEYS.viewFilters, {}, activeWorkspaceId)
+      : storage.get<ViewFiltersMap>(storage.KEYS.viewFilters, {})
     // Backward compat: migrate old format (arrays) into new format (Record<string, FilterMode>)
     if (saved.allSessions && Array.isArray((saved.allSessions as any).statuses)) {
       // Old format: { statuses: string[], labels: string[] } → new: { statuses: Record, labels: Record }
@@ -393,6 +396,11 @@ function AppShellContent({
     }
     return saved
   })
+  // Rehydrate before the persistence effect can write the previous workspace's preferences.
+  if (activeWorkspaceId !== viewFiltersWorkspaceId) {
+    setViewFiltersWorkspaceId(activeWorkspaceId)
+    setViewFiltersMap(activeWorkspaceId ? storage.get<ViewFiltersMap>(storage.KEYS.viewFilters, {}, activeWorkspaceId) : {})
+  }
 
   // Derive current view's status filter as a Map<SessionStatusId, FilterMode>
   const listFilter = useMemo(() => {
@@ -519,12 +527,13 @@ function AppShellContent({
   const [searchActive, setSearchActive] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
 
-  // Grouping mode for chat list: per-view (stored in viewFiltersMap), forced to 'date' for state sub-views
+  // State sub-views offer only their existing Date order and Manual.
   const isStateSubView = sessionFilter?.kind === 'state'
 
-  const chatGroupingMode: ChatGroupingMode = isStateSubView
+  const savedGroupingMode = viewFiltersMap[sessionFilterKey ?? '']?.groupingMode
+  const chatGroupingMode: ChatGroupingMode = isStateSubView && savedGroupingMode !== 'manual'
     ? 'date'
-    : (viewFiltersMap[sessionFilterKey ?? '']?.groupingMode ?? 'date')
+    : savedGroupingMode ?? 'date'
 
   const setChatGroupingMode = useCallback((mode: ChatGroupingMode) => {
     setViewFiltersMap(prev => {
@@ -757,9 +766,6 @@ function AppShellContent({
     // Load workspace-scoped state on BOTH initial mount AND workspace switch
     // This fixes CMD+R losing filters - previously only ran on workspace switch
     if (previousWorkspaceId !== activeWorkspaceId) {
-      const newViewFilters = storage.get<ViewFiltersMap>(storage.KEYS.viewFilters, {}, activeWorkspaceId)
-      setViewFiltersMap(newViewFilters)
-
       const newExpandedFolders = storage.get<string[]>(storage.KEYS.expandedFolders, [], activeWorkspaceId)
       setExpandedFolders(new Set(newExpandedFolders))
 

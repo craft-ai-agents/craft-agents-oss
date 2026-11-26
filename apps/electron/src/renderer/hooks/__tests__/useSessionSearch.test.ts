@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'bun:test'
-import { computeCollapsedPagination, paginateFamilies } from '../useSessionSearch'
+import { describe, it, expect, afterEach, beforeEach } from 'bun:test'
+import { buildSessionListFamilies, computeCollapsedPagination, paginateFamilies } from '../useSessionSearch'
 import { buildSessionFamilies } from '@/utils/session-tree'
+import { loadManualSessionOrder, moveSessionFamily, saveManualSessionOrder } from '@/utils/session-manual-order'
+import { buildCollapsedGroupsScopeSuffix } from '@/utils/session-list-collapse'
 import type { SessionMeta } from '@/atoms/sessions'
 
 function makeSession(id: string, opts: Partial<SessionMeta> = {}): SessionMeta {
@@ -187,5 +189,80 @@ describe('paginateFamilies', () => {
 
     expect(page.rows.map(r => r.item.id)).toEqual(['parent', 'solo'])
     expect(page.rows[0]).toMatchObject({ collapsed: true, descendantCount: 2 })
+  })
+})
+
+
+describe('Manual family ordering', () => {
+  const alpha = makeSession('alpha', { createdAt: 1 })
+  const beta = makeSession('beta', { createdAt: 2 })
+  const child = makeSession('child', { createdAt: 3, parentSessionId: 'beta' })
+  const grandchild = makeSession('grandchild', { createdAt: 4, parentSessionId: 'child' })
+  const manualRows = (items: SessionMeta[], saved: readonly string[], limit = 50) =>
+    paginateFamilies(buildSessionListFamilies(items, 'manual', saved), limit, undefined, 'manual', new Set())
+
+  it('keeps parents and children in place on message, agent activity, and status changes', () => {
+    const saved = ['alpha', 'beta']
+    expect(manualRows([alpha, beta, child, grandchild], saved).rows.map(row => row.item.id))
+      .toEqual(['alpha', 'beta', 'child', 'grandchild'])
+    const working = { ...grandchild, lastMessageAt: Date.now(), isProcessing: true, hasUnread: true }
+    const done = { ...beta, sessionStatus: 'done' }
+    const after = manualRows([working, done, child, alpha], saved, 2)
+    expect(after.rows.map(row => [row.item.id, row.depth])).toEqual([
+      ['alpha', 0], ['beta', 0], ['child', 1], ['grandchild', 2],
+    ])
+    expect(after.hasMore).toBe(false)
+    // An automatic view still uses the list's activity order.
+    expect(buildSessionListFamilies([working, done, child, alpha], 'date').map(family => family.view.id))
+      .toEqual(['beta', 'alpha'])
+  })
+
+  it('puts new roots first by time of creation, not by activity, including before the first drag', () => {
+    const oldActive = { ...alpha, lastMessageAt: Date.now() }
+    const newRoot = makeSession('new', { createdAt: 5, lastMessageAt: 0 })
+    const items = [oldActive, child, beta, newRoot]
+    expect(manualRows(items, []).rows.map(row => row.item.id)).toEqual(['new', 'beta', 'child', 'alpha'])
+    expect(manualRows(items, ['alpha', 'beta']).rows.map(row => row.item.id)).toEqual(['new', 'alpha', 'beta', 'child'])
+    expect(manualRows(items, ['alpha', 'beta'], 2).rows.map(row => row.item.id)).toEqual(['new', 'alpha'])
+  })
+
+  it('moves a family before or after a target and keeps saved slots for filtered-out chats', () => {
+    expect(moveSessionFamily(['alpha', 'hidden', 'beta'], ['alpha', 'beta'], 'alpha', 'beta', 'after'))
+      .toEqual(['beta', 'hidden', 'alpha'])
+    expect(moveSessionFamily(['alpha', 'beta'], ['alpha', 'beta'], 'beta', 'alpha', 'before'))
+      .toEqual(['beta', 'alpha'])
+    expect(moveSessionFamily(['alpha', 'beta'], ['alpha', 'beta'], 'child', 'alpha', 'before')).toBeUndefined()
+    expect(moveSessionFamily(['alpha', 'beta'], ['alpha', 'beta'], 'alpha', 'beta', 'before')).toBeUndefined()
+  })
+
+  describe('saved ranks', () => {
+    const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+    beforeEach(() => {
+      const memory = new Map<string, string>()
+      Object.defineProperty(globalThis, 'localStorage', {
+        configurable: true,
+        value: {
+          getItem: (key: string) => memory.get(key) ?? null,
+          setItem: (key: string, value: string) => memory.set(key, value),
+        },
+      })
+    })
+    afterEach(() => {
+      if (originalStorage) Object.defineProperty(globalThis, 'localStorage', originalStorage)
+      else Reflect.deleteProperty(globalThis, 'localStorage')
+    })
+
+    it('reads the order again on reload and isolates saves by workspace and view', () => {
+      const all = buildCollapsedGroupsScopeSuffix({ workspaceId: 'one', groupingMode: 'manual' })
+      const flagged = buildCollapsedGroupsScopeSuffix({ workspaceId: 'one', currentFilter: { kind: 'flagged' }, groupingMode: 'manual' })
+      const otherWorkspace = buildCollapsedGroupsScopeSuffix({ workspaceId: 'two', groupingMode: 'manual' })
+      const order = moveSessionFamily([], ['beta', 'alpha'], 'alpha', 'beta', 'before')!
+      saveManualSessionOrder(all, order)
+      saveManualSessionOrder(flagged, ['beta', 'alpha'])
+      expect(manualRows([child, beta, alpha], loadManualSessionOrder(all)).rows.map(row => row.item.id))
+        .toEqual(['alpha', 'beta', 'child'])
+      expect(loadManualSessionOrder(flagged)).toEqual(['beta', 'alpha'])
+      expect(loadManualSessionOrder(otherWorkspace)).toEqual([])
+    })
   })
 })
