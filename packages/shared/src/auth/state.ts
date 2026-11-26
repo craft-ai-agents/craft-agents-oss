@@ -238,6 +238,21 @@ export function isDeadRefreshTokenError(errorMessage: string): boolean {
 }
 
 /**
+ * Whether a refresh failure means the stored refresh token can never succeed again,
+ * so its credentials should be cleared and the user asked to sign in.
+ * Be conservative - network errors, timeouts and unknown errors keep the credentials.
+ */
+export function isDeadRefreshTokenError(errorMessage: string): boolean {
+  return (
+    errorMessage.includes('invalid_grant') ||
+    errorMessage.includes('Refresh token not found or invalid') ||
+    // refreshClaudeToken reports the server's error_description, e.g. "400 - Refresh token expired"
+    errorMessage.includes('Refresh token expired') ||
+    errorMessage.includes('invalid_refresh_token')
+  );
+}
+
+/**
  * Perform the actual token refresh (internal, called only when holding mutex)
  * Returns TokenResult with accessToken and optional migrationRequired info
  *
