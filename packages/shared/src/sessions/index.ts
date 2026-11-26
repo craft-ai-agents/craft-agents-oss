@@ -93,6 +93,7 @@ export {
   SESSION_HEADER_READ_TIMEOUT_MS,
   readSessionJsonl,
   writeSessionJsonl,
+  rewriteSessionHeader,
   createSessionHeader,
 } from './jsonl.ts';
 

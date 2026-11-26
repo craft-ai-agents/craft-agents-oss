@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { ANTHROPIC_MODELS, getModelDisplayName, type ModelDefinition } from '@config/models'
 import {
+  canSwitchClaudeAccount,
   isCompatProvider,
   resolveEffectiveConnectionSlug,
   type LlmConnectionWithStatus,
@@ -26,6 +27,8 @@ export interface ModelPickerState {
   effectiveConnectionDetails: LlmConnectionWithStatus | null
   /** The session's own connection (null while it has none). */
   currentConnectionDetails: LlmConnectionWithStatus | null
+  /** Signed-in Claude accounts a started chat can move to (`canSwitchClaudeAccount`, OSS #1155); empty before the first message. */
+  accountSwitchTargets: LlmConnectionWithStatus[]
   /** Non-null only for a `pi_compat` connection with at most one model (a custom endpoint's fixed model). */
   connectionDefaultModel: string | null
   pickerMode: PickerMode
@@ -102,8 +105,13 @@ export function useModelPickerState({
 
   const connectionsByProvider = React.useMemo(() => groupConnectionsByProvider(llmConnections), [llmConnections])
 
+  const accountSwitchTargets = React.useMemo(() => !isEmptySession && pickerMode === 'flat'
+    ? llmConnections.filter(conn => conn.isAuthenticated && canSwitchClaudeAccount(currentConnectionDetails, conn, currentModel))
+    : [], [isEmptySession, pickerMode, llmConnections, currentConnectionDetails, currentModel])
+
   return {
     effectiveConnection,
+    accountSwitchTargets,
     effectiveConnectionDetails,
     currentConnectionDetails,
     connectionDefaultModel,

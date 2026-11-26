@@ -27,7 +27,7 @@ const codexOptions = {
     openai: ['gpt-5-mini'],
     anthropic: ['claude-haiku-4-5'],
   }),
-  preferCustomEndpoint: false,
+  customEndpointOnly: false,
 };
 
 describe('queryMiniModel', () => {
@@ -159,12 +159,34 @@ describe('queryMiniModel', () => {
     expect(result.model).toBe('pi/gpt-5-mini');
   });
 
+  it('retries a model a custom endpoint rejects on the endpoint\'s own models only', async () => {
+    const tried: string[] = [];
+    const rejectedEverywhere = rejection('endpoint-mini');
+    await expect(queryMiniModel({
+      model: 'endpoint-mini',
+      miniModel: 'endpoint-mini',
+      sessionModel: 'endpoint-model',
+      authProvider: 'openai',
+      // The built-in OpenAI models match every fallback candidate ('pi/gpt-5-mini', the
+      // OpenAI defaults): before the endpoint was isolated, a retry went to api.openai.com.
+      modelRegistry: registry({
+        'custom-endpoint': ['endpoint-model', 'endpoint-mini'],
+        openai: ['gpt-5-mini', 'gpt-6-astra', 'gpt-5.5'],
+      }),
+      customEndpointOnly: true,
+    }, async model => {
+      tried.push(model);
+      throw model === 'endpoint-mini' ? rejectedEverywhere : rejection(model);
+    })).rejects.toThrow();
+    expect(tried).toEqual(['endpoint-mini', 'endpoint-model']);
+  });
+
   it('respects custom-endpoint precedence when resolving fallback candidates', async () => {
     const result = await queryMiniModel({
       ...codexOptions,
       sessionModel: 'private-model',
       modelRegistry: registry({ 'custom-endpoint': ['private-model'] }),
-      preferCustomEndpoint: true,
+      customEndpointOnly: true,
     }, async model => {
       if (model === 'pi/gpt-5.4-mini') throw rejection(model);
       return 'Private Title';

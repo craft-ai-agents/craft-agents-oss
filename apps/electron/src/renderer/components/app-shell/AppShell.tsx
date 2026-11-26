@@ -150,6 +150,7 @@ import {
 } from "./panel-constants"
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
+import { moveSessionsToProject, undoProjectMove, type ProjectCommandSender } from "@/lib/project-move"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
 
 /**
@@ -638,14 +639,35 @@ function AppShellContent({
     () => projects.map(p => ({ id: p.config.id, slug: p.config.slug, name: p.config.name, color: p.config.color })),
     [projects],
   )
-  const handleSessionProjectChange = useCallback(async (sessionId: string, projectId: string | null) => {
+  // Single-chat menu and multi-select "Move to Project": the chats nested under the moved ones follow
+  // on the server, so the toast says how many moved and offers to put them all back.
+  const handleSetSessionProjects = useCallback(async (sessionIds: string[], projectId: string | null) => {
+    if (sessionIds.length === 0) return
+    const send: ProjectCommandSender = (sessionId, command) => window.electronAPI.sessionCommand(sessionId, command)
     try {
-      await window.electronAPI.sessionCommand(sessionId, { type: 'setProjectId', projectId })
+      const moved = await moveSessionsToProject(send, sessionIds, projectId)
+      if (!moved?.length) return
+      toast(t('toast.movedChats', { count: moved.length }), {
+        duration: 8000,
+        action: {
+          label: t('toast.undo'),
+          onClick: () => {
+            undoProjectMove(send, moved).catch((err: unknown) => {
+              console.error('[AppShell] Failed to undo the project move:', err)
+              toast.error(t('toast.failedToUpdateProject'))
+            })
+          },
+        },
+      })
     } catch (err) {
       console.error('[AppShell] Failed to update session project:', err)
       toast.error(t('toast.failedToUpdateProject'))
     }
   }, [t])
+
+  const handleSessionProjectChange = useCallback((sessionId: string, projectId: string | null) => {
+    return handleSetSessionProjects([sessionId], projectId)
+  }, [handleSetSessionProjects])
 
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
@@ -1432,6 +1454,8 @@ function AppShellContent({
     activeSessionWorkingDirectory,
     labels: displayLabelConfigs,
     onSessionLabelsChange: handleSessionLabelsChange,
+    projectMenuOptions,
+    onSetSessionProjects: handleSetSessionProjects,
     enabledModes,
     sessionStatuses: effectiveSessionStatuses,
     onSessionSourcesChange: handleSessionSourcesChange,
@@ -1450,7 +1474,7 @@ function AppShellContent({
     automationTestResults,
     getAutomationHistory,
     onReplayAutomation: handleReplayAutomation,
-  }), [contextValue, handleDeleteSession, sources, skills, chatStarters, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, handleJumpToTaskSessions, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation])
+  }), [contextValue, handleDeleteSession, sources, skills, chatStarters, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, projectMenuOptions, handleSetSessionProjects, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, handleJumpToTaskSessions, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation])
 
   // Persist expanded folders to localStorage (workspace-scoped)
   React.useEffect(() => {

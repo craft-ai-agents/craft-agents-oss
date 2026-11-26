@@ -64,6 +64,14 @@ describe('wantsSuggestion', () => {
     expect(wantsSuggestion('check [source:linear] issues')).toBe(false)
     expect(wantsSuggestion('list my issues\n\n[linear activated]')).toBe(false)
   })
+
+  // The WS RPC JSON-encodes call args, turning a trailing `undefined` options arg into `null` on
+  // the wire (e.g. Crafty's first-question sendMessage). A plain request must still be checked, not
+  // throw "Cannot read properties of null (reading 'hidden')".
+  it('treats null options like absent', () => {
+    expect(wantsSuggestion('file a ticket for the login bug', null)).toBe(true)
+    expect(wantsSuggestion('/compact', null)).toBe(false)
+  })
 })
 
 describe('collectSuggestionCandidates', () => {

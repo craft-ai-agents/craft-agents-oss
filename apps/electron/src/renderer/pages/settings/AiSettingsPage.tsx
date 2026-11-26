@@ -65,6 +65,7 @@ import { getModelsForProviderType, resolveMidStreamBehavior, type CustomEndpoint
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { loadAiSettings } from './ai-settings-loader'
+import { getDuplicateAnthropicConnectionSlugs } from './anthropic-connection-identity'
 
 /** Checks with an outcome after which a feature that changed nothing is pointed out. */
 const DECISION_NO_CHANGE_MIN_CHECKS = 30
@@ -228,7 +229,7 @@ interface ConnectionRowProps {
   onSetMidStreamBehavior: (behavior: MidStreamBehavior) => void
   validationState: ValidationState
   validationError?: string
-  /** True when another OAuth connection resolves to the same Anthropic account (issue #838) */
+  /** True when another connection signs in to the same Anthropic account, unless known to use another organization (issue #838) */
   isDuplicateAccount?: boolean
 }
 
@@ -1206,16 +1207,11 @@ export default function AiSettingsPage() {
     return llmConnections.find(c => c.isDefault)
   }, [llmConnections])
 
-  // Anthropic account UUIDs that resolve from 2+ connections (issue #838).
-  // Surfaces a warning when several Claude connections share one account/quota.
-  const duplicateAccountUuids = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const conn of llmConnections) {
-      const uuid = conn.oauthAccountUuid
-      if (uuid) counts.set(uuid, (counts.get(uuid) ?? 0) + 1)
-    }
-    return new Set([...counts].filter(([, n]) => n > 1).map(([uuid]) => uuid))
-  }, [llmConnections])
+  // Claude connections signed in to the same Anthropic account and organization (issue #838).
+  const duplicateAnthropicConnectionSlugs = useMemo(
+    () => getDuplicateAnthropicConnectionSlugs(llmConnections),
+    [llmConnections],
+  )
 
   const defaultModel = defaultConnection?.defaultModel ?? ''
 
@@ -1676,7 +1672,7 @@ export default function AiSettingsPage() {
                 onSetMidStreamBehavior={(behavior) => handleSetMidStreamBehavior(conn, behavior)}
                 validationState={validationStates[conn.slug]?.state || 'idle'}
                 validationError={validationStates[conn.slug]?.error}
-                isDuplicateAccount={!!conn.oauthAccountUuid && duplicateAccountUuids.has(conn.oauthAccountUuid)}
+                isDuplicateAccount={duplicateAnthropicConnectionSlugs.has(conn.slug)}
               />
             ))
           )}

@@ -51,9 +51,12 @@ const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0
  * not hidden, no skill or source already chosen, not the automatic resend
  * after a source activation.
  */
-export function wantsSuggestion(message: string, options: { hidden?: boolean; skillSlugs?: readonly string[] } = {}): boolean {
+export function wantsSuggestion(message: string, options?: { hidden?: boolean; skillSlugs?: readonly string[] } | null): boolean {
   const text = message.trim()
-  if (!text || text.startsWith('/') || options.hidden || options.skillSlugs?.length) return false
+  // `options` may arrive as null, not undefined: the WS RPC JSON-encodes call args, so a trailing
+  // `undefined` (e.g. Crafty's first-question `sendMessage(..., undefined)`) becomes null on the wire.
+  // A default param only covers undefined, so guard with optional chaining, as the callers do.
+  if (!text || text.startsWith('/') || options?.hidden || options?.skillSlugs?.length) return false
   if (/\[(?:skill|source):/.test(text)) return false
   // The server's own auto-retry is hidden (and skipped before this); the suffix check only
   // catches a legacy renderer's copy, which arrives as a normal message.

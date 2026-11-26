@@ -171,6 +171,12 @@ export interface CreateSessionOptions {
   branchFromSessionId?: string
   /** Bind the new session to a workspace project (inherits project's workingDirectory). */
   projectId?: string
+  /**
+   * The child keeps its own project when its parent moves (the session's `projectOverride`).
+   * Only for a child chosen to be in another project than its parent, e.g. a `spawn_session`
+   * that names one; a child without it follows its parent's project.
+   */
+  projectOverride?: boolean
   /** Mark the new session as a subtask of this parent session (undefined = top-level task). */
   parentSessionId?: string
   /** Tasks Conductor: slug of the task spec this session belongs to (orchestrator + child nodes). */
@@ -533,7 +539,15 @@ export type SessionCommand =
   | { type: 'updateWorkingDirectory'; dir: string }
   | { type: 'setSources'; sourceSlugs: string[] }
   | { type: 'setLabels'; labels: string[] }
-  | { type: 'setProjectId'; projectId: string | null }
+  /**
+   * Move the session and `additionalSessionIds` (same workspace, at most
+   * MAX_PROJECT_MOVE_SESSIONS in all) to a project, `null` = no project; the chats nested under
+   * them follow unless one keeps its own project. Returns a `ProjectMoveResult`; an older server
+   * returns nothing and moves only the session itself.
+   */
+  | { type: 'setProjectId'; projectId: string | null; additionalSessionIds?: string[] }
+  /** Put chats back as a `ProjectMoveResult` found them (Undo): exactly these, nothing follows. Returns a `ProjectMoveResult`. */
+  | { type: 'restoreProjectIds'; sessions: SessionProjectState[] }
   | { type: 'setKanbanColumn'; column: string | null }
   | { type: 'showInFinder' }
   | { type: 'copyPath' }
@@ -541,7 +555,7 @@ export type SessionCommand =
   | { type: 'updateShare' }
   | { type: 'revokeShare' }
   | { type: 'refreshTitle' }
-  | { type: 'setConnection'; connectionSlug: string }
+  | { type: 'setConnection'; connectionSlug: string; switchAccount?: boolean }
   | { type: 'setPendingPlanExecution'; planPath: string; draftInputSnapshot?: string }
   | { type: 'markCompactionComplete' }
   | { type: 'markPendingPlanExecutionDispatched' }
@@ -549,6 +563,28 @@ export type SessionCommand =
   | { type: 'addAnnotation'; messageId: string; annotation: AnnotationV1 }
   | { type: 'removeAnnotation'; messageId: string; annotationId: string }
   | { type: 'updateAnnotation'; messageId: string; annotationId: string; patch: Partial<AnnotationV1> }
+
+/** Most chats one `setProjectId` or `restoreProjectIds` command names; clients split a bigger selection. */
+export const MAX_PROJECT_MOVE_SESSIONS = 500
+
+/** A chat's project binding: `projectOverride` = it keeps that project when its parent moves. */
+export interface SessionProjectState {
+  id: string
+  projectId: string | null
+  projectOverride: boolean
+}
+
+/** A chat a project move changed, with its binding before the move (what Undo restores). */
+export interface ProjectMoveEntry {
+  id: string
+  previousProjectId: string | null
+  previousOverride: boolean
+}
+
+/** What `setProjectId` and `restoreProjectIds` changed: only chats whose binding differs afterwards. */
+export interface ProjectMoveResult {
+  moved: ProjectMoveEntry[]
+}
 
 export interface NewChatActionParams {
   input?: string

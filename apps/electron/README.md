@@ -60,23 +60,12 @@ node_modules/@anthropic-ai/claude-agent-sdk-binary/{claude,claude.exe}
 
 and falls back to the real per-arch package in dev. Once resolved, `applyAnthropicRuntimeBootstrap()` calls `setPathToClaudeCodeExecutable(path)` before any Claude agents are created.
 
-### 2. Authentication Environment Setup (CRITICAL)
+### 2. Authentication (CRITICAL)
 
-The SDK requires authentication environment variables to be set BEFORE creating agents. The Electron app must do this explicitly during initialization.
-
-```typescript
-import { getAuthState } from '../../../src/auth/state'
-
-// In initialize():
-const authState = await getAuthState()
-const { billing } = authState
-
-if (billing.type === 'oauth_token' && billing.claudeOAuthToken) {
-  process.env.CLAUDE_CODE_OAUTH_TOKEN = billing.claudeOAuthToken
-} else if (billing.apiKey) {
-  process.env.ANTHROPIC_API_KEY = billing.apiKey
-}
-```
+Credentials never go into `process.env`: every process the app starts inherits it. Each Claude agent resolves
+its own connection's credentials in `postInit()` and starts its CLI with only those
+(`buildClaudeSubprocessEnv`); a Pi agent sends its connection's credentials to its subprocess in the init
+message. See `packages/shared/CLAUDE.md` (Claude credentials are per connection).
 
 ### 3. AgentEvent Type Mismatches
 

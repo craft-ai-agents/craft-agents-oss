@@ -18,6 +18,7 @@ import { createInterface, type Interface as ReadlineInterface } from 'node:readl
 import type { AgentEvent } from '@craft-agent/core/types';
 import type { FileAttachment } from '../utils/files.ts';
 import { getProxyEnvVars } from '../config/proxy-env.ts';
+import { withStartupManagedAuthEnv } from '../config/llm-connections.ts';
 
 import type {
   BackendConfig,
@@ -157,6 +158,29 @@ interface PendingEphemeralRequest<T> {
   resolve(value: T): void;
   reject(error: Error): void;
   timeout: ReturnType<typeof setTimeout>;
+}
+
+/**
+ * The Pi subprocess's environment. The Pi SDK authenticates from it, and its agent runs shell
+ * commands with it, so it never carries a connection's credentials from process.env: the auth
+ * variables Craft manages are at their startup values (the user's own). The session's own
+ * values (a Bedrock connection's IAM keys) go in after that.
+ */
+export function buildPiSubprocessEnv(input: {
+  envOverrides?: Record<string, string>;
+  awsEnv: Record<string, string>;
+  sessionDir?: string;
+}): NodeJS.ProcessEnv {
+  return {
+    ...withStartupManagedAuthEnv(process.env),
+    ...getProxyEnvVars(),
+    ...input.envOverrides,
+    ...input.awsEnv,
+    // Pass session dir for cross-process toolMetadataStore
+    ...(input.sessionDir ? { CRAFT_SESSION_DIR: input.sessionDir } : {}),
+    // Propagate debug mode
+    CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
+  };
 }
 
 /**
@@ -512,9 +536,11 @@ export class PiAgent extends BaseAgent {
     // Retrieve auth credentials for the subprocess.
     // Custom endpoint mode must NOT fall back to global API keys — keyless local endpoints
     // are valid, and non-local endpoints should fail explicitly instead of using unrelated creds.
+    // Neither may a connection of another provider: the legacy key is an Anthropic key.
     const piAuth = await this.getPiAuth();
     const isCustomEndpointMode = !!runtime.customEndpoint;
-    const legacyApiKey = (!piAuth && !isCustomEndpointMode) ? await this.getApiKey() : undefined;
+    const mayUseLegacyKey = !runtime.piAuthProvider || runtime.piAuthProvider === 'anthropic';
+    const legacyApiKey = (!piAuth && !isCustomEndpointMode && mayUseLegacyKey) ? await this.getApiKey() : undefined;
     if (isCustomEndpointMode && !piAuth) {
       this.debug('Custom endpoint mode: no provider credential configured, sending empty API key');
     }
@@ -526,16 +552,7 @@ export class PiAgent extends BaseAgent {
     const child = spawn(nodePath, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        ...getProxyEnvVars(),
-        ...this.config.envOverrides,
-        ...awsEnv,
-        // Pass session dir for cross-process toolMetadataStore
-        ...(sessionDir ? { CRAFT_SESSION_DIR: sessionDir } : {}),
-        // Propagate debug mode
-        CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
-      },
+      env: buildPiSubprocessEnv({ envOverrides: this.config.envOverrides, awsEnv, sessionDir }),
     });
 
     this.subprocess = child;
@@ -596,6 +613,8 @@ export class PiAgent extends BaseAgent {
       providerType: this.config.providerType,
       authType: this.config.authType,
       workspaceId: this.config.workspace.id,
+      // The only provider the session may authenticate, also without piAuth (`environment` auth).
+      piAuthProvider: runtime.piAuthProvider,
       piAuth,
       baseUrl: runtime.baseUrl,
       customEndpoint: runtime.customEndpoint,

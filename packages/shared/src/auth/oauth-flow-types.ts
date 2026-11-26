@@ -53,7 +53,7 @@ export interface OAuthExchangeResult {
   expiresAt?: number
   /** Identifier for the authenticated user/workspace (Google email, Slack teamName, Microsoft UPN) */
   email?: string
-  /** OAuth client_id for storage (MCP dynamic registration) */
+  /** OAuth client_id for storage: a refresh must use the client that issued the tokens */
   oauthClientId?: string
   /** OAuth client_secret for storage (Google needs it for refresh) */
   oauthClientSecret?: string

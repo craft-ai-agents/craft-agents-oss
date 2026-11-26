@@ -481,7 +481,9 @@ Opens a browser window for the user to sign in with their Slack account.
 
 Opens a browser window for the user to sign in with their Microsoft account.
 
-**Supported services:** Outlook, Calendar, OneDrive, Teams, SharePoint
+**Supported services:** Outlook, Calendar, OneDrive, Teams, SharePoint (\`api.microsoftService\`), or custom Microsoft Graph scopes (\`api.microsoftScopes\`)
+
+Signs in with the built-in Microsoft app unless the source sets its own app registration: \`api.microsoftOAuthClientId\`, plus \`api.microsoftTenantId\` for a single-tenant app.
 
 **IMPORTANT:** After calling this tool, execution will be paused while OAuth completes.`,
 

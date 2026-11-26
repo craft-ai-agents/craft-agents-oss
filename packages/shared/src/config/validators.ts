@@ -22,6 +22,12 @@ import { THINKING_LEVEL_IDS } from '../agent/thinking-levels.ts';
 import { isValidProviderAuthCombination } from './llm-connections.ts';
 import { isParseableColor } from './theme-roles.ts';
 import { SUPPORTED_LANGUAGE_CODES } from '../i18n/languages.ts';
+import {
+  MICROSOFT_CLIENT_ID_RULE,
+  MICROSOFT_TENANT_RULE,
+  isValidMicrosoftClientId,
+  isValidMicrosoftTenant,
+} from '../auth/microsoft-authority.ts';
 import type { LanguageCode } from '../i18n/languages.ts';
 
 // ============================================================
@@ -454,6 +460,8 @@ const ApiSourceConfigSchema = z.object({
   slackUserScopes: z.array(z.string()).optional(),
   microsoftService: z.enum(['outlook', 'microsoft-calendar', 'onedrive', 'teams', 'sharepoint']).optional(),
   microsoftScopes: z.array(z.string()).optional(),
+  microsoftOAuthClientId: z.string().trim().refine(isValidMicrosoftClientId, MICROSOFT_CLIENT_ID_RULE).optional(),
+  microsoftTenantId: z.string().trim().refine(isValidMicrosoftTenant, MICROSOFT_TENANT_RULE).optional(),
   oauth: ApiOAuthConfigSchema.optional(),
 });
 

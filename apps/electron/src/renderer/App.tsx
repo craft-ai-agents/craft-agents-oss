@@ -32,6 +32,7 @@ import { stripMarkdown } from './utils/text'
 import { coerceInputText } from './lib/input-text'
 import { getSessionsToRefreshAfterStaleReconnect } from './lib/reconnect-recovery'
 import { formatSessionLoadFailure, shouldTreatSessionLoadFailureAsTransportFallback } from './lib/session-load'
+import { createKeyedBatcher } from './lib/project-move'
 import { extractWorkspaceSlugFromPath } from '@craft-agent/shared/utils/workspace-slug'
 import { DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
 import { initRendererPerf } from './lib/perf'
@@ -98,6 +99,9 @@ type SessionListRefreshOptions = {
 }
 
 const SESSION_REFRESH_LOG_ID_LIMIT = 25
+
+/** How long project_id_changed events are collected before the session list updates once. */
+const PROJECT_EVENT_BATCH_MS = 50
 
 function summarizeIds(ids: Iterable<string>, limit = SESSION_REFRESH_LOG_ID_LIMIT) {
   const all = Array.from(ids)
@@ -852,7 +856,22 @@ export default function App() {
     // Handoff events signal end of streaming - need to sync back to React state
     // Also includes todo_state_changed so status updates immediately reflect in sidebar
     // async_operation included so shimmer effect on session titles updates in real-time
-    const handoffEventTypes = new Set(['complete', 'error', 'interrupted', 'typed_error', 'session_status_changed', 'session_metadata_changed', 'session_flagged', 'session_unflagged', 'name_changed', 'labels_changed', 'project_id_changed', 'title_generated', 'async_operation'])
+    const handoffEventTypes = new Set(['complete', 'error', 'interrupted', 'typed_error', 'session_status_changed', 'session_metadata_changed', 'session_flagged', 'session_unflagged', 'name_changed', 'labels_changed', 'title_generated', 'async_operation'])
+
+    // A project move sends one project_id_changed per chat it moved (a family or a whole selection):
+    // apply a burst as one session-list update instead of a list re-render per chat. Any other event
+    // applies the pending ones first, so the order of events is kept.
+    const projectChanges = createKeyedBatcher<string | null>((batch) => {
+      const metaMap = new Map(store.get(sessionMetaMapAtom))
+      for (const [sessionId, projectId] of batch) {
+        const current = store.get(sessionAtomFamily(sessionId))
+        if (!current) continue
+        const { session } = processAgentEvent({ type: 'project_id_changed', sessionId, projectId }, current, windowWorkspaceId ?? '')
+        updateSessionDirect(sessionId, () => session)
+        metaMap.set(sessionId, extractSessionMeta(session))
+      }
+      store.set(sessionMetaMapAtom, metaMap)
+    }, PROJECT_EVENT_BATCH_MS)
 
     // Helper to handle side effects (same logic for both paths)
     const handleEffects = (effects: Effect[], sessionId: string, eventType: string) => {
@@ -971,6 +990,12 @@ export default function App() {
 
       const sessionId = event.sessionId
       const workspaceId = windowWorkspaceId ?? ''
+
+      if (event.type === 'project_id_changed') {
+        projectChanges.add(sessionId, event.projectId)
+        return
+      }
+      projectChanges.flush()
 
       // Session lifecycle events are handled explicitly (not by the agent event processor).
       if (event.type === 'session_created') {
@@ -1110,7 +1135,10 @@ export default function App() {
       store.set(sessionMetaMapAtom, newMetaMap)
     })
 
-    return cleanup
+    return () => {
+      cleanup()
+      projectChanges.flush()
+    }
   }, [
     processAgentEvent,
     trackSessionActivity,

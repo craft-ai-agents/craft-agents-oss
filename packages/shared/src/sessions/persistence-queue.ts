@@ -3,7 +3,7 @@ import { dirname } from 'path'
 import type { StoredSession, SessionHeader } from './types.js'
 import { getSessionFilePath, ensureSessionsDir, ensureSessionDir } from './storage.js'
 import { toPortablePath } from '../utils/paths.js'
-import { createSessionHeader, makeSessionPathPortable, readSessionHeader } from './jsonl.js'
+import { createSessionHeader, makeSessionPathPortable, readSessionHeader, rewriteSessionHeader } from './jsonl.js'
 import { debug } from '../utils/debug.js'
 
 interface PendingWrite {
@@ -52,13 +52,16 @@ function mergeHeaderWithExternalMetadata(localHeader: SessionHeader, diskHeader:
  * Prevents main thread blocking by using async writes and coalescing
  * rapid successive persist calls into a single write.
  *
- * IMPORTANT: Writes are serialized per-session to prevent race conditions
- * when rapid successive flushes (e.g., clearSessionForRecovery + onSdkSessionIdUpdate)
- * would otherwise write to the same .tmp file concurrently.
+ * IMPORTANT: Writes are serialized per-session (`writeChains`): debounced writes, flushes and
+ * header patches each start after the session's previous write settles, so two never write the
+ * same file at once (e.g. a timer write and a flush, or clearSessionForRecovery +
+ * onSdkSessionIdUpdate flushing in quick succession), and a header patch never lands under a
+ * newer full write.
  */
 class SessionPersistenceQueue {
   private pending = new Map<string, PendingWrite>()
-  private writeInProgress = new Map<string, Promise<void>>()
+  /** Per session: its last write, which the next one waits for (removed once nothing waits). */
+  private writeChains = new Map<string, Promise<void>>()
   private lastWrittenHeaderSignature = new Map<string, string>()
   private debounceMs: number
 
@@ -77,10 +80,21 @@ class SessionPersistenceQueue {
     }
 
     const timer = setTimeout(() => {
-      void this.write(session.id)
+      void this.flush(session.id)
     }, this.debounceMs)
 
     this.pending.set(session.id, { data: session, timer })
+  }
+
+  /** Run `op` once the session's previous write has settled; the next one waits for it in turn. */
+  private serialize(sessionId: string, op: () => Promise<void>): Promise<void> {
+    const run = (this.writeChains.get(sessionId) ?? Promise.resolve()).then(op)
+    const settled = run.catch(() => { /* reported by the caller; the next write still runs */ })
+    this.writeChains.set(sessionId, settled)
+    void settled.then(() => {
+      if (this.writeChains.get(sessionId) === settled) this.writeChains.delete(sessionId)
+    })
+    return run
   }
 
   /**
@@ -166,31 +180,58 @@ class SessionPersistenceQueue {
   }
 
   /**
-   * Immediately flush a specific session if pending.
-   * Waits for any in-progress write to complete before starting a new one
-   * to prevent race conditions on the shared .tmp file.
+   * Write a session's pending snapshot now, after its writes in progress (none pending: just wait
+   * for those). Resolves once everything queued for the session before the call is on disk.
    */
   async flush(sessionId: string): Promise<void> {
     const entry = this.pending.get(sessionId)
-    if (entry) {
-      clearTimeout(entry.timer)
+    if (entry) clearTimeout(entry.timer)
+    if (!entry && !this.writeChains.has(sessionId)) return
+    // write() takes whatever snapshot is pending when its turn comes (none: nothing to do)
+    await this.serialize(sessionId, () => this.write(sessionId))
+  }
 
-      // Wait for any in-progress write to complete first
-      const inProgress = this.writeInProgress.get(sessionId)
-      if (inProgress) {
-        await inProgress
+  /**
+   * Change header fields of a session whose messages aren't loaded, without reading its transcript
+   * (`rewriteSessionHeader`). Runs in turn with the session's other writes: a snapshot still
+   * pending goes to disk first, then the patch, read from `getPatch` at that moment so it carries
+   * the latest values. A failure is logged, not thrown: the in-memory session stays right and its
+   * next full write repairs the file.
+   *
+   * Like `write`, it records the new header's signature before the file is replaced, so the
+   * watcher takes the patch for our own write. Otherwise a session this run never wrote has no
+   * signature, the echo reads as an external change, and a copy of it deferred while the session
+   * is busy or under a write guard is applied later, over any status, label or name set meanwhile.
+   */
+  async patchHeader(
+    workspaceRootPath: string,
+    sessionId: string,
+    getPatch: () => Partial<Record<keyof SessionHeader, unknown>>,
+  ): Promise<void> {
+    await this.serialize(sessionId, async () => {
+      const entry = this.pending.get(sessionId)
+      if (entry) {
+        clearTimeout(entry.timer)
+        await this.write(sessionId)
       }
-
-      // Start new write and track it
-      const writePromise = this.write(sessionId)
-      this.writeInProgress.set(sessionId, writePromise)
-
+      const filePath = getSessionFilePath(workspaceRootPath, sessionId)
+      const previousSignature = this.lastWrittenHeaderSignature.get(sessionId)
       try {
-        await writePromise
-      } finally {
-        this.writeInProgress.delete(sessionId)
+        const patched = await rewriteSessionHeader(filePath, getPatch(), (header) => {
+          this.lastWrittenHeaderSignature.set(sessionId, getHeaderMetadataSignature(header))
+        })
+        if (patched) {
+          debug(`[PersistenceQueue] Patched header of session ${sessionId}`)
+        } else {
+          debug(`[PersistenceQueue] No readable header to patch for session ${sessionId}`)
+        }
+      } catch (error) {
+        // The file wasn't replaced: it still has the header the previous signature describes
+        if (previousSignature === undefined) this.lastWrittenHeaderSignature.delete(sessionId)
+        else this.lastWrittenHeaderSignature.set(sessionId, previousSignature)
+        console.error(`[PersistenceQueue] Failed to patch header of session ${sessionId}:`, error)
       }
-    }
+    })
   }
 
   /**
@@ -210,8 +251,9 @@ class SessionPersistenceQueue {
    * Flush all pending sessions. Call this on app quit.
    */
   async flushAll(): Promise<void> {
-    const sessionIds = [...this.pending.keys()]
-    await Promise.all(sessionIds.map(id => this.flush(id)))
+    // Pending snapshots, plus writes already running (a header patch has no pending snapshot)
+    const sessionIds = new Set([...this.pending.keys(), ...this.writeChains.keys()])
+    await Promise.all([...sessionIds].map(id => this.flush(id)))
   }
 
   /**

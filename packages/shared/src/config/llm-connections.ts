@@ -2,7 +2,7 @@
  * LLM Connections
  *
  * Named provider configurations that users can add, configure, and switch between.
- * Each session locks to a specific connection after the first message.
+ * Sessions lock after the first message, but can explicitly switch compatible Claude OAuth accounts.
  * Workspaces can set a default connection.
  */
 
@@ -16,6 +16,7 @@ import {
   ANTHROPIC_MODELS,
   normalizeDeprecatedModelId,
 } from './models';
+import { toPiProviderId } from './pi-provider-ids.ts';
 import type { CredentialManager } from '../credentials/manager.ts';
 
 // ============================================================
@@ -280,6 +281,32 @@ export function isClaudeAccountConnection(connection: Pick<LlmConnection, 'provi
 }
 
 /**
+ * Whether a started chat on `current` may move to `target` (OSS #1155). Only the
+ * credentials may change, never the backend, endpoint, billing mode or model: both are
+ * Claude subscription sign-ins on Anthropic's own API, the target lists the chat's model,
+ * and they aren't known to be the same account and organization (nothing would change).
+ */
+export function canSwitchClaudeAccount(
+  current: LlmConnection | null | undefined,
+  target: LlmConnection,
+  model: string,
+): boolean {
+  return !!current && !!model && current.slug !== target.slug
+    && isClaudeAccountConnection(current) && isClaudeAccountConnection(target)
+    && !current.baseUrl && !target.baseUrl
+    && !isSameClaudeIdentity(current, target)
+    && (target.models ?? ANTHROPIC_MODELS).some(entry => (typeof entry === 'string' ? entry : entry.id) === model);
+}
+
+function isSameClaudeIdentity(
+  a: Pick<LlmConnection, 'oauthAccountUuid' | 'oauthOrganizationUuid'>,
+  b: Pick<LlmConnection, 'oauthAccountUuid' | 'oauthOrganizationUuid'>,
+): boolean {
+  return !!a.oauthAccountUuid && a.oauthAccountUuid === b.oauthAccountUuid
+    && !!a.oauthOrganizationUuid && a.oauthOrganizationUuid === b.oauthOrganizationUuid;
+}
+
+/**
  * The connection "Publish as Claude artifact" runs on: the default connection
  * when it is a claude.ai account, else the first one. Shared by the Pages
  * button (visibility) and the publish handler (execution).
@@ -330,9 +357,9 @@ function findSmallModel(
   const isAllowedModel = (m: ModelDefinition | string): boolean =>
     !isDeniedMiniModelId(toId(m), connection.piAuthProvider);
 
-  // Explicit per-provider utility models first (Pi connections)
+  // Explicit per-provider utility models first (Pi connections; the tables use Pi SDK ids)
   const preferredMini = (isPiProvider(connection.providerType) && connection.piAuthProvider
-    && PI_PREFERRED_MINI_MODELS[connection.piAuthProvider]) || [];
+    && PI_PREFERRED_MINI_MODELS[toPiProviderId(connection.piAuthProvider)]) || [];
   if (preferredMini.length > 0) {
     let best: ModelDefinition | string | undefined;
     let bestRank = Infinity;
@@ -619,9 +646,10 @@ export function getModelsForProviderType(providerType: LlmProviderType, piAuthPr
     return [];
   }
 
-  // Pi: fetch models via registered resolver (avoids Pi SDK import in renderer)
+  // Pi: fetch models via registered resolver (avoids Pi SDK import in renderer),
+  // in Craft's preference order
   if (providerType === 'pi') {
-    return _piModelResolver(piAuthProvider);
+    return sortPiModelsByPreference(_piModelResolver(piAuthProvider), piAuthProvider);
   }
 
   // Anthropic uses Claude models with bare Anthropic IDs.
@@ -643,7 +671,9 @@ export function getModelsForProviderType(providerType: LlmProviderType, piAuthPr
  * Preferred default model IDs per Pi auth provider.
  * The Pi SDK returns models in arbitrary order (alphabetical by ID), which means
  * deprecated models like claude-3-5-haiku-20241022 can end up first.
- * This map ensures getDefaultModelForConnection() picks a modern, capable model.
+ * This map ensures getDefaultModelForConnection() picks a modern, capable model,
+ * and orders the model lists Craft stores (sortPiModelsByPreference), so it is also
+ * the order of the model menu: keep a provider's current generation together.
  *
  * Format: bare model IDs (without pi/ prefix). Matched against pi/{id} or pi/{id}-*.
  */
@@ -652,12 +682,12 @@ export const PI_PREFERRED_DEFAULTS: Record<string, string[]> = {
   // when Opus 4.6 is deprecated.
   // Opus 5.5 (in the Pi catalog since SDK 0.87.1) is the default for new
   // connections, matching the Claude Agent SDK path; older Opus generations follow.
-  anthropic: ['claude-opus-5-5', 'claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-fable-5-1', 'claude-fable-5', 'claude-sonnet-5-5', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-5-5', 'claude-haiku-4-5'],
-  // GPT-6 Astra entered the Pi catalog in SDK 0.85.1 for both the API-key and
-  // the ChatGPT-account (openai-codex) flows; new connections default to it.
-  // GPT-6.1 Sol (Pi 0.99.1) follows it.
-  openai: ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.2', 'gpt-5.1', 'gpt-5', 'o4-mini', 'o3', 'gpt-4o'],
-  'openai-codex': ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.2', 'gpt-5.1', 'gpt-5', 'o4-mini', 'o3', 'gpt-4o'],
+  anthropic: ['claude-opus-5-5', 'claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-fable-5-2', 'claude-fable-5-1', 'claude-fable-5', 'claude-sonnet-5-5', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-5-5', 'claude-haiku-4-5'],
+  // The newest Astra is the default for new connections, on the API-key and the
+  // ChatGPT-account (openai-codex) flows alike: GPT-6.2 Astra since Pi 1.6.0
+  // (cheaper than GPT-6 Astra), then GPT-6.2 Sol, then the previous generation.
+  openai: ['gpt-6.2-astra', 'gpt-6.2-sol', 'gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.2', 'gpt-5.1', 'gpt-5', 'o4-mini', 'o3', 'gpt-4o'],
+  'openai-codex': ['gpt-6.2-astra', 'gpt-6.2-sol', 'gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.2', 'gpt-5.1', 'gpt-5', 'o4-mini', 'o3', 'gpt-4o'],
   // Stable models first so the connection-setup test (which uses
   // getDefaultModelForConnection) lands on a reliable model.
   // gemini-3-pro-preview and gemini-3.1-pro-preview are intermittently
@@ -670,10 +700,11 @@ export const PI_PREFERRED_DEFAULTS: Record<string, string[]> = {
   // K2.6 is also the utility model (PI_PREFERRED_MINI_MODELS).
   moonshotai: ['kimi-k3', 'kimi-k2.6'],
   'moonshotai-cn': ['kimi-k3', 'kimi-k2.6'],
-  'github-copilot': ['claude-sonnet-4-6', 'gpt-5', 'o4-mini', 'claude-haiku-4-5'],
+  // Copilot's catalog writes Claude versions with dots (claude-sonnet-5.5).
+  'github-copilot': ['claude-sonnet-5.5', 'gpt-6.2-sol', 'gpt-6.1-sol', 'claude-haiku-5.5', 'claude-haiku-4.5'],
   'amazon-bedrock': ['claude-opus-5-5', 'claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-5-5', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-5-5', 'claude-haiku-4-5'],
   // Cloudflare AI Gateway proxies Anthropic, OpenAI and Workers AI; Claude first.
-  'cloudflare-ai-gateway': ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'gpt-6-astra', 'gpt-6.1-sol', 'claude-haiku-4-5'],
+  'cloudflare-ai-gateway': ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-2', 'claude-fable-5-1', 'gpt-6.2-astra', 'gpt-6-astra', 'gpt-6.2-sol', 'gpt-6.1-sol', 'claude-haiku-4-5'],
 };
 
 /**
@@ -716,23 +747,31 @@ export function preferredModelRank(id: string, preferred: readonly string[]): nu
   return reversed !== bare ? matchIndex(reversed) : -1
 }
 
+/**
+ * Pi models in Craft's order for the provider: PI_PREFERRED_DEFAULTS first, the rest in
+ * the catalog's order (alphabetical, which would put a mini model like gpt-5.6-luna
+ * first). Every path that stores a Pi connection's models goes through it (new
+ * connections, the startup backfill, the background model refresh), because a
+ * connection whose default model is gone falls back to the first one.
+ *
+ * Bedrock models come as inference profiles (pi/us.anthropic.claude-opus-4-8) and are
+ * matched through the reverse Bedrock mapping (see preferredModelRank).
+ */
+export function sortPiModelsByPreference<T extends { id: string }>(models: readonly T[], piAuthProvider?: string): T[] {
+  const preferred = (piAuthProvider && PI_PREFERRED_DEFAULTS[toPiProviderId(piAuthProvider)]) || [];
+  if (preferred.length === 0) return [...models];
+  // Unranked entries sort after every preferred model, keeping the SDK's catalog order.
+  const rank = (id: string): number => {
+    const r = preferredModelRank(id, preferred)
+    return r < 0 ? preferred.length : r
+  }
+  return [...models].sort((a, b) => rank(a.id) - rank(b.id));
+}
+
 export function getDefaultModelsForConnection(providerType: LlmProviderType, piAuthProvider?: string): Array<ModelDefinition | string> {
   if (providerType === 'pi') {
-    const models = _piModelResolver(piAuthProvider);
-    // Sort preferred defaults first so getDefaultModelForConnection picks a modern model.
-    // For Bedrock models, the Pi SDK returns IDs like pi/us.anthropic.claude-opus-4-8
-    // but preferred defaults use bare IDs (claude-opus-4-8). We match via both direct
-    // comparison and reverse Bedrock ID mapping.
-    const preferred = (piAuthProvider && PI_PREFERRED_DEFAULTS[piAuthProvider]) || [];
-    if (preferred.length > 0) {
-      // Unranked entries sort after every preferred model, keeping the SDK's catalog order.
-      const rank = (id: string): number => {
-        const r = preferredModelRank(id, preferred)
-        return r < 0 ? preferred.length : r
-      }
-      models.sort((a, b) => rank(a.id) - rank(b.id));
-    }
-    return models;
+    // Preferred models first, so getDefaultModelForConnection picks a modern model.
+    return sortPiModelsByPreference(_piModelResolver(piAuthProvider), piAuthProvider);
   }
   if (providerType === 'pi_compat') return [];  // Dynamic — user specifies
   // anthropic
@@ -1096,6 +1135,22 @@ export function resetManagedAnthropicAuthEnvVars(): void {
 }
 
 /**
+ * A copy of `env` with the auth variables Craft manages at the values the app started with: the
+ * user's own, or none. For a child process that must never get a connection's credentials from
+ * process.env, whatever was written there (the Pi subprocess, whose agent runs shell commands with
+ * its environment).
+ */
+export function withStartupManagedAuthEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const result: NodeJS.ProcessEnv = { ...env }
+  for (const key of MANAGED_ANTHROPIC_AUTH_ENV_KEYS) {
+    const startupValue = MANAGED_ANTHROPIC_AUTH_ENV_BASELINE[key]
+    if (startupValue === undefined) delete result[key]
+    else result[key] = startupValue
+  }
+  return result
+}
+
+/**
  * Result of resolving auth env vars for an LLM connection.
  */
 export interface ResolvedAuthEnvVars {
@@ -1111,10 +1166,9 @@ export interface ResolvedAuthEnvVars {
  * Resolve authentication environment variables for an LLM connection.
  *
  * Provider-agnostic: switches on providerType to determine which env vars
- * to set and how to retrieve credentials. Shared by:
- * - `SessionManager.reinitializeAuth()` (applies to process.env)
- * - `ClaudeAgent.postInit()` (keeps them for its own CLI processes, see buildClaudeSubprocessEnv,
- *   and applies them to process.env)
+ * to set and how to retrieve credentials. The result goes only to the CLI processes it is
+ * resolved for (`ClaudeAgent.postInit()` → buildClaudeSubprocessEnv, the Publish as Claude
+ * artifact query), never into process.env.
  *
  * Providers that handle auth internally (openai, copilot, pi) return
  * empty envVars — their auth is managed in postInit() via native mechanisms.

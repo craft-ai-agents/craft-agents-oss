@@ -26,6 +26,8 @@ import type {
   StopBackgroundTaskResult,
   BoundPr,
   PrMonitorState,
+  ProjectMoveResult,
+  SessionProjectState,
 } from '@craft-agent/shared/protocol'
 import type { SessionBundle, DispatchMode } from '@craft-agent/shared/sessions'
 import type { EventSink } from '../transport'
@@ -129,7 +131,10 @@ export interface ISessionManager {
     sessionId: string,
     opts?: { parentSessionId?: string },
   ): Promise<{ labelId: string } | undefined>
-  setSessionProjectId(sessionId: string, projectId: string | null): Promise<void>
+  /** Move chats and the chats nested under them to a project (see SessionManager.setSessionProjectId). */
+  setSessionProjectId(sessionId: string, projectId: string | null, additionalSessionIds?: readonly string[]): Promise<ProjectMoveResult>
+  /** Put chats back as a project move found them (Undo). */
+  restoreSessionProjects(sessionId: string, states: readonly SessionProjectState[]): Promise<ProjectMoveResult>
   setKanbanColumn(sessionId: string, column: string | null): Promise<void>
   setTaskNodeCount(sessionId: string, count: number): Promise<void>
   adoptGeneratedTaskOrchestrator(
@@ -142,7 +147,7 @@ export interface ISessionManager {
     taskSlug: string,
     reconcile?: { name?: string; projectId?: string; workingDirectory?: string; model?: string; llmConnection?: string; permissionMode?: PermissionMode },
   ): Promise<boolean>
-  setSessionConnection(sessionId: string, connectionSlug: string): Promise<void>
+  setSessionConnection(sessionId: string, connectionSlug: string, switchAccount?: boolean): Promise<void>
   updateSessionModel(sessionId: string, workspaceId: string, model: string | null, connection?: string): Promise<void>
 
   // ---------------------------------------------------------------------------

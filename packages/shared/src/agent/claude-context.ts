@@ -60,6 +60,7 @@ import {
   type MicrosoftService,
 } from '../sources/types.ts';
 import { isGoogleOAuthConfigured as isGoogleOAuthConfiguredImpl } from '../auth/google-oauth.ts';
+import { isMicrosoftOAuthConfigured as isMicrosoftOAuthConfiguredImpl } from '../auth/microsoft-oauth.ts';
 import { debug } from '../utils/debug.ts';
 import { getSessionPlansPath, getSessionPath, getSessionDataPath } from '../sessions/storage.ts';
 import { updatePreferences as updatePreferencesImpl } from '../config/preferences.ts';
@@ -257,6 +258,9 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
     // OAuth config check
     isGoogleOAuthConfigured: (clientId?: string, clientSecret?: string): boolean => {
       return isGoogleOAuthConfiguredImpl(clientId, clientSecret);
+    },
+    isMicrosoftOAuthConfigured: (clientId?: string): boolean => {
+      return isMicrosoftOAuthConfiguredImpl(clientId);
     },
 
     // MCP validation

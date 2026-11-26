@@ -1,8 +1,9 @@
 /**
  * Each Claude session's CLI starts with its own connection's credentials (craft-agents-oss#1129).
  *
- * postInit() also writes them to the shared process.env, where the next session's postInit
- * overwrites them: a CLI started from process.env ran on whichever account was set up last.
+ * postInit() used to write them to the shared process.env too, where the next session's postInit
+ * overwrote them: a CLI started from process.env ran on whichever account was set up last, and every
+ * other process the app started (the Pi subprocess and the commands its agent runs) got them.
  * Config, credential store and token refresh are stubbed; the agents are built with Object.create.
  */
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
@@ -15,7 +16,7 @@ import * as storage from '../../config/storage.ts';
 import * as credentials from '../../credentials/index.ts';
 import * as authState from '../../auth/state.ts';
 
-const ENV_KEYS = ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_USE_BEDROCK', 'AWS_BEARER_TOKEN_BEDROCK', 'ANTHROPIC_BEDROCK_BASE_URL'];
+const ENV_KEYS = ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_USE_BEDROCK', 'AWS_BEARER_TOKEN_BEDROCK', 'ANTHROPIC_BEDROCK_BASE_URL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL'];
 const originalEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 
 afterEach(() => {
@@ -55,13 +56,16 @@ describe('ClaudeAgent connection env', () => {
     spyOn(authState, 'getValidClaudeOAuthToken').mockImplementation((async (slug: string) => ({ accessToken: `token-${slug}` })) as any);
 
     const work = agentFor('work');
+    work.config.miniModel = 'claude-haiku-5-5';
     const personal = agentFor('personal');
     const gateway = agentFor('gateway');
     expect((await work.postInit()).authInjected).toBe(true);
     expect((await personal.postInit()).authInjected).toBe(true);
     expect((await gateway.postInit()).authInjected).toBe(true);
-    // The shared environment holds the connection set up last.
-    expect(process.env.ANTHROPIC_API_KEY).toBe('key-gateway');
+    // The shared environment holds no connection's credentials or mini model.
+    for (const key of ENV_KEYS) {
+      expect(process.env[key]).toBe(originalEnv[key]);
+    }
 
     const workEnv = buildClaudeSubprocessEnv(work.config.envOverrides, work.connectionEnv);
     expect(workEnv.CLAUDE_CODE_OAUTH_TOKEN).toBe('token-work');

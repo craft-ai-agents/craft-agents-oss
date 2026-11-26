@@ -3,7 +3,7 @@ import type { LLMQueryResult } from '../../shared/src/agent/llm-tool.ts';
 import { getDefaultSummarizationModel } from '../../shared/src/config/models.ts';
 import { PI_PREFERRED_DEFAULTS } from '../../shared/src/config/llm-connections.ts';
 import { stripPiPrefix } from './custom-endpoint-models.ts';
-import { isDeniedMiniModelId, isModelRejectionError, resolvePiModel } from './model-resolution.ts';
+import { isDeniedMiniModelId, isModelRejectionError, isModelUsableWithAuth, resolvePiModel } from './model-resolution.ts';
 
 interface MiniModelQueryOptions {
   model: string;
@@ -11,7 +11,8 @@ interface MiniModelQueryOptions {
   sessionModel?: string;
   authProvider?: string;
   modelRegistry: PiModelRegistry;
-  preferCustomEndpoint: boolean;
+  /** A custom endpoint is configured: only its own models may be retried. */
+  customEndpointOnly: boolean;
   onFallback?: (rejectedModel: string, retryModel: string) => void;
 }
 
@@ -48,9 +49,8 @@ export async function queryMiniModel(
 
       const retryModel = fallbackCandidates.find(candidate => {
         if (triedModels.has(stripPiPrefix(candidate))) return false;
-        const resolved = resolvePiModel(options.modelRegistry, candidate, options.authProvider, options.preferCustomEndpoint);
-        if (!resolved) return false;
-        return !options.authProvider || resolved.provider === options.authProvider || resolved.provider === 'custom-endpoint';
+        const resolved = resolvePiModel(options.modelRegistry, candidate, options.authProvider, options.customEndpointOnly);
+        return isModelUsableWithAuth(resolved?.provider, options.authProvider, options.customEndpointOnly);
       });
       if (!retryModel) throw error;
 

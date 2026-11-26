@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'bun:test';
-import { resolvePiModel, isDeniedMiniModelId, isModelNotFoundError, isModelRejectionError } from './model-resolution.ts';
+import {
+  resolvePiModel,
+  isDeniedMiniModelId,
+  isModelNotFoundError,
+  isModelRejectionError,
+  isModelUsableWithAuth,
+} from './model-resolution.ts';
+import { createTestPiRuntime } from './test-fixtures/pi-runtime.ts';
 
 /**
  * Minimal mock of PiModelRegistry.
@@ -25,8 +32,8 @@ function createMockRegistry(
 }
 
 describe('resolvePiModel', () => {
-  describe('preferCustomEndpoint', () => {
-    it('returns custom-endpoint model when preferCustomEndpoint=true and model exists in both providers', () => {
+  describe('customEndpointOnly', () => {
+    it('returns custom-endpoint model when customEndpointOnly=true and model exists in both providers', () => {
       const registry = createMockRegistry({
         'custom-endpoint': [{ id: 'claude-sonnet-4-6', name: 'claude-sonnet-4-6', provider: 'custom-endpoint' }],
         anthropic: [{ id: 'claude-sonnet-4-6', name: 'claude-sonnet-4-6', provider: 'anthropic' }],
@@ -37,7 +44,7 @@ describe('resolvePiModel', () => {
       expect(result!.provider).toBe('custom-endpoint');
     });
 
-    it('returns anthropic model when preferCustomEndpoint=false', () => {
+    it('returns anthropic model when customEndpointOnly=false', () => {
       const registry = createMockRegistry({
         'custom-endpoint': [{ id: 'claude-sonnet-4-6', name: 'claude-sonnet-4-6', provider: 'custom-endpoint' }],
         anthropic: [{ id: 'claude-sonnet-4-6', name: 'claude-sonnet-4-6', provider: 'anthropic' }],
@@ -48,15 +55,42 @@ describe('resolvePiModel', () => {
       expect(result!.provider).toBe('anthropic');
     });
 
-    it('falls through to piAuthProvider when preferCustomEndpoint=true but model not in custom-endpoint', () => {
+    // The endpoint is labelled 'anthropic' only for the request format: a built-in Anthropic
+    // model would authenticate with the endpoint's key and send it to api.anthropic.com.
+    it('never falls through to the provider the endpoint is labelled with', () => {
       const registry = createMockRegistry({
         'custom-endpoint': [],
         anthropic: [{ id: 'claude-sonnet-4-6', name: 'claude-sonnet-4-6', provider: 'anthropic' }],
       });
 
-      const result = resolvePiModel(registry, 'claude-sonnet-4-6', 'anthropic', true);
-      expect(result).toBeDefined();
-      expect(result!.provider).toBe('anthropic');
+      expect(resolvePiModel(registry, 'claude-sonnet-4-6', 'anthropic', true)).toBeUndefined();
+    });
+
+    it('never scans other providers either', () => {
+      const registry = createMockRegistry({
+        'custom-endpoint': [],
+        openai: [{ id: 'gpt-5.5', name: 'GPT-5.5', provider: 'openai' }],
+      });
+
+      expect(resolvePiModel(registry, 'gpt-5.5', undefined, true)).toBeUndefined();
+      expect(resolvePiModel(registry, 'GPT-5.5', 'openai', true)).toBeUndefined();
+    });
+  });
+
+  describe('customEndpointOnly with the Pi SDK catalog', () => {
+    it.each([
+      ['openai', 'gpt-6-astra', 'https://api.openai.com/v1'],
+      ['anthropic', 'claude-haiku-5-5', 'https://api.anthropic.com'],
+    ])('resolves %s/%s only without a custom endpoint', async (provider, modelId, officialBaseUrl) => {
+      const { modelRegistry } = await createTestPiRuntime({ endpointModels: ['endpoint-model'] });
+
+      const builtIn = resolvePiModel(modelRegistry, modelId, provider, false);
+      expect(builtIn?.provider).toBe(provider);
+      expect(builtIn?.baseUrl).toBe(officialBaseUrl);
+
+      expect(resolvePiModel(modelRegistry, modelId, provider, true)).toBeUndefined();
+      expect(resolvePiModel(modelRegistry, `pi/${modelId}`, provider, true)).toBeUndefined();
+      expect(resolvePiModel(modelRegistry, 'endpoint-model', provider, true)?.provider).toBe('custom-endpoint');
     });
   });
 
@@ -199,6 +233,26 @@ describe('resolvePiModel', () => {
       const result = resolvePiModel(registry, 'gpt-5.4', 'github-copilot');
       expect(result).toBeUndefined();
     });
+  });
+});
+
+describe('isModelUsableWithAuth', () => {
+  it('accepts only custom-endpoint models with a custom endpoint', () => {
+    expect(isModelUsableWithAuth('custom-endpoint', 'openai', true)).toBe(true);
+    expect(isModelUsableWithAuth('openai', 'openai', true)).toBe(false);
+    expect(isModelUsableWithAuth('anthropic', undefined, true)).toBe(false);
+  });
+
+  it('otherwise accepts the authenticated provider and custom-endpoint models', () => {
+    expect(isModelUsableWithAuth('openai', 'openai', false)).toBe(true);
+    expect(isModelUsableWithAuth('custom-endpoint', 'openai', false)).toBe(true);
+    expect(isModelUsableWithAuth('azure', 'github-copilot', false)).toBe(false);
+    expect(isModelUsableWithAuth('azure', undefined, false)).toBe(true);
+  });
+
+  it('rejects an unresolved model', () => {
+    expect(isModelUsableWithAuth(undefined, 'openai', false)).toBe(false);
+    expect(isModelUsableWithAuth(undefined, undefined, true)).toBe(false);
   });
 });
 

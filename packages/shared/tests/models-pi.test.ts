@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { getPiApiKeyProviders, getPiModelsForAuthProvider } from '../src/config/models-pi.ts';
-import { fromPiProviderId, toPiProviderId } from '../src/config/pi-provider-ids.ts';
+import { fromPiProviderId, regionalProviderBaseUrl, toPiProviderId } from '../src/config/pi-provider-ids.ts';
 
 describe('models-pi filtering', () => {
   it('excludes codex-mini-latest for openai models', () => {
@@ -90,6 +90,22 @@ describe('models-pi filtering', () => {
     const providers = getPiApiKeyProviders();
     expect(providers.some(p => p.key === 'azure-openai-responses' && p.label === 'Azure OpenAI')).toBe(true);
     expect(providers.some(p => p.key === 'azure')).toBe(false);
+  });
+
+  it('maps the OpenAI EU/US presets to OpenAI at their regional API, one way only', () => {
+    expect(toPiProviderId('openai-eu')).toBe('openai');
+    expect(toPiProviderId('openai-us')).toBe('openai');
+    expect(fromPiProviderId('openai')).toBe('openai');
+    expect(regionalProviderBaseUrl('openai-eu')).toBe('https://eu.api.openai.com/v1');
+    expect(regionalProviderBaseUrl('openai-us')).toBe('https://us.api.openai.com/v1');
+    expect(regionalProviderBaseUrl('openai')).toBeUndefined();
+    expect(regionalProviderBaseUrl(undefined)).toBeUndefined();
+
+    // Stored EU/US connections get OpenAI's catalog.
+    const openAiIds = getPiModelsForAuthProvider('openai').map(m => m.id);
+    expect(openAiIds.length).toBeGreaterThan(0);
+    expect(getPiModelsForAuthProvider('openai-eu').map(m => m.id)).toEqual(openAiIds);
+    expect(getPiModelsForAuthProvider('openai-us').map(m => m.id)).toEqual(openAiIds);
   });
 
   it('offers Cloudflare AI Gateway in the API key provider list with its Claude and GPT catalog', () => {

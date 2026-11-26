@@ -54,7 +54,12 @@ export function spawnedSessionOptions(request: SpawnOverrides, parent: SpawnPare
     workingDirectory: request.worktreePath
       ?? request.workingDirectory
       ?? (projectId === parent.projectId ? parent.workingDirectory : undefined),
-    projectId,
+    // Only a project the request names is passed: createSession inherits the parent's own, which
+    // can't be a stale copy, and a parent project deleted since leaves the child without one
+    // instead of failing the spawn ("Project … not found").
+    projectId: request.projectId,
+    // A child put in another project than its parent's stays there when the parent moves
+    projectOverride: request.projectId !== undefined && request.projectId !== parent.projectId ? true : undefined,
     // Requested, else the parent's mode both ways, never the workspace default (branches do the same).
     codingMode: request.worktreePath ? true : request.codingMode ?? parent.codingMode === true,
     // Spawned sessions become subtasks of the spawning session.

@@ -52,6 +52,8 @@ import {
   prepareMicrosoftOAuth,
   exchangeMicrosoftOAuth,
   refreshMicrosoftToken,
+  microsoftCredentialMatchesSource,
+  MICROSOFT_SCOPES_RULE,
   type MicrosoftOAuthResult,
   type MicrosoftOAuthOptions,
 } from '../auth/microsoft-oauth.ts';
@@ -89,6 +91,22 @@ export {
   parseStoredApiCredential,
   serializeHeaderCredential,
 } from '@craft-agent/session-tools-core/api-auth';
+
+/**
+ * What a Microsoft source signs in for, the same on both sign-in paths: its microsoftScopes,
+ * else its service (microsoftService, else inferred from the base URL). Undefined when neither
+ * is known. getMicrosoftScopes refuses a service without predefined scopes.
+ */
+function microsoftScopeChoice(source: LoadedSource): { service?: MicrosoftService; scopes?: string[] } | undefined {
+  const api = source.config.api;
+  if (api?.microsoftScopes?.length) return { scopes: api.microsoftScopes };
+  const service = api?.microsoftService || inferMicrosoftServiceFromUrl(api?.baseUrl);
+  return service ? { service } : undefined;
+}
+
+function microsoftScopesMissing(source: LoadedSource): string {
+  return `Cannot determine Microsoft service for source '${source.config.slug}'. ${MICROSOFT_SCOPES_RULE}`;
+}
 
 /**
  * SourceCredentialManager - unified credential operations for sources
@@ -156,6 +174,18 @@ export class SourceCredentialManager {
     // For other sources, use the credential ID based on authType
     const credentialId = this.getCredentialId(source);
     const cred = await manager.get(credentialId);
+
+    // A Microsoft sign-in belongs to the app registration that issued it. After the source
+    // switches apps (microsoftOAuthClientId added, changed or removed) its tokens can't be
+    // used or refreshed as the new app's, so the source counts as signed out.
+    if (
+      cred
+      && source.config.provider === 'microsoft'
+      && !microsoftCredentialMatchesSource(cred.clientId, source.config.api?.microsoftOAuthClientId)
+    ) {
+      debug(`[SourceCredentialManager] ${source.config.slug}: credential was issued to another Microsoft app registration; sign-in needed`);
+      return null;
+    }
 
     if (cred) {
       debug(`[SourceCredentialManager] Found ${credentialId.type} for ${source.config.slug}`);
@@ -462,24 +492,16 @@ export class SourceCredentialManager {
 
       case 'microsoft': {
         const api = source.config.api;
-        let service: MicrosoftService | undefined;
-        let scopes: string[] | undefined;
+        const choice = microsoftScopeChoice(source);
+        if (!choice) throw new Error(microsoftScopesMissing(source));
 
-        if (api?.microsoftScopes && api.microsoftScopes.length > 0) {
-          scopes = api.microsoftScopes;
-        } else if (api?.microsoftService) {
-          service = api.microsoftService;
-        } else {
-          service = inferMicrosoftServiceFromUrl(api?.baseUrl);
-          if (!service) {
-            throw new Error(
-              `Cannot determine Microsoft service for source '${source.config.slug}'. ` +
-              `Set microsoftService in api config.`
-            );
-          }
-        }
-
-        prepared = prepareMicrosoftOAuth({ service, scopes, callbackPort, callbackUrl: providerCallbackUrl });
+        prepared = prepareMicrosoftOAuth({
+          ...choice,
+          callbackPort,
+          callbackUrl: providerCallbackUrl,
+          clientId: api?.microsoftOAuthClientId,
+          tenantId: api?.microsoftTenantId,
+        });
         break;
       }
 
@@ -817,36 +839,21 @@ export class SourceCredentialManager {
     sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
     try {
-      // Determine service/scopes from config
       const api = source.config.api;
-      let service: MicrosoftService | undefined;
-      let scopes: string[] | undefined;
-
-      if (api?.microsoftScopes && api.microsoftScopes.length > 0) {
-        // Custom scopes take precedence
-        scopes = api.microsoftScopes;
-      } else if (api?.microsoftService) {
-        // Use predefined service scopes
-        service = api.microsoftService;
-      } else {
-        // Infer from baseUrl
-        service = inferMicrosoftServiceFromUrl(api?.baseUrl);
-        if (!service) {
-          return {
-            success: false,
-            error: `Cannot determine Microsoft service for source '${source.config.slug}'. Set microsoftService ('outlook', 'calendar', 'onedrive', 'teams', or 'sharepoint') in api config.`,
-          };
-        }
+      const choice = microsoftScopeChoice(source);
+      if (!choice) {
+        return { success: false, error: microsoftScopesMissing(source) };
       }
 
-      const serviceName = service || 'Microsoft API';
+      const serviceName = choice.service || 'Microsoft API';
       callbacks.onStatus(`Starting ${serviceName} OAuth flow...`);
 
       const options: MicrosoftOAuthOptions = {
-        service,
-        scopes,
+        ...choice,
         appType: 'electron',
         sessionContext,
+        clientId: api?.microsoftOAuthClientId,
+        tenantId: api?.microsoftTenantId,
       };
 
       const result: MicrosoftOAuthResult = await startMicrosoftOAuth(options);
@@ -855,11 +862,12 @@ export class SourceCredentialManager {
         return { success: false, error: result.error || 'Microsoft OAuth failed' };
       }
 
-      // Save the credentials
+      // Save the credentials, with the client that issued them (refresh needs it)
       await this.save(source, {
         value: result.accessToken!,
         refreshToken: result.refreshToken,
         expiresAt: result.expiresAt,
+        clientId: result.clientId,
       });
 
       // Mark source as authenticated in config.json
@@ -1121,7 +1129,13 @@ export class SourceCredentialManager {
     cred: StoredCredential
   ): Promise<string | null> {
     try {
-      const result = await refreshMicrosoftToken(cred.refreshToken!);
+      // The refresh token belongs to the client that issued it: the stored client ID
+      // (absent on credentials from older versions: the built-in app). The tenant comes
+      // from the source, since a single-tenant app can't refresh through "common".
+      const result = await refreshMicrosoftToken(cred.refreshToken!, {
+        clientId: cred.clientId,
+        tenantId: source.config.api?.microsoftTenantId,
+      });
 
       // Update stored credentials (Microsoft may rotate refresh tokens)
       await this.save(source, {

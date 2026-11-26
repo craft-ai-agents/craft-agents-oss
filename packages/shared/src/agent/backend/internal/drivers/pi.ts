@@ -2,6 +2,7 @@ import type { ProviderDriver, DriverTestConnectionArgs } from '../driver-types.t
 import type { ModelDefinition } from '../../../../config/models.ts';
 import { getAllPiModels, getPiModelsForAuthProvider } from '../../../../config/models-pi.ts';
 import { getPiProviderBaseUrl } from '../../../../config/models-pi.ts';
+import { sortPiModelsByPreference } from '../../../../config/llm-connections.ts';
 
 // ── Copilot model types ────────────────────────────────────────────────
 type RawCopilotModel = {
@@ -246,15 +247,17 @@ export const piDriver: ProviderDriver = {
     // Copilot OAuth: fetch models directly from the Copilot API via HTTP.
     // Uses the GitHub OAuth token (our refreshToken) to exchange for a
     // Copilot API token, then queries GET /models for the live model list.
+    // Both lists come back in Craft's preference order: a refresh that drops the
+    // connection's default model falls back to the first one.
     const copilotGitHubToken = credentials.oauthRefreshToken || credentials.oauthAccessToken;
     if (connection.piAuthProvider === 'github-copilot' && copilotGitHubToken) {
       const models = await fetchCopilotModels(copilotGitHubToken, timeoutMs);
-      return { models };
+      return { models: sortPiModelsByPreference(models, connection.piAuthProvider) };
     }
 
     // All other Pi providers: use static Pi SDK model registry
     const models = connection.piAuthProvider
-      ? getPiModelsForAuthProvider(connection.piAuthProvider)
+      ? sortPiModelsByPreference(getPiModelsForAuthProvider(connection.piAuthProvider), connection.piAuthProvider)
       : getAllPiModels();
 
     if (models.length === 0) {

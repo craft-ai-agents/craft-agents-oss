@@ -50,6 +50,7 @@ import { PageView } from '../pages/PageView'
 import type { ExecutionEntry } from '../automations/types'
 import { automationsAtom } from '@/atoms/automations'
 import { SendResourceToWorkspaceDialog, type SendResourceType } from './SendResourceToWorkspaceDialog'
+import { sharedProjectId } from '@/lib/project-move'
 
 export interface MainContentPanelProps {
   /** Whether both sidebar and navigator are hidden (focus mode / CMD+.) */
@@ -78,6 +79,8 @@ export function MainContentPanel({
     onSessionStatusChange,
     onArchiveSession,
     onSessionLabelsChange,
+    projectMenuOptions,
+    onSetSessionProjects,
     sessionStatuses,
     labels,
     onTestAutomation,
@@ -195,6 +198,13 @@ export function MainContentPanel({
       onSessionStatusChange(sessionId, status)
     })
   }, [selectedIds, onSessionStatusChange])
+
+  const activeProjectId = useMemo(() => sharedProjectId(selectedMetas, selectedIds.size), [selectedMetas, selectedIds])
+
+  // One command for the whole selection: the server moves the chats nested under them too
+  const handleBatchSetProject = useCallback((projectId: string | null) => {
+    onSetSessionProjects?.([...selectedIds], projectId)
+  }, [selectedIds, onSetSessionProjects])
 
   const handleBatchArchive = useCallback(() => {
     selectedIds.forEach(sessionId => {
@@ -410,6 +420,9 @@ export function MainContentPanel({
             labels={labels}
             appliedLabelIds={appliedLabelIds}
             onToggleLabel={handleBatchToggleLabel}
+            projects={projectMenuOptions}
+            activeProjectId={activeProjectId}
+            onSetProject={onSetSessionProjects ? handleBatchSetProject : undefined}
             onArchive={handleBatchArchive}
             onClearSelection={clearMultiSelect}
           />

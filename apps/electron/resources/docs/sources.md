@@ -10,9 +10,17 @@ This guide explains how to configure sources (MCP servers, APIs, local filesyste
 
 When a user wants to add a new source, follow this conversational setup process to create a tailored, well-documented integration.
 
-### 0. Check for a Specialized Source Guide (REQUIRED FIRST STEP)
+### 0. Check for Existing Setup Instructions (REQUIRED FIRST STEP)
 
-**Before doing anything else**, check the product documentation at https://thecraftagents.com/docs for a service-specific setup guide (fetch pages with your web tools, e.g. search for "{service} source setup").
+**Before researching or configuring anything**, look for instructions that already cover this service, in this order.
+
+**a) A matching skill.** Skills hold setup instructions for a team's own services and conventions, and they take precedence over this generic workflow.
+1. Run `craft-agent skill list`: it lists workspace, global and project skills with their descriptions. Without the CLI, read the `description` in the frontmatter of each `SKILL.md` under `{workspace}/skills/`, `~/.agents/skills/` and the project's `.agents/skills/`.
+2. If a skill's description covers setting up this service or source, read its `SKILL.md` and follow it. Where it differs from the steps below, the skill wins.
+3. A skill doesn't replace the checks that keep a source safe: still trigger the right auth flow, write the Explore mode `permissions.json` (step 4) and run `source_test` (step 6).
+4. If no skill matches, continue; there is no need to mention the check to the user.
+
+**b) A specialized source guide.** Check the product documentation at https://thecraftagents.com/docs for a service-specific setup guide (fetch pages with your web tools, e.g. search for "{service} source setup").
 
 **Available guides:** GitHub, Linear, Slack, Gmail, Google Calendar, Google Drive, Google Docs, Google Sheets, Outlook, Microsoft Calendar, Teams, SharePoint, Craft, Filesystem, Brave Search, Memory
 
@@ -849,6 +857,17 @@ Requires user-provided OAuth credentials in the source config:
 Create credentials at [Google Cloud Console](https://console.cloud.google.com/apis/credentials) as a **Web application** client (not "Desktop app"), and add `https://thecraftagents.com/auth/callback` as an authorized redirect URI. A client secret is required.
 Uses OAuth via `source_google_oauth_trigger`.
 
+### Outlook, Calendar, OneDrive, Teams, SharePoint (Microsoft)
+Provider: `microsoft`, Type: `api`, base URL `https://graph.microsoft.com/v1.0/`.
+Set `microsoftService` (`outlook`, `microsoft-calendar`, `onedrive`, `teams`, `sharepoint`) or `microsoftScopes` (Microsoft Graph scopes). Teams and SharePoint need a work or school account.
+Signs in with the built-in Microsoft app; no credentials needed. Uses OAuth via `source_microsoft_oauth_trigger`.
+
+To use the user's own app registration instead (their organization requires it, or the build has no built-in app), add:
+- `microsoftOAuthClientId`: the app's Application (client) ID
+- `microsoftTenantId`: the Directory (tenant) ID or a domain. Needed for a single-tenant app; otherwise leave it out (the sign-in uses `common`).
+
+The app must have the redirect URIs `https://thecraftagents.com/auth/callback` and `http://localhost/callback` under **Mobile and desktop applications** (not Web), and no client secret. Changing `microsoftOAuthClientId` signs the source out; trigger the sign-in again. Setup guide: https://thecraftagents.com/docs/source-guides/microsoft-oauth-setup
+
 ### Linear
 Provider: `linear`, Type: `mcp`
 URL: `https://mcp.linear.app`, OAuth auth.
@@ -875,11 +894,12 @@ Transport: `stdio`, Command: `npx -y @modelcontextprotocol/server-memory`, no au
 
 **Always follow the conversational setup process** (see above). The key steps:
 
-1. **Ask before creating**: Understand user intent, scope, and common tasks
-2. **Choose the right path**: Confirm if this should be a source or a browser-first one-off workflow
-3. **Research before configuring**: Use WebSearch/WebFetch and browser tools as needed
-4. **Tailor guide.md to context**: Include specific projects/teams the user mentioned
-5. **Test before declaring done**: Validate config, trigger auth, verify connection
+1. **Follow a matching skill first**: If `craft-agent skill list` shows a skill that covers this service, read its `SKILL.md` and follow it
+2. **Ask before creating**: Understand user intent, scope, and common tasks
+3. **Choose the right path**: Confirm if this should be a source or a browser-first one-off workflow
+4. **Research before configuring**: Use WebSearch/WebFetch and browser tools as needed
+5. **Tailor guide.md to context**: Include specific projects/teams the user mentioned
+6. **Test before declaring done**: Validate config, trigger auth, verify connection
 
 Technical steps:
 

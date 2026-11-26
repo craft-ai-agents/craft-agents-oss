@@ -221,7 +221,7 @@ export interface FreeFormInputProps {
   /** Current LLM connection slug (locked after first message) */
   currentConnection?: string
   /** Callback when connection changes (only works when session is empty) */
-  onConnectionChange?: (connectionSlug: string) => void
+  onConnectionChange?: (connectionSlug: string, switchAccount?: boolean) => void
   /** When true, the session's locked connection has been removed */
   connectionUnavailable?: boolean
   /**
@@ -328,6 +328,7 @@ export function FreeFormInput({
     effectiveConnection,
     effectiveConnectionDetails,
     currentConnectionDetails,
+    accountSwitchTargets,
     connectionDefaultModel,
     pickerMode,
     availableModels,
@@ -1804,6 +1805,7 @@ export function FreeFormInput({
                 onThinkingLevelChange={onThinkingLevelChange}
                 isEmptySession={isEmptySession}
                 connectionUnavailable={connectionUnavailable}
+                disableAccountSwitch={isProcessing}
                 contextStatus={contextStatus}
               />
             )
@@ -1816,6 +1818,8 @@ export function FreeFormInput({
               effectiveConnection={effectiveConnection}
               effectiveConnectionDetails={effectiveConnectionDetails}
               currentConnectionDetails={currentConnectionDetails}
+              accountSwitchTargets={accountSwitchTargets}
+              disableAccountSwitch={isProcessing}
               connectionsByProvider={connectionsByProvider}
               connectionDefaultModel={connectionDefaultModel}
               pickerMode={pickerMode}

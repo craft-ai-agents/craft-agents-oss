@@ -274,15 +274,19 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     }
   }, [sessionId, activeWorkspaceId])
 
-  // Session connection change handler - can only change before first message
-  const handleConnectionChange = React.useCallback(async (connectionSlug: string) => {
+  // Picks the connection of an empty session, or switches the Claude account of a started one (OSS #1155)
+  const handleConnectionChange = React.useCallback(async (connectionSlug: string, switchAccount?: boolean) => {
     try {
-      await window.electronAPI.sessionCommand(sessionId, { type: 'setConnection', connectionSlug })
+      await window.electronAPI.sessionCommand(sessionId, { type: 'setConnection', connectionSlug, switchAccount })
     } catch (error) {
-      // Connection change may fail if session already started or connection is invalid
       console.error('Failed to change connection:', error)
+      if (switchAccount) {
+        toast.error(t('chat.modelPicker.switchAccountFailed'), {
+          description: error instanceof Error ? error.message : undefined,
+        })
+      }
     }
-  }, [sessionId])
+  }, [sessionId, t])
 
   // Check if session's locked connection has been removed
   const connectionUnavailable = React.useMemo(() =>

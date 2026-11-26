@@ -8,27 +8,27 @@ export { isDeniedMiniModelId } from '../../shared/src/config/llm-connections.ts'
 type PiModel<T = any> = ReturnType<PiModelRegistry['find']>;
 
 /**
- * Resolve a Pi SDK model from the registry, with optional custom-endpoint precedence.
+ * Resolve a Pi SDK model from the registry.
  *
- * Resolution order:
- * 1. If `preferCustomEndpoint` is true, try `'custom-endpoint'` provider first
- * 2. Exact provider+model lookup via `piAuthProvider`
- * 3. Full `getAll()` scan by id/name
- * 4. Common provider fallback list (includes 'custom-endpoint')
+ * With `customEndpointOnly` (a custom endpoint is configured), only the endpoint's own
+ * models resolve: its credential is labelled with a vendor's provider id ('openai',
+ * 'anthropic'), so falling through to that vendor's built-in models would send the
+ * endpoint's key, and the conversation, to the vendor's API. Otherwise:
+ * 1. Exact provider+model lookup via `piAuthProvider`
+ * 2. Full `getAll()` scan by id/name
+ * 3. Common provider fallback list (includes 'custom-endpoint')
  */
 export function resolvePiModel(
   modelRegistry: PiModelRegistry,
   modelId: string,
   piAuthProvider?: string,
-  preferCustomEndpoint?: boolean,
+  customEndpointOnly?: boolean,
 ): PiModel | undefined {
   // Strip Craft's pi/ prefix — Pi SDK uses bare model IDs (e.g. "claude-sonnet-4-6")
   const bareId = modelId.startsWith('pi/') ? modelId.slice(3) : modelId;
 
-  // Custom-endpoint takes precedence when configured
-  if (preferCustomEndpoint) {
-    const custom = modelRegistry.find('custom-endpoint', bareId);
-    if (custom) return custom;
+  if (customEndpointOnly) {
+    return modelRegistry.find('custom-endpoint', bareId) ?? undefined;
   }
 
   // If we know the auth provider, do an exact provider+model lookup first.
@@ -70,6 +70,21 @@ export function resolvePiModel(
   }
 
   return undefined;
+}
+
+/**
+ * Whether a resolved model may run under the connection's credential: with a custom
+ * endpoint only the endpoint's models; otherwise models of the authenticated provider
+ * (any provider without piAuth) and custom-endpoint models.
+ */
+export function isModelUsableWithAuth(
+  resolvedProvider: string | undefined,
+  authProvider: string | undefined,
+  customEndpointOnly: boolean,
+): boolean {
+  if (!resolvedProvider) return false;
+  if (customEndpointOnly) return resolvedProvider === 'custom-endpoint';
+  return !authProvider || resolvedProvider === authProvider || resolvedProvider === 'custom-endpoint';
 }
 
 /**

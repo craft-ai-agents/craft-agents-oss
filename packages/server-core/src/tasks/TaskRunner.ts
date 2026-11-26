@@ -429,7 +429,10 @@ class ActiveRun {
         applyTaskLabel: true,
         // Task-level sources become the child's enabled-sources set (spec omitted → workspace default).
         ...(this.spec.sources?.length ? { enabledSourceSlugs: this.spec.sources } : {}),
-        projectId: this.spec.project,
+        // A step of an orchestrator inherits its project (createSession), so the run lands where the
+        // task is now, even after the task was moved to another project; the spec's project is
+        // only for a run without one.
+        ...(this.opts.orchestratorSessionId ? {} : { projectId: this.spec.project }),
         ...(cwd ? { workingDirectory: cwd } : {}),
         sessionStatus: RUNNING_STATUS,
       };

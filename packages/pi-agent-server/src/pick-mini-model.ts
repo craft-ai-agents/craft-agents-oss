@@ -24,12 +24,12 @@ import { PI_PREFERRED_DEFAULTS, PI_PREFERRED_MINI_MODELS } from '../../shared/sr
 export function pickProviderAppropriateMiniModel(
   authProvider: string,
   modelRegistry: PiModelRegistry,
-  preferCustomEndpoint: boolean,
+  customEndpointOnly: boolean,
 ): string | undefined {
   const preferred = [...(PI_PREFERRED_MINI_MODELS[authProvider] ?? []), ...(PI_PREFERRED_DEFAULTS[authProvider] ?? [])];
   for (const candidate of preferred) {
     if (isDeniedMiniModelId(candidate, authProvider)) continue;
-    const resolved = resolvePiModel(modelRegistry, candidate, authProvider, preferCustomEndpoint);
+    const resolved = resolvePiModel(modelRegistry, candidate, authProvider, customEndpointOnly);
     if (resolved) return candidate;
   }
   return undefined;

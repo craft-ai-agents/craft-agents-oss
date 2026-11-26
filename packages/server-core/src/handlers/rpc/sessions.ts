@@ -11,6 +11,7 @@ const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { setTransferableHandler } from './transfer'
+import { projectMoveDestination, projectMoveSelection, projectRestoreStates } from '../../sessions/project-move'
 
 interface ClientSessionWatchState {
   watcher: import('fs').FSWatcher
@@ -345,8 +346,13 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
         return sessionManager.setSessionSources(sessionId, command.sourceSlugs)
       case 'setLabels':
         return sessionManager.setSessionLabels(sessionId, command.labels)
-      case 'setProjectId':
-        return sessionManager.setSessionProjectId(sessionId, command.projectId)
+      case 'setProjectId': {
+        // Checked here: the wire can carry anything (a string was once spread into characters)
+        const [, ...additionalSessionIds] = projectMoveSelection(sessionId, command.additionalSessionIds)
+        return sessionManager.setSessionProjectId(sessionId, projectMoveDestination(command.projectId), additionalSessionIds)
+      }
+      case 'restoreProjectIds':
+        return sessionManager.restoreSessionProjects(sessionId, projectRestoreStates(command.sessions))
       case 'setKanbanColumn':
         return sessionManager.setKanbanColumn(sessionId, command.column)
       case 'showInFinder': {
@@ -370,10 +376,10 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
       case 'refreshTitle':
         log.info(`IPC: refreshTitle received for session ${sessionId}`)
         return sessionManager.refreshTitle(sessionId)
-      // Connection selection (locked after first message)
+      // Connection selection, including an explicit compatible account switch
       case 'setConnection':
         log.info(`IPC: setConnection received for session ${sessionId}, connection: ${command.connectionSlug}`)
-        return sessionManager.setSessionConnection(sessionId, command.connectionSlug)
+        return sessionManager.setSessionConnection(sessionId, command.connectionSlug, command.switchAccount)
       // Pending plan execution (Accept & Compact flow)
       case 'setPendingPlanExecution':
         return sessionManager.setPendingPlanExecution(sessionId, command.planPath, command.draftInputSnapshot)

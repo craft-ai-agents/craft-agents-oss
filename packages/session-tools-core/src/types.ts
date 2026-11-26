@@ -29,10 +29,11 @@ export type GoogleService = 'gmail' | 'calendar' | 'drive' | 'docs' | 'sheets' |
 export type SlackService = 'messaging' | 'channels' | 'users' | 'files' | 'full';
 
 /**
- * Microsoft service types for OAuth
+ * Microsoft services with predefined scopes (MICROSOFT_SERVICE_SCOPES in @craft-agent/shared).
  * Note: 'microsoft-calendar' is used to distinguish from Google calendar
  */
-export type MicrosoftService = 'outlook' | 'microsoft-calendar' | 'onedrive' | 'teams' | 'sharepoint';
+export const MICROSOFT_SERVICES = ['outlook', 'microsoft-calendar', 'onedrive', 'teams', 'sharepoint'] as const;
+export type MicrosoftService = typeof MICROSOFT_SERVICES[number];
 
 // ============================================================
 // Auth Request Types
@@ -278,6 +279,9 @@ export interface ApiSourceConfig {
   slackService?: SlackService;
   // Microsoft OAuth
   microsoftService?: MicrosoftService;
+  microsoftScopes?: string[];
+  microsoftOAuthClientId?: string;
+  microsoftTenantId?: string;
   // Generic OAuth config (when authType is 'oauth' and provider is not google/slack/microsoft)
   oauth?: {
     authorizationUrl: string;

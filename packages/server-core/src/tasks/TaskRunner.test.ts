@@ -303,6 +303,24 @@ describe('TaskRunner (Conductor)', () => {
     expect(host.created.find((c) => c.options.name === 'a')?.options.workingDirectory).toBe('/spec/dir')
   })
 
+  it("children of an orchestrator get its current project (createSession inherits it), not the spec's", async () => {
+    // The task may have moved to another project since its spec was saved: the run follows the task,
+    // and a child the runner named a project for would look deliberately kept apart.
+    saveTaskSpec(root, specOf({ id: 'proj', title: 'Proj', goal: 'g', project: 'proj-saved', nodes: [{ id: 'a', prompt: 'a' }] }))
+    makeRunner().run('proj', { runId: 'r1', orchestratorSessionId: 'orch' })
+    await tick()
+    const child = host.created.find((c) => c.options.name === 'a')?.options
+    expect(child?.parentSessionId).toBe('orch')
+    expect(child).not.toHaveProperty('projectId')
+    expect(child?.projectOverride).toBeUndefined()
+
+    // Without an orchestrator there is nothing to inherit from: the spec's project is used.
+    host.created.length = 0
+    makeRunner().run('proj', { runId: 'r2' })
+    await tick()
+    expect(host.created.find((c) => c.options.name === 'a')?.options.projectId).toBe('proj-saved')
+  })
+
   it('refuses to run on a sub-session, but accepts an orchestrator id it does not know', async () => {
     saveTaskSpec(root, specOf({ id: 'sub', title: 'Sub', goal: 'g', nodes: [{ id: 'a', prompt: 'a' }] }))
     host.parentById.set('child', 'orch')

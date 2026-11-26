@@ -106,11 +106,13 @@ export function buildCraftPiSettings(purpose: CraftPiSessionPurpose = 'main'): P
     // (requestSetAutoCompaction(true)); keep the SDK default explicit here so
     // the intent is visible next to the retry policy.
     compaction: { enabled: true },
-    // Pi >=1.0 keeps the prompt cache warm while a run is in progress (a long
-    // tool call, a pending permission prompt) by replaying the last request
-    // with a 1-token output cap shortly before the cache expires, only when
-    // the expected saving is at least $0.05. Keep that SDK default for chats;
-    // utility sessions are one-shot and disposed right after their prompt.
+    // Pi keeps the prompt cache warm while a run is in progress (a long tool
+    // call, a pending permission prompt) by replaying the last request with a
+    // 1-token output cap shortly before the cache expires, only when the
+    // expected saving is at least $0.05. Since Pi 1.5.1 the SDK default is
+    // 'idle', which also warms for up to 30 minutes after every run: paid
+    // requests for each open chat while nobody uses it. Chats warm during runs
+    // only; utility sessions are one-shot and disposed right after their prompt.
     cacheWarming: purpose === 'ephemeral' ? 'off' : 'streaming',
   };
 }

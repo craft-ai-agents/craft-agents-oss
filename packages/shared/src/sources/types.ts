@@ -411,6 +411,11 @@ export interface ApiSourceConfig {
   // Microsoft OAuth fields (used when provider is 'microsoft')
   microsoftService?: MicrosoftService; // Predefined service for scope selection
   microsoftScopes?: string[]; // Custom scopes (overrides microsoftService)
+  // The source's own Entra app registration instead of the built-in one (public client:
+  // "Mobile and desktop applications" platform, no secret). Tokens belong to the app that
+  // issued them, so changing the client ID signs the source out.
+  microsoftOAuthClientId?: string; // Application (client) ID
+  microsoftTenantId?: string; // Directory (tenant) ID or domain; default "common"
 
   // Generic OAuth config (used when authType is 'oauth' and provider is not google/slack/microsoft)
   oauth?: ApiOAuthConfig;

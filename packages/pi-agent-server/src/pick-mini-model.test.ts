@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { pickProviderAppropriateMiniModel } from './pick-mini-model.ts';
+import { createTestPiRuntime } from './test-fixtures/pi-runtime.ts';
 
 /**
  * Minimal mock of PiModelRegistry — mirrors the pattern from model-resolution.test.ts.
@@ -97,5 +98,16 @@ describe('pickProviderAppropriateMiniModel', () => {
 
     const result = pickProviderAppropriateMiniModel('openai-codex', registry, false);
     expect(result).toBeUndefined();
+  });
+
+  // A custom endpoint labelled 'openai' must never get OpenAI's own mini model: it would
+  // authenticate with the endpoint's key and send it to api.openai.com.
+  it('customEndpointOnly: only picks a candidate the endpoint registered', async () => {
+    const { modelRegistry } = await createTestPiRuntime({ endpointModels: ['endpoint-model'] });
+    expect(pickProviderAppropriateMiniModel('openai', modelRegistry, false)).toBeDefined();
+    expect(pickProviderAppropriateMiniModel('openai', modelRegistry, true)).toBeUndefined();
+
+    const withMini = await createTestPiRuntime({ endpointModels: ['endpoint-model', 'gpt-5.4-mini'] });
+    expect(pickProviderAppropriateMiniModel('openai', withMini.modelRegistry, true)).toBe('gpt-5.4-mini');
   });
 });

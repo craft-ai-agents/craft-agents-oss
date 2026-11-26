@@ -20,7 +20,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior, getPersistedUiLanguage, resolveTitleLanguageName } from '@craft-agent/shared/config'
+import { getLlmConnection, getLlmConnections, getDefaultThinkingLevel, canSwitchClaudeAccount, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior, getPersistedUiLanguage, resolveTitleLanguageName } from '@craft-agent/shared/config'
 import type { MidStreamBehavior } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
@@ -86,18 +86,16 @@ import { buildDecisionToolCallbacks } from '../decisions/tool-callbacks'
 import { buildServersFromSources as buildServersFromSourcesShared } from '../sources/build-servers'
 import { buildMcpSourceToolCallbacks } from '../sources/mcp-source-tool-callbacks'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
-import { getValidClaudeOAuthToken } from '@craft-agent/shared/auth'
-import { resolveAuthEnvVars } from '@craft-agent/shared/config'
 import { toolMetadataStore, getLastApiError } from '@craft-agent/shared/interceptor'
 import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
 import { redactBrowserPasswordFills } from '@craft-agent/shared/agent'
 import { restoreFiles } from '@craft-agent/shared/utils/bundle-files'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
-import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, type BackgroundTaskOutput, type StopBackgroundTaskResult, type BoundPr, type PrMonitorState, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
+import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, type BackgroundTaskOutput, type StopBackgroundTaskResult, type BoundPr, type PrMonitorState, type ProjectMoveEntry, type ProjectMoveResult, type SessionProjectState, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
 import { launchOutputFile, readBackgroundTaskOutput } from './background-task-output'
 import { messageToStored, storedToMessage, withoutRetractedMessages, type Message, type StoredAttachment, type ToolDisplayMeta, type TokenUsage } from '@craft-agent/core/types'
-import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
+import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath, mapWithConcurrency } from '@craft-agent/shared/utils'
 import { loadAllSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
@@ -126,6 +124,7 @@ import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntr
 import { buildBackendRuntimeSignature, buildRestartRequiredSignature, filterAttachmentsForModelInput } from './runtime-config'
 import { validateArchiveTarget } from './archive-guards'
 import { spawnedSessionOptions, spawnRequestError } from './spawn-options'
+import { planProjectMove, type ProjectChange, type ProjectMoveNode } from './project-move'
 import { runGit } from '../services/git'
 import { addTurnUsage, branchStartTotals, type BranchParent } from './turn-usage'
 
@@ -206,6 +205,9 @@ const MAX_ANNOTATION_JSON_BYTES = 32 * 1024
 // are ignored, so the watcher does not roll back the in-memory mutation we
 // just persisted. See onSessionMetadataChange.
 const METADATA_WRITE_GUARD_MS = 5000
+
+/** Chats a project move saves at once: a bulk move of a few hundred finishes well inside an RPC timeout. */
+const PROJECT_MOVE_WRITE_CONCURRENCY = 4
 
 /**
  * Text sent to the session when a plan is approved from outside the desktop
@@ -795,6 +797,7 @@ interface ManagedSession {
   labels?: string[]
   // Workspace-scoped project binding (undefined = unbound)
   projectId?: string
+  projectOverride?: true
   // Parent session id — when set, this session is a subtask of the parent (undefined = top-level task)
   parentSessionId?: string
   // Kanban board column id ('todo' | 'in-progress' | 'done'); independent of sessionStatus
@@ -2221,6 +2224,11 @@ export class SessionManager implements ISessionManager {
       changed = true
     }
 
+    if (managed.projectOverride !== header.projectOverride) {
+      managed.projectOverride = header.projectOverride
+      changed = true
+    }
+
     // Kanban column (mutable via drag; reconcile external/multi-window changes)
     if (managed.kanbanColumn !== header.kanbanColumn) {
       managed.kanbanColumn = header.kanbanColumn
@@ -2521,63 +2529,25 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
-   * Reinitialize authentication environment variables.
-   * Call this after onboarding or settings changes to pick up new credentials.
+   * Pick up new credentials: at startup, and after onboarding or a settings change (SETUP passes
+   * the slug of the connection whose credentials changed).
    *
-   * SECURITY NOTE: These env vars are propagated to the SDK subprocess via options.ts.
-   * Bun's automatic .env loading is disabled in the subprocess (--env-file=/dev/null)
-   * to prevent a user's project .env from injecting ANTHROPIC_API_KEY and overriding
-   * OAuth auth — Claude Code prioritizes API key over OAuth token when both are set.
-   * See: https://github.com/craft-ai-agents/craft-agents-oss/issues/39
-   */
-  /**
-   * Reinitialize authentication environment variables.
+   * Connection credentials never go into process.env, which every process the app starts
+   * inherits (the Pi subprocess and the shell commands its agent runs among them). Each Claude
+   * agent resolves its own connection's credentials in postInit and starts its CLIs with only
+   * those (`buildClaudeSubprocessEnv`); a Pi agent sends its own to its subprocess.
    *
-   * Uses the default LLM connection to determine which credentials to set.
-   *
-   * @param connectionSlug - Optional connection slug to use (overrides default)
+   * @param connectionSlug - The connection whose credentials changed, if any
    */
   async reinitializeAuth(connectionSlug?: string): Promise<void> {
     try {
-      // A slug means its credentials changed (SETUP: a new key or sign-in). Running agents on it
-      // keep what their postInit resolved, and a Claude agent's CLIs start with that: resolve it
-      // again. Before process.env below, which has to end on this connection.
+      // Running agents on the connection keep what their postInit resolved, and a Claude agent's
+      // CLIs start with that: resolve it again.
       if (connectionSlug) await this.reresolveAgentCredentials(connectionSlug)
 
-      const manager = getCredentialManager()
-
-      // Get the connection to use (explicit parameter or default)
-      const slug = connectionSlug || getDefaultLlmConnection()
-      if (!slug) {
-        sessionLog.warn('No LLM connection slug available for reinitializeAuth')
-      }
-      const connection = slug ? getLlmConnection(slug) : null
-
-      // Restore managed auth env vars to their baseline before applying this connection.
+      // The auth variables Craft manages back at the values the app started with, minus the
+      // shell's Claude Bedrock-routing switches, which must never reach a Claude CLI.
       resetManagedAnthropicAuthEnvVars()
-
-      if (!connection) {
-        sessionLog.error(`No LLM connection found for slug: ${slug}`)
-        resetSummarizationClient()
-        return
-      }
-
-      sessionLog.info(`Reinitializing auth for connection: ${slug} (${connection.authType})`)
-
-      // Resolve auth env vars via shared utility (provider-agnostic)
-      const result = await resolveAuthEnvVars(connection, slug!, manager, getValidClaudeOAuthToken)
-
-      if (!result.success) {
-        sessionLog.error(`Auth resolution failed for ${slug}: ${result.warning}`)
-      } else {
-        // Apply resolved env vars to process.env
-        for (const [key, value] of Object.entries(result.envVars)) {
-          process.env[key] = value
-        }
-        sessionLog.info(`Auth env vars set for connection: ${slug}`)
-      }
-
-      // Reset cached summarization client so it picks up new credentials/base URL
       resetSummarizationClient()
     } catch (error) {
       sessionLog.error('Failed to reinitialize auth:', error)
@@ -2617,7 +2587,7 @@ export class SessionManager implements ISessionManager {
       // This ensures credentials saved before LLM connections are available via the new system
       await migrateLegacyCredentials()
 
-      // Set up authentication environment variables (critical for SDK to work)
+      // Auth variables at their startup values (agents resolve their own credentials in postInit)
       await this.reinitializeAuth()
 
       // Eagerly activate ConfigWatcher + AutomationSystem for every workspace so
@@ -3673,6 +3643,9 @@ export class SessionManager implements ISessionManager {
       labels: this.canonicalLabels(workspaceRootPath, options?.labels),
       isFlagged: options?.isFlagged,
       projectId: resolvedProjectId,
+      // Only the caller knows a child's project was chosen apart from its parent's (a spawn_session
+      // that names one); a project passed for any other reason (a task's own) doesn't make one.
+      projectOverride: options?.projectOverride && inheritFromSessionId ? true : undefined,
       parentSessionId: options?.parentSessionId,
       taskSlug: options?.taskSlug,
       taskRunId: options?.taskRunId,
@@ -5617,44 +5590,141 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
-   * Set the LLM connection for a session.
-   * Can only be changed before the first message is sent (connection is locked after).
-   * This determines which LLM provider/backend will be used for this session.
+   * Set the LLM connection for a session. Any connection can be chosen before the first
+   * message; after it the connection is locked, except for an explicit `switchAccount` to
+   * another Claude subscription account that can continue the chat (OSS #1155).
    */
-  async setSessionConnection(sessionId: string, connectionSlug: string): Promise<void> {
-    const managed = this.sessions.get(sessionId)
-    if (!managed) {
-      sessionLog.warn(`setSessionConnection: session ${sessionId} not found`)
-      throw new Error(`Session ${sessionId} not found`)
+  async setSessionConnection(sessionId: string, connectionSlug: string, switchAccount = false): Promise<void> {
+    if (switchAccount) return this.switchClaudeAccount(sessionId, connectionSlug)
+
+    // Serialized with sends, so a first message can't be admitted while the connection changes.
+    await this.sendInSlot(this.reserveAdmission(sessionId), async () => {
+      const managed = this.sessions.get(sessionId)
+      if (!managed) {
+        sessionLog.warn(`setSessionConnection: session ${sessionId} not found`)
+        throw new Error(`Session ${sessionId} not found`)
+      }
+
+      // Messages load lazily: a started session whose messages aren't loaded would look empty.
+      await this.ensureMessagesLoaded(managed)
+      if (managed.messages.length > 0 || hasConversationStarted(managed)) {
+        sessionLog.warn(`setSessionConnection: cannot change connection after session has started (${sessionId})`)
+        throw new Error('Cannot change connection after session has started')
+      }
+
+      const connection = getLlmConnection(connectionSlug)
+      if (!connection) {
+        sessionLog.warn(`setSessionConnection: connection "${connectionSlug}" not found`)
+        throw new Error(`LLM connection "${connectionSlug}" not found`)
+      }
+
+      managed.llmConnection = connectionSlug
+      // Persist in-memory state directly to avoid race with pending queue writes
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+      sessionLog.info(`Set LLM connection for session ${sessionId} to ${connectionSlug}`)
+
+      // Notify UI that connection changed (triggers capabilities refresh)
+      this.sendEvent({
+        type: 'connection_changed',
+        sessionId,
+        connectionSlug,
+        supportsBranching: resolveSupportsBranching(managed),
+      }, managed.workspace.id)
+    })
+  }
+
+  /**
+   * Move a started chat to another Claude subscription account (OSS #1155), e.g. when the
+   * current one hit its usage limit. The transcript (SDK session id), model and draft stay;
+   * the next turn runs on the new account. Refused while the chat has work in flight, or
+   * when the account can't continue it (`canSwitchClaudeAccount`).
+   */
+  private async switchClaudeAccount(sessionId: string, connectionSlug: string): Promise<void> {
+    const target = getLlmConnection(connectionSlug)
+    if (!target) throw new Error(`LLM connection "${connectionSlug}" not found`)
+    if (this.sessions.get(sessionId)?.llmConnection === connectionSlug) return
+
+    // Before taking the admission slot: this may refresh the token over the network, and
+    // the user's sends would wait on a slot held meanwhile. It reads the connection's own
+    // sign-in, including the legacy slot a default connection may run on.
+    const token = await this.getClaudeAccountToken(connectionSlug)
+    if (!token.accessToken) {
+      throw new Error(token.transientRefreshError
+        ? `Couldn't refresh the sign-in of ${target.name}: ${token.transientRefreshError}`
+        : `${target.name} is not signed in`)
     }
 
-    // Only allow changing connection before first message (session hasn't started)
-    if (managed.messages && managed.messages.length > 0) {
-      sessionLog.warn(`setSessionConnection: cannot change connection after session has started (${sessionId})`)
-      throw new Error('Cannot change connection after session has started')
+    await this.sendInSlot(this.reserveAdmission(sessionId), async () => {
+      const managed = this.sessions.get(sessionId)
+      if (!managed) throw new Error(`Session ${sessionId} not found`)
+      if (managed.llmConnection === connectionSlug) return
+
+      const busy = this.accountSwitchBlocker(managed)
+      if (busy) {
+        sessionLog.info(`switchClaudeAccount: refused for ${sessionId}: ${busy}`)
+        throw new Error(busy)
+      }
+
+      // The model the chat runs now (normalized, else its connection's default), so the new
+      // account continues with it instead of switching to its own default.
+      const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+      const { connection: current, resolvedModel } = resolveBackendContext({
+        sessionConnectionSlug: managed.llmConnection,
+        workspaceDefaultConnectionSlug: workspaceConfig?.defaults?.defaultLlmConnection,
+        managedModel: managed.model,
+      })
+      if (!canSwitchClaudeAccount(current, target, resolvedModel)) {
+        throw new Error(`${target.name} can't continue this chat`)
+      }
+
+      // A keep-alive agent keeps its CLI, started with the old account's credentials, open
+      // between turns and reports isProcessing() all along, so tryRefreshAgentRuntime would
+      // never restart it. Dispose it: the next turn starts a CLI with the new account and
+      // resumes the same SDK session (transcripts don't depend on the account).
+      if (managed.agent) await this.disposeManagedAgentRuntime(managed, 'Claude account switch')
+
+      const previousSlug = managed.llmConnection
+      const modelChanged = managed.model !== resolvedModel
+      managed.llmConnection = connectionSlug
+      managed.model = resolvedModel
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+      sessionLog.info(`Switched session ${sessionId} from connection ${previousSlug} to ${connectionSlug} (model ${resolvedModel})`)
+
+      this.sendEvent({
+        type: 'connection_changed',
+        sessionId,
+        connectionSlug,
+        supportsBranching: resolveSupportsBranching(managed),
+      }, managed.workspace.id)
+      if (modelChanged) {
+        this.sendEvent({ type: 'session_model_changed', sessionId, model: resolvedModel }, managed.workspace.id)
+      }
+    })
+  }
+
+  /** Why the chat can't switch accounts now, or null: a switch replaces the agent, which would cut off work in flight. */
+  private accountSwitchBlocker(managed: ManagedSession): string | null {
+    if (managed.isProcessing || managed.isAsyncOperationOngoing || managed.pendingActivationResend || managed.autoRetryTimer) {
+      return 'Wait for the chat to finish before switching accounts'
     }
-
-    // Validate connection exists
-    const { getLlmConnection } = await import('@craft-agent/shared/config/storage')
-    const connection = getLlmConnection(connectionSlug)
-    if (!connection) {
-      sessionLog.warn(`setSessionConnection: connection "${connectionSlug}" not found`)
-      throw new Error(`LLM connection "${connectionSlug}" not found`)
+    if (managed.messageQueue.length > 0 || managed.pendingQueueReplays) {
+      return 'Wait for the queued messages to be sent before switching accounts'
     }
+    if (managed.pendingHandoffSummary) {
+      return 'Wait for the handoff summary before switching accounts'
+    }
+    if (this.keepBackgroundTasksAlive && [...managed.backgroundTaskRegistry.values()].some(task => task.status === 'running')) {
+      return 'Stop the running background tasks before switching accounts'
+    }
+    return null
+  }
 
-    managed.llmConnection = connectionSlug
-    // Persist in-memory state directly to avoid race with pending queue writes
-    this.persistSession(managed)
-    await this.flushSession(managed.id)
-    sessionLog.info(`Set LLM connection for session ${sessionId} to ${connectionSlug}`)
-
-    // Notify UI that connection changed (triggers capabilities refresh)
-    this.sendEvent({
-      type: 'connection_changed',
-      sessionId,
-      connectionSlug,
-      supportsBranching: resolveSupportsBranching(managed),
-    }, managed.workspace.id)
+  /** The connection's own Claude sign-in, refreshed when expired (a test seam). */
+  private async getClaudeAccountToken(connectionSlug: string): Promise<{ accessToken: string | null; transientRefreshError?: string }> {
+    const { getValidClaudeOAuthToken } = await import('@craft-agent/shared/auth')
+    return getValidClaudeOAuthToken(connectionSlug)
   }
 
   // ============================================
@@ -8535,27 +8605,113 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
-   * Bind or unbind a session to/from a workspace project.
-   * Pass `null` to unbind. The session's working directory is NOT changed retroactively —
-   * the project binding is only used as a default for newly created sessions.
+   * Move chats to a project (`null` = no project): `sessionId` plus `additionalSessionIds`, as
+   * checked by the RPC handler (`projectMoveSelection`). The first of them this server knows picks
+   * the workspace; unknown ids and chats of other workspaces are ignored. The chats nested under
+   * them in the list (spawned, task steps, branches) follow, except one that keeps its own project
+   * (`planProjectMove`, which also sets the `projectOverride` marker). Working directories and
+   * transcripts stay as they are. Returns the chats that changed, with what they had before (Undo).
    */
-  async setSessionProjectId(sessionId: string, projectId: string | null): Promise<void> {
-    const managed = this.sessions.get(sessionId)
-    if (managed) {
-      managed.projectId = projectId ?? undefined
-      this.setMetadataWriteGuard(managed)
-
-      this.sendEvent({
-        type: 'project_id_changed',
-        sessionId: managed.id,
-        projectId: managed.projectId ?? null,
-      }, managed.workspace.id)
-
-      this.persistSession(managed)
-      await this.flushSession(managed.id)
-      const watcher = this.configWatchers.get(managed.workspace.rootPath)
-      watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
+  async setSessionProjectId(
+    sessionId: string,
+    projectId: string | null,
+    additionalSessionIds: readonly string[] = [],
+  ): Promise<ProjectMoveResult> {
+    const selected = [sessionId, ...additionalSessionIds]
+    const root = selected.map(id => this.sessions.get(id)).find(session => session !== undefined)
+    if (!root) return { moved: [] }
+    const { workspace } = root
+    if (projectId !== null) {
+      const { loadProjectById } = await import('@craft-agent/shared/projects')
+      if (!loadProjectById(workspace.rootPath, projectId)) {
+        throw new Error(`Project ${projectId} not found in workspace ${workspace.id}`)
+      }
     }
+
+    const nodes: ProjectMoveNode[] = []
+    for (const session of this.sessions.values()) {
+      if (session.workspace.id !== workspace.id) continue
+      nodes.push({
+        id: session.id,
+        // The relation the session list nests by (renderer utils/session-tree.ts listParentId)
+        listParentId: session.parentSessionId
+          ?? (session.branchFromSessionPath ? basename(session.branchFromSessionPath) : undefined),
+        projectId: session.projectId,
+        projectOverride: session.projectOverride,
+      })
+    }
+    const changes = planProjectMove(nodes, selected, projectId ?? undefined)
+    return { moved: await this.applyProjectChanges(workspace, changes) }
+  }
+
+  /**
+   * Put chats back as a project move found them (Undo of `setSessionProjectId`): exactly the
+   * given chats get the given project and marker, nothing nested follows. Chats of another
+   * workspace than `sessionId`'s are ignored; a project deleted since leaves its chats without
+   * one, as deleting it does.
+   */
+  async restoreSessionProjects(sessionId: string, states: readonly SessionProjectState[]): Promise<ProjectMoveResult> {
+    const root = this.sessions.get(sessionId) ?? states.map(state => this.sessions.get(state.id)).find(session => session !== undefined)
+    if (!root) return { moved: [] }
+    const { workspace } = root
+    const { loadProjectById } = await import('@craft-agent/shared/projects')
+    const existing = new Map<string, boolean>()
+    const projectExists = (id: string) => {
+      if (!existing.has(id)) existing.set(id, !!loadProjectById(workspace.rootPath, id))
+      return existing.get(id)!
+    }
+
+    const changes = new Map<string, ProjectChange>()
+    for (const state of states) {
+      const managed = this.sessions.get(state.id)
+      if (!managed || managed.workspace.id !== workspace.id) continue
+      const deleted = state.projectId !== null && !projectExists(state.projectId)
+      const projectId = deleted ? undefined : state.projectId ?? undefined
+      const projectOverride = !deleted && state.projectOverride ? true : undefined
+      if (managed.projectId === projectId && managed.projectOverride === projectOverride) {
+        changes.delete(state.id)
+        continue
+      }
+      changes.set(state.id, { id: state.id, projectId, projectOverride })
+    }
+    return { moved: await this.applyProjectChanges(workspace, [...changes.values()]) }
+  }
+
+  /**
+   * Apply project bindings: set them in memory, tell clients (one `project_id_changed` per chat,
+   * which the renderer applies as one batch), then save them. A chat with its messages loaded goes
+   * through the persistence queue; any other only gets its header patched, so a move never reads,
+   * parses or keeps the transcript of a chat nobody opened.
+   */
+  private async applyProjectChanges(workspace: Workspace, changes: readonly ProjectChange[]): Promise<ProjectMoveEntry[]> {
+    const moved: ProjectMoveEntry[] = []
+    const touched: ManagedSession[] = []
+    for (const change of changes) {
+      const managed = this.sessions.get(change.id)
+      if (!managed) continue
+      moved.push({ id: managed.id, previousProjectId: managed.projectId ?? null, previousOverride: managed.projectOverride === true })
+      managed.projectId = change.projectId
+      managed.projectOverride = change.projectOverride
+      this.setMetadataWriteGuard(managed)
+      touched.push(managed)
+      this.sendEvent({ type: 'project_id_changed', sessionId: managed.id, projectId: managed.projectId ?? null }, workspace.id)
+    }
+
+    const watcher = this.configWatchers.get(workspace.rootPath)
+    await mapWithConcurrency(touched, PROJECT_MOVE_WRITE_CONCURRENCY, async (managed) => {
+      if (managed.messagesLoaded) {
+        this.persistSession(managed)
+        await this.flushSession(managed.id)
+      } else {
+        // Read when the patch runs, so a later change to the same chat can't be overwritten
+        await sessionPersistenceQueue.patchHeader(workspace.rootPath, managed.id, () => ({
+          projectId: managed.projectId,
+          projectOverride: managed.projectOverride,
+        }))
+      }
+      watcher?.notifyFileChange(`sessions/${managed.id}/session.jsonl`)
+    })
+    return moved
   }
 
   /**
@@ -8650,7 +8806,7 @@ export class SessionManager implements ISessionManager {
     // the connection_changed event below keeps the renderer in sync.
     managed.taskSlug = taskSlug
     managed.taskDraft = false
-    if (reconcile?.projectId !== undefined) managed.projectId = reconcile.projectId
+    await this.moveTaskToProject(managed, reconcile?.projectId)
     if (connectionChanged) managed.llmConnection = reconcile!.llmConnection
     const renamed = Boolean(reconcile?.name && reconcile.name !== managed.name)
     if (renamed) managed.name = reconcile!.name!
@@ -8667,11 +8823,10 @@ export class SessionManager implements ISessionManager {
     await this.flushSession(managed.id)
 
     // One-shot board promotion: clearing taskDraft (sent as `false`, never `undefined` — undefined
-    // is dropped over the JSON wire) reveals the already-announced tile; taskSlug/projectId
-    // reconcile its metadata. `false` is falsy for the board's `if (meta.taskDraft)` skip.
-    const changes: { taskDraft: boolean; taskSlug: string; projectId?: string } = { taskDraft: false, taskSlug }
-    if (reconcile?.projectId !== undefined) changes.projectId = reconcile.projectId
-    this.sendEvent({ type: 'session_metadata_changed', sessionId, changes }, managed.workspace.id)
+    // is dropped over the JSON wire) reveals the already-announced tile; taskSlug reconciles its
+    // metadata (a project change went out as project_id_changed). `false` is falsy for the board's
+    // `if (meta.taskDraft)` skip.
+    this.sendEvent({ type: 'session_metadata_changed', sessionId, changes: { taskDraft: false, taskSlug } }, managed.workspace.id)
     if (renamed) {
       this.sendEvent({ type: 'name_changed', sessionId, name: managed.name }, managed.workspace.id)
     }
@@ -8745,7 +8900,8 @@ export class SessionManager implements ISessionManager {
     // the connection_changed event below keeps the renderer in sync.
     managed.taskSlug = taskSlug
     managed.taskDraft = false
-    if (reconcile?.projectId !== undefined) managed.projectId = reconcile.projectId
+    // The tile's quick-add subtasks move with it
+    await this.moveTaskToProject(managed, reconcile?.projectId)
     if (connectionChanged) managed.llmConnection = reconcile!.llmConnection
     const renamed = Boolean(reconcile?.name && reconcile.name !== managed.name)
     if (renamed) managed.name = reconcile!.name!
@@ -8761,9 +8917,8 @@ export class SessionManager implements ISessionManager {
     this.persistSession(managed)
     await this.flushSession(managed.id)
 
-    const changes: { taskDraft: boolean; taskSlug: string; projectId?: string } = { taskDraft: false, taskSlug }
-    if (reconcile?.projectId !== undefined) changes.projectId = reconcile.projectId
-    this.sendEvent({ type: 'session_metadata_changed', sessionId, changes }, managed.workspace.id)
+    // A project change went out as project_id_changed (one per chat that moved)
+    this.sendEvent({ type: 'session_metadata_changed', sessionId, changes: { taskDraft: false, taskSlug } }, managed.workspace.id)
     if (renamed) {
       this.sendEvent({ type: 'name_changed', sessionId, name: managed.name }, managed.workspace.id)
     }
@@ -8779,6 +8934,21 @@ export class SessionManager implements ISessionManager {
     watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
     sessionLog.info('bindExistingSessionToTask: bound existing session', { sessionId, taskSlug, renamed, modelChanged, connectionChanged, cwdChanged, modeChanged })
     return true
+  }
+
+  /**
+   * Put a task's orchestrator in the task's project (`undefined` = leave it) through the project
+   * move, so the chats nested under it (subtasks added on the board) come along. A project that
+   * doesn't exist is skipped with a warning rather than bound or failing the task.
+   */
+  private async moveTaskToProject(managed: ManagedSession, projectId: string | undefined): Promise<void> {
+    if (projectId === undefined || projectId === managed.projectId) return
+    const { loadProjectById } = await import('@craft-agent/shared/projects')
+    if (!loadProjectById(managed.workspace.rootPath, projectId)) {
+      sessionLog.warn('Task project not found, the orchestrator keeps its project', { sessionId: managed.id, projectId })
+      return
+    }
+    await this.setSessionProjectId(managed.id, projectId)
   }
 
   /**

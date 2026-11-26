@@ -199,7 +199,8 @@ export interface CoreBackendConfig {
   /**
    * Claude only: the credentials and endpoint of an agent that never runs postInit (the Settings
    * connection test). Its CLI starts with them and without any Claude auth variable from
-   * process.env (`buildClaudeSubprocessEnv`); postInit replaces them with what it resolves.
+   * process.env (`buildClaudeSubprocessEnv`); postInit replaces them with what it resolves, plus
+   * the connection's mini model, and never writes them to process.env.
    */
   connectionEnv?: Record<string, string>;
 

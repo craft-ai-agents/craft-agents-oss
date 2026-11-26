@@ -17,9 +17,18 @@ import type {
   SlackService,
   MicrosoftService,
 } from '../types.ts';
+import { MICROSOFT_SERVICES } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
 import { generateRequestId } from '../source-helpers.ts';
 import { basename } from 'node:path';
+
+/** How a Microsoft source chooses its scopes (MICROSOFT_SCOPES_RULE in @craft-agent/shared). */
+const MICROSOFT_SCOPES_RULE = `Set microsoftService (${new Intl.ListFormat('en', { type: 'disjunction' })
+  .format(MICROSOFT_SERVICES.map(service => `'${service}'`))}) or microsoftScopes in api config.`;
+
+function isMicrosoftService(value: string | undefined): value is MicrosoftService {
+  return value !== undefined && (MICROSOFT_SERVICES as readonly string[]).includes(value);
+}
 
 /** The LoadedSource shape the credential manager needs for a source config. */
 function toLoadedSource(ctx: SessionToolContext, config: SourceConfig) {
@@ -318,23 +327,43 @@ export async function handleMicrosoftOAuthTrigger(
     );
   }
 
+  // Without the built-in app (builds without MICROSOFT_OAUTH_CLIENT_ID), the source needs its own
+  if (ctx.isMicrosoftOAuthConfigured && !ctx.isMicrosoftOAuthConfigured(source.api?.microsoftOAuthClientId)) {
+    return errorResponse(
+      `Microsoft OAuth is not configured for source '${sourceSlug}': this build has no built-in Microsoft app.
+
+Register your own app in the Microsoft Entra admin center (App registrations → New registration):
+- Platform "Mobile and desktop applications" with the redirect URIs https://thecraftagents.com/auth/callback and http://localhost/callback
+- No client secret
+
+Then add its IDs to the source's config.json:
+\`\`\`json
+{
+  "api": {
+    "microsoftOAuthClientId": "YOUR_APPLICATION_CLIENT_ID",
+    "microsoftTenantId": "YOUR_TENANT_ID"
+  }
+}
+\`\`\`
+\`microsoftTenantId\` is needed only when the app accepts accounts of a single organization; without it the sign-in uses "common".`
+    );
+  }
+
   // A valid or refreshable token needs no sign-in card
   const ready = await reuseOrRefreshToken(ctx, source);
   if (ready) return ready;
 
-  // Determine service from config
-  let service: MicrosoftService | undefined;
-  if (source.api?.microsoftService) {
-    service = source.api.microsoftService;
-  } else if (ctx.inferMicrosoftService) {
-    service = ctx.inferMicrosoftService(source.api?.baseUrl);
+  // What the sign-in asks for (credential manager prepareOAuth): the source's microsoftScopes,
+  // else the scopes of its service, explicit or inferred from the base URL. config.json is not
+  // validated on load, so a service that doesn't exist (e.g. 'calendar') is refused here, where
+  // the agent can still fix the config, rather than when the sign-in starts.
+  const hasScopes = Boolean(source.api?.microsoftScopes?.length);
+  const service: string | undefined = source.api?.microsoftService || ctx.inferMicrosoftService?.(source.api?.baseUrl);
+  if (!hasScopes && !service) {
+    return errorResponse(`Cannot determine Microsoft service for source '${sourceSlug}'. ${MICROSOFT_SCOPES_RULE}`);
   }
-
-  // Require explicit service configuration if it can't be inferred
-  if (!service) {
-    return errorResponse(
-      `Cannot determine Microsoft service for source '${sourceSlug}'. Set microsoftService ('outlook', 'microsoft-calendar', 'onedrive', 'teams', or 'sharepoint') in api config.`
-    );
+  if (!hasScopes && !isMicrosoftService(service)) {
+    return errorResponse(`Unknown microsoftService '${service}' for source '${sourceSlug}'. ${MICROSOFT_SCOPES_RULE}`);
   }
 
   // Build auth request
@@ -344,7 +373,7 @@ export async function handleMicrosoftOAuthTrigger(
     sessionId: ctx.sessionId,
     sourceSlug,
     sourceName: source.name,
-    service,
+    service: isMicrosoftService(service) ? service : undefined,
   };
 
   // Trigger auth request

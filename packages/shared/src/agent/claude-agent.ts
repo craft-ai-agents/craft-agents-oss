@@ -17,10 +17,7 @@ import { runErrorDiagnostics } from './diagnostics.ts';
 import { loadStoredConfig, loadConfigDefaults, type Workspace, type AuthType, getDefaultLlmConnection, getLlmConnection } from '../config/storage.ts';
 import { getValidClaudeOAuthToken } from '../auth/state.ts';
 import { largePdfNote, shouldInlinePdf } from './pdf-inline.ts';
-import {
-  clearClaudeBedrockRoutingEnvVars,
-  resolveAuthEnvVars,
-} from '../config/llm-connections.ts';
+import { resolveAuthEnvVars } from '../config/llm-connections.ts';
 import type { McpClientPool } from '../mcp/mcp-pool.ts';
 import { proxyToolName } from '../mcp/proxy-tool-name.ts';
 import { loadPlanFromPath } from '../sessions/storage.ts';
@@ -1076,14 +1073,6 @@ export class ClaudeAgent extends BaseAgent {
       return this.recordAuthFailure({ kind: 'connection', warning: `Connection not found: ${slug}` });
     }
 
-    // Clear all auth env vars first for clean state.
-    // Claude subprocesses must never inherit Bedrock-routing toggles from a
-    // previous connection or parent process environment.
-    delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
-    delete process.env.ANTHROPIC_BASE_URL;
-    clearClaudeBedrockRoutingEnvVars();
-
     // Resolve auth env vars via shared utility
     const manager = getCredentialManager();
     let transientRefreshError: string | undefined;
@@ -1102,21 +1091,15 @@ export class ClaudeAgent extends BaseAgent {
     }
     this.authFailure = null;
 
-    // This agent's CLI processes start with these (buildClaudeSubprocessEnv). process.env gets
-    // them too, for code that still reads the ambient credentials, but the next session's
-    // postInit overwrites them there: a CLI started from it ran on that session's account.
-    this.connectionEnv = result.envVars;
-    for (const [key, value] of Object.entries(result.envVars)) {
-      process.env[key] = value;
-    }
-
-    // Pass mini model to SDK subprocess so built-in tools like WebFetch
-    // use the correct summarization model (instead of hardcoded Haiku).
-    // This is critical for custom providers where the default Haiku model ID
-    // doesn't exist on the provider's endpoint.
-    if (this.config.miniModel) {
-      process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = this.config.miniModel;
-    }
+    // Only this agent's CLI processes start with these (buildClaudeSubprocessEnv), never
+    // process.env: every process the app starts would inherit them, the Pi subprocess and the
+    // shell commands its agent runs included.
+    this.connectionEnv = {
+      ...result.envVars,
+      // Built-in tools like WebFetch summarize with the "Haiku" model: the connection's mini
+      // model, whose id a custom provider's endpoint knows (Claude's Haiku id may not exist there).
+      ...(this.config.miniModel ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: this.config.miniModel } : {}),
+    };
 
     return { authInjected: true };
   }
@@ -1312,11 +1295,10 @@ export class ClaudeAgent extends BaseAgent {
       const model = this._model;
 
       // Log provider context for diagnostics (custom base URL = third-party provider)
-      const defaultConnSlug = getDefaultLlmConnection();
-      const defaultConn = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null;
-      const activeBaseUrl = defaultConn?.baseUrl;
+      const connSlug = this.config.connectionSlug ?? getDefaultLlmConnection();
+      const activeBaseUrl = connSlug ? getLlmConnection(connSlug)?.baseUrl : undefined;
       if (activeBaseUrl) {
-        debug(`[chat] Custom provider: baseUrl=${activeBaseUrl}, model=${model}, hasApiKey=${!!process.env.ANTHROPIC_API_KEY}`);
+        debug(`[chat] Custom provider: baseUrl=${activeBaseUrl}, model=${model}, hasApiKey=${!!this.connectionEnv?.ANTHROPIC_API_KEY}`);
       }
 
       // A per-turn override (adaptive thinking) applies to this turn only.
@@ -2492,8 +2474,10 @@ This is a branched conversation. All prior messages in this conversation are par
           // Run diagnostics to identify specific cause (2s timeout)
           // Derive authType from the default LLM connection
           const { getDefaultLlmConnection, getLlmConnection } = await import('../config/storage.ts');
-          const defaultConnSlug = getDefaultLlmConnection();
-          const connection = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null;
+          // The session's own connection: its base URL is the endpoint the CLI used (the
+          // diagnostics fall back to process.env, which holds no connection's endpoint).
+          const connSlug = this.config.connectionSlug ?? getDefaultLlmConnection();
+          const connection = connSlug ? getLlmConnection(connSlug) : null;
           // Map connection authType to legacy AuthType format for diagnostics
           let diagnosticAuthType: AuthType | undefined;
           if (connection) {

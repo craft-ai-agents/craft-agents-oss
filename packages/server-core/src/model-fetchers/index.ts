@@ -136,7 +136,8 @@ class ModelRefreshService {
       return
     }
 
-    // Preserve user's defaultModel if still valid
+    // Preserve user's defaultModel if still valid, else take the first model: the Pi
+    // fetcher lists models in Craft's preference order (sortPiModelsByPreference).
     const currentDefault = connection.defaultModel
     const stillValid = currentDefault && newModels.some(m => m.id === currentDefault)
     const newDefault = stillValid

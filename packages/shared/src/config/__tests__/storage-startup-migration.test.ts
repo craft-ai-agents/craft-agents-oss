@@ -117,6 +117,33 @@ describe('startup migration (integration)', () => {
     expect(connection.authType).toBe('api_key')
   })
 
+  // The Pi SDK had no models for 'openai-eu'/'openai-us', so these connections were saved without any.
+  it('gives a stored OpenAI EU connection without models the OpenAI models and default', () => {
+    const { configDir, workspaceRoot, configPath } = setupWorkspaceConfigDir()
+
+    writeRootConfig(configPath, workspaceRoot, [
+      {
+        slug: 'pi-api-key',
+        name: 'OpenAI EU',
+        providerType: 'pi',
+        authType: 'api_key',
+        piAuthProvider: 'openai-eu',
+        baseUrl: 'https://eu.api.openai.com/v1',
+        createdAt: Date.now(),
+        models: [],
+        defaultModel: '',
+      },
+    ])
+
+    runMigration(configDir)
+
+    const connection = readPiApiKeyConnection(configPath)
+    expect(connection.piAuthProvider).toBe('openai-eu')
+    expect(connection.baseUrl).toBe('https://eu.api.openai.com/v1')
+    expect([...getModelIds(connection)].sort()).toEqual(getPiModelsForAuthProvider('openai').map(m => m.id).sort())
+    expect(connection.defaultModel).toBe('pi/gpt-6.2-astra')
+  })
+
   it('preserves userDefined3Tier model subsets during startup migration', () => {
     const { configDir, workspaceRoot, configPath } = setupWorkspaceConfigDir()
     const userDefinedModels = ['pi/claude-opus-4-6', 'pi/claude-sonnet-4-6', 'pi/claude-haiku-4-5']

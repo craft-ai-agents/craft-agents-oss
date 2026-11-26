@@ -229,6 +229,11 @@ export interface SessionToolContext {
    */
   isGoogleOAuthConfigured?(clientId?: string, clientSecret?: string): boolean;
 
+  /**
+   * Check if Microsoft OAuth can start: the source's own client ID, or the built-in one.
+   */
+  isMicrosoftOAuthConfigured?(clientId?: string): boolean;
+
   // ============================================================
   // Icon Management (for source_test)
   // ============================================================

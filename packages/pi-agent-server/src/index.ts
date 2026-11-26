@@ -63,8 +63,15 @@ setBedrockProviderModule(bedrockProviderModule);
 import { registerBunOAuthFlows } from '@earendil-works/pi-ai/bun-oauth';
 registerBunOAuthFlows();
 
-// Model resolution (extracted for testability + custom-endpoint precedence)
-import { resolvePiModel, isDeniedMiniModelId } from './model-resolution.ts';
+// Model resolution (extracted for testability + custom-endpoint isolation)
+import { resolvePiModel, isDeniedMiniModelId, isModelUsableWithAuth } from './model-resolution.ts';
+import {
+  connectionPiProvider,
+  hasCustomEndpoint,
+  pickCustomEndpointUtilityModel,
+  sessionModelProviderError,
+  syncPiCredentialStore,
+} from './credential-routing.ts';
 import { pickProviderAppropriateMiniModel } from './pick-mini-model.ts';
 import { queryMiniModel } from './mini-model-query.ts';
 import {
@@ -96,7 +103,7 @@ import type { LLMQueryRequest, LLMQueryResult } from '../../shared/src/agent/llm
 import { PI_TOOL_NAME_MAP, THINKING_TO_PI } from '../../shared/src/agent/backend/pi/constants.ts';
 import { getDefaultSummarizationModel } from '../../shared/src/config/models.ts';
 import { createWebFetchTool } from './tools/web-fetch.ts';
-import { resolveSearchProvider } from './tools/search/resolve-provider.ts';
+import { createLiveSearchProvider } from './tools/search/resolve-provider.ts';
 import { createSearchTool } from './tools/search/create-search-tool.ts';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
 import {
@@ -108,9 +115,9 @@ import { readContextUsage, deferContextUsage } from './context-usage.ts';
 import { waitForCompaction, MANUAL_COMPACT_WAIT_MS, PROMPT_COMPACT_WAIT_MS } from './compaction-wait.ts';
 import type { PiCompactResult, PiContextUsagePayload, PiLargeResultGateRequest, PiLargeResultGateResponse } from '../../shared/src/agent/backend/pi/protocol.ts';
 import { createLargeResultGateClient } from './large-result-gate.ts';
-import { adaptCredentialForPiSdk, type PiCredential } from './adapt-credential.ts';
+import type { PiCredential } from './adapt-credential.ts';
 import { resolveCraftAgentDir } from './agent-dir.ts';
-import { toPiProviderId } from '../../shared/src/config/pi-provider-ids.ts';
+import { regionalProviderBaseUrl, toPiProviderId } from '../../shared/src/config/pi-provider-ids.ts';
 import { providerEndpointEnv } from './provider-endpoint-env.ts';
 
 // ============================================================
@@ -142,6 +149,11 @@ interface InitMessage {
   customModels?: Array<string | { id: string; contextWindow?: number; supportsImages?: boolean }>;
   /** Compact once context reaches this many tokens (config.json `autoCompactWindow`). */
   autoCompactWindow?: number;
+  /**
+   * The connection's provider, also when there is no piAuth (`environment` auth): the only
+   * provider the session may authenticate (credential-routing.ts).
+   */
+  piAuthProvider?: string;
   piAuth?: { provider: string; credential: PiCredential };
 }
 
@@ -424,11 +436,6 @@ function resolvedCwd(): string {
   return wd;
 }
 
-// Helper: derive preferCustomEndpoint flag from init config
-function shouldPreferCustomEndpoint(): boolean {
-  return Boolean(initConfig?.customEndpoint && initConfig?.baseUrl?.trim());
-}
-
 /**
  * Expose the active Pi model API/provider/base URL to the interceptor process.
  * This gives the interceptor a robust routing hint (instead of brittle URL-only matching).
@@ -486,6 +493,12 @@ function isLocalhostUrl(url: string): boolean {
 let customEndpointModelIds: Set<string> = new Set();
 
 /**
+ * A regional preset (OpenAI EU/US): the SDK provider whose built-in models all go to the
+ * region's API, set at init (pi-provider-ids.ts `regionalProviderBaseUrl`).
+ */
+let pinnedProviderEndpoint: { provider: string; baseUrl: string } | null = null;
+
+/**
  * Register (or re-register) the custom-endpoint provider with the given models.
  * Note: registerProvider replaces the entire provider, so we maintain a Set of all
  * known model IDs and always pass the full set.
@@ -527,6 +540,20 @@ function registerCustomEndpointModels(
 }
 
 /**
+ * Register one more model for the custom endpoint and return it: a session model,
+ * set_model or a runtime update can name a model the connection's list doesn't have,
+ * and the endpoint is the only place a custom-endpoint session's model may run.
+ */
+function registerCustomEndpointModel(registry: PiModelRegistry, modelId: string): ReturnType<PiModelRegistry['find']> {
+  const api = initConfig?.customEndpoint?.api;
+  const baseUrl = initConfig?.baseUrl?.trim();
+  if (!api || !baseUrl) return undefined;
+  const bareId = stripPiPrefix(modelId);
+  registerCustomEndpointModels(registry, api, baseUrl, [{ id: bareId }]);
+  return registry.find('custom-endpoint', bareId) ?? undefined;
+}
+
+/**
  * Get the shared credential store + model runtime + registry, (re-)injecting
  * the user's credentials on every call. Used by both the main session and
  * ephemeral queryLlm sessions.
@@ -550,21 +577,10 @@ async function createAuthenticatedRuntime(): Promise<{
     moduleCredentialStore = new InMemoryCredentialStore();
   }
   const credentials = moduleCredentialStore;
-  if (initConfig?.piAuth) {
-    const { provider, credential } = initConfig.piAuth;
-    const adapted = adaptCredentialForPiSdk(provider, credential);
-    if (adapted) {
-      await credentials.modify(provider, async () => adapted);
-      debugLog(`Injected ${credential.type} credential for provider: ${provider}${
-        adapted.type !== credential.type ? ` (stored as ${adapted.type} for SDK resolution)` : ''}`);
-    } else {
-      debugLog(`Not storing ${credential.type} credential for provider: ${provider} — resolves ambiently from env`);
-    }
-  } else if (initConfig?.apiKey) {
-    const apiKey = initConfig.apiKey;
-    await credentials.modify('anthropic', async () => ({ type: 'api_key', key: apiKey }));
-    debugLog('Injected API key into credential store (legacy fallback)');
-  }
+  // The connection's credential plus blocking entries for every other provider (for a
+  // custom endpoint, whose key goes to the endpoint alone, for all of them), before the
+  // runtime takes its first look at which providers authenticate (credential-routing.ts).
+  await syncPiCredentialStore(credentials, initConfig, debugLog);
 
   if (!moduleRuntimePromise) {
     const build = async (): Promise<{
@@ -579,21 +595,28 @@ async function createAuthenticatedRuntime(): Promise<{
       });
       const modelRegistry = new PiModelRegistry(modelRuntime);
 
+      // A regional preset: the provider's built-in models, all at the region's API (a
+      // registration without models only replaces their base URL).
+      if (pinnedProviderEndpoint) {
+        modelRegistry.registerProvider(pinnedProviderEndpoint.provider, { baseUrl: pinnedProviderEndpoint.baseUrl });
+        debugLog(`Regional API: ${pinnedProviderEndpoint.provider} models go to ${pinnedProviderEndpoint.baseUrl}`);
+      }
+
       // Register custom endpoint models dynamically via Pi SDK's registerProvider API.
       // This makes arbitrary OpenAI/Anthropic-compatible endpoints work through the Pi SDK
       // by creating synthetic Model<Api> objects that the SDK requires. One-time per cache
       // lifetime: later config changes re-register via update_runtime_config, which
       // operates on this same shared registry.
-      const hasCustomEndpoint = !!initConfig?.baseUrl?.trim();
-      if (hasCustomEndpoint && initConfig?.customEndpoint) {
+      const baseUrl = initConfig?.baseUrl?.trim();
+      if (baseUrl && initConfig?.customEndpoint) {
         const { api } = initConfig.customEndpoint;
         const modelEntries: CustomEndpointModelEntry[] = (initConfig.customModels?.length
           ? initConfig.customModels
           : [initConfig.model || 'default']
         ).map(normalizeCustomEndpointModelEntry);
         customEndpointModelIds = new Set();  // Reset on fresh registry creation
-        registerCustomEndpointModels(modelRegistry, api, initConfig.baseUrl!.trim(), modelEntries);
-      } else if (hasCustomEndpoint && !initConfig?.customEndpoint) {
+        registerCustomEndpointModels(modelRegistry, api, baseUrl, modelEntries);
+      } else if (baseUrl && !pinnedProviderEndpoint) {
         debugLog('Custom endpoint without protocol config — models may not resolve. Set customEndpoint.api for proper routing.');
       }
 
@@ -620,27 +643,18 @@ async function ensureSession(): Promise<AgentSession> {
   const { modelRuntime, modelRegistry } = await createAuthenticatedRuntime();
 
   // Build tools: coding tools + web tools wrapped with permission hooks + proxy tools.
-  // Search provider is selected based on the user's LLM connection:
+  // Search provider is selected based on the user's LLM connection (resolve-provider.ts):
   //   - OpenAI/OpenRouter → Responses API built-in web_search
   //   - ChatGPT Plus (openai-codex) → ChatGPT backend responses endpoint
   //   - Google → Gemini API with googleSearch grounding
-  //   - Others → DuckDuckGo fallback
+  //   - Others, and custom endpoints (a base URL that isn't the provider's official
+  //     API) → DuckDuckGo fallback, so their key never reaches the provider
   //
-  // IMPORTANT: resolve dynamically on each search call so token_update refreshes
-  // are used without recreating the session.
-  // The active model is passed so the ChatGPT backend search provider uses a model the
-  // account supports instead of a hardcoded one (craft-agents-oss#1023). Resolved per call
-  // (alongside the provider) so set_model / token_update refreshes are picked up live.
-  const activeSearchModel = () => (initConfig?.model ? stripPiPrefix(initConfig.model) : undefined);
-  const searchProvider = {
-    get name() {
-      return resolveSearchProvider(initConfig?.piAuth, activeSearchModel()).name;
-    },
-    async search(query: string, count: number) {
-      return resolveSearchProvider(initConfig?.piAuth, activeSearchModel()).search(query, count);
-    },
-  };
-  const searchTool = createSearchTool(searchProvider);
+  // IMPORTANT: resolved on each search call from the live initConfig, so token_update
+  // (piAuth), set_model (the model the ChatGPT backend searches with, instead of a
+  // hardcoded one, craft-agents-oss#1023) and update_runtime_config (baseUrl; it
+  // replaces initConfig) take effect without recreating the session.
+  const searchTool = createSearchTool(createLiveSearchProvider(() => initConfig));
   const webFetchTool = createWebFetchTool(() =>
     initConfig ? getSessionPath(initConfig.workspaceRootPath, initConfig.sessionId) : null
   );
@@ -732,34 +746,44 @@ async function ensureSession(): Promise<AgentSession> {
 
   }
 
-  // Set model if specified
-  if (initConfig.model) {
+  // Set model if specified. With a custom endpoint the session always runs on an
+  // endpoint model: one the connection's list doesn't have is registered for the
+  // endpoint (as set_model does), and a session without a model takes the first
+  // registered one. The Pi SDK's own default would be a built-in model of the vendor
+  // the endpoint's credential is labelled with. Any other session whose model doesn't
+  // resolve gets the SDK's default model of the connection's provider: the only provider
+  // that authenticates (credential-routing.ts), checked once the session exists.
+  const customEndpointOnly = hasCustomEndpoint(initConfig);
+  const authProvider = connectionPiProvider(initConfig);
+  const sessionModelId = initConfig.model || (customEndpointOnly ? [...customEndpointModelIds][0] : undefined);
+  if (sessionModelId) {
     try {
-      const piModel = resolvePiModel(modelRegistry, initConfig.model, initConfig.piAuth?.provider, shouldPreferCustomEndpoint());
+      const piModel = resolvePiModel(modelRegistry, sessionModelId, authProvider, customEndpointOnly)
+        ?? (customEndpointOnly ? registerCustomEndpointModel(modelRegistry, sessionModelId) : undefined);
       if (piModel) {
         // Verify resolved model's provider is compatible with the authenticated provider.
         // Without this, a model that resolves to a different provider (e.g. azure
         // when authed as github-copilot) would cause "No API key found" at runtime.
-        const resolvedProvider = (piModel as any)?.provider;
-        const isCompatible = !initConfig.piAuth ||
-          resolvedProvider === initConfig.piAuth.provider ||
-          resolvedProvider === 'custom-endpoint';
-        if (isCompatible) {
+        if (isModelUsableWithAuth(piModel.provider, authProvider, customEndpointOnly)) {
           sessionOptions.model = piModel;
           setInterceptorApiHints(piModel as { api?: string; provider?: string; baseUrl?: string });
         } else {
-          debugLog(`Model ${initConfig.model} resolved to incompatible provider ${resolvedProvider} (expected ${initConfig.piAuth!.provider}), skipping`);
+          debugLog(`Model ${sessionModelId} resolved to incompatible provider ${piModel.provider} (expected ${authProvider}), skipping`);
           setInterceptorApiHints(undefined);
         }
       } else {
+        debugLog(`Model ${sessionModelId} did not resolve; the Pi SDK picks its default model of ${authProvider ?? 'any provider that authenticates'}`);
         setInterceptorApiHints(undefined);
       }
     } catch {
-      debugLog(`Could not resolve Pi model: ${initConfig.model}`);
+      debugLog(`Could not resolve Pi model: ${sessionModelId}`);
       setInterceptorApiHints(undefined);
     }
   } else {
     setInterceptorApiHints(undefined);
+  }
+  if (customEndpointOnly && !sessionOptions.model) {
+    throw new Error(`No model for the custom endpoint (session model: ${initConfig.model || 'none'}); not starting the session on the Pi SDK's default model`);
   }
 
   // Set thinking level
@@ -781,6 +805,16 @@ async function ensureSession(): Promise<AgentSession> {
 
   // Create the session — tools flow through customTools + allowlist (see comment above).
   const { session } = await createAgentSession(sessionOptions);
+  // The model the SDK picked when none was set (or restored from the session file) must
+  // belong to the connection too; the blocked store already keeps other providers out.
+  const modelError = sessionModelProviderError(session.model?.provider, initConfig);
+  if (modelError) {
+    session.dispose();
+    throw new Error(`${modelError}; not starting the session (session model: ${initConfig.model || 'none'})`);
+  }
+  if (!sessionOptions.model && session.model) {
+    debugLog(`Session runs on the Pi SDK's default model: ${session.model.provider}/${session.model.id}`);
+  }
   piSession = session;
   piSessionPromptOverride = systemPromptOverride;
 
@@ -1015,38 +1049,48 @@ async function queryLlm(
 
   debugLog('[queryLlm] Starting');
 
-  // Pick mini model. If the configured miniModel uses a different provider than
-  // what the user authenticated with (e.g. gemini-2.5-pro when only anthropic
-  // credentials exist), fall back to the default summarization model which uses
-  // the same provider family.
-  let model = request.model ?? initConfig.miniModel ?? getDefaultSummarizationModel();
-
-  // Create authenticated runtime upfront — used by both the provider guard and the ephemeral session.
+  // Create authenticated runtime upfront — used by both the provider guard and the ephemeral
+  // session; it also registers the custom endpoint's models.
   const { modelRuntime, modelRegistry } = await createAuthenticatedRuntime();
   lifecycle.throwIfCancelled();
 
-  const piAuthProvider = initConfig.piAuth?.provider;
+  const authProvider = connectionPiProvider(initConfig);
+  const customEndpointOnly = hasCustomEndpoint(initConfig);
+  let model: string;
 
-  // If piAuth is set, ensure the mini model uses the same provider.
-  // Pi SDK will fail with "No API key found" if the model requires a different provider.
-  // Exception: 'custom-endpoint' provider is always compatible because it has its own
-  // API key configured via resolveCustomEndpointApiKey() and doesn't use the credential store.
-  if (initConfig.piAuth) {
-    const authProvider = initConfig.piAuth.provider;
-    const bareModel = model.startsWith('pi/') ? model.slice(3) : model;
-    const resolved = resolvePiModel(modelRegistry, bareModel, authProvider, shouldPreferCustomEndpoint());
-    const resolvedProvider = (resolved as any)?.provider;
-    const isCompatible = resolvedProvider === authProvider || resolvedProvider === 'custom-endpoint';
-    if (!resolved || !isCompatible || isDeniedMiniModelId(model, piAuthProvider)) {
-      // Anthropic: keep Haiku (the cheap/fast mini). For every other provider
-      // Haiku is unresolvable, so walk PI_PREFERRED_DEFAULTS for a model that
-      // actually works under the user's auth.
-      const providerDefault = authProvider === 'anthropic'
-        ? undefined
-        : pickProviderAppropriateMiniModel(authProvider, modelRegistry, shouldPreferCustomEndpoint());
-      const fallback = providerDefault ?? getDefaultSummarizationModel();
-      debugLog(`[queryLlm] Model ${bareModel} incompatible with ${authProvider} (resolved: ${resolvedProvider}), falling back to ${fallback}`);
-      model = fallback;
+  if (customEndpointOnly) {
+    // A custom endpoint's key goes to the endpoint alone: a model the endpoint hasn't
+    // registered falls back to one it has, never to a vendor's mini model or Haiku.
+    const requested = request.model ?? initConfig.miniModel;
+    const endpointModel = pickCustomEndpointUtilityModel(requested, initConfig, customEndpointModelIds);
+    if (!endpointModel) throw new Error('No model is registered for the custom endpoint');
+    if (requested && endpointModel !== requested) {
+      debugLog(`[queryLlm] Model ${requested} is not registered for the custom endpoint, using ${endpointModel}`);
+    }
+    model = endpointModel;
+  } else {
+    // Pick mini model. If the configured miniModel uses a different provider than
+    // what the user authenticated with (e.g. gemini-2.5-pro when only anthropic
+    // credentials exist), fall back to the default summarization model which uses
+    // the same provider family.
+    model = request.model ?? initConfig.miniModel ?? getDefaultSummarizationModel();
+
+    // Keep the mini model on the connection's provider: it is the only one that
+    // authenticates (credential-routing.ts).
+    if (authProvider) {
+      const bareModel = model.startsWith('pi/') ? model.slice(3) : model;
+      const resolved = resolvePiModel(modelRegistry, bareModel, authProvider, false);
+      if (!isModelUsableWithAuth(resolved?.provider, authProvider, false) || isDeniedMiniModelId(model, authProvider)) {
+        // Anthropic: keep Haiku (the cheap/fast mini). For every other provider
+        // Haiku is unresolvable, so walk PI_PREFERRED_DEFAULTS for a model that
+        // actually works under the user's auth.
+        const providerDefault = authProvider === 'anthropic'
+          ? undefined
+          : pickProviderAppropriateMiniModel(authProvider, modelRegistry, false);
+        const fallback = providerDefault ?? getDefaultSummarizationModel();
+        debugLog(`[queryLlm] Model ${bareModel} incompatible with ${authProvider} (resolved: ${resolved?.provider}), falling back to ${fallback}`);
+        model = fallback;
+      }
     }
   }
 
@@ -1058,10 +1102,10 @@ async function queryLlm(
     // fall back to its own internal default (which may require a provider
     // the user hasn't authenticated with, surfacing as a misleading
     // "No API key found for <provider>" error).
-    const piModel = resolvePiModel(modelRegistry, modelId, initConfig!.piAuth?.provider, shouldPreferCustomEndpoint());
+    const piModel = resolvePiModel(modelRegistry, modelId, authProvider, customEndpointOnly);
     if (!piModel) {
       throw new Error(
-        `Could not resolve mini model "${modelId}" for provider "${initConfig!.piAuth?.provider ?? '(unknown)'}"`,
+        `Could not resolve mini model "${modelId}" for provider "${authProvider ?? (customEndpointOnly ? 'custom-endpoint' : '(unknown)')}"`,
       );
     }
 
@@ -1169,9 +1213,9 @@ async function queryLlm(
     model,
     miniModel: initConfig.miniModel,
     sessionModel: initConfig.model,
-    authProvider: piAuthProvider,
+    authProvider,
     modelRegistry,
-    preferCustomEndpoint: shouldPreferCustomEndpoint(),
+    customEndpointOnly,
     onFallback: (rejectedModel, retryModel) => {
       debugLog(`[queryLlm] Model ${rejectedModel} unavailable, retrying with ${retryModel}`);
     },
@@ -1373,12 +1417,13 @@ function handleSessionEvent(event: AgentSessionEvent): void {
  * config updates so an edited endpoint takes effect without a subprocess restart.
  */
 function applyProviderEndpointEnv(config: InitMessage): void {
-  const env = providerEndpointEnv(config.piAuth?.provider, config.baseUrl);
+  const provider = config.piAuth?.provider ?? config.piAuthProvider;
+  const env = providerEndpointEnv(provider, config.baseUrl);
   for (const [key, value] of Object.entries(env)) {
     process.env[key] = value;
     debugLog(`Set ${key}=${value}`);
   }
-  if (config.piAuth?.provider === 'cloudflare-ai-gateway' && !env.CLOUDFLARE_GATEWAY_ID) {
+  if (provider === 'cloudflare-ai-gateway' && !env.CLOUDFLARE_GATEWAY_ID) {
     debugLog(`Cloudflare AI Gateway: base URL ${config.baseUrl ?? '(none)'} has no account/gateway id`);
   }
 }
@@ -1410,9 +1455,23 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
   moduleRuntimePromise = null;
   piModelRegistry = null;
 
+  // A regional preset's requests, search included, go to the region's API whatever base URL
+  // the connection has stored. Not a custom endpoint's, whatever its credential is labelled
+  // with: its key goes to the endpoint alone.
+  const craftProvider = msg.piAuth?.provider ?? msg.piAuthProvider;
+  const regionalBaseUrl = hasCustomEndpoint(msg) ? undefined : regionalProviderBaseUrl(craftProvider);
+  pinnedProviderEndpoint = craftProvider && regionalBaseUrl
+    ? { provider: toPiProviderId(craftProvider), baseUrl: regionalBaseUrl }
+    : null;
+
   // Craft's stored provider ids → Pi SDK ids, once, so every consumer below
   // (credential store, model resolution, search) sees the SDK's id.
-  initConfig = msg.piAuth ? { ...msg, piAuth: toPiAuth(msg.piAuth) } : msg;
+  initConfig = {
+    ...msg,
+    ...(msg.piAuth ? { piAuth: toPiAuth(msg.piAuth) } : {}),
+    ...(msg.piAuthProvider ? { piAuthProvider: toPiProviderId(msg.piAuthProvider) } : {}),
+    ...(pinnedProviderEndpoint ? { baseUrl: pinnedProviderEndpoint.baseUrl } : {}),
+  };
   applyProviderEndpointEnv(initConfig);
 
   // Start callback server for call_llm (idempotent — skips if already running)
@@ -1686,11 +1745,16 @@ async function handleUpdateRuntimeConfig(msg: RuntimeConfigUpdateMessage): Promi
       model: msg.model,
       providerType: msg.providerType ?? initConfig.providerType,
       authType: msg.authType ?? initConfig.authType,
-      baseUrl: msg.baseUrl,
+      baseUrl: pinnedProviderEndpoint?.baseUrl ?? msg.baseUrl,
       customEndpoint: msg.customEndpoint,
       customModels: msg.customModels,
     };
     applyProviderEndpointEnv(initConfig);
+    // The base URL and protocol change in place, so whether the credential may sit in
+    // the Pi store can too.
+    if (moduleCredentialStore) {
+      await syncPiCredentialStore(moduleCredentialStore, initConfig, debugLog);
+    }
 
     if (piModelRegistry && initConfig.baseUrl?.trim() && initConfig.customEndpoint) {
       const modelEntries: CustomEndpointModelEntry[] = (initConfig.customModels?.length
@@ -1704,12 +1768,11 @@ async function handleUpdateRuntimeConfig(msg: RuntimeConfigUpdateMessage): Promi
     }
 
     if (piSession && piModelRegistry) {
-      let piModel = resolvePiModel(piModelRegistry, msg.model, initConfig.piAuth?.provider, shouldPreferCustomEndpoint());
-      if (!piModel && initConfig.baseUrl?.trim() && initConfig.customEndpoint) {
-        const bareId = stripPiPrefix(msg.model);
-        registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint.api, initConfig.baseUrl.trim(), [{ id: bareId }]);
-        piModel = piModelRegistry.find('custom-endpoint', bareId) ?? undefined;
-        debugLog(`[runtime_config] Dynamically registered custom endpoint model: ${bareId}`);
+      const customEndpointOnly = hasCustomEndpoint(initConfig);
+      let piModel = resolvePiModel(piModelRegistry, msg.model, connectionPiProvider(initConfig), customEndpointOnly);
+      if (!piModel && customEndpointOnly) {
+        piModel = registerCustomEndpointModel(piModelRegistry, msg.model);
+        debugLog(`[runtime_config] Dynamically registered custom endpoint model: ${stripPiPrefix(msg.model)}`);
       }
 
       if (!piModel) {
@@ -1737,16 +1800,15 @@ async function handleSetModel(msg: Extract<InboundMessage, { type: 'set_model' }
     debugLog(`[set_model] No active session or model registry, ignoring`);
     return;
   }
-  let piModel = resolvePiModel(piModelRegistry, msg.model, initConfig?.piAuth?.provider, shouldPreferCustomEndpoint());
+  const customEndpointOnly = hasCustomEndpoint(initConfig);
+  let piModel = resolvePiModel(piModelRegistry, msg.model, connectionPiProvider(initConfig), customEndpointOnly);
 
   // For custom endpoints, dynamically register unknown models so mid-session switching works.
   // Uses registerCustomEndpointModels which accumulates into the existing model set
   // (registerProvider replaces, so we track all IDs and re-register the full set).
-  if (!piModel && initConfig?.baseUrl?.trim() && initConfig?.customEndpoint) {
-    const bareId = stripPiPrefix(msg.model);
-    registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint.api, initConfig.baseUrl!.trim(), [{ id: bareId }]);
-    piModel = piModelRegistry.find('custom-endpoint', bareId) ?? undefined;
-    debugLog(`[set_model] Dynamically registered custom endpoint model: ${bareId}`);
+  if (!piModel && customEndpointOnly) {
+    piModel = registerCustomEndpointModel(piModelRegistry, msg.model);
+    debugLog(`[set_model] Dynamically registered custom endpoint model: ${stripPiPrefix(msg.model)}`);
   }
 
   if (!piModel) {
@@ -1907,15 +1969,13 @@ async function processMessage(msg: InboundMessage): Promise<void> {
     case 'token_update':
       if (moduleCredentialStore) {
         const piAuth = toPiAuth(msg.piAuth);
-        const { provider, credential } = piAuth;
-        const adapted = adaptCredentialForPiSdk(provider, credential);
-        if (adapted) {
-          await moduleCredentialStore.modify(provider, async () => adapted);
-        }
         if (initConfig) {
           initConfig.piAuth = piAuth;
         }
-        debugLog(`Updated ${credential.type} credential for provider: ${provider}`);
+        // Same rules as at runtime creation: only the connection's provider authenticates,
+        // and a custom endpoint's key stays out of the store.
+        await syncPiCredentialStore(moduleCredentialStore, initConfig, debugLog);
+        debugLog(`Updated ${piAuth.credential.type} credential for provider: ${piAuth.provider}`);
       } else {
         debugLog('token_update received but no credential store initialized');
       }

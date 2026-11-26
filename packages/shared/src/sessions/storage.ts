@@ -190,6 +190,7 @@ export async function createSession(
     labels?: string[];
     isFlagged?: boolean;
     projectId?: string;
+    projectOverride?: SessionConfig['projectOverride'];
     parentSessionId?: string;
     taskSlug?: string;
     taskRunId?: string;
@@ -227,6 +228,7 @@ export async function createSession(
     labels: options?.labels,
     isFlagged: options?.isFlagged,
     projectId: options?.projectId,
+    projectOverride: options?.projectOverride,
     parentSessionId: options?.parentSessionId,
     taskSlug: options?.taskSlug,
     taskRunId: options?.taskRunId,
@@ -701,9 +703,12 @@ export async function unbindProjectFromSessions(
   const sessions = listSessions(workspaceRootPath);
   let touched = 0;
   for (const meta of sessions) {
+    // The header says: load (and rewrite) only the sessions bound to it, not every transcript
+    if (meta.projectId !== projectId) continue;
     const full = loadSession(workspaceRootPath, meta.id);
     if (full?.projectId === projectId) {
       full.projectId = undefined;
+      full.projectOverride = undefined;
       await saveSession(full);
       touched++;
     }

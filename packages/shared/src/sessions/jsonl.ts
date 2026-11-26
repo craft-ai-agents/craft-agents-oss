@@ -5,9 +5,11 @@
  * Format: Line 1 = SessionHeader, Lines 2+ = StoredMessage (one per line)
  */
 
-import { openSync, readSync, closeSync, statSync, readFileSync, writeFileSync, renameSync, unlinkSync } from 'fs';
+import { openSync, readSync, closeSync, statSync, readFileSync, writeFileSync, renameSync, unlinkSync, existsSync, createWriteStream } from 'fs';
 import type { Stats } from 'fs';
-import { open, stat, readFile } from 'fs/promises';
+import { open, stat, readFile, writeFile, rename, unlink } from 'fs/promises';
+import type { FileHandle } from 'fs/promises';
+import { pipeline } from 'stream/promises';
 import { dirname } from 'path';
 import type { SessionHeader, StoredSession, StoredMessage, SessionTokenUsage } from './types.ts';
 import type { PermissionMode } from '../agent/mode-types.ts';
@@ -101,6 +103,11 @@ function normalizeHeaderPermissionModes<T extends SessionHeader>(header: T): T {
   return header;
 }
 
+/** A stored header line as the header readers return it: session paths expanded, permission modes normalized. */
+function parseHeaderLine(line: string, sessionFile: string): SessionHeader {
+  return normalizeHeaderPermissionModes(safeJsonParse(expandSessionPath(line, dirname(sessionFile))) as SessionHeader);
+}
+
 /**
  * Read only the header (first line) from a session.jsonl file.
  * Uses low-level fs to read minimal bytes for fast list loading.
@@ -123,8 +130,7 @@ export function readSessionHeader(sessionFile: string): SessionHeader | null {
     const firstNewline = content.indexOf('\n');
     const firstLine = firstNewline > 0 ? content.slice(0, firstNewline) : content;
 
-    const parsed = safeJsonParse(expandSessionPath(firstLine, dirname(sessionFile))) as SessionHeader;
-    return normalizeHeaderPermissionModes(parsed);
+    return parseHeaderLine(firstLine, sessionFile);
   } catch (error) {
     debug('[jsonl] Failed to read session header:', sessionFile, error);
     return null;
@@ -202,6 +208,126 @@ export function writeSessionJsonl(sessionFile: string, session: StoredSession): 
   // On Windows, rename fails if target exists. Delete first for cross-platform compatibility.
   try { unlinkSync(sessionFile); } catch { /* ignore if doesn't exist */ }
   renameSync(tmpFile, sessionFile);
+}
+
+/** Errors with which Windows refuses to rename over a file another process holds open, or a read-only one. */
+const REPLACE_REFUSED_CODES = new Set(['EPERM', 'EACCES', 'EBUSY', 'EEXIST']);
+
+/**
+ * Move a finished temp file over `target` in one step, so a reader finds the old file or the new
+ * one, never none: a chat whose messages load while its file is missing loads empty, and its next
+ * save drops the transcript. Node and Bun replace an existing file on every platform. Windows can
+ * refuse while another process holds the file open, or when it's read-only; only then is the file
+ * deleted first.
+ */
+async function replaceFile(tmpFile: string, target: string): Promise<void> {
+  try {
+    await rename(tmpFile, target);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (process.platform !== 'win32' || !code || !REPLACE_REFUSED_CODES.has(code)) throw error;
+    await unlink(target).catch(() => { /* missing, or locked: the rename reports it */ });
+    await rename(tmpFile, target);
+  }
+}
+
+/**
+ * Change fields of a session.jsonl header (line 1) and copy the message lines over byte for byte,
+ * streamed: a metadata change on a session whose messages aren't loaded then neither parses nor
+ * holds its transcript. A key set to `undefined` is removed. The header is patched as stored
+ * (portable paths stay as they are), so patch only fields that hold no paths. Atomic: the new file is
+ * written to a temp file, which then replaces it (`replaceFile`); `beforeReplace` gets the new header,
+ * as the header readers will return it, just before that. Returns false when the file or its header
+ * can't be read; throws when writing fails.
+ *
+ * Callers inside the app go through `sessionPersistenceQueue.patchHeader`, which orders this after
+ * the session's queued writes.
+ */
+export async function rewriteSessionHeader(
+  sessionFile: string,
+  patch: Partial<Record<keyof SessionHeader, unknown>>,
+  beforeReplace?: (header: SessionHeader) => void,
+): Promise<boolean> {
+  let handle: FileHandle;
+  try {
+    handle = await open(sessionFile, 'r');
+  } catch (error) {
+    debug('[jsonl] Failed to open session file for header rewrite:', sessionFile, error);
+    return false;
+  }
+
+  const tmpFile = sessionFile + '.header.tmp';
+  let headerLine: string;
+  try {
+    const stored = await readStoredHeader(handle, sessionFile);
+    if (!stored) return false;
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === undefined) delete stored.header[key];
+      else stored.header[key] = value;
+    }
+    headerLine = JSON.stringify(stored.header);
+    await writeFile(tmpFile, headerLine + '\n', 'utf-8');
+    if (stored.messagesStart !== -1) {
+      // From the handle the header was read from, so the lines belong to that header even if the
+      // file is replaced meanwhile
+      await pipeline(
+        handle.createReadStream({ start: stored.messagesStart, autoClose: false }),
+        createWriteStream(tmpFile, { flags: 'a' }),
+      );
+    }
+  } catch (error) {
+    await unlink(tmpFile).catch(() => { /* never written */ });
+    throw error;
+  } finally {
+    await handle.close().catch(() => { /* already closed */ });
+  }
+
+  try {
+    beforeReplace?.(parseHeaderLine(headerLine, sessionFile));
+    await replaceFile(tmpFile, sessionFile);
+  } catch (error) {
+    // When Windows deleted the file before a rename that still failed, the temp is the only copy left
+    if (existsSync(sessionFile)) await unlink(tmpFile).catch(() => { /* already gone */ });
+    throw error;
+  }
+  return true;
+}
+
+/** The header of an open session file, as stored, and the offset of its first message line (-1: none). */
+async function readStoredHeader(
+  handle: FileHandle,
+  sessionFile: string,
+): Promise<{ header: Record<string, unknown>; messagesStart: number } | null> {
+  const chunks: Buffer[] = [];
+  let messagesStart = -1;
+  try {
+    for (let position = 0; ;) {
+      const chunk = Buffer.alloc(64 * 1024);
+      const { bytesRead } = await handle.read(chunk, 0, chunk.length, position);
+      if (bytesRead === 0) break;
+      const newline = chunk.subarray(0, bytesRead).indexOf(0x0a);
+      if (newline !== -1) {
+        chunks.push(chunk.subarray(0, newline));
+        messagesStart = position + newline + 1;
+        break;
+      }
+      chunks.push(chunk.subarray(0, bytesRead));
+      position += bytesRead;
+    }
+  } catch (error) {
+    debug('[jsonl] Failed to read session header for rewrite:', sessionFile, error);
+    return null;
+  }
+
+  let header: unknown;
+  try {
+    header = safeJsonParse(Buffer.concat(chunks).toString('utf-8'));
+  } catch (error) {
+    debug('[jsonl] Unreadable session header, not rewritten:', sessionFile, error);
+    return null;
+  }
+  if (!header || typeof header !== 'object' || Array.isArray(header)) return null;
+  return { header: header as Record<string, unknown>, messagesStart };
 }
 
 /**
@@ -309,8 +435,7 @@ export async function readSessionHeaderAsync(
         const content = buffer.toString('utf-8', 0, bytesRead);
         const firstNewline = content.indexOf('\n');
         const firstLine = firstNewline > 0 ? content.slice(0, firstNewline) : content;
-        const parsed = safeJsonParse(expandSessionPath(firstLine, dirname(sessionFile))) as SessionHeader;
-        return normalizeHeaderPermissionModes(parsed);
+        return parseHeaderLine(firstLine, sessionFile);
       } finally {
         await handle.close().catch(() => { /* already closed / gone */ });
       }

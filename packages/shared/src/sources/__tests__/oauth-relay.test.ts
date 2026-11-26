@@ -143,6 +143,42 @@ describe('SourceCredentialManager.prepareOAuth relay wrapping', () => {
     expect(authUrl.searchParams.get('state')).toBe(result.state);
   });
 
+  it('signs Microsoft sources in with their own app registration through the relay', async () => {
+    const clientId = '11111111-2222-4333-8444-555555555555';
+    const source = createApiSource({
+      slug: 'outlook-test',
+      provider: 'microsoft',
+      api: {
+        baseUrl: 'https://graph.microsoft.com/v1.0/',
+        authType: 'oauth',
+        microsoftService: 'outlook',
+        microsoftOAuthClientId: clientId,
+        microsoftTenantId: 'contoso.onmicrosoft.com',
+      },
+    });
+
+    const result = await credManager.prepareOAuth(source, {
+      callbackUrl: 'https://webui.example.com/api/oauth/callback',
+    });
+
+    expect(result).toMatchObject({
+      provider: 'microsoft',
+      clientId,
+      tokenEndpoint: 'https://login.microsoftonline.com/contoso.onmicrosoft.com/oauth2/v2.0/token',
+      redirectUri: OAUTH_RELAY_CALLBACK_URL,
+    });
+
+    const authUrl = new URL(result.authUrl);
+    expect(authUrl.origin + authUrl.pathname)
+      .toBe('https://login.microsoftonline.com/contoso.onmicrosoft.com/oauth2/v2.0/authorize');
+    expect(authUrl.searchParams.get('client_id')).toBe(clientId);
+    expect(authUrl.searchParams.get('redirect_uri')).toBe(OAUTH_RELAY_CALLBACK_URL);
+    expect(decodeOAuthRelayState(authUrl.searchParams.get('state')!)).toEqual({
+      returnTo: 'https://webui.example.com/api/oauth/callback',
+      innerState: result.state,
+    });
+  });
+
   it('passes mcp.scopes through to the authorization URL', async () => {
     const result = await credManager.prepareOAuth(
       createMcpSource({ mcp: { transport: 'http', url: 'https://example.com/mcp', scopes: ['app:read', 'app:write'] } }),

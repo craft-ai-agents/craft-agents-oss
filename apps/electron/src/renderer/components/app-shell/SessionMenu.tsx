@@ -31,7 +31,6 @@ import {
   Tag,
   Send,
   FolderKanban,
-  Check,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getStateColor, getStateIcon, type SessionStatusId } from '@/config/session-status-config'
@@ -45,11 +44,8 @@ import { MessagingSessionMenuItem } from '@/components/messaging/MessagingSessio
 import { SendCraftyHereMenuItem } from '@/components/crafty/SendCraftyHereMenuItem'
 import { useSessionMenuActions } from '@/hooks/useSessionMenuActions'
 
-export interface SessionMenuProjectOption {
-  id: string
-  slug: string
-  name: string
-}
+import { ProjectMenuItems, type SessionMenuProjectOption } from './ProjectMenuItems'
+export type { SessionMenuProjectOption } from './ProjectMenuItems'
 
 export interface SessionMenuProps {
   /** Session data — display state is derived from this */
@@ -213,22 +209,12 @@ export function SessionMenu({
             <span className="flex-1">{t("sessionMenu.projects")}</span>
           </SubTrigger>
           <SubContent>
-            <MenuItem onClick={() => onSetProjectId(null)}>
-              {!item.projectId && <Check className="h-3.5 w-3.5" />}
-              <span className={item.projectId ? 'flex-1 ml-[18px]' : 'flex-1'}>
-                {t("sessionMenu.noProject")}
-              </span>
-            </MenuItem>
-            <Separator />
-            {projects.map((p) => {
-              const isBound = item.projectId === p.id
-              return (
-                <MenuItem key={p.id} onClick={() => onSetProjectId(p.id)}>
-                  {isBound && <Check className="h-3.5 w-3.5" />}
-                  <span className={isBound ? 'flex-1' : 'flex-1 ml-[18px]'}>{p.name}</span>
-                </MenuItem>
-              )
-            })}
+            <ProjectMenuItems
+              projects={projects}
+              activeProjectId={item.projectId ?? null}
+              onSelect={onSetProjectId}
+              menu={{ MenuItem, Separator }}
+            />
           </SubContent>
         </Sub>
       )}

@@ -212,6 +212,7 @@ import type {
   SessionCommand,
   ShareResult,
   RefreshTitleResult,
+  ProjectMoveResult,
   FileSearchResult,
   SessionSearchResult,
   LlmConnectionSetup,
@@ -276,7 +277,9 @@ export interface ElectronAPI {
   // Consolidated session command handler
   sessionCommand(sessionId: string, command: Extract<SessionCommand, { type: 'markPendingPlanExecutionDispatched' }>): Promise<boolean>
   sessionCommand(sessionId: string, command: Extract<SessionCommand, { type: 'continueInNewSession' }>): Promise<{ sessionId: string }>
-  sessionCommand(sessionId: string, command: Exclude<SessionCommand, { type: 'markPendingPlanExecutionDispatched' | 'continueInNewSession' }>): Promise<void | ShareResult | RefreshTitleResult | { count: number }>
+  /** `undefined` from a server older than project families (it moved only `sessionId`). */
+  sessionCommand(sessionId: string, command: Extract<SessionCommand, { type: 'setProjectId' | 'restoreProjectIds' }>): Promise<ProjectMoveResult | undefined>
+  sessionCommand(sessionId: string, command: Exclude<SessionCommand, { type: 'markPendingPlanExecutionDispatched' | 'continueInNewSession' | 'setProjectId' | 'restoreProjectIds' }>): Promise<void | ShareResult | RefreshTitleResult | { count: number }>
 
   // Server info (REMOTE_ELIGIBLE — returns data from whichever server owns the workspace)
   getServerHomeDir(): Promise<string>

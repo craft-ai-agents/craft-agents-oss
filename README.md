@@ -403,6 +403,20 @@ SLACK_OAUTH_CLIENT_SECRET=your-slack-client-secret
 
 **Note:** Google OAuth credentials are NOT baked into the build. Users provide their own credentials via source configuration. See the [Google OAuth Setup](#google-oauth-setup-gmail-calendar-drive) section below.
 
+**Microsoft without `MICROSOFT_OAUTH_CLIENT_ID`:** a Microsoft source can bring its own app registration instead. Register an app in the Microsoft Entra admin center with the redirect URIs `https://thecraftagents.com/auth/callback` and `http://localhost/callback` under **Mobile and desktop applications** (no client secret), then add its IDs to the source's `config.json`:
+
+```json
+{
+  "api": {
+    "microsoftService": "outlook",
+    "microsoftOAuthClientId": "your-application-client-id",
+    "microsoftTenantId": "your-directory-tenant-id"
+  }
+}
+```
+
+`microsoftTenantId` is needed only for a single-tenant app. Full steps: [Microsoft App Setup](https://thecraftagents.com/docs/source-guides/microsoft-oauth-setup).
+
 ### Google OAuth Setup (Gmail, Calendar, Drive, YouTube, Search Console)
 
 Google integrations require you to create your own OAuth credentials. This is a one-time setup.

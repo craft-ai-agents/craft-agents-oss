@@ -12,6 +12,7 @@ import {
   normalizeBedrockModelId,
   deriveBedrockRegionPrefix,
   getMiniModel,
+  sortPiModelsByPreference,
 } from '../llm-connections'
 import { ANTHROPIC_MODELS, getModelDisplayName, getModelContextWindow, getModelShortName, isClaudeModel, normalizeDeprecatedModelId } from '../models'
 
@@ -110,13 +111,43 @@ describe('getDefaultModelForConnection', () => {
     expect(modelIds).toContain(defaultModel)
   })
 
-  it('Pi openai and openai-codex default to GPT-6 Astra with GPT-6.1 Sol ranked next', () => {
+  it('Pi openai and openai-codex default to GPT-6.2 Astra, then GPT-6.2 Sol and the previous generation', () => {
     for (const provider of ['openai', 'openai-codex'] as const) {
       const ids = getDefaultModelsForConnection('pi', provider).map(m => typeof m === 'string' ? m : m.id)
-      expect(ids[0]).toBe('pi/gpt-6-astra')
-      expect(ids[1]).toBe('pi/gpt-6.1-sol')
-      expect(ids[2]).toBe('pi/gpt-5.6-sol')
-      expect(getDefaultModelForConnection('pi', provider)).toBe('pi/gpt-6-astra')
+      expect(ids.slice(0, 8)).toEqual(['pi/gpt-6.2-astra', 'pi/gpt-6.2-sol', 'pi/gpt-6-astra', 'pi/gpt-6.1-sol', 'pi/gpt-6.1-terra', 'pi/gpt-6-sol', 'pi/gpt-6-luna', 'pi/gpt-5.6-sol'])
+      expect(getDefaultModelForConnection('pi', provider)).toBe('pi/gpt-6.2-astra')
+    }
+  })
+
+  // A catalog change can make every preferred id miss (Pi 1.6 dropped gpt-5-mini from
+  // GitHub Copilot, the only model the old 'gpt-5' entry matched there), and the default
+  // then silently falls back to the catalog's first model.
+  it('every Pi provider with preferred defaults picks one of them', () => {
+    for (const [provider, preferred] of Object.entries(PI_PREFERRED_DEFAULTS)) {
+      const bare = getDefaultModelForConnection('pi', provider).slice('pi/'.length)
+      const matches = [bare, fromBedrockNativeId(bare)].some(candidate =>
+        preferred.some(p => candidate === p || candidate.startsWith(`${p}-`)))
+      expect({ provider, matches }).toEqual({ provider, matches: true })
+    }
+    expect(getDefaultModelForConnection('pi', 'github-copilot')).toBe('pi/claude-sonnet-5.5')
+  })
+
+  it('sorts a live model list (Copilot API order) by preference, keeping the order of the rest', () => {
+    const live = ['pi/claude-fable-5', 'pi/grok-4.7', 'pi/gpt-6.1-sol', 'pi/gemini-4-argon', 'pi/claude-sonnet-5.5'].map(id => ({ id }))
+    expect(sortPiModelsByPreference(live, 'github-copilot').map(m => m.id))
+      .toEqual(['pi/claude-sonnet-5.5', 'pi/gpt-6.1-sol', 'pi/claude-fable-5', 'pi/grok-4.7', 'pi/gemini-4-argon'])
+    expect(live[0]!.id).toBe('pi/claude-fable-5')
+    expect(sortPiModelsByPreference(live, 'provider-without-preferences')).toEqual(live)
+  })
+
+  it('Pi OpenAI EU/US presets get the OpenAI models, default and mini model', () => {
+    const openAiIds = getDefaultModelsForConnection('pi', 'openai').map(m => typeof m === 'string' ? m : m.id)
+    for (const provider of ['openai-eu', 'openai-us'] as const) {
+      const models = getDefaultModelsForConnection('pi', provider)
+      expect(models.map(m => typeof m === 'string' ? m : m.id)).toEqual(openAiIds)
+      expect(getDefaultModelForConnection('pi', provider)).toBe('pi/gpt-6.2-astra')
+      const connection = { slug: provider, name: provider, providerType: 'pi', authType: 'api_key', piAuthProvider: provider, models } as const
+      expect(getMiniModel(connection as never)).toBe(getMiniModel({ ...connection, piAuthProvider: 'openai' } as never))
     }
   })
 

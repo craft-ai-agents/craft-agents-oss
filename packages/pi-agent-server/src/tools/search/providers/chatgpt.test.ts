@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { ChatGPTBackendSearchProvider, extractChatGptAccountId } from './chatgpt.ts';
+import { PI_PREFERRED_DEFAULTS } from '../../../../../shared/src/config/llm-connections.ts';
 
 const originalFetch = globalThis.fetch;
 
@@ -91,7 +92,7 @@ describe('ChatGPTBackendSearchProvider', () => {
     expect(calledHeaders.Authorization).toBe('Bearer my-access-token');
     expect(calledHeaders['chatgpt-account-id']).toBe('acc_12345');
     // No model plumbed → first candidate from the shared openai-codex catalog (#1023).
-    expect(calledBody.model).toBe('gpt-6-astra');
+    expect(calledBody.model).toBe(PI_PREFERRED_DEFAULTS['openai-codex']![0]);
     expect(calledBody.store).toBe(false);
     expect(calledBody.stream).toBe(true);
     expect(calledBody.instructions).toContain('web search assistant');

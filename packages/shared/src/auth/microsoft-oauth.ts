@@ -1,17 +1,15 @@
 /**
- * Microsoft OAuth flow using Azure AD OAuth 2.0 with PKCE
+ * Microsoft OAuth 2.0 with PKCE for Microsoft Graph sources (Outlook, Calendar,
+ * OneDrive, Teams, SharePoint), as a public client: no client secret.
  *
- * This module handles the complete Microsoft OAuth flow for Microsoft 365 APIs:
- * 1. Opens browser for Microsoft consent screen
- * 2. Receives authorization code via local callback server
- * 3. Exchanges code for access and refresh tokens
- * 4. Returns tokens and user email
+ * The server-owned flow prepares the sign-in (`prepareMicrosoftOAuth`) and exchanges
+ * the code (`exchangeMicrosoftOAuth`); `startMicrosoftOAuth` is the self-contained
+ * loopback variant used by the CLI/test path.
  *
- * Supports multiple Microsoft services (Outlook, OneDrive, Calendar, Teams)
- * with predefined scope sets, or custom scopes for other Microsoft Graph APIs.
- *
- * Uses "common" tenant endpoint to support both personal Microsoft accounts
- * and work/school (Azure AD) accounts.
+ * A source signs in with the built-in app registration (MICROSOFT_OAUTH_CLIENT_ID,
+ * baked into the build) unless it brings its own: `api.microsoftOAuthClientId`, plus
+ * `api.microsoftTenantId` for a single-tenant registration. The default authority,
+ * "common", accepts personal Microsoft accounts and work/school accounts.
  */
 
 import { URL } from 'url';
@@ -21,21 +19,28 @@ import { createCallbackServer, type AppType } from './callback-server.ts';
 import { type MicrosoftService } from '../sources/types.ts';
 import { type OAuthSessionContext, buildOAuthDeeplinkUrl } from './types.ts';
 import type { PreparedOAuthFlow, OAuthExchangeParams, OAuthExchangeResult } from './oauth-flow-types.ts';
+import { MICROSOFT_CLIENT_ID_RULE, isValidMicrosoftClientId, microsoftAuthority } from './microsoft-authority.ts';
 
 // Re-export MicrosoftService type for convenient access
 export type { MicrosoftService };
 
-// Microsoft OAuth configuration - must be set via environment variables
-// These are baked into the build at compile time
-// Used for all Microsoft services (Outlook, OneDrive, Calendar, Teams, etc.)
-// Uses pure PKCE flow - no client_secret needed for public clients (desktop/mobile apps)
+// Built-in app registration, baked into the build at compile time. It is a public client
+// ("Mobile and desktop applications" platform): PKCE, no client secret.
 const MICROSOFT_CLIENT_ID = process.env.MICROSOFT_OAUTH_CLIENT_ID || '';
 
-// Microsoft OAuth endpoints (using "common" tenant for multi-tenant support)
-// "common" supports both personal Microsoft accounts and work/school accounts
-const MICROSOFT_AUTH_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize';
-const MICROSOFT_TOKEN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token';
 const MICROSOFT_GRAPH_ME_URL = 'https://graph.microsoft.com/v1.0/me';
+
+// Always show the account picker, never a forced consent screen. The refresh token comes
+// from the offline_access scope, and Entra asks for consent by itself whenever new
+// permissions are requested. Microsoft says to send prompt=consent only for testing: once
+// consent exists "users might always receive a consent error". It made users who may not
+// approve apps themselves fail with "Need admin approval" (AADSTS90094) even after their
+// admin had approved the app for the organization.
+const MICROSOFT_PROMPT = 'select_account';
+
+const NOT_CONFIGURED_MESSAGE =
+  "Microsoft OAuth not configured. Set microsoftOAuthClientId in the source's api config " +
+  '(your own app registration), or build with the MICROSOFT_OAUTH_CLIENT_ID environment variable.';
 
 /**
  * Predefined scope sets for common Microsoft services
@@ -81,10 +86,30 @@ export const MICROSOFT_SERVICE_SCOPES: Record<MicrosoftService, string[]> = {
   ],
 };
 
+/** Whether `value` names a service with predefined scopes (own keys only, not Object.prototype's). */
+export function isMicrosoftService(value: unknown): value is MicrosoftService {
+  return typeof value === 'string' && Object.hasOwn(MICROSOFT_SERVICE_SCOPES, value);
+}
+
+/** How a Microsoft source chooses its scopes, for the errors that ask for them. */
+export const MICROSOFT_SCOPES_RULE = `Set microsoftService (${new Intl.ListFormat('en', { type: 'disjunction' })
+  .format(Object.keys(MICROSOFT_SERVICE_SCOPES).map(service => `'${service}'`))}) or microsoftScopes in api config.`;
+
+/**
+ * The app registration a Microsoft source signs in with: its own
+ * (`api.microsoftOAuthClientId` / `api.microsoftTenantId`) or the built-in one.
+ */
+export interface MicrosoftClientOptions {
+  /** Application (client) ID of the source's own app registration. Default: the built-in app. */
+  clientId?: string;
+  /** Directory (tenant) ID or domain of that registration. Default: "common". */
+  tenantId?: string;
+}
+
 /**
  * Options for starting Microsoft OAuth flow
  */
-export interface MicrosoftOAuthOptions {
+export interface MicrosoftOAuthOptions extends MicrosoftClientOptions {
   /** Microsoft service to authenticate (uses predefined scopes) */
   service?: MicrosoftService;
   /** Custom scopes (overrides service scopes if provided) */
@@ -104,7 +129,37 @@ export interface MicrosoftOAuthResult {
   refreshToken?: string;
   expiresAt?: number;
   email?: string;
+  /** Client ID that issued the tokens (stored with them: refresh must use the same one) */
+  clientId?: string;
   error?: string;
+}
+
+/** The client ID a source signs in with: its own, else the built-in one ('' when neither is set). */
+export function microsoftClientIdFor(clientId?: string): string {
+  return clientId?.trim() || MICROSOFT_CLIENT_ID;
+}
+
+/**
+ * Whether tokens issued to `issuedClientId` belong to the app the source signs in with
+ * (`sourceClientId`, its microsoftOAuthClientId). Tokens stored before the client ID was
+ * recorded came from the built-in app. When this is false the tokens can neither be used
+ * as the source's app nor refreshed with it, so the source needs a new sign-in.
+ */
+export function microsoftCredentialMatchesSource(issuedClientId: string | undefined, sourceClientId: string | undefined): boolean {
+  const issuedBy = issuedClientId?.trim() || MICROSOFT_CLIENT_ID;
+  return issuedBy.toLowerCase() === microsoftClientIdFor(sourceClientId).toLowerCase();
+}
+
+/**
+ * Like microsoftClientIdFor, but throws on a malformed own ID, which Entra would only
+ * reject after the browser opens.
+ */
+function resolveClientId(clientId?: string): string {
+  const resolved = microsoftClientIdFor(clientId);
+  if (clientId?.trim() && !isValidMicrosoftClientId(resolved)) {
+    throw new Error(`Invalid microsoftOAuthClientId '${resolved}'. ${MICROSOFT_CLIENT_ID_RULE}`);
+  }
+  return resolved;
 }
 
 /**
@@ -124,30 +179,52 @@ function generateState(): string {
 }
 
 /**
+ * Microsoft's reason for a refused token request ("invalid_grant: AADSTS700082: …"),
+ * without the trace and correlation IDs it appends. Token error responses carry no
+ * tokens, so this is safe to log and to show.
+ */
+async function describeTokenError(response: Response): Promise<string> {
+  const text = await response.text().catch(() => '');
+  try {
+    const body = JSON.parse(text) as { error?: unknown; error_description?: unknown };
+    const error = typeof body.error === 'string' ? body.error : undefined;
+    const description = typeof body.error_description === 'string'
+      ? body.error_description.split(/\r?\n| Trace ID:/)[0]!.trim()
+      : undefined;
+    const reason = [error, description].filter(Boolean).join(': ');
+    if (reason) return reason.slice(0, 300);
+  } catch {
+    // Not JSON: report the status instead.
+  }
+  return `HTTP ${response.status}`;
+}
+
+/**
  * Exchange authorization code for tokens
  */
 async function exchangeCodeForTokens(
   code: string,
   codeVerifier: string,
-  redirectUri: string
+  redirectUri: string,
+  clientId: string,
+  tokenUrl: string,
 ): Promise<{ accessToken: string; refreshToken?: string; expiresIn?: number }> {
   const params = new URLSearchParams({
-    client_id: MICROSOFT_CLIENT_ID,
+    client_id: clientId,
     code,
     code_verifier: codeVerifier,
     grant_type: 'authorization_code',
     redirect_uri: redirectUri,
   });
 
-  const response = await fetch(MICROSOFT_TOKEN_URL, {
+  const response = await fetch(tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: params.toString(),
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Token exchange failed: ${errorText}`);
+    throw new Error(`Token exchange failed: ${await describeTokenError(response)}`);
   }
 
   const data = (await response.json()) as {
@@ -186,27 +263,40 @@ async function getUserEmail(accessToken: string): Promise<string> {
 }
 
 /**
- * Refresh Microsoft access token using refresh token
+ * Refresh a Microsoft access token.
+ *
+ * A refresh token only works with the app registration that issued it, so pass the
+ * client ID stored with the credential (undefined = the built-in app) and the source's
+ * tenant (a single-tenant registration can't refresh through "common").
  */
-export async function refreshMicrosoftToken(refreshToken: string): Promise<{
+export async function refreshMicrosoftToken(
+  refreshToken: string,
+  client: MicrosoftClientOptions = {},
+): Promise<{
   accessToken: string;
   refreshToken?: string;
   expiresAt?: number;
 }> {
+  const clientId = resolveClientId(client.clientId);
+  if (!clientId) {
+    throw new Error(NOT_CONFIGURED_MESSAGE);
+  }
+  const { tokenUrl } = microsoftAuthority(client.tenantId);
+
   const params = new URLSearchParams({
-    client_id: MICROSOFT_CLIENT_ID,
+    client_id: clientId,
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
   });
 
-  const response = await fetch(MICROSOFT_TOKEN_URL, {
+  const response = await fetch(tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: params.toString(),
   });
 
   if (!response.ok) {
-    throw new Error('Failed to refresh Microsoft token');
+    throw new Error(`Failed to refresh Microsoft token: ${await describeTokenError(response)}`);
   }
 
   const data = (await response.json()) as {
@@ -224,17 +314,18 @@ export async function refreshMicrosoftToken(refreshToken: string): Promise<{
 }
 
 /**
- * Check if Microsoft OAuth is configured (client ID is set)
- * Note: Client secret is optional for public clients using PKCE
+ * True when a sign-in can start: the source has its own client ID, or the build
+ * has the built-in one. No client secret is involved (public client with PKCE).
  */
-export function isMicrosoftOAuthConfigured(): boolean {
-  return Boolean(MICROSOFT_CLIENT_ID);
+export function isMicrosoftOAuthConfigured(clientId?: string): boolean {
+  return Boolean(microsoftClientIdFor(clientId));
 }
 
 /**
- * Get scopes for a Microsoft service or use custom scopes
+ * The scopes a sign-in requests: the custom scopes (plus the ones every sign-in needs),
+ * else the service's. Throws for a service without predefined scopes.
  */
-export function getMicrosoftScopes(options: MicrosoftOAuthOptions): string[] {
+export function getMicrosoftScopes(options: Pick<MicrosoftOAuthOptions, 'service' | 'scopes'>): string[] {
   // Custom scopes take precedence
   if (options.scopes && options.scopes.length > 0) {
     // Ensure required scopes are included
@@ -248,19 +339,23 @@ export function getMicrosoftScopes(options: MicrosoftOAuthOptions): string[] {
     return allScopes;
   }
 
-  // Use predefined service scopes
-  if (options.service && options.service in MICROSOFT_SERVICE_SCOPES) {
+  // Predefined service scopes. The service comes from config.json, which is not validated
+  // on load: an unknown one (e.g. 'calendar') must not sign in for the Outlook mail scopes.
+  if (options.service) {
+    if (!isMicrosoftService(options.service)) {
+      throw new Error(`Unknown microsoftService '${options.service}'. ${MICROSOFT_SCOPES_RULE}`);
+    }
     return MICROSOFT_SERVICE_SCOPES[options.service];
   }
 
-  // Default to Outlook scopes for backwards compatibility
+  // Neither: Outlook scopes, for backwards compatibility
   return MICROSOFT_SERVICE_SCOPES.outlook;
 }
 
 /**
  * Options for preparing a Microsoft OAuth flow (server-side, no browser interaction)
  */
-export interface PrepareMicrosoftOAuthOptions {
+export interface PrepareMicrosoftOAuthOptions extends MicrosoftClientOptions {
   service?: MicrosoftService;
   scopes?: string[];
   /** Port for the local callback server (Electron). One of callbackPort or callbackUrl required. */
@@ -271,14 +366,15 @@ export interface PrepareMicrosoftOAuthOptions {
 
 /**
  * Prepare a Microsoft OAuth flow without starting a callback server or opening a browser.
- * Returns everything needed to construct the auth URL and later exchange the code.
+ * Returns everything needed to construct the auth URL and later exchange the code; the
+ * flow carries the client ID and the tenant's token endpoint to the exchange.
  */
 export function prepareMicrosoftOAuth(options: PrepareMicrosoftOAuthOptions): PreparedOAuthFlow {
-  if (!isMicrosoftOAuthConfigured()) {
-    throw new Error(
-      'Microsoft OAuth not configured. Set MICROSOFT_OAUTH_CLIENT_ID environment variable.'
-    );
+  const clientId = resolveClientId(options.clientId);
+  if (!clientId) {
+    throw new Error(NOT_CONFIGURED_MESSAGE);
   }
+  const authority = microsoftAuthority(options.tenantId);
 
   const scopes = getMicrosoftScopes(options);
   const pkce = generatePKCE();
@@ -286,8 +382,8 @@ export function prepareMicrosoftOAuth(options: PrepareMicrosoftOAuthOptions): Pr
   const redirectUri = options.callbackUrl
     ?? `http://localhost:${options.callbackPort}/callback`;
 
-  const authUrl = new URL(MICROSOFT_AUTH_URL);
-  authUrl.searchParams.set('client_id', MICROSOFT_CLIENT_ID);
+  const authUrl = new URL(authority.authorizeUrl);
+  authUrl.searchParams.set('client_id', clientId);
   authUrl.searchParams.set('redirect_uri', redirectUri);
   authUrl.searchParams.set('response_type', 'code');
   authUrl.searchParams.set('scope', scopes.join(' '));
@@ -295,14 +391,14 @@ export function prepareMicrosoftOAuth(options: PrepareMicrosoftOAuthOptions): Pr
   authUrl.searchParams.set('code_challenge', pkce.challenge);
   authUrl.searchParams.set('code_challenge_method', 'S256');
   authUrl.searchParams.set('response_mode', 'query');
-  authUrl.searchParams.set('prompt', 'consent');
+  authUrl.searchParams.set('prompt', MICROSOFT_PROMPT);
 
   return {
     authUrl: authUrl.toString(),
     state,
     codeVerifier: pkce.verifier,
-    tokenEndpoint: MICROSOFT_TOKEN_URL,
-    clientId: MICROSOFT_CLIENT_ID,
+    tokenEndpoint: authority.tokenUrl,
+    clientId,
     redirectUri,
     provider: 'microsoft',
   };
@@ -314,7 +410,10 @@ export function prepareMicrosoftOAuth(options: PrepareMicrosoftOAuthOptions): Pr
  */
 export async function exchangeMicrosoftOAuth(params: OAuthExchangeParams): Promise<OAuthExchangeResult> {
   try {
-    const tokens = await exchangeCodeForTokens(params.code, params.codeVerifier, params.redirectUri);
+    // The prepared flow carries the app registration and the tenant's token endpoint.
+    const clientId = params.clientId || MICROSOFT_CLIENT_ID;
+    const tokenUrl = params.tokenEndpoint || microsoftAuthority().tokenUrl;
+    const tokens = await exchangeCodeForTokens(params.code, params.codeVerifier, params.redirectUri, clientId, tokenUrl);
 
     const email = await getUserEmail(tokens.accessToken);
 
@@ -324,6 +423,8 @@ export async function exchangeMicrosoftOAuth(params: OAuthExchangeParams): Promi
       refreshToken: tokens.refreshToken,
       expiresAt: tokens.expiresIn ? Date.now() + tokens.expiresIn * 1000 : undefined,
       email,
+      // Stored with the tokens: a refresh has to use the client that issued them.
+      oauthClientId: clientId,
     };
   } catch (error) {
     return {
@@ -357,14 +458,11 @@ export async function startMicrosoftOAuth(
   options: MicrosoftOAuthOptions = {}
 ): Promise<MicrosoftOAuthResult> {
   try {
-    // Verify OAuth credentials are configured
-    if (!isMicrosoftOAuthConfigured()) {
-      return {
-        success: false,
-        error:
-          'Microsoft OAuth not configured. Set MICROSOFT_OAUTH_CLIENT_ID environment variable.',
-      };
+    const clientId = resolveClientId(options.clientId);
+    if (!clientId) {
+      return { success: false, error: NOT_CONFIGURED_MESSAGE };
     }
+    const authority = microsoftAuthority(options.tenantId);
 
     // Get scopes for this request
     const scopes = getMicrosoftScopes(options);
@@ -380,8 +478,8 @@ export async function startMicrosoftOAuth(
     const redirectUri = `${callbackServer.url}/callback`;
 
     // Build authorization URL
-    const authUrl = new URL(MICROSOFT_AUTH_URL);
-    authUrl.searchParams.set('client_id', MICROSOFT_CLIENT_ID);
+    const authUrl = new URL(authority.authorizeUrl);
+    authUrl.searchParams.set('client_id', clientId);
     authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('scope', scopes.join(' '));
@@ -390,8 +488,7 @@ export async function startMicrosoftOAuth(
     authUrl.searchParams.set('code_challenge_method', 'S256');
     // Response mode 'query' returns code in URL query params (default for authorization_code)
     authUrl.searchParams.set('response_mode', 'query');
-    // Prompt 'consent' forces consent screen to ensure we get refresh token
-    authUrl.searchParams.set('prompt', 'consent');
+    authUrl.searchParams.set('prompt', MICROSOFT_PROMPT);
 
     // Open browser for authorization
     await openUrl(authUrl.toString());
@@ -425,7 +522,7 @@ export async function startMicrosoftOAuth(
     }
 
     // Exchange code for tokens
-    const tokens = await exchangeCodeForTokens(code, pkce.verifier, redirectUri);
+    const tokens = await exchangeCodeForTokens(code, pkce.verifier, redirectUri, clientId, authority.tokenUrl);
 
     // Get user email
     const email = await getUserEmail(tokens.accessToken);
@@ -436,6 +533,7 @@ export async function startMicrosoftOAuth(
       refreshToken: tokens.refreshToken,
       expiresAt: tokens.expiresIn ? Date.now() + tokens.expiresIn * 1000 : undefined,
       email,
+      clientId,
     };
   } catch (error) {
     return {

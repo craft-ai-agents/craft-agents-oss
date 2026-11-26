@@ -1,5 +1,18 @@
-import { describe, expect, it } from 'bun:test'
+import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test'
+import * as config from '@craft-agent/shared/config'
+import * as credentials from '@craft-agent/shared/credentials'
 import { SessionManager, createManagedSession } from './SessionManager.ts'
+
+const ENV_KEYS = ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_BASE_URL']
+const originalEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]))
+
+afterEach(() => {
+  mock.restore()
+  for (const [key, value] of Object.entries(originalEnv)) {
+    if (value === undefined) delete process.env[key]
+    else process.env[key] = value
+  }
+})
 
 // A Claude agent's CLIs start with the credentials its own postInit resolved, so a key or sign-in
 // saved in Settings (SETUP → reinitializeAuth(slug)) reached running sessions only once they were
@@ -23,5 +36,22 @@ describe('reinitializeAuth', () => {
     await sm.reinitializeAuth('test-reauth-conn')
 
     expect(postInits).toEqual(['on-it'])
+  })
+
+  // process.env reaches the processes the app starts, the Pi subprocess and the shell commands
+  // its agent runs among them. A Claude agent resolves its own credentials in postInit.
+  it("never puts a connection's credentials into process.env", async () => {
+    spyOn(config, 'getLlmConnection').mockImplementation(((slug: string) => ({
+      slug, name: slug, providerType: 'anthropic', authType: 'api_key', baseUrl: 'https://gateway.example.com',
+    })) as never)
+    spyOn(credentials, 'getCredentialManager').mockReturnValue({
+      getLlmApiKey: async () => 'sk-saved-in-settings',
+    } as never)
+    const sm = new SessionManager()
+    sm.setEventSink(() => {})
+
+    await sm.reinitializeAuth('test-gateway-conn')
+
+    for (const key of ENV_KEYS) expect(process.env[key]).toBe(originalEnv[key])
   })
 })
