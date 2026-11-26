@@ -118,6 +118,12 @@ mac:
     # ripgrep (used by packages/server-core/src/services/search.ts).
     - from: node_modules/@vscode/ripgrep
       to: app/node_modules/@vscode/ripgrep
+    # Pi's bundled Photon loader looks for its WASM under dirname(process.execPath)/photon.
+    - from: ../../node_modules/@silvia-odwyer/photon-node
+      to: app/vendor/bun/photon
+      filter:
+        - photon_rs_bg.wasm
+        - LICENSE.md
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs
@@ -195,6 +201,11 @@ win:
       to: app/node_modules/@vscode/ripgrep
     - from: vendor/bun/bun.exe
       to: vendor/bun/bun.exe
+    - from: ../../node_modules/@silvia-odwyer/photon-node
+      to: vendor/bun/photon
+      filter:
+        - photon_rs_bg.wasm
+        - LICENSE.md
     - from: resources/bin/win32-x64
       to: app/resources/bin/win32-x64
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
@@ -224,6 +235,11 @@ linux:
       to: app/node_modules/@anthropic-ai/claude-agent-sdk-binary
     - from: node_modules/@vscode/ripgrep
       to: app/node_modules/@vscode/ripgrep
+    - from: ../../node_modules/@silvia-odwyer/photon-node
+      to: app/vendor/bun/photon
+      filter:
+        - photon_rs_bg.wasm
+        - LICENSE.md
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs
