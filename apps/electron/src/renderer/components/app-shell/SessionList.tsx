@@ -19,6 +19,7 @@ import { EntityList, type EntityListGroup } from "@/components/ui/entity-list"
 import { RenameDialog } from "@/components/ui/rename-dialog"
 import { SessionSearchHeader } from "./SessionSearchHeader"
 import { SessionItem } from "./SessionItem"
+import { getCycledSessionIndex } from "./session-list-cycle"
 import { SessionListProvider, type SessionListContextValue } from "@/context/SessionListContext"
 import { useSessionSelection, useSessionSelectionStore } from "@/hooks/useSession"
 import { useSessionSearch, type FilterMode } from "@/hooks/useSessionSearch"
@@ -701,6 +702,29 @@ export function SessionList({
     selectSession(row.item.id, index)
     navigateToSession(row.item.id)
   }, [selectSession, navigateToSession])
+
+  // Use the same ordered rows and panel-aware selection path as the navigator.
+  const currentSessionIndex = highlightedSessionId ? (rowIndexMap.get(highlightedSessionId) ?? -1) : -1
+  const previousChatIndex = getCycledSessionIndex(flatRows.length, currentSessionIndex, -1)
+  const nextChatIndex = getCycledSessionIndex(flatRows.length, currentSessionIndex, 1)
+  const cycleToChat = (index: number | null) => {
+    const row = index === null ? undefined : flatRows[index]
+    if (index === null || !row) return
+    handleSelectSession(row, index)
+    requestAnimationFrame(() => {
+      const element = document.getElementById(`item-${row.item.id}`)
+      if (element && zoneRef.current?.contains(element)) {
+        element.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+      }
+    })
+  }
+
+  useAction('nav.previousChat', () => cycleToChat(previousChatIndex), {
+    enabled: () => previousChatIndex !== null,
+  })
+  useAction('nav.nextChat', () => cycleToChat(nextChatIndex), {
+    enabled: () => nextChatIndex !== null,
+  })
 
   const handleSelectSessionById = useCallback((sessionId: string) => {
     const index = rowIndexMap.get(sessionId) ?? -1

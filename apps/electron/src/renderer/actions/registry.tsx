@@ -187,6 +187,8 @@ function formatHotkeyDisplay(hotkey: string): string {
     if (part === 'tab') return 'Tab'
     if (part === 'left') return '←'
     if (part === 'right') return '→'
+    if (part === 'up') return '↑'
+    if (part === 'down') return '↓'
     if (part === '[') return '['
     if (part === ']') return ']'
     return part.toUpperCase()

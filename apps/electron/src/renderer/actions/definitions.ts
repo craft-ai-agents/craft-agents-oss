@@ -1,4 +1,5 @@
 import type { ActionDefinition } from './types'
+import { isMac, isWebUI } from '../lib/platform'
 
 export const actions = {
   // ═══════════════════════════════════════════
@@ -88,6 +89,20 @@ export const actions = {
     defaultHotkey: 'tab',
     category: 'Navigation',
     when: '!inputFocus',  // Tab should work normally in text inputs
+  },
+  'nav.previousChat': {
+    id: 'nav.previousChat',
+    label: 'Previous Chat in List',
+    defaultHotkey: isMac && !isWebUI ? 'mod+alt+up' : null,
+    category: 'Navigation',
+    when: '!menuOpen',
+  },
+  'nav.nextChat': {
+    id: 'nav.nextChat',
+    label: 'Next Chat in List',
+    defaultHotkey: isMac && !isWebUI ? 'mod+alt+down' : null,
+    category: 'Navigation',
+    when: '!menuOpen',
   },
   'nav.goBack': {
     id: 'nav.goBack',
