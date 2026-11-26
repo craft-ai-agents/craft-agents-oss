@@ -17,6 +17,15 @@ describe('parseCloudflareGatewayUrl', () => {
     expect(parseCloudflareGatewayUrl('https://gateway.ai.cloudflare.com/v1/<account-id>/<gateway-id>')).toBeNull();
     expect(parseCloudflareGatewayUrl('not a url')).toBeNull();
   });
+
+  it('returns null for a malformed percent-escape instead of throwing', () => {
+    // `new URL` keeps invalid escapes as they are, so decoding them is what fails
+    expect(() => parseCloudflareGatewayUrl('https://gateway.ai.cloudflare.com/v1/acc/gw%zz')).not.toThrow();
+    expect(parseCloudflareGatewayUrl('https://gateway.ai.cloudflare.com/v1/acc/gw%zz')).toBeNull();
+    expect(parseCloudflareGatewayUrl('https://gateway.ai.cloudflare.com/v1/acc/gw%')).toBeNull();
+    // A well-formed escape still decodes
+    expect(parseCloudflareGatewayUrl('https://gateway.ai.cloudflare.com/v1/acc%20id/gw')).toEqual({ accountId: 'acc id', gatewayId: 'gw' });
+  });
 });
 
 describe('providerEndpointEnv', () => {
@@ -30,6 +39,11 @@ describe('providerEndpointEnv', () => {
     expect(providerEndpointEnv('openai', 'https://example.com')).toEqual({});
     expect(providerEndpointEnv('azure', undefined)).toEqual({});
     expect(providerEndpointEnv('cloudflare-ai-gateway', 'https://example.com/v1/a/b')).toEqual({});
+  });
+
+  it('is empty for a gateway URL with a malformed percent-escape', () => {
+    expect(() => providerEndpointEnv('cloudflare-ai-gateway', 'https://gateway.ai.cloudflare.com/v1/acc/gw%zz')).not.toThrow();
+    expect(providerEndpointEnv('cloudflare-ai-gateway', 'https://gateway.ai.cloudflare.com/v1/acc/gw%zz')).toEqual({});
   });
 });
 
