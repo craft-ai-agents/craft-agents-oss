@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { getBashRememberKey, getFileWriteRememberKey, getNetworkCommandHosts, isDangerousArgv } from '../permission-remember.ts';
 
 const exact = (...argv: string[]) => `exact:${JSON.stringify(argv)}`;
@@ -91,10 +91,10 @@ describe('isDangerousArgv', () => {
 
 describe('getFileWriteRememberKey', () => {
   it('keys a write by the folder it goes into', () => {
-    expect(getFileWriteRememberKey('/repo/src/a.ts')).toBe('write:/repo/src');
-    expect(getFileWriteRememberKey('/repo/src/b.ts')).toBe('write:/repo/src');
+    expect(getFileWriteRememberKey('/repo/src/a.ts')).toBe(`write:${dirname(resolve('/repo/src/a.ts'))}`);
+    expect(getFileWriteRememberKey('/repo/src/b.ts')).toBe(`write:${dirname(resolve('/repo/src/b.ts'))}`);
     expect(getFileWriteRememberKey('~/.ssh/authorized_keys')).toBe(`write:${join(homedir(), '.ssh')}`);
-    expect(getFileWriteRememberKey('/repo/src/../../etc/hosts')).toBe('write:/etc');
+    expect(getFileWriteRememberKey('/repo/src/../../etc/hosts')).toBe(`write:${dirname(resolve('/repo/src/../../etc/hosts'))}`);
   });
 });
 

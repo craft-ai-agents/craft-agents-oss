@@ -75,6 +75,7 @@ export type PermissionCallback = (request: {
   toolName: string;
   command?: string;
   description: string;
+  canAlwaysAllow?: boolean;
   type?: PermissionRequestType;
   appName?: string;
   reason?: string;
