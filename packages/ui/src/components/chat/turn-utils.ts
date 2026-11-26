@@ -358,11 +358,28 @@ export interface GroupTurnsOptions {
  * means final response.
  */
 export function groupMessagesByTurn(messages: Message[], options: GroupTurnsOptions = {}): Turn[] {
-  // Drop hidden messages before grouping. These are system-generated nudges that
-  // must reach the model (they drive a turn) but must never render as a bubble —
-  // e.g. the WS2 background-task-completion nudge that wakes an idle session. The
-  // assistant response they trigger has its own turnId and still renders normally.
-  const visibleMessages = messages.filter(m => !m.hidden)
+  const toolMessagesById = new Map<string, Message>()
+  for (const message of messages) {
+    if (message.role === 'tool' && message.toolUseId) {
+      toolMessagesById.set(message.toolUseId, message)
+    }
+  }
+
+  // Hidden messages drive a turn but must not render as a bubble. SDK heartbeat
+  // records have their own toolUseId, but only report progress for an existing
+  // tool call. Keep orphaned records visible so a missing parent cannot hide
+  // a real call.
+  const visibleMessages = messages.filter(m => {
+    if (m.hidden) return false
+    if (m.role !== 'tool' || m.toolStatus !== 'executing' || !m.toolUseId || !m.parentToolUseId) return true
+
+    const parent = toolMessagesById.get(m.parentToolUseId)
+    const heartbeatPrefix = `${m.parentToolUseId}-heartbeat-`
+    const heartbeatIndex = m.toolUseId.slice(heartbeatPrefix.length)
+    return !(parent?.toolName === m.toolName
+      && m.toolUseId.startsWith(heartbeatPrefix)
+      && /^\d+$/.test(heartbeatIndex))
+  })
   // Sort by timestamp for correct chronological order
   // This ensures correct turn grouping even if messages are added out of order during streaming
   const sortedMessages = [...visibleMessages].sort((a, b) => a.timestamp - b.timestamp)

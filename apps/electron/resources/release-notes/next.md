@@ -8,4 +8,6 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Bug Fixes
 
+- **Tool call heartbeats no longer appear as repeated invocations** — Long-running tool calls stay as one running activity in the conversation while SDK heartbeat records arrive. Fixes #1008.
+
 ## Breaking Changes
