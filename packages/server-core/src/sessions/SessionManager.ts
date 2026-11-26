@@ -3325,9 +3325,9 @@ export class SessionManager implements ISessionManager {
     workspaceId: string,
     options?: import('@craft-agent/shared/protocol').CreateSessionOptions,
     // Transport concern, deliberately NOT on the wire DTO: by default every created session is
-    // announced to the renderer (see notifySessionCreated). Callers that register the session
-    // themselves — the `sessions:create` RPC adds it from the return value — pass
-    // `{ emitCreatedEvent: false }` to avoid a redundant hydrate.
+    // announced to the renderer (see notifySessionCreated). Callers that announce it themselves
+    // pass `{ emitCreatedEvent: false }`: the `sessions:create` RPC tells every client but the
+    // caller, which adds the session from the return value.
     internal?: { emitCreatedEvent?: boolean },
   ): Promise<Session> {
     const workspace = getWorkspaceByNameOrId(workspaceId)
@@ -3851,10 +3851,11 @@ export class SessionManager implements ISessionManager {
    *
    * `createSession` calls this by default, so server-side creators get it for free. Use it
    * directly only for sessions built outside `createSession` (e.g. the SessionBundle import
-   * path, which assembles a ManagedSession by hand). The renderer handler is idempotent.
+   * path, which assembles a ManagedSession by hand) or to leave out the client that created it
+   * (`exclude`, a client id: the `sessions:create` RPC). The renderer handler is idempotent.
    */
-  notifySessionCreated(workspaceId: string, sessionId: string): void {
-    this.sendEvent({ type: 'session_created', sessionId }, workspaceId)
+  notifySessionCreated(workspaceId: string, sessionId: string, options: { exclude?: string } = {}): void {
+    this.sendEvent({ type: 'session_created', sessionId }, workspaceId, options.exclude)
   }
 
   /** Resolved working directory of a live session (used by the Tasks Conductor so child
@@ -10239,7 +10240,8 @@ export class SessionManager implements ISessionManager {
     return () => this.turnCompleteListeners.delete(listener)
   }
 
-  private sendEvent(event: SessionEvent, workspaceId?: string): void {
+  /** `exclude`: a client id that doesn't get it. */
+  private sendEvent(event: SessionEvent, workspaceId?: string, exclude?: string): void {
     if (event.type === 'complete') {
       for (const listener of this.turnCompleteListeners) {
         try {
@@ -10259,7 +10261,7 @@ export class SessionManager implements ISessionManager {
       return
     }
 
-    this.eventSink(RPC_CHANNELS.sessions.EVENT, { to: 'workspace', workspaceId }, event)
+    this.eventSink(RPC_CHANNELS.sessions.EVENT, { to: 'workspace', workspaceId, ...(exclude && { exclude }) }, event)
   }
 
   /**

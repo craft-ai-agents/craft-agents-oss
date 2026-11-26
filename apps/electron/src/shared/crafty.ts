@@ -84,6 +84,7 @@ export interface CraftyRecentScreenshot {
 
 /** The session Crafty sends to ("Send Crafty here"). None means a new session for each question. */
 export interface CraftyTargetRef {
+  /** The workspace's id in this app, for a remote workspace too (its sessions carry the server's id). */
   workspaceId: string
   sessionId: string
 }
@@ -113,9 +114,17 @@ export interface CraftyInvocation {
   id: string
   /** `Date.now()` in main when the shortcut fired; the window reports its first frame against it. */
   at: number
-  /** The target's workspace when there is a target, else the last focused Craft window's. */
+  /**
+   * The target's workspace when there is a target, else the last focused Craft window's (local or
+   * remote). The window's preload connects to that workspace's server.
+   */
   workspaceId: string | null
-  /** Where the question goes; null for a new session. Checked at the shortcut (archived → null). */
+  /** That workspace's name, for the panel to say where it sends; null when there's only one workspace. */
+  workspaceLabel: string | null
+  /**
+   * Where the question goes; null for a new session. A local target is checked at the shortcut
+   * (archived → null); a remote one is what was last known, and a `target` event follows its check.
+   */
   target: CraftySessionSummary | null
   cursor: CraftyPoint
   windowSize: { width: number; height: number }
@@ -142,7 +151,10 @@ export type CraftyEvent =
   | { type: 'dismiss'; reason: string }
   /** The follow strategy changed (in Settings): track the pointer with it, or stop. */
   | { type: 'follow'; strategy: CraftyFollowStrategy }
-  /** The target changed (a session's menu in Craft, or it was archived); the panel updates its chip. */
+  /**
+   * The target changed (a session's menu in Craft, or it was archived), or a remote target's check
+   * came back with its current title and state; the panel updates its chip.
+   */
   | { type: 'target'; target: CraftySessionSummary | null }
   /**
    * The double-tap's second press ended. `interrupted`: a key press or click came while it was
@@ -271,7 +283,8 @@ export interface CraftyApi {
   setFollow(strategy: CraftyFollowStrategy): Promise<void>
   /**
    * "Send Crafty here" (a session's menu, the panel's target menu), or null for a new session each
-   * time. Rejects a session that can't take it (archived, hidden, in a remote workspace, not found).
+   * time. `workspaceId` is the workspace's id in this app, also for a remote workspace. Rejects a
+   * session that can't take it (archived, hidden, not found) or whose server can't be reached.
    */
   setTarget(target: CraftyTargetRef | null): Promise<CraftyTargetRef | null>
   /** Craft's windows follow the target (the session menu's item, the composer's Crafty chip). */

@@ -954,7 +954,10 @@ app.whenReady().then(async () => {
         e.returnValue = instance.token
       })
       ipcMain.on('__get-workspace-remote-config', (e) => {
+        // As for __get-workspace-id: the Crafty window isn't a managed window, its controller names
+        // its workspace, so its preload connects to a remote workspace's server like a main window's
         const wsId = windowManager?.getWorkspaceForWindow(e.sender.id)
+          || craftyController?.workspaceForWebContents(e.sender.id)
         if (!wsId) { e.returnValue = null; return }
         const ws = getWorkspaceByNameOrId(wsId)
         e.returnValue = ws?.remoteServer ?? null

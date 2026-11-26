@@ -25,6 +25,10 @@ export const RPC_CHANNELS = {
     CREATE: 'sessions:create',
     DELETE: 'sessions:delete',
     GET_MESSAGES: 'sessions:getMessages',
+    // One session's metadata, without its messages
+    GET_METADATA: 'sessions:getMetadata',
+    // One completion outside any session (Crafty's Rewrite and Translate)
+    RUN_UTILITY_COMPLETION: 'sessions:runUtilityCompletion',
     SEND_MESSAGE: 'sessions:sendMessage',
     CANCEL: 'sessions:cancel',
     // Legacy name of STOP_BACKGROUND_TASK for shells (older clients); same handler.

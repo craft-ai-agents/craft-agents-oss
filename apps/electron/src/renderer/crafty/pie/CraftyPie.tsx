@@ -87,6 +87,8 @@ export interface PieRelease {
 
 export interface CraftyPieProps {
   invocation: CraftyInvocation
+  /** Where Crafty sends: the panel's, which a remote target's check updates after the invocation. */
+  target: CraftySessionSummary | null
   selection: CraftySelectionResult | null
   provenance: CraftyProvenance | null
   recentScreenshot: CraftyRecentScreenshot | null
@@ -99,7 +101,13 @@ export interface CraftyPieProps {
   onCancel: (reason: PieCancel) => void
 }
 
-function itemsFor(sub: PieSub | null, capture: PieCapture, target: CraftySessionSummary | null, languages: TranslateLanguage[]): PieItem[] {
+/** Where Send to goes: the target, and the workspace a new session would be in. */
+interface SendDestinations {
+  target: CraftySessionSummary | null
+  workspaceLabel: string | null
+}
+
+function itemsFor(sub: PieSub | null, capture: PieCapture, send: SendDestinations, languages: TranslateLanguage[]): PieItem[] {
   switch (sub) {
     case null:
       return mainItems(capture)
@@ -108,7 +116,7 @@ function itemsFor(sub: PieSub | null, capture: PieCapture, target: CraftySession
     case 'translate':
       return [...translateItems(languages), BACK_ITEM]
     case 'send':
-      return [...sendItems(target, capture.sessions ?? []), BACK_ITEM]
+      return [...sendItems(send.target, capture.sessions ?? [], send.workspaceLabel), BACK_ITEM]
   }
 }
 
@@ -120,7 +128,7 @@ const quantize = (aim: number | null) => (aim === null ? null : Math.round(aim /
  * keys and the trigger's release. While it's open the whole window takes the mouse, so every click
  * lands here: a click outside closes the pie without reaching the app (the selection stays).
  */
-export function CraftyPie({ invocation, selection, provenance, recentScreenshot, release, closing, onAction, onCancel }: CraftyPieProps) {
+export function CraftyPie({ invocation, target, selection, provenance, recentScreenshot, release, closing, onAction, onCancel }: CraftyPieProps) {
   const listboxId = useId()
   const optionId = useCallback((index: number) => `${listboxId}-option-${index}`, [listboxId])
   const stage = invocation.windowSize
@@ -155,7 +163,8 @@ export function CraftyPie({ invocation, selection, provenance, recentScreenshot,
     sessions,
   }), [invocation.accessibility, provenance, recentScreenshot, selection, sessions])
   const languages = useMemo(() => translateLanguages(invocation.languages, SUB_PIE_MAX), [invocation.languages])
-  const items = useMemo(() => itemsFor(level.sub, capture, invocation.target, languages), [capture, invocation.target, languages, level.sub])
+  const send = useMemo<SendDestinations>(() => ({ target, workspaceLabel: invocation.workspaceLabel }), [invocation.workspaceLabel, target])
+  const items = useMemo(() => itemsFor(level.sub, capture, send, languages), [capture, languages, level.sub, send])
 
   // The handlers below run from window listeners: they read the current state through refs
   const latest = useRef({ items, level, capture, languages, drawn, waiting, onAction, onCancel })
@@ -229,7 +238,7 @@ export function CraftyPie({ invocation, selection, provenance, recentScreenshot,
   const openSub = useCallback((sub: PieSub, index: number, at: Point, held: boolean, how: PieHow | 'dwell') => {
     const { level: current, capture: c, languages: langs } = latest.current
     const parent = current.parent ?? { ring: current.ring, index }
-    const count = itemsFor(sub, c, invocation.target, langs).length
+    const count = itemsFor(sub, c, send, langs).length
     const ring = layoutSubRing(at, stage, count, parent.ring.center)
     setLevel({ sub, ring, parent: { ring: parent.ring, index } })
     setRefused(null)
@@ -237,7 +246,7 @@ export function CraftyPie({ invocation, selection, provenance, recentScreenshot,
     apply(held ? { ...startGesture(ring, at, 'held'), pointer: at } : { ...startGesture(ring, ring.center, 'sticky'), pointer: at })
     if (held && ring.shifted) warpToHub(ring)
     metric('pie:sub', { sub, how, shifted: ring.shifted })
-  }, [apply, invocation.target, metric, stage, warpToHub])
+  }, [apply, metric, send, stage, warpToHub])
 
   const goBack = useCallback(() => {
     const { parent } = latest.current.level

@@ -33,7 +33,7 @@ import {
   type CraftyTransform,
 } from '../../../shared/crafty'
 import { sourceAppName } from '../context'
-import { sessionTitle } from '../target'
+import { newSessionLabel, sessionTitle } from '../target'
 import type { TranslateLanguage } from './languages'
 
 export type PresetSlot = 'summarize' | 'explain' | 'reply'
@@ -196,8 +196,15 @@ export function translateItems(languages: readonly TranslateLanguage[]): PieItem
   }))
 }
 
-/** The target first (it's where Crafty sends today), then the most recent sessions, then a new one. */
-export function sendItems(target: CraftySessionSummary | null, sessions: readonly CraftySessionSummary[]): PieItem[] {
+/**
+ * The target first (it's where Crafty sends today), then the most recent sessions, then a new one
+ * (named with its workspace when there's more than one: `workspaceLabel`).
+ */
+export function sendItems(
+  target: CraftySessionSummary | null,
+  sessions: readonly CraftySessionSummary[],
+  workspaceLabel: string | null = null,
+): PieItem[] {
   const others = sessions.filter(session => session.sessionId !== target?.sessionId)
   const listed = (target ? [target, ...others] : others).slice(0, SUB_PIE_MAX - 1)
   return [
@@ -208,7 +215,7 @@ export function sendItems(target: CraftySessionSummary | null, sessions: readonl
       action: { kind: 'send', session },
       availability: READY,
     })),
-    { id: 'send:new', label: 'New session', icon: Plus, action: { kind: 'send', session: null }, availability: READY },
+    { id: 'send:new', label: newSessionLabel(workspaceLabel), icon: Plus, action: { kind: 'send', session: null }, availability: READY },
   ]
 }
 

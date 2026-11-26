@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { ArrowUp, Camera, Check, CircleAlert, Copy, CornerDownLeft, ExternalLink, Image as ImageIcon, X } from 'lucide-react'
 import { Markdown, Spinner } from '@craft-agent/ui'
 import { Button, IconButton } from '@/components/ui/button'
+import { ipcErrorMessage } from '@/lib/ipc-error'
 import type { FileAttachment, StoredAttachment } from '../../shared/types'
 import type {
   CraftyCreateSessionResult,
@@ -454,7 +455,7 @@ export function CraftyApp() {
     try {
       await crafty.setTarget(next && { workspaceId: next.workspaceId, sessionId: next.sessionId })
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : String(error))
+      setNotice(ipcErrorMessage(error))
       return
     }
     // Already where the conversation is (the session this panel just created): nothing moves
@@ -487,13 +488,18 @@ export function CraftyApp() {
     setTurn(newTurn(question, messageId))
     firstTokenRef.current = false
     sentAtRef.current = Date.now()
-    const busyAtSend = existing ? sessionBusyRef.current : false
     try {
       let destination = existing
       if (!destination) {
         destination = await crafty.createSession(inv.id, sessionOptions())
         sessionBusyRef.current = false
+      } else if (!session) {
+        // The target's summary can be stale (a remote one's is the last known until its check
+        // answers), and a busy session takes this as a steer, not as a turn of its own
+        const current = await window.electronAPI.getSessionMetadata(destination.sessionId).catch(() => null)
+        if (current) sessionBusyRef.current = !!current.isProcessing
       }
+      const busyAtSend = existing ? sessionBusyRef.current : false
       if (isFirst) setSession(destination)
       sessionIdRef.current = destination.sessionId
       const sessionId = destination.sessionId
@@ -514,7 +520,7 @@ export function CraftyApp() {
         sendMs: Date.now() - sentAtRef.current,
       })
     } catch (error) {
-      setTurn(current => current && { ...current, streaming: false, activity: null, error: error instanceof Error ? error.message : String(error) })
+      setTurn(current => current && { ...current, streaming: false, activity: null, error: ipcErrorMessage(error) })
     }
   }, [busy, input, provenance, screenshots, selection, session, sessionOptions, target, turn?.streaming])
 
@@ -604,7 +610,7 @@ export function CraftyApp() {
       settle(null)
     } catch (error) {
       // The card stays up so it can be answered again; without it the agent would wait for nothing
-      const message = error instanceof Error ? error.message : String(error)
+      const message = ipcErrorMessage(error)
       settle({ requestId: request.requestId, error: `Your answer didn't reach the session: ${message}` })
     }
   }, [session, shownPermission])
@@ -639,7 +645,7 @@ export function CraftyApp() {
       setOneShot(current => current?.transform === transform ? { ...current, status: 'done', result: result.text } : current)
     } catch (error) {
       if (invocationRef.current?.id !== inv.id) return
-      const message = error instanceof Error ? error.message : String(error)
+      const message = ipcErrorMessage(error)
       setOneShot(current => current?.transform === transform ? { ...current, status: 'error', error: message } : current)
     }
   }, [selection, sessionOptions])
@@ -689,9 +695,12 @@ export function CraftyApp() {
       await window.electronAPI.sendMessage(sessionId, message, attachments, stored)
       pieResult({ result: 'send', ok: true, newSession: !destination, screenshot: shots.length > 0, ms: Date.now() - started })
       if (invocationRef.current?.id !== inv.id) return
-      showCursorNote({ text: destination ? `Sent to “${sessionTitle(destination)}”` : 'Sent to a new session', tone: 'success' }, NOTE_MS)
+      const where = destination
+        ? `“${sessionTitle(destination)}”`
+        : `a new session${inv.workspaceLabel ? ` in ${inv.workspaceLabel}` : ''}`
+      showCursorNote({ text: `Sent to ${where}`, tone: 'success' }, NOTE_MS)
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = ipcErrorMessage(error)
       pieResult({ result: 'send', ok: false, newSession: !destination, error: message })
       if (invocationRef.current?.id !== inv.id) return
       showCursorNote({ text: `Couldn't send: ${message}`, tone: 'error' }, NOTE_ERROR_MS)
@@ -795,6 +804,7 @@ export function CraftyApp() {
         <CraftyPie
           key={invocation.id}
           invocation={invocation}
+          target={target}
           selection={selection}
           provenance={provenance}
           recentScreenshot={recentScreenshot}
@@ -862,7 +872,13 @@ export function CraftyApp() {
                 )}
               </div>
               {invocation && (
-                <CraftyTargetMenu invocationId={invocation.id} target={target} disabled={!!turn?.streaming} onPick={next => void pickTarget(next)} />
+                <CraftyTargetMenu
+                  invocationId={invocation.id}
+                  target={target}
+                  workspaceLabel={invocation.workspaceLabel}
+                  disabled={!!turn?.streaming}
+                  onPick={next => void pickTarget(next)}
+                />
               )}
               {openable && (
                 <IconButton aria-label="Open in Craft" tooltip size="sm" icon={<ExternalLink />} onClick={() => void openInCraft()} />

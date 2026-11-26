@@ -71,6 +71,10 @@ export interface ISessionManager {
     options?: CreateSessionOptions,
     internal?: { emitCreatedEvent?: boolean },
   ): Promise<Session>
+  /** Announce a session to the workspace's clients (`session_created`), except `exclude` (a client id). */
+  notifySessionCreated(workspaceId: string, sessionId: string, options?: { exclude?: string }): void
+  /** One completion outside any session, on the connection's mini model (Crafty's Rewrite and Translate). */
+  runUtilityCompletion(workspaceId: string, prompt: string, options?: { llmConnection?: string; model?: string }): Promise<string>
   /** Resolved working directory of a live session (Tasks Conductor uses it so children inherit
    *  the orchestrator's cwd). */
   getSessionWorkingDirectory(sessionId: string): string | undefined

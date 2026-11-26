@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import type { CraftySessionSummary } from '../../../shared/crafty'
-import { filterSessions, sessionTitle, shortAge, targetSession } from '../target'
+import { filterSessions, newSessionLabel, sessionTitle, shortAge, targetSession } from '../target'
 
 const summary = (sessionId: string, name: string | null, preview: string | null = null): CraftySessionSummary => ({
   workspaceId: 'w',
@@ -16,6 +16,13 @@ describe('sessionTitle', () => {
     expect(sessionTitle(summary('a', 'Trip plan'))).toBe('Trip plan')
     expect(sessionTitle(summary('a', '  ', 'What is the weather'))).toBe('What is the weather')
     expect(sessionTitle(summary('a', null, null))).toBe('Untitled session')
+  })
+})
+
+describe('newSessionLabel', () => {
+  it('says which workspace when there is more than one', () => {
+    expect(newSessionLabel('Home server')).toBe('New session in Home server')
+    expect(newSessionLabel(null)).toBe('New session')
   })
 })
 

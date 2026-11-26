@@ -20,4 +20,14 @@ describe('notifySessionCreated', () => {
     expect(calls[0]!.target).toEqual({ to: 'workspace', workspaceId: 'ws-1' })
     expect(calls[0]!.payload[0]).toEqual({ type: 'session_created', sessionId: 'sess-1' })
   })
+
+  it('leaves out the client that created it (the sessions:create RPC adds it from its reply)', () => {
+    const sm = new SessionManager()
+    const targets: unknown[] = []
+    sm.setEventSink((_channel: string, target: unknown) => { targets.push(target) })
+
+    sm.notifySessionCreated('ws-1', 'sess-1', { exclude: 'client-7' })
+
+    expect(targets).toEqual([{ to: 'workspace', workspaceId: 'ws-1', exclude: 'client-7' }])
+  })
 })

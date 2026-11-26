@@ -10,8 +10,9 @@ import {
   StyledDropdownMenuSeparator,
 } from '@/components/ui/styled-dropdown'
 import { COMPOSER_CHIP } from '@/components/app-shell/input/composer-styles'
+import { ipcErrorMessage } from '@/lib/ipc-error'
 import type { CraftySessionSummary } from '../../shared/crafty'
-import { filterSessions, NEW_SESSION_LABEL, sessionTitle, shortAge } from './target'
+import { filterSessions, newSessionLabel, sessionTitle, shortAge } from './target'
 
 const crafty = window.electronAPI.crafty!
 
@@ -24,6 +25,8 @@ const MAX_ROWS = 40
 interface CraftyTargetMenuProps {
   invocationId: string
   target: CraftySessionSummary | null
+  /** The workspace's name when there's more than one: new sessions say where they go. */
+  workspaceLabel: string | null
   /** While an answer streams: the conversation can't move. */
   disabled: boolean
   onPick: (target: CraftySessionSummary | null) => void
@@ -34,22 +37,30 @@ interface CraftyTargetMenuProps {
  * workspace, kept until you change it. Non-modal for the same reason as the model menu: in this
  * click-through window a modal menu would let clicks fall through to the app underneath.
  */
-export function CraftyTargetMenu({ invocationId, target, disabled, onPick }: CraftyTargetMenuProps) {
+export function CraftyTargetMenu({ invocationId, target, workspaceLabel, disabled, onPick }: CraftyTargetMenuProps) {
   const [open, setOpen] = useState(false)
   const [sessions, setSessions] = useState<CraftySessionSummary[] | null>(null)
+  /** Why the list didn't load (a remote workspace's server can be out of reach). */
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const newLabel = newSessionLabel(workspaceLabel)
 
   // Fresh on every open: titles, the working marker and new sessions change while the window waits
   useEffect(() => {
     if (!open) return
     let current = true
     setQuery('')
-    // An older preload (hot reload before the app restarted) has no listSessions: an empty list
+    setLoadError(null)
+    // Inside the chain: an older preload (hot reload before the app restarted) has no listSessions
     Promise.resolve()
       .then(() => crafty.listSessions(invocationId))
       .then(list => { if (current) setSessions(list) })
-      .catch(() => { if (current) setSessions([]) })
+      .catch((error: unknown) => {
+        if (!current) return
+        setSessions([])
+        setLoadError(ipcErrorMessage(error))
+      })
     const frame = requestAnimationFrame(() => inputRef.current?.focus())
     const onBlur = () => setOpen(false)
     window.addEventListener('blur', onBlur)
@@ -84,12 +95,14 @@ export function CraftyTargetMenu({ invocationId, target, disabled, onPick }: Cra
     }
   }
 
+  const groupLabel = query.trim() ? 'Matching sessions' : 'Recent sessions'
+
   return (
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
       <DropdownMenuTrigger asChild disabled={disabled}>
-        <button type="button" className={cn(COMPOSER_CHIP, CHIP, 'max-w-44', open && 'bg-fill-hover text-foreground')} title="Where Crafty sends">
+        <button type="button" className={cn(COMPOSER_CHIP, CHIP, 'max-w-52', open && 'bg-fill-hover text-foreground')} title="Where Crafty sends">
           {target ? <MessageSquare className="size-3.5 shrink-0" /> : <SquarePen className="size-3.5 shrink-0" />}
-          <span className="min-w-0 truncate">{target ? sessionTitle(target) : NEW_SESSION_LABEL}</span>
+          <span className="min-w-0 truncate">{target ? sessionTitle(target) : newLabel}</span>
           <ChevronDown className="size-3.5 shrink-0" />
         </button>
       </DropdownMenuTrigger>
@@ -108,15 +121,17 @@ export function CraftyTargetMenu({ invocationId, target, disabled, onPick }: Cra
           <>
             <StyledDropdownMenuItem onSelect={() => pick(null)}>
               <SquarePen />
-              <span className="flex-1">{NEW_SESSION_LABEL}</span>
+              <span className="min-w-0 flex-1 truncate">{newLabel}</span>
               {!target && <Check className="size-3.5 text-secondary" />}
             </StyledDropdownMenuItem>
             <StyledDropdownMenuSeparator />
           </>
         )}
-        <div className={GROUP_LABEL}>{query.trim() ? 'Matching sessions' : 'Recent sessions'}</div>
+        <div className={cn(GROUP_LABEL, 'truncate')}>{workspaceLabel ? `${groupLabel} in ${workspaceLabel}` : groupLabel}</div>
         {sessions === null ? (
           <div className="flex items-center gap-2 px-2 py-1.5 text-label-sm text-tertiary"><Spinner /> Loading…</div>
+        ) : loadError ? (
+          <div role="alert" className="px-2 py-1.5 text-label-sm text-destructive">{loadError}</div>
         ) : matches.length === 0 ? (
           <div className="px-2 py-1.5 text-label-sm text-tertiary">{query.trim() ? 'No session matches.' : 'No sessions yet.'}</div>
         ) : (

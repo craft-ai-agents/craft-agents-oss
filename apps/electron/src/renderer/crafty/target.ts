@@ -7,6 +7,14 @@ import type { CraftyCreateSessionResult, CraftySessionSummary } from '../../shar
 
 export const NEW_SESSION_LABEL = 'New session'
 
+/**
+ * Where a new session goes: with more than one workspace the panel says which (`workspaceLabel`,
+ * null with one), so Crafty never picks a workspace you didn't see.
+ */
+export function newSessionLabel(workspaceLabel: string | null): string {
+  return workspaceLabel ? `${NEW_SESSION_LABEL} in ${workspaceLabel}` : NEW_SESSION_LABEL
+}
+
 /** The title, else the start of its last message (sessions get a title after their first turn). */
 export function sessionTitle(session: Pick<CraftySessionSummary, 'name' | 'preview'>): string {
   return session.name?.trim() || session.preview?.trim() || 'Untitled session'

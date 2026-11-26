@@ -4,12 +4,14 @@ import { toast } from 'sonner'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { isCraftyTarget, useCraftyTarget } from '@/hooks/useCraftyTarget'
+import { ipcErrorMessage } from '@/lib/ipc-error'
 
 /**
  * "Send Crafty Here" in a session's menu (dropdown and right-click): Crafty's questions land in this
- * session until you stop it here, pick another one, or archive this one. Only while Crafty is on,
- * and only for a local workspace's session, the one kind main accepts (a remote session runs on
- * another machine and carries that server's workspace id, which matches no local workspace).
+ * session until you stop it here, pick another one, or archive this one. Only while Crafty is on.
+ * The target names the window's workspace, local or remote: a remote session carries its server's
+ * workspace id, which matches no workspace in this app. `workspaceId`, the session's, is only the
+ * fallback where there's no window shell.
  */
 export function SendCraftyHereMenuItem({ sessionId, workspaceId, isArchived }: {
   sessionId: string
@@ -19,14 +21,13 @@ export function SendCraftyHereMenuItem({ sessionId, workspaceId, isArchived }: {
   const { t } = useTranslation()
   const { MenuItem } = useMenuComponents()
   const { available, target, setTarget } = useCraftyTarget({ refreshOnMount: true })
-  const workspaces = useOptionalAppShellContext()?.workspaces
-  const isLocal = !workspaces || workspaces.some(w => w.id === workspaceId && !w.remoteServer)
-  if (!available || !workspaceId || isArchived || !isLocal) return null
+  const targetWorkspaceId = useOptionalAppShellContext()?.activeWorkspaceId ?? workspaceId
+  if (!available || !targetWorkspaceId || isArchived) return null
 
-  const isTarget = isCraftyTarget(target, workspaceId, sessionId)
+  const isTarget = isCraftyTarget(target, targetWorkspaceId, sessionId)
   const toggle = () => {
-    setTarget(isTarget ? null : { workspaceId, sessionId })
-      .catch((error: unknown) => toast.error(error instanceof Error ? error.message : String(error)))
+    setTarget(isTarget ? null : { workspaceId: targetWorkspaceId, sessionId })
+      .catch((error: unknown) => toast.error(ipcErrorMessage(error)))
   }
 
   return (

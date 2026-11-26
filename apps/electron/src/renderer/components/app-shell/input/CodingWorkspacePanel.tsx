@@ -19,6 +19,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { getPathBasename } from '@/lib/platform'
+import { ipcErrorMessage } from '@/lib/ipc-error'
 import { getRecentWorkingDirs } from './working-directory-history'
 
 type Repo = LocalRepo | GitHubRepo
@@ -257,7 +258,7 @@ function CreateWorktreeForm({ repo, workspaceId, cloneRoot, defaultBranch, onCre
       onCreated(result.path)
     } catch (err) {
       // The server's message is git's own reason ("a branch named … already exists")
-      setError(err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(err))
+      setError(ipcErrorMessage(err))
       setBusy(false)
     }
   }

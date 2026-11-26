@@ -14,8 +14,7 @@ import {
   setPersistedCraftyOpenWith,
   setPersistedCraftyTarget,
 } from '@craft-agent/shared/config'
-import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
-import type { Session } from '@craft-agent/shared/protocol'
+import type { Workspace } from '@craft-agent/core/types'
 import type { SessionManager } from '@craft-agent/server-core/sessions'
 import { mainLog } from '../logger'
 import type { WindowManager } from '../window-manager'
@@ -52,11 +51,10 @@ import { CraftyMetrics } from './metrics'
 import { captureRegion, findRecentScreenshot, toScreenshot } from './screenshots'
 import { reduceTrigger, TRIGGER_IDLE, type TriggerState } from './trigger-detect'
 import { buildTransformPrompt, cleanTransformResult } from './transform-prompt'
+import { localCraftySessions, remoteCraftySessions, type CraftySessions } from './sessions'
+import { openRemoteClient, RemoteConnections } from './remote-connections'
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
-
-/** Label for spike sessions, so they're easy to find and delete. */
-const CRAFTY_LABEL = 'crafty'
 
 /** How long main waits for the window to animate out before hiding it anyway. */
 const FORCED_HIDE_MS = 400
@@ -80,23 +78,17 @@ const META_KEYS_ALLOWED = new Set([
   'escape', 'enter', 'backspace', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'meta',
 ])
 
-/** Archived and hidden sessions (a task's or an automation's internals) can't be targets. */
-function canTakeCrafty(session: Session): boolean {
-  return !session.isArchived && !session.hidden
+function sameTarget(a: CraftyTargetRef | null, b: CraftyTargetRef | null): boolean {
+  return a?.sessionId === b?.sessionId && a?.workspaceId === b?.workspaceId
 }
 
-function summarize(session: Session): CraftySessionSummary {
-  return {
-    workspaceId: session.workspaceId,
-    sessionId: session.id,
-    name: session.name ?? null,
-    preview: session.preview ?? null,
-    lastMessageAt: session.lastMessageAt ?? null,
-    isProcessing: !!session.isProcessing,
-    llmConnection: session.llmConnection,
-    model: session.model,
-    thinkingLevel: session.thinkingLevel,
-  }
+/**
+ * What the Crafty window's preload connected to: its workspace and, for a remote one, that
+ * workspace's server. When it changes (another workspace, a new address or token) the page reloads.
+ */
+function windowRoute(workspace: Workspace | null): string {
+  const server = workspace?.remoteServer
+  return server ? [workspace.id, server.url, server.remoteWorkspaceId, server.token].join('\n') : workspace?.id ?? ''
 }
 
 const PERMISSION_PANES: Record<CraftyPermissionKind, string> = {
@@ -177,7 +169,13 @@ export class CraftyController {
   private window: BrowserWindow | null = null
   private windowBounds: Rectangle | null = null
   private windowWorkspaceId: string | null = null
+  /** See `windowRoute`. */
+  private windowRouteKey: string | null = null
   private windowLoaded: Promise<void> | null = null
+  /** Connections to remote workspaces' servers, for the session work main does there. */
+  private readonly remote = new RemoteConnections(openRemoteClient)
+  /** The stored target's last known summary: a remote one shows it while its server is asked again. */
+  private targetSummary: CraftySessionSummary | null = null
   private invocation: Invocation | null = null
   private running = false
   private shortcutRegistered = false
@@ -185,7 +183,8 @@ export class CraftyController {
   private shown = false
   private shownAt = 0
   private follow: CraftyFollowStrategy = 'off'
-  private lastFocusedWorkspaceId: string | null = null
+  /** The last focused Craft window (webContents id): Crafty works in the workspace it shows now. */
+  private lastFocusedWindowId: number | null = null
   private forcedHideTimer: NodeJS.Timeout | null = null
   // The double-tap (the input addon's tap, fed through trigger-detect)
   private doubleTap: CraftyDoubleTap = getPersistedCraftyDoubleTap()
@@ -203,8 +202,9 @@ export class CraftyController {
   constructor(private readonly deps: CraftyDeps) {
     app.on('browser-window-focus', (_event, window) => {
       if (window === this.window) return
-      const workspaceId = this.deps.windowManager.getWorkspaceForWindow(window.webContents.id)
-      if (workspaceId) this.lastFocusedWorkspaceId = workspaceId
+      // The window, not its workspace: a window switches workspaces without being focused again
+      const id = window.webContents.id
+      if (this.deps.windowManager.getWorkspaceForWindow(id)) this.lastFocusedWindowId = id
     })
     this.native.onInput(event => this.onInputEvent(event))
   }
@@ -227,7 +227,10 @@ export class CraftyController {
     if (!this.shortcutRegistered) mainLog.warn('[crafty] could not register the shortcut', CRAFTY_SHORTCUT)
     this.native.warmUp()
     void this.syncDoubleTap()
-    void this.ensureWindow(this.resolveWorkspaceId())
+    void this.ensureWindow(this.resolveWorkspace())
+    // A remote target's name and state, for the first shortcut (which doesn't wait for its server)
+    const stored = getPersistedCraftyTarget()
+    if (stored && getWorkspaceByNameOrId(stored.workspaceId)?.remoteServer) void this.refreshTarget(stored, null)
     this.metrics.record('start', {
       shortcut: CRAFTY_SHORTCUT,
       shortcutRegistered: this.shortcutRegistered,
@@ -252,6 +255,8 @@ export class CraftyController {
     this.window = null
     this.windowLoaded = null
     this.windowWorkspaceId = null
+    this.windowRouteKey = null
+    this.remote.dispose()
     this.shown = false
     this.panelOpen = false
     this.follow = 'off'
@@ -423,25 +428,27 @@ export class CraftyController {
   // Target ("Send Crafty here")
   // ---------------------------------------------------------------------------
 
-  /** The session behind a target, if it can still take Crafty's questions (local, not archived). */
+  /**
+   * The session behind a target, if it can still take Crafty's questions (not archived or hidden);
+   * null when it or its workspace is gone. Throws when a remote workspace's server can't be reached.
+   */
   private async findSession(ref: CraftyTargetRef): Promise<CraftySessionSummary | null> {
-    const sessionManager = this.deps.sessionManager
     const workspace = getWorkspaceByNameOrId(ref.workspaceId)
-    if (!sessionManager || !workspace || workspace.remoteServer) return null
-    // At startup sessions load in the background; until then every session reads as missing
-    await sessionManager.waitForSessionsLoaded()
-    const session = sessionManager.getSessionSnapshot(ref.sessionId)
-    if (!session || session.workspaceId !== workspace.id || !canTakeCrafty(session)) return null
-    return summarize(session)
+    return workspace ? this.sessionsOf(workspace).find(ref.sessionId) : null
   }
 
   /** Store it and tell Craft's windows (the session menu's check, the composer chip) and the panel. */
   private storeTarget(target: CraftyTargetRef | null, summary: CraftySessionSummary | null, reason: string): void {
+    this.targetSummary = summary
     const previous = getPersistedCraftyTarget()
     setPersistedCraftyTarget(target)
-    if (previous?.sessionId === target?.sessionId && previous?.workspaceId === target?.workspaceId) return
+    if (sameTarget(previous, target)) return
     this.broadcastTarget()
-    if (this.panelOpen) this.events.push({ type: 'target', target: summary })
+    // The open panel talks to its own workspace's server, where another workspace's session isn't:
+    // a target picked there waits for the next invocation
+    if (this.panelOpen && (!target || target.workspaceId === this.invocation?.workspaceId)) {
+      this.events.push({ type: 'target', target: summary })
+    }
     this.metrics.record('target', { reason, attached: !!target })
   }
 
@@ -462,23 +469,72 @@ export class CraftyController {
       return null
     }
     const summary = await this.findSession(target)
-    if (!summary) throw new Error('Crafty can only send to a session of a local workspace that isn\'t archived.')
+    if (!summary) throw new Error('Crafty can only send to a session that still exists and isn\'t archived.')
     this.storeTarget(target, summary, reason)
     return target
   }
 
-  /** The stored target, checked: one that was archived or deleted falls back to a new session. */
-  private async currentTarget(): Promise<CraftySessionSummary | null> {
+  /**
+   * The stored target, checked; one that was archived or deleted falls back to a new session. A
+   * remote target can't be checked before the panel opens (its server may be slow or unreachable),
+   * so it opens with what was last known and the panel hears from `refreshTarget`.
+   */
+  private async currentTarget(invocationId: string): Promise<CraftySessionSummary | null> {
     const stored = getPersistedCraftyTarget()
     if (!stored) return null
+    const workspace = getWorkspaceByNameOrId(stored.workspaceId)
+    if (!workspace) {
+      this.storeTarget(null, null, 'unavailable')
+      return null
+    }
+    if (workspace.remoteServer) {
+      void this.refreshTarget(stored, invocationId)
+      return this.knownSummary(stored)
+    }
     try {
       const summary = await this.findSession(stored)
-      if (!summary) this.storeTarget(null, null, 'unavailable')
+      if (summary) this.targetSummary = summary
+      else this.storeTarget(null, null, 'unavailable')
       return summary
     } catch (error) {
       // Sessions failed to load: keep the target for later, use a new session this time
       mainLog.warn('[crafty] could not check the target', error)
       return null
+    }
+  }
+
+  /** The target's last known summary, else just its reference: the panel names it once it's checked. */
+  private knownSummary(ref: CraftyTargetRef): CraftySessionSummary {
+    const known = this.targetSummary
+    if (known && sameTarget(known, ref)) return known
+    return { ...ref, name: null, preview: null, lastMessageAt: null, isProcessing: false }
+  }
+
+  /**
+   * Ask a remote target's server about it: gone (archived, deleted) → a new session from now on;
+   * there → its fresh summary for the open panel (its title, whether a turn runs). When the server
+   * can't be reached nothing changes: sending fails and says so.
+   */
+  private async refreshTarget(ref: CraftyTargetRef, invocationId: string | null): Promise<void> {
+    let summary: CraftySessionSummary | null
+    try {
+      summary = await this.findSession(ref)
+    } catch (error) {
+      mainLog.warn('[crafty] could not check the target', error)
+      return
+    }
+    // Changed meanwhile (another target, or none): this answer is about the old one
+    if (!sameTarget(getPersistedCraftyTarget(), ref)) return
+    if (!summary) {
+      this.storeTarget(null, null, 'unavailable')
+      return
+    }
+    this.targetSummary = summary
+    // Before its `invoke` the panel would take this for the previous invocation's (and the invoke
+    // then overwrites it): `onTrigger` reads the summary from `targetSummary` instead
+    const invocation = this.invocation
+    if (invocationId !== null && this.panelOpen && invocation?.id === invocationId && invocation.invokePushed) {
+      this.events.push({ type: 'target', target: summary })
     }
   }
 
@@ -507,33 +563,39 @@ export class CraftyController {
   // Window
   // ---------------------------------------------------------------------------
 
-  /** The workspace of the last focused Craft window, if it is local; else the first local one. */
-  private resolveWorkspaceId(): string | null {
-    const isLocal = (id: string | null) => {
-      if (!id) return false
-      const workspace = getWorkspaceByNameOrId(id)
-      return !!workspace && !workspace.remoteServer
+  /**
+   * The workspace (local or remote) of the last focused Craft window, as it is now; else of any open
+   * window; else the first local workspace (no window says which, and it needs no network); else the
+   * first.
+   */
+  private resolveWorkspace(workspaces: Workspace[] = getWorkspaces()): Workspace | null {
+    const windows = this.deps.windowManager
+    const find = (id: string | null) => (id ? workspaces.find(workspace => workspace.id === id) : undefined)
+    const focused = this.lastFocusedWindowId === null ? undefined : find(windows.getWorkspaceForWindow(this.lastFocusedWindowId))
+    if (focused) return focused
+    for (const managed of windows.getAllWindows()) {
+      const open = find(windows.getWorkspaceForWindow(managed.window.webContents.id))
+      if (open) return open
     }
-    if (isLocal(this.lastFocusedWorkspaceId)) return this.lastFocusedWorkspaceId
-    const first = this.deps.windowManager.getAllWindows()
-      .map(managed => this.deps.windowManager.getWorkspaceForWindow(managed.window.webContents.id))
-      .find(id => isLocal(id))
-    if (first) return first
-    return getWorkspaces().find(workspace => !workspace.remoteServer)?.id ?? null
+    return workspaces.find(workspace => !workspace.remoteServer) ?? workspaces[0] ?? null
   }
 
   /**
-   * The window is created once and kept warm. It is bound to one workspace (its preload connects
-   * once at load), so a different target workspace reloads it.
+   * The window is created once and kept warm. Its preload connects once at load, to its workspace's
+   * server (this process's for a local workspace), so a different workspace, or a new address or
+   * token for a remote one, reloads it.
    */
-  private async ensureWindow(workspaceId: string | null): Promise<{ window: BrowserWindow; reloaded: boolean }> {
+  private async ensureWindow(workspace: Workspace | null): Promise<{ window: BrowserWindow; reloaded: boolean }> {
     let reloaded = false
+    const route = windowRoute(workspace)
     if (!this.window || this.window.isDestroyed()) {
       this.window = this.createWindow()
-      this.windowWorkspaceId = workspaceId
+      this.windowWorkspaceId = workspace?.id ?? null
+      this.windowRouteKey = route
       this.windowLoaded = this.load(this.window)
-    } else if (workspaceId !== this.windowWorkspaceId) {
-      this.windowWorkspaceId = workspaceId
+    } else if (route !== this.windowRouteKey) {
+      this.windowWorkspaceId = workspace?.id ?? null
+      this.windowRouteKey = route
       this.windowLoaded = this.load(this.window)
       reloaded = true
     }
@@ -704,11 +766,18 @@ export class CraftyController {
     const surface = getPersistedCraftyOpenWith()
 
     // A target takes Crafty to its workspace; the window reloads for it if it was on another
-    const target = await this.currentTarget()
-    const workspaceId = target?.workspaceId ?? this.resolveWorkspaceId()
+    const checked = await this.currentTarget(id)
+    const workspaces = getWorkspaces()
+    const workspace = checked
+      ? workspaces.find(candidate => candidate.id === checked.workspaceId) ?? null
+      : this.resolveWorkspace(workspaces)
+    const workspaceId = workspace?.id ?? null
     if (this.invocation?.id === id) this.invocation.workspaceId = workspaceId
 
-    const { window, reloaded } = await this.ensureWindow(workspaceId)
+    const { window, reloaded } = await this.ensureWindow(workspace)
+    // A remote target's background check can finish while the window loads (`refreshTarget` only
+    // tells a panel that has its invocation): take what it found, a fresh summary or no target
+    const target = checked && sameTarget(getPersistedCraftyTarget(), checked) ? this.knownSummary(checked) : null
     this.moveToDisplay(window, display.bounds)
     this.events.push({
       type: 'invoke',
@@ -716,6 +785,8 @@ export class CraftyController {
         id,
         at,
         workspaceId,
+        // With one workspace there's nothing to tell apart
+        workspaceLabel: workspaces.length > 1 ? workspace?.name ?? null : null,
         target,
         cursor: { x: cursor.x - display.bounds.x, y: cursor.y - display.bounds.y },
         windowSize: { width: display.bounds.width, height: display.bounds.height },
@@ -740,6 +811,7 @@ export class CraftyController {
       trigger,
       surface,
       workspaceId,
+      remote: !!workspace?.remoteServer,
       attached: !!target,
       targetBusy: target?.isProcessing ?? null,
       reloaded,
@@ -926,58 +998,55 @@ export class CraftyController {
       return
     }
     if (!this.shown) {
-      const { window } = await this.ensureWindow(this.windowWorkspaceId ?? this.resolveWorkspaceId())
+      const current = this.windowWorkspaceId ? getWorkspaceByNameOrId(this.windowWorkspaceId) : null
+      const { window } = await this.ensureWindow(current ?? this.resolveWorkspace())
       this.moveToDisplay(window, screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).bounds)
       this.showWindow(window)
     }
   }
 
+  /** Crafty's session work in a workspace: in this process for a local one, on its server for a remote one. */
+  private sessionsOf(workspace: Workspace): CraftySessions {
+    const server = workspace.remoteServer
+    if (server) {
+      return remoteCraftySessions(workspace, server, {
+        get: () => this.remote.get(workspace.id, server),
+        discard: client => this.remote.discard(workspace.id, client),
+      })
+    }
+    if (!this.deps.sessionManager) throw new Error('Crafty needs the local server.')
+    return localCraftySessions(this.deps.sessionManager, workspace)
+  }
+
+  /** The invocation's workspace (else the window's): where the panel's session work goes. */
+  private invocationWorkspace(invocationId: string): Workspace {
+    const workspaceId = this.invocation?.id === invocationId ? this.invocation.workspaceId : this.windowWorkspaceId
+    const workspace = workspaceId ? getWorkspaceByNameOrId(workspaceId) : null
+    if (!workspace) throw new Error('Crafty has no workspace to work in.')
+    return workspace
+  }
+
   /** `model` is the panel's pick; unset fields take the workspace's defaults, like any new session. */
   async createSession(invocationId: string, model: CraftySessionModel = {}): Promise<CraftyCreateSessionResult> {
-    const sessionManager = this.deps.sessionManager
-    if (!sessionManager) throw new Error('Crafty needs the local server.')
-    const workspaceId = this.invocation?.id === invocationId ? this.invocation.workspaceId : this.windowWorkspaceId
-    if (!workspaceId) throw new Error('No local workspace to create the session in.')
-    const workspace = getWorkspaceByNameOrId(workspaceId)
-    if (!workspace) throw new Error(`Workspace ${workspaceId} not found.`)
-    let labels: string[] | undefined
-    try {
-      labels = ensureLabelsExist(workspace.rootPath, [CRAFTY_LABEL])
-    } catch (error) {
-      mainLog.warn('[crafty] could not ensure the crafty label', error)
-    }
-    // Created here rather than over the sessions:create RPC, which announces the session to no
-    // window; this way the main window lists it right away and "Open in Craft" finds it.
-    const session = await sessionManager.createSession(workspaceId, { labels, ...model })
+    const workspace = this.invocationWorkspace(invocationId)
+    const session = await this.sessionsOf(workspace).create(model)
     // The model goes in the measurements: first-token latency depends on it
     this.metrics.record('session', {
       id: invocationId,
-      sessionId: session.id,
-      workspaceId,
+      sessionId: session.sessionId,
+      workspaceId: workspace.id,
+      remote: !!workspace.remoteServer,
       picked: !!model.llmConnection || !!model.model,
       connection: session.llmConnection ?? null,
       model: session.model ?? null,
       thinkingLevel: session.thinkingLevel ?? null,
     })
-    return {
-      sessionId: session.id,
-      workspaceId,
-      llmConnection: session.llmConnection,
-      model: session.model,
-      thinkingLevel: session.thinkingLevel,
-    }
+    return session
   }
 
   /** The invocation's workspace sessions that can take Crafty's questions, most recent first. */
   async listSessions(invocationId: string): Promise<CraftySessionSummary[]> {
-    const sessionManager = this.deps.sessionManager
-    const workspaceId = this.invocation?.id === invocationId ? this.invocation.workspaceId : this.windowWorkspaceId
-    if (!sessionManager || !workspaceId) return []
-    await sessionManager.waitForSessionsLoaded()
-    return sessionManager.getSessions(workspaceId)
-      .filter(canTakeCrafty)
-      .slice(0, MAX_LISTED_SESSIONS)
-      .map(summarize)
+    return this.sessionsOf(this.invocationWorkspace(invocationId)).list(MAX_LISTED_SESSIONS)
   }
 
   async insert(request: CraftyInsertRequest): Promise<CraftyInsertResult> {
@@ -1071,7 +1140,7 @@ export class CraftyController {
 
   /** The pie hub's Craft mark: Craft Agents itself, in Crafty's workspace, showing what it showed. */
   async openCraft(invocationId: string): Promise<void> {
-    const workspaceId = (this.invocation?.id === invocationId ? this.invocation.workspaceId : null) ?? this.resolveWorkspaceId()
+    const workspaceId = (this.invocation?.id === invocationId ? this.invocation.workspaceId : null) ?? this.resolveWorkspace()?.id ?? null
     this.panelOpen = false
     this.hideWindow('open-craft', { toCraft: true })
     this.metrics.record('open-craft', { id: invocationId, workspaceId })
@@ -1092,20 +1161,14 @@ export class CraftyController {
     }
   }
 
-  /** Rewrite or translate the selection: one completion on a throwaway agent, no session. */
+  /** Rewrite or translate the selection: one completion on a throwaway agent (on the workspace's server), no session. */
   async transform(request: CraftyTransformRequest): Promise<CraftyTransformResult> {
-    const sessionManager = this.deps.sessionManager
-    if (!sessionManager) throw new Error('Crafty needs the local server.')
-    const workspaceId = this.invocation?.id === request.invocationId ? this.invocation.workspaceId : this.windowWorkspaceId
-    if (!workspaceId) throw new Error('No local workspace to run it in.')
+    const workspace = this.invocationWorkspace(request.invocationId)
     const started = Date.now()
     const { transform } = request
-    const detail = transform.kind === 'rewrite' ? { style: transform.style } : { language: transform.language }
+    const detail = { ...(transform.kind === 'rewrite' ? { style: transform.style } : { language: transform.language }), remote: !!workspace.remoteServer }
     try {
-      const raw = await sessionManager.runUtilityCompletion(workspaceId, buildTransformPrompt(transform, request.text), {
-        llmConnection: request.model?.llmConnection,
-        model: request.model?.model,
-      })
+      const raw = await this.sessionsOf(workspace).complete(buildTransformPrompt(transform, request.text), request.model ?? {})
       const text = cleanTransformResult(raw, request.text)
       const durationMs = Date.now() - started
       if (request.languageCode) rememberCraftyLanguage(request.languageCode)

@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { COMPOSER_CHIP } from '@/components/app-shell/input/composer-styles'
 import { isCraftyTarget, useCraftyTarget } from '@/hooks/useCraftyTarget'
+import { ipcErrorMessage } from '@/lib/ipc-error'
 
 /**
  * Crafty's dot and name, as a composer toolbar chip (the label folds away in narrow panels, like
@@ -36,7 +37,7 @@ export function CraftyComposerChip({ sessionId, workspaceId }: { sessionId?: str
   const { target, setTarget } = useCraftyTarget()
   if (!isCraftyTarget(target, workspaceId, sessionId)) return null
   const stop = () => {
-    setTarget(null).catch((error: unknown) => toast.error(error instanceof Error ? error.message : String(error)))
+    setTarget(null).catch((error: unknown) => toast.error(ipcErrorMessage(error)))
   }
   return <CraftyChip onStop={stop} />
 }

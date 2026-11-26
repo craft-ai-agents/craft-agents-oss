@@ -125,6 +125,11 @@ describe('sub-pies', () => {
     expect(items.at(-1)?.action).toEqual({ kind: 'send', session: null })
   })
 
+  it('names the workspace a new session goes to when there is more than one', () => {
+    expect(sendItems(null, [], 'Home server').at(-1)?.label).toBe('New session in Home server')
+    expect(sendItems(null, [], null).at(-1)?.label).toBe('New session')
+  })
+
   it('caps the session list so Back still fits', () => {
     const many = Array.from({ length: 20 }, (_, i) => session(`s${i}`, `Session ${i}`))
     expect(sendItems(null, many)).toHaveLength(SUB_PIE_MAX)

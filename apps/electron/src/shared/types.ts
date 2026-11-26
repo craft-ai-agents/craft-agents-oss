@@ -248,6 +248,8 @@ export interface ElectronAPI {
   getUnreadSummary(): Promise<UnreadSummary>
   markAllSessionsRead(workspaceId: string): Promise<void>
   getSessionMessages(sessionId: string): Promise<Session | null>
+  /** One session without its messages (servers before `sessions:getMetadata` reject it). */
+  getSessionMetadata(sessionId: string): Promise<Session | null>
   createSession(workspaceId: string, options?: CreateSessionOptions): Promise<Session>
   deleteSession(sessionId: string): Promise<void>
   sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachmentType[], options?: SendMessageOptions): Promise<void>

@@ -24,6 +24,9 @@ const clientSessionWatches = new Map<string, ClientSessionWatchState>()
 
 const SESSION_GET_LOG_ID_LIMIT = 25
 
+/** RUN_UTILITY_COMPLETION's prompt cap: Crafty sends at most 20,000 selected characters plus its instructions. */
+const MAX_UTILITY_PROMPT_CHARS = 50_000
+
 function summarizeIds(ids: Iterable<string>, limit = SESSION_GET_LOG_ID_LIMIT) {
   const all = Array.from(ids)
   return {
@@ -110,6 +113,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sessions.CREATE,
   RPC_CHANNELS.sessions.DELETE,
   RPC_CHANNELS.sessions.GET_MESSAGES,
+  RPC_CHANNELS.sessions.GET_METADATA,
+  RPC_CHANNELS.sessions.RUN_UTILITY_COMPLETION,
   RPC_CHANNELS.sessions.SEND_MESSAGE,
   RPC_CHANNELS.sessions.CANCEL,
   RPC_CHANNELS.sessions.KILL_SHELL,
@@ -187,14 +192,45 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
     return session
   })
 
+  // One session's metadata without its messages (cheap, unlike GET_MESSAGES); null for an unknown id
+  server.handle(RPC_CHANNELS.sessions.GET_METADATA, async (_ctx, sessionId: string) => {
+    try {
+      await sessionManager.waitForSessionsLoaded()
+    } catch (error) {
+      log.error('GET_METADATA continuing after initialization failure:', error)
+    }
+    return sessionManager.getSessionSnapshot(sessionId)
+  })
+
   // Create a new session
-  server.handle(RPC_CHANNELS.sessions.CREATE, async (_ctx, workspaceId: string, options?: import('@craft-agent/shared/protocol').CreateSessionOptions) => {
+  server.handle(RPC_CHANNELS.sessions.CREATE, async (ctx, workspaceId: string, options?: import('@craft-agent/shared/protocol').CreateSessionOptions) => {
     const end = perf.start('rpc.createSession', { workspaceId })
-    // The renderer adds the session synchronously from this return value (App.tsx handleCreateSession),
-    // so suppress the broadcast to avoid a redundant hydrate round-trip.
     const session = await sessionManager.createSession(workspaceId, options, { emitCreatedEvent: false })
+    // The caller adds the session from this return value (App.tsx handleCreateSession), so it skips
+    // the announcement and its hydrate round-trip; every other client of the workspace (another
+    // window, Crafty, another device on this server) needs it to list the session.
+    sessionManager.notifySessionCreated(workspaceId, session.id, { exclude: ctx.clientId })
     end()
     return session
+  })
+
+  // One completion outside any session (Crafty's Rewrite and Translate): nothing is stored. A client
+  // can already run whole turns, so this adds no capability; the cap only keeps out runaway input.
+  server.handle(RPC_CHANNELS.sessions.RUN_UTILITY_COMPLETION, async (
+    _ctx,
+    workspaceId: string,
+    prompt: string,
+    options?: { llmConnection?: unknown; model?: unknown },
+  ) => {
+    if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('The prompt is empty.')
+    if (prompt.length > MAX_UTILITY_PROMPT_CHARS) {
+      throw new Error(`The prompt is too long (over ${MAX_UTILITY_PROMPT_CHARS} characters).`)
+    }
+    const text = (value: unknown) => (typeof value === 'string' && value ? value : undefined)
+    return sessionManager.runUtilityCompletion(workspaceId, prompt, {
+      llmConnection: text(options?.llmConnection),
+      model: text(options?.model),
+    })
   })
 
   // Delete a session
