@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import * as Icons from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Spinner } from '@craft-agent/ui'
 import {
   DropdownMenu,
@@ -51,6 +52,7 @@ export function BrowserTabStrip({
   // stamps onto its tabs) than the local `activeWorkspaceId` (what locally-
   // opened manual tabs use), so we accept either.
   const { activeWorkspaceId, workspaces } = useAppShellContext()
+  const { t } = useTranslation()
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId)
   const remoteWorkspaceId = activeWorkspace?.remoteServer?.remoteWorkspaceId ?? null
   const allInstances = useAtomValue(browserInstancesAtom)
@@ -224,8 +226,8 @@ export function BrowserTabStrip({
     const targetSessionId = instance.boundSessionId ?? instance.ownerSessionId
     const canOpenSession = !!targetSessionId
     const openSessionLabel = instance.agentControlActive
-      ? 'Open Session Using this Window'
-      : 'Open Session Which Used this Window'
+      ? t('browser.openSessionUsingWindow')
+      : t('browser.openSessionWhichUsedWindow')
 
     return (
       <>
@@ -234,7 +236,7 @@ export function BrowserTabStrip({
           onSelect={() => focusBrowserWindow(instance)}
         >
           <Icons.Monitor className="h-3.5 w-3.5" />
-          Show Browser Window
+          {t('browser.showWindow')}
         </StyledDropdownMenuItem>
 
         <StyledDropdownMenuItem
@@ -253,11 +255,11 @@ export function BrowserTabStrip({
           onSelect={() => terminateBrowserWindow(instance)}
         >
           <Icons.XCircle className="h-3.5 w-3.5" />
-          Terminate Browser
+          {t('browser.terminateBrowser')}
         </StyledDropdownMenuItem>
       </>
     )
-  }, [instancesOverride, focusBrowserWindow, openSessionUsingWindow, terminateBrowserWindow])
+  }, [instancesOverride, focusBrowserWindow, openSessionUsingWindow, terminateBrowserWindow, t])
 
   if (orderedInstances.length === 0) return null
 
